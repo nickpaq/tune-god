@@ -3,6 +3,8 @@ import { decodeFile, toMono, cloneChannelData, monoFromChannelData } from "../au
 import { semitonesToRatio } from "../audio/theory";
 import { nextAnalysisWorker, nextRenderWorker } from "../workers/workerClient";
 import { useSamplesStore, type SampleItem } from "./samplesStore";
+import { parseKoalaProject, koalaPadToFile } from "../audio/koalaProject";
+import { guessSampleMode } from "../audio/drumDetect";
 
 function makeId(): string {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -12,7 +14,7 @@ export function useAppActions() {
   const { state, dispatch } = useSamplesStore();
 
   const loadMaster = useCallback(
-    async (file: File) => {
+    async (file: File, koalaSampleId?: number) => {
       const buffer = await decodeFile(file);
       const mono = toMono(buffer);
       const channelData = cloneChannelData(buffer);
@@ -24,6 +26,7 @@ export function useAppActions() {
           sampleRate: buffer.sampleRate,
           channelData,
           status: "analyzing",
+          koalaSampleId,
         },
       });
       const worker = nextAnalysisWorker();
@@ -34,9 +37,10 @@ export function useAppActions() {
   );
 
   const addSampleFiles = useCallback(
-    async (files: File[]) => {
+    async (files: File[], koalaSampleIds?: (number | undefined)[]) => {
       const items: SampleItem[] = [];
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         try {
           const buffer = await decodeFile(file);
           items.push({
@@ -46,8 +50,9 @@ export function useAppActions() {
             sampleRate: buffer.sampleRate,
             channelData: cloneChannelData(buffer),
             status: "pending",
-            mode: "tune",
+            mode: guessSampleMode(file.name),
             isLoop: false,
+            koalaSampleId: koalaSampleIds?.[i],
           });
         } catch {
           // Skip files that fail to decode (unsupported format, corrupt file).
@@ -68,6 +73,33 @@ export function useAppActions() {
       }
     },
     [dispatch],
+  );
+
+  /**
+   * Imports a whole .koala project: the lowest-numbered pad (top-left slot)
+   * becomes the master loop, every other sample pad is loaded into the batch
+   * exactly like a normal file drop. The parsed project (zip + sampler.json)
+   * is kept in state so a tuned project can be rebuilt later.
+   */
+  const loadKoalaProject = useCallback(
+    async (file: File) => {
+      const project = await parseKoalaProject(file);
+      const [masterPad, ...restPads] = project.pads;
+
+      const masterFile = await koalaPadToFile(project, masterPad);
+      await loadMaster(masterFile, masterPad.sampleId);
+
+      if (restPads.length) {
+        const sampleFiles = await Promise.all(restPads.map((p) => koalaPadToFile(project, p)));
+        await addSampleFiles(
+          sampleFiles,
+          restPads.map((p) => p.sampleId),
+        );
+      }
+
+      dispatch({ type: "SET_KOALA_PROJECT", project });
+    },
+    [loadMaster, addSampleFiles, dispatch],
   );
 
   const processSample = useCallback(
@@ -99,5 +131,5 @@ export function useAppActions() {
     await Promise.all(targets.map((s) => processSample(s.id)));
   }, [state.samples, processSample]);
 
-  return { loadMaster, addSampleFiles, processSample, processAll };
+  return { loadMaster, addSampleFiles, loadKoalaProject, processSample, processAll };
 }
