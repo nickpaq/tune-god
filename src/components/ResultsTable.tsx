@@ -16,7 +16,7 @@ export function ResultsTable() {
       <h2>2. Sample batch</h2>
       <Dropzone
         label="Drop your sample batch here"
-        hint="One-shots to tune (skip drum hits with the Drum toggle below)"
+        hint="One-shots to tune — drum hits are auto-detected as Drum (passthrough), and you can flip the toggle below if it guesses wrong"
         multiple
         onFiles={(files) => addSampleFiles(files)}
       />

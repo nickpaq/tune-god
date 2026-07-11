@@ -4,6 +4,7 @@ import { semitonesToRatio } from "../audio/theory";
 import { nextAnalysisWorker, nextRenderWorker } from "../workers/workerClient";
 import { useSamplesStore, type SampleItem } from "./samplesStore";
 import { parseKoalaProject, koalaPadToFile } from "../audio/koalaProject";
+import { guessSampleMode } from "../audio/drumDetect";
 
 function makeId(): string {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -49,7 +50,7 @@ export function useAppActions() {
             sampleRate: buffer.sampleRate,
             channelData: cloneChannelData(buffer),
             status: "pending",
-            mode: "tune",
+            mode: guessSampleMode(file.name),
             isLoop: false,
             koalaSampleId: koalaSampleIds?.[i],
           });

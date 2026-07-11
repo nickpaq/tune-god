@@ -2,6 +2,7 @@ import React, { createContext, useContext, useMemo, useReducer } from "react";
 import type { MasterAnalysis, SampleAnalysis } from "../audio/analysisTypes";
 import { smallestSignedShift, pitchClassOf, semitonesToRatio, targetPitchClassFor } from "../audio/theory";
 import type { ParsedKoalaProject } from "../audio/koalaProject";
+import { guessSampleMode } from "../audio/drumDetect";
 
 export type SampleMode = "tune" | "drum";
 export type SampleStatus = "pending" | "analyzing" | "analyzed" | "processing" | "done" | "error";
@@ -23,6 +24,8 @@ export interface SampleItem {
   processedChannelData?: Float32Array[];
   /** Set when this sample came from a pad in an imported .koala project. */
   koalaSampleId?: number;
+  /** True once the user has explicitly clicked Tune/Drum — stops auto-detection from overwriting their choice. */
+  modeManuallySet?: boolean;
 }
 
 export interface MasterItem {
@@ -120,14 +123,19 @@ function reducer(state: State, action: Action): State {
     case "SET_SAMPLE_ANALYSIS":
       return {
         ...state,
-        samples: state.samples.map((s) =>
-          s.id === action.id
-            ? withComputedShift(state.master, { ...s, analysis: action.analysis, status: "analyzed" })
-            : s,
-        ),
+        samples: state.samples.map((s) => {
+          if (s.id !== action.id) return s;
+          const mode = s.modeManuallySet ? s.mode : guessSampleMode(s.name, action.analysis);
+          return withComputedShift(state.master, { ...s, analysis: action.analysis, status: "analyzed", mode });
+        }),
       };
     case "SET_SAMPLE_MODE":
-      return { ...state, samples: state.samples.map((s) => (s.id === action.id ? { ...s, mode: action.mode } : s)) };
+      return {
+        ...state,
+        samples: state.samples.map((s) =>
+          s.id === action.id ? { ...s, mode: action.mode, modeManuallySet: true } : s,
+        ),
+      };
     case "SET_SAMPLE_LOOP":
       return {
         ...state,
