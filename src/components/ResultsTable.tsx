@@ -11,15 +11,11 @@ export function ResultsTable() {
   const { samples, master, koalaProject } = state;
   const tunedPadCount = samples.filter((s) => s.koalaSampleId !== undefined && s.mode === "tune" && s.processedChannelData).length;
 
+  if (!master && samples.length === 0) return null;
+
   return (
     <section className="panel">
-      <h2>2. Sample batch</h2>
-      <Dropzone
-        label="Drop your sample batch here"
-        hint="One-shots to tune — drum hits are auto-detected as Drum (passthrough), and you can flip the toggle below if it guesses wrong"
-        multiple
-        onFiles={(files) => addSampleFiles(files)}
-      />
+      <Dropzone label="Drop samples here to tune" multiple onFiles={(files) => addSampleFiles(files)} />
 
       {samples.length > 0 && (
         <>
@@ -49,11 +45,6 @@ export function ResultsTable() {
               </button>
             )}
           </div>
-          <p className="muted drag-hint">
-            Tip: drag the ⠿ handle on any row — or “Drag all out” above — straight into your DAW or file manager as
-            separate files (no zip involved). Works in Chrome/Edge; other browsers fall back to the download
-            buttons.
-          </p>
           <div className="sample-list">
             {samples.map((s) => (
               <SampleRow key={s.id} sample={s} />
