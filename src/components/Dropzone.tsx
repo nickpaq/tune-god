@@ -14,7 +14,9 @@ export function Dropzone({ label, hint, multiple, onFiles }: Props) {
     (e: React.DragEvent<HTMLLabelElement>) => {
       e.preventDefault();
       setIsOver(false);
-      const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("audio/") || f.name.match(/\.(wav|mp3|aif|aiff|flac|m4a|ogg)$/i));
+      const files = Array.from(e.dataTransfer.files).filter(
+        (f) => f.type.startsWith("audio/") || f.name.match(/\.(wav|wave|mp3|aif|aiff|caf|flac|m4a|ogg)$/i),
+      );
       if (files.length) onFiles(files);
     },
     [onFiles],
@@ -39,7 +41,18 @@ export function Dropzone({ label, hint, multiple, onFiles }: Props) {
       onDragLeave={() => setIsOver(false)}
       onDrop={handleDrop}
     >
-      <input type="file" accept="audio/*" multiple={multiple} onChange={handleInput} hidden />
+      {/* iOS's Files picker filters by UTI derived from `accept`, and plain
+          "audio/*" greys out many real audio files (loops synced from other
+          apps, iCloud Drive files, etc.) that lack clean MIME metadata.
+          Listing extensions alongside it makes iOS match by UTI per-extension
+          instead, which is far more reliable there. */}
+      <input
+        type="file"
+        accept="audio/*,.wav,.wave,.aif,.aiff,.caf,.mp3,.m4a,.flac,.ogg"
+        multiple={multiple}
+        onChange={handleInput}
+        hidden
+      />
       <div className="dropzone__label">{label}</div>
       <div className="dropzone__hint">{hint}</div>
     </label>
