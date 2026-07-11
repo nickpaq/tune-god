@@ -1,17 +1,19 @@
+import { useState } from "react";
 import { useSamplesStore, type SampleItem } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { formatNoteWithCents } from "../audio/theory";
-import { playChannelData } from "../audio/playback";
+import { togglePlayback } from "../audio/playback";
 import { downloadSample } from "../audio/exportSample";
 
 export function SampleRow({ sample }: { sample: SampleItem }) {
   const { dispatch } = useSamplesStore();
   const { processSample } = useAppActions();
+  const [playing, setPlaying] = useState(false);
 
   const preview = () => {
     const data =
       sample.mode === "drum" ? sample.channelData : (sample.processedChannelData ?? sample.channelData);
-    playChannelData(data, sample.sampleRate);
+    setPlaying(togglePlayback(sample.id, data, sample.sampleRate, () => setPlaying(false)));
   };
 
   return (
@@ -59,7 +61,7 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
         </label>
       </td>
       <td>
-        <button onClick={preview}>▶</button>
+        <button onClick={preview}>{playing ? "⏸" : "▶"}</button>
       </td>
       <td>
         {sample.mode === "tune" && (
