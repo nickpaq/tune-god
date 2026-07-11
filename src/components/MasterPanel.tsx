@@ -4,6 +4,7 @@ import { useSamplesStore } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { NOTE_NAMES, formatCents } from "../audio/theory";
 import { togglePlayback } from "../audio/playback";
+import { masterDragItem, startFileDrag } from "../audio/exportSample";
 
 export function MasterPanel() {
   const { state, dispatch } = useSamplesStore();
@@ -42,6 +43,14 @@ export function MasterPanel() {
       <h2>1. Master loop</h2>
       <div className="master-summary">
         <div>
+          <button
+            className="drag-handle"
+            draggable
+            onDragStart={(e) => startFileDrag(e.dataTransfer, [masterDragItem(master)])}
+            title="Drag into another app"
+          >
+            ⠿
+          </button>
           <strong>{master.name}</strong>
           <button
             className="link-btn"
@@ -50,6 +59,9 @@ export function MasterPanel() {
             }
           >
             {playing ? "⏸ pause" : "▶ preview"}
+          </button>
+          <button className="link-btn" onClick={() => dispatch({ type: "CLEAR_MASTER" })}>
+            ✕ clear
           </button>
         </div>
         {master.status === "analyzing" && <p className="muted">Analyzing…</p>}
