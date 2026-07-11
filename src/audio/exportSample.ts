@@ -62,6 +62,22 @@ export async function downloadAllAsZip(
   downloadBlob(blob, zipName);
 }
 
+/**
+ * Triggers a separate browser download for every file instead of zipping —
+ * some browsers throttle/prompt after a handful of rapid downloads, so
+ * these are staggered slightly.
+ */
+export async function downloadAllIndividually(samples: SampleItem[], master: MasterItem | null): Promise<void> {
+  if (master) {
+    downloadBlob(masterToWavBlob(master), masterFileName(master));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  for (const sample of samples) {
+    downloadBlob(sampleToWavBlob(sample), outputFileName(sample));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
 export interface DragExportItem {
   filename: string;
   blob: Blob;

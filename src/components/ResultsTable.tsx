@@ -2,7 +2,7 @@ import { Dropzone } from "./Dropzone";
 import { SampleRow } from "./SampleRow";
 import { useSamplesStore } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
-import { downloadAllAsZip, collectDragExportItems, startFileDrag } from "../audio/exportSample";
+import { downloadAllAsZip, downloadAllIndividually, collectDragExportItems, startFileDrag } from "../audio/exportSample";
 
 export function ResultsTable() {
   const { state } = useSamplesStore();
@@ -23,6 +23,7 @@ export function ResultsTable() {
         <>
           <div className="batch-actions">
             <button onClick={processAll}>Process all</button>
+            <button onClick={() => downloadAllIndividually(samples, master)}>Download all</button>
             <button onClick={() => downloadAllAsZip(samples, master)}>Download ZIP</button>
             <button
               className="drag-all-chip"
@@ -34,8 +35,9 @@ export function ResultsTable() {
             </button>
           </div>
           <p className="muted drag-hint">
-            Tip: drag the ⠿ handle on any row — or “Drag all out” above — straight into your DAW or file manager.
-            Works in Chrome/Edge; other browsers fall back to the download buttons.
+            Tip: drag the ⠿ handle on any row — or “Drag all out” above — straight into your DAW or file manager as
+            separate files (no zip involved). Works in Chrome/Edge; other browsers fall back to the download
+            buttons.
           </p>
           <div className="sample-list">
             {samples.map((s) => (
