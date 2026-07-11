@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Dropzone } from "./Dropzone";
 import { useSamplesStore } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
@@ -6,6 +6,7 @@ import { NOTE_NAMES, formatCents } from "../audio/theory";
 import { togglePlayback } from "../audio/playback";
 import { masterDragItem, startFileDrag } from "../audio/exportSample";
 import { isKoalaFile } from "../audio/koalaProject";
+import { clipboardReadSupported, findKoalaFileInFileList, readKoalaFileFromClipboard } from "../audio/clipboardImport";
 
 export function MasterPanel() {
   const { state, dispatch } = useSamplesStore();
@@ -15,6 +16,54 @@ export function MasterPanel() {
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
 
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      setBusy(true);
+      setError(null);
+      try {
+        if (isKoalaFile(files[0])) {
+          await loadKoalaProject(files[0]);
+        } else {
+          await loadMaster(files[0]);
+        }
+      } catch (err) {
+        setError(String(err instanceof Error ? err.message : err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [loadKoalaProject, loadMaster],
+  );
+
+  const handlePasteClick = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const file = await readKoalaFileFromClipboard();
+      await loadKoalaProject(file);
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err));
+    } finally {
+      setBusy(false);
+    }
+  }, [loadKoalaProject]);
+
+  // Native Cmd/Ctrl+V (or iOS's Edit menu paste) — a fallback alongside the
+  // explicit button, since the Async Clipboard API's permission/type support
+  // varies a lot across browsers.
+  useEffect(() => {
+    if (master) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const files = e.clipboardData?.files;
+      if (!files?.length) return;
+      findKoalaFileInFileList(files).then((file) => {
+        if (file) handleFiles([file]);
+      });
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [master, handleFiles]);
+
   if (!master) {
     return (
       <section className="panel">
@@ -23,26 +72,17 @@ export function MasterPanel() {
           label="Drop your master loop here"
           hint="The loop whose key & tempo everything else will match — or drop a whole .koala project to import every pad at once"
           allowKoala
-          onFiles={async (files) => {
-            setBusy(true);
-            setError(null);
-            try {
-              if (isKoalaFile(files[0])) {
-                await loadKoalaProject(files[0]);
-              } else {
-                await loadMaster(files[0]);
-              }
-            } catch (err) {
-              setError(String(err instanceof Error ? err.message : err));
-            } finally {
-              setBusy(false);
-            }
-          }}
+          onFiles={handleFiles}
         />
         <p className="muted drag-hint">
           Tip: for .koala project files, the sound in the top-left pad becomes the master automatically — rearrange
           pads in Koala first if you want a different one used, or drop a plain audio file here instead.
         </p>
+        {clipboardReadSupported && (
+          <button className="link-btn" onClick={handlePasteClick} disabled={busy}>
+            📋 paste project from clipboard
+          </button>
+        )}
         {busy && <p className="muted">Analyzing…</p>}
         {error && <p className="error">{error}</p>}
       </section>
