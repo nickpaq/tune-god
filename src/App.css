@@ -1,7 +1,8 @@
 .app {
   max-width: 960px;
   margin: 0 auto;
-  padding: 1.5rem 1rem 4rem;
+  padding: max(1.5rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(4rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
 }
 
 .app-header__title {
