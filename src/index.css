@@ -1,0 +1,35 @@
+:root {
+  --text: #2a2a2e;
+  --bg: #fafafa;
+  --border-color: #d8d8dc;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font: 16px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e6e9;
+    --bg: #14151a;
+    --border-color: #33343c;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+table {
+  color: inherit;
+}
