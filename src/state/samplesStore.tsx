@@ -50,6 +50,7 @@ type Action =
   | { type: "SET_SAMPLE_MODE"; id: string; mode: SampleMode }
   | { type: "SET_SAMPLE_LOOP"; id: string; isLoop: boolean }
   | { type: "SET_SAMPLE_PROCESSED"; id: string; channelData: Float32Array[] }
+  | { type: "CLEAR_MASTER" }
   | { type: "RESET" };
 
 function effectiveMasterKey(master: MasterItem): { tonicPitchClass: number; scale: "major" | "minor" } | null {
@@ -134,6 +135,18 @@ function reducer(state: State, action: Action): State {
         samples: state.samples.map((s) =>
           s.id === action.id ? { ...s, processedChannelData: action.channelData, status: "done" } : s,
         ),
+      };
+    case "CLEAR_MASTER":
+      return {
+        ...state,
+        master: null,
+        samples: state.samples.map((s) => ({
+          ...s,
+          pitchShiftSemitones: undefined,
+          timeRatio: undefined,
+          processedChannelData: undefined,
+          status: s.analysis ? "analyzed" : s.status,
+        })),
       };
     case "RESET":
       return { master: null, samples: [] };

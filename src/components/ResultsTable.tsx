@@ -2,12 +2,12 @@ import { Dropzone } from "./Dropzone";
 import { SampleRow } from "./SampleRow";
 import { useSamplesStore } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
-import { downloadAllAsZip } from "../audio/exportSample";
+import { downloadAllAsZip, collectDragExportItems, startFileDrag } from "../audio/exportSample";
 
 export function ResultsTable() {
   const { state } = useSamplesStore();
   const { addSampleFiles, processAll } = useAppActions();
-  const { samples } = state;
+  const { samples, master } = state;
 
   return (
     <section className="panel">
@@ -23,25 +23,25 @@ export function ResultsTable() {
         <>
           <div className="batch-actions">
             <button onClick={processAll}>Process all</button>
-            <button onClick={() => downloadAllAsZip(samples)}>Download ZIP</button>
+            <button onClick={() => downloadAllAsZip(samples, master)}>Download ZIP</button>
+            <button
+              className="drag-all-chip"
+              draggable
+              onDragStart={(e) => startFileDrag(e.dataTransfer, collectDragExportItems(samples, master))}
+              title="Drag all processed sounds (and the master loop) straight into another app"
+            >
+              ⠿ Drag all out
+            </button>
           </div>
-          <table className="results-table">
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Detected</th>
-                <th>Mode</th>
-                <th>Loop</th>
-                <th>Preview</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {samples.map((s) => (
-                <SampleRow key={s.id} sample={s} />
-              ))}
-            </tbody>
-          </table>
+          <p className="muted drag-hint">
+            Tip: drag the ⠿ handle on any row — or “Drag all out” above — straight into your DAW or file manager.
+            Works in Chrome/Edge; other browsers fall back to the download buttons.
+          </p>
+          <div className="sample-list">
+            {samples.map((s) => (
+              <SampleRow key={s.id} sample={s} />
+            ))}
+          </div>
         </>
       )}
     </section>

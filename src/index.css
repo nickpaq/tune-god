@@ -1,20 +1,18 @@
 :root {
-  --text: #2a2a2e;
-  --bg: #fafafa;
-  --border-color: #d8d8dc;
-  color-scheme: light dark;
+  --text: #f4f1f7;
+  --text-muted: #b2a9bd;
+  --bg: #18131e;
+  --panel-bg: #1e1826;
+  --border-color: rgba(244, 241, 247, 0.55);
+  --border-strong: rgba(244, 241, 247, 0.85);
+  --accent-pink: #ef4f70;
+  --accent-pink-text: #ffffff;
+  --accent-cyan: #4fd1e6;
+  color-scheme: dark;
   color: var(--text);
   background: var(--bg);
   font: 16px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #e6e6e9;
-    --bg: #14151a;
-    --border-color: #33343c;
-  }
 }
 
 * {
@@ -25,9 +23,37 @@ body {
   margin: 0;
 }
 
+/* Chunky outlined pill/rounded-rect, matches the hardware-sampler look —
+   uppercase bold label, transparent dark fill. Classed buttons (toggle
+   states, links, chips) override this with higher-specificity selectors. */
 button {
   font: inherit;
   cursor: pointer;
+  background: transparent;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.45rem 0.85rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+input,
+select {
+  font: inherit;
+  color: inherit;
 }
 
 table {
