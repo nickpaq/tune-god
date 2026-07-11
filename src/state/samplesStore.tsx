@@ -65,7 +65,7 @@ function effectiveMasterKey(master: MasterItem): { tonicPitchClass: number; scal
 function computeShiftSemitones(master: MasterItem, sample: SampleAnalysis): number | undefined {
   const key = effectiveMasterKey(master);
   if (!key) return undefined;
-  const targetClass = targetPitchClassFor(key.scale);
+  const targetClass = targetPitchClassFor(key.scale, key.tonicPitchClass);
   const detectedClass = pitchClassOf(sample.detectedMidi);
   const tuningCorrection = -(master.analysis?.tuningOffsetCents ?? 0) / 100;
   const baseShift = smallestSignedShift(detectedClass, targetClass);
@@ -156,14 +156,27 @@ export function useSamplesStore() {
   return ctx;
 }
 
-export function useTargetFrequencyLabel(master: MasterItem | null): string | null {
+export interface TargetInfo {
+  tonicPitchClass: number;
+  tonicName: string;
+  scale: "major" | "minor";
+  /** Pitch class samples are tuned to (tonic for major, relative major root for minor). */
+  sampleTargetName: string;
+}
+
+export function useTargetInfo(master: MasterItem | null): TargetInfo | null {
   return useMemo(() => {
     if (!master) return null;
     const key = effectiveMasterKey(master);
     if (!key) return null;
-    const targetClass = targetPitchClassFor(key.scale);
+    const targetClass = targetPitchClassFor(key.scale, key.tonicPitchClass);
     const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-    return names[targetClass];
+    return {
+      tonicPitchClass: key.tonicPitchClass,
+      tonicName: names[key.tonicPitchClass],
+      scale: key.scale,
+      sampleTargetName: names[targetClass],
+    };
   }, [master]);
 }
 

@@ -3,13 +3,14 @@ import { Dropzone } from "./Dropzone";
 import { useSamplesStore } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { NOTE_NAMES, formatCents } from "../audio/theory";
-import { playChannelData } from "../audio/playback";
+import { togglePlayback } from "../audio/playback";
 
 export function MasterPanel() {
   const { state, dispatch } = useSamplesStore();
   const { loadMaster } = useAppActions();
   const { master } = state;
   const [busy, setBusy] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
   if (!master) {
     return (
@@ -42,8 +43,13 @@ export function MasterPanel() {
       <div className="master-summary">
         <div>
           <strong>{master.name}</strong>
-          <button className="link-btn" onClick={() => playChannelData(master.channelData, master.sampleRate)}>
-            ▶ preview
+          <button
+            className="link-btn"
+            onClick={() =>
+              setPlaying(togglePlayback("master", master.channelData, master.sampleRate, () => setPlaying(false)))
+            }
+          >
+            {playing ? "⏸ pause" : "▶ preview"}
           </button>
         </div>
         {master.status === "analyzing" && <p className="muted">Analyzing…</p>}
