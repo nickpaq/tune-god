@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useMemo, useReducer } from "react";
 import type { MasterAnalysis, SampleAnalysis } from "../audio/analysisTypes";
 import { smallestSignedShift, pitchClassOf, semitonesToRatio, targetPitchClassFor } from "../audio/theory";
+import type { ParsedKoalaProject } from "../audio/koalaProject";
 
 export type SampleMode = "tune" | "drum";
 export type SampleStatus = "pending" | "analyzing" | "analyzed" | "processing" | "done" | "error";
@@ -20,6 +21,8 @@ export interface SampleItem {
   pitchShiftSemitones?: number;
   timeRatio?: number;
   processedChannelData?: Float32Array[];
+  /** Set when this sample came from a pad in an imported .koala project. */
+  koalaSampleId?: number;
 }
 
 export interface MasterItem {
@@ -32,11 +35,13 @@ export interface MasterItem {
   /** User override in case detection is wrong. */
   overrideTonicPitchClass?: number;
   overrideScale?: "major" | "minor";
+  koalaSampleId?: number;
 }
 
 interface State {
   master: MasterItem | null;
   samples: SampleItem[];
+  koalaProject: ParsedKoalaProject | null;
 }
 
 type Action =
@@ -50,6 +55,7 @@ type Action =
   | { type: "SET_SAMPLE_MODE"; id: string; mode: SampleMode }
   | { type: "SET_SAMPLE_LOOP"; id: string; isLoop: boolean }
   | { type: "SET_SAMPLE_PROCESSED"; id: string; channelData: Float32Array[] }
+  | { type: "SET_KOALA_PROJECT"; project: ParsedKoalaProject | null }
   | { type: "CLEAR_MASTER" }
   | { type: "RESET" };
 
@@ -136,6 +142,8 @@ function reducer(state: State, action: Action): State {
           s.id === action.id ? { ...s, processedChannelData: action.channelData, status: "done" } : s,
         ),
       };
+    case "SET_KOALA_PROJECT":
+      return { ...state, koalaProject: action.project };
     case "CLEAR_MASTER":
       return {
         ...state,
@@ -149,7 +157,7 @@ function reducer(state: State, action: Action): State {
         })),
       };
     case "RESET":
-      return { master: null, samples: [] };
+      return { master: null, samples: [], koalaProject: null };
     default:
       return state;
   }
@@ -158,7 +166,7 @@ function reducer(state: State, action: Action): State {
 const StoreContext = createContext<{ state: State; dispatch: React.Dispatch<Action> } | null>(null);
 
 export function SamplesProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, { master: null, samples: [] });
+  const [state, dispatch] = useReducer(reducer, { master: null, samples: [], koalaProject: null });
   const value = useMemo(() => ({ state, dispatch }), [state]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

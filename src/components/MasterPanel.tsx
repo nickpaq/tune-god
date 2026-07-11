@@ -5,12 +5,14 @@ import { useAppActions } from "../state/useAppActions";
 import { NOTE_NAMES, formatCents } from "../audio/theory";
 import { togglePlayback } from "../audio/playback";
 import { masterDragItem, startFileDrag } from "../audio/exportSample";
+import { isKoalaFile } from "../audio/koalaProject";
 
 export function MasterPanel() {
   const { state, dispatch } = useSamplesStore();
-  const { loadMaster } = useAppActions();
-  const { master } = state;
+  const { loadMaster, loadKoalaProject } = useAppActions();
+  const { master, koalaProject } = state;
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
 
   if (!master) {
@@ -19,17 +21,30 @@ export function MasterPanel() {
         <h2>1. Master loop</h2>
         <Dropzone
           label="Drop your master loop here"
-          hint="The loop whose key & tempo everything else will match"
+          hint="The loop whose key & tempo everything else will match — or drop a whole .koala project to import every pad at once"
+          allowKoala
           onFiles={async (files) => {
             setBusy(true);
+            setError(null);
             try {
-              await loadMaster(files[0]);
+              if (isKoalaFile(files[0])) {
+                await loadKoalaProject(files[0]);
+              } else {
+                await loadMaster(files[0]);
+              }
+            } catch (err) {
+              setError(String(err instanceof Error ? err.message : err));
             } finally {
               setBusy(false);
             }
           }}
         />
+        <p className="muted drag-hint">
+          Tip: for .koala project files, the sound in the top-left pad becomes the master automatically — rearrange
+          pads in Koala first if you want a different one used, or drop a plain audio file here instead.
+        </p>
         {busy && <p className="muted">Analyzing…</p>}
+        {error && <p className="error">{error}</p>}
       </section>
     );
   }
@@ -41,6 +56,12 @@ export function MasterPanel() {
   return (
     <section className="panel">
       <h2>1. Master loop</h2>
+      {koalaProject && (
+        <p className="muted drag-hint">
+          Imported {koalaProject.pads.length} pad{koalaProject.pads.length === 1 ? "" : "s"} from{" "}
+          {koalaProject.originalName} — top-left pad used as the master.
+        </p>
+      )}
       <div className="master-summary">
         <div>
           <button

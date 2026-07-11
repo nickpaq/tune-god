@@ -4,10 +4,12 @@ interface Props {
   label: string;
   hint: string;
   multiple?: boolean;
+  /** Also accept .koala project files (Koala Sampler), not just plain audio. */
+  allowKoala?: boolean;
   onFiles: (files: File[]) => void;
 }
 
-export function Dropzone({ label, hint, multiple, onFiles }: Props) {
+export function Dropzone({ label, hint, multiple, allowKoala, onFiles }: Props) {
   const [isOver, setIsOver] = useState(false);
 
   const handleDrop = useCallback(
@@ -15,11 +17,14 @@ export function Dropzone({ label, hint, multiple, onFiles }: Props) {
       e.preventDefault();
       setIsOver(false);
       const files = Array.from(e.dataTransfer.files).filter(
-        (f) => f.type.startsWith("audio/") || f.name.match(/\.(wav|wave|mp3|aif|aiff|caf|flac|m4a|ogg)$/i),
+        (f) =>
+          f.type.startsWith("audio/") ||
+          f.name.match(/\.(wav|wave|mp3|aif|aiff|caf|flac|m4a|ogg)$/i) ||
+          (allowKoala && f.name.match(/\.koala$/i)),
       );
       if (files.length) onFiles(files);
     },
-    [onFiles],
+    [onFiles, allowKoala],
   );
 
   const handleInput = useCallback(
@@ -48,7 +53,7 @@ export function Dropzone({ label, hint, multiple, onFiles }: Props) {
           instead, which is far more reliable there. */}
       <input
         type="file"
-        accept="audio/*,.wav,.wave,.aif,.aiff,.caf,.mp3,.m4a,.flac,.ogg"
+        accept={`audio/*,.wav,.wave,.aif,.aiff,.caf,.mp3,.m4a,.flac,.ogg${allowKoala ? ",.koala" : ""}`}
         multiple={multiple}
         onChange={handleInput}
         hidden
