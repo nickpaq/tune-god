@@ -2,7 +2,7 @@ import React, { useCallback, useState } from "react";
 
 interface Props {
   label: string;
-  hint: string;
+  hint?: string;
   multiple?: boolean;
   /** Also accept .koala project files (Koala Sampler), not just plain audio. */
   allowKoala?: boolean;
@@ -59,7 +59,7 @@ export function Dropzone({ label, hint, multiple, allowKoala, onFiles }: Props) 
         hidden
       />
       <div className="dropzone__label">{label}</div>
-      <div className="dropzone__hint">{hint}</div>
+      {hint && <div className="dropzone__hint">{hint}</div>}
     </label>
   );
 }

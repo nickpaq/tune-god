@@ -9,7 +9,6 @@
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  margin: 0 0 0.35rem;
 }
 
 .app-header__title svg {
@@ -23,10 +22,6 @@
   font-weight: 800;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-}
-
-.app-header .muted {
-  max-width: 46em;
 }
 
 .app-main {
@@ -181,10 +176,6 @@
 
 .drag-all-chip:active {
   cursor: grabbing;
-}
-
-.drag-hint {
-  margin: 0 0 0.75rem;
 }
 
 .sample-list {

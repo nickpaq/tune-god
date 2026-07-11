@@ -38,16 +38,6 @@ export function ReferenceTone() {
       <h2>
         Target key: {target.tonicName} {target.scale}
       </h2>
-      <p className="muted">
-        Samples are tuned to <strong>{target.sampleTargetName}</strong>
-        {target.scale === "minor" && (
-          <>
-            {" "}
-            so the <strong>A</strong> key on a DAW keyboard plays the root ({target.tonicName})
-          </>
-        )}
-        {" "}— the white keys play {target.tonicName} {target.scale}.
-      </p>
       <div className="tone-controls">
         <button onClick={toggle}>
           {playing ? "■ Stop" : `▶ Root tone (${target.tonicName}, ${frequency.toFixed(1)} Hz)`}

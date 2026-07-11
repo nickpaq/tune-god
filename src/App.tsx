@@ -14,10 +14,6 @@ function App() {
             <Logo size={44} />
             <h1>KoalaTune</h1>
           </div>
-          <p className="muted">
-            Detect the key of a loop, tune your samples so the white keys play in key, and time-stretch loops to
-            match — all on-device.
-          </p>
         </header>
         <main className="app-main">
           <MasterPanel />

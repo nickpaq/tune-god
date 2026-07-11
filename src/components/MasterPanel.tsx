@@ -11,7 +11,7 @@ import { clipboardReadSupported, findKoalaFileInFileList, readKoalaFileFromClipb
 export function MasterPanel() {
   const { state, dispatch } = useSamplesStore();
   const { loadMaster, loadKoalaProject } = useAppActions();
-  const { master, koalaProject } = state;
+  const { master } = state;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -67,17 +67,11 @@ export function MasterPanel() {
   if (!master) {
     return (
       <section className="panel">
-        <h2>1. Master loop</h2>
         <Dropzone
-          label="Drop your master loop here"
-          hint="The loop whose key & tempo everything else will match — or drop a whole .koala project to import every pad at once"
+          label="Drop your koala project file here to tune"
           allowKoala
           onFiles={handleFiles}
         />
-        <p className="muted drag-hint">
-          Tip: for .koala project files, the sound in the top-left pad becomes the master automatically — rearrange
-          pads in Koala first if you want a different one used, or drop a plain audio file here instead.
-        </p>
         {clipboardReadSupported && (
           <button className="link-btn" onClick={handlePasteClick} disabled={busy}>
             📋 paste project from clipboard
@@ -95,13 +89,6 @@ export function MasterPanel() {
 
   return (
     <section className="panel">
-      <h2>1. Master loop</h2>
-      {koalaProject && (
-        <p className="muted drag-hint">
-          Imported {koalaProject.pads.length} pad{koalaProject.pads.length === 1 ? "" : "s"} from{" "}
-          {koalaProject.originalName} — top-left pad used as the master.
-        </p>
-      )}
       <div className="master-summary">
         <div>
           <button
