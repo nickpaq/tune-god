@@ -1,7 +1,6 @@
 // Pitch-class / frequency math shared across key detection, tuning and UI.
 
 export const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
-export type NoteName = (typeof NOTE_NAMES)[number];
 export type Scale = "major" | "minor";
 
 export interface DetectedPitch {
@@ -28,10 +27,6 @@ export function centsOffsetFromNearest(midi: number): number {
 
 export function pitchClassOf(midi: number): number {
   return ((Math.round(midi) % 12) + 12) % 12;
-}
-
-export function noteNameOf(midi: number): NoteName {
-  return NOTE_NAMES[pitchClassOf(midi)];
 }
 
 export function pitchClassIndex(name: string): number {
@@ -83,8 +78,4 @@ export function formatCents(cents: number): string {
   const rounded = Math.round(cents);
   if (rounded === 0) return "in tune";
   return rounded > 0 ? `+${rounded}c` : `${rounded}c`;
-}
-
-export function formatNoteWithCents(midi: number): string {
-  return `${noteNameOf(midi)}${Math.floor(midi / 12) - 1} ${formatCents(centsOffsetFromNearest(midi))}`;
 }

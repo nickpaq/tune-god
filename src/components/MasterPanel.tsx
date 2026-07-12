@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Dropzone } from "./Dropzone";
+import { PlayButton } from "./PlayButton";
 import { useSamplesStore } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { NOTE_NAMES, formatCents } from "../audio/theory";
 import { togglePlayback } from "../audio/playback";
-import { masterDragItem, startFileDrag } from "../audio/exportSample";
+import { stripExtension } from "../audio/filename";
 import { isKoalaFile } from "../audio/koalaProject";
 import { clipboardReadSupported, findKoalaFileInFileList, readKoalaFileFromClipboard } from "../audio/clipboardImport";
 
@@ -91,23 +92,13 @@ export function MasterPanel() {
     <section className="panel">
       <div className="master-summary">
         <div>
-          <button
-            className="drag-handle"
-            draggable
-            onDragStart={(e) => startFileDrag(e.dataTransfer, [masterDragItem(master)])}
-            title="Drag into another app"
-          >
-            ⠿
-          </button>
-          <strong>{master.name}</strong>
-          <button
-            className="link-btn"
+          <PlayButton
+            playing={playing}
             onClick={() =>
               setPlaying(togglePlayback("master", master.channelData, master.sampleRate, () => setPlaying(false)))
             }
-          >
-            {playing ? "⏸ pause" : "▶ preview"}
-          </button>
+          />
+          <strong>{stripExtension(master.name)}</strong>
           <button className="link-btn" onClick={() => dispatch({ type: "CLEAR_MASTER" })}>
             ✕ clear
           </button>
