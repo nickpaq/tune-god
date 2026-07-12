@@ -32,12 +32,19 @@ async function getEssentia(): Promise<any> {
   return essentiaPromise;
 }
 
-export async function detectKey(mono: Float32Array, sampleRate: number): Promise<KeyDetectionResult> {
-  const essentia = await getEssentia();
-  const vector = essentia.arrayToVector(mono);
-  // 'edma' profile is tuned for electronic/produced music and distinguishes
-  // major/minor more reliably than the classical Krumhansl profile on loops.
-  const result = essentia.KeyExtractor(
+/**
+ * Key profiles voted together for the final estimate. Each profile has
+ * different failure modes — 'edma' is tuned for electronic/produced music
+ * but is biased toward minor; 'bgate' (Faraldo's gated profile) is strong
+ * on the same material with different errors; 'temperley' and 'krumhansl'
+ * are the classical-listening profiles and anchor the major/minor decision
+ * on tonal material. A strength-weighted vote across all four beats any
+ * single profile on loop-length audio.
+ */
+const KEY_PROFILE_ENSEMBLE = ["edma", "bgate", "temperley", "krumhansl"] as const;
+
+function runKeyExtractor(essentia: any, vector: any, sampleRate: number, profile: string) {
+  return essentia.KeyExtractor(
     vector,
     true,
     4096,
@@ -47,21 +54,63 @@ export async function detectKey(mono: Float32Array, sampleRate: number): Promise
     60,
     25,
     0.2,
-    "edma",
+    profile,
     sampleRate,
     0.0001,
     440,
     "cosine",
     "hann",
   );
-  vector.delete?.();
+}
 
+export async function detectKey(mono: Float32Array, sampleRate: number): Promise<KeyDetectionResult> {
+  const essentia = await getEssentia();
+  const vector = essentia.arrayToVector(mono);
+
+  // Strength-weighted vote: each profile's (tonic, scale) estimate adds its
+  // confidence to that candidate's total; the candidate with the highest
+  // total wins and its best single-profile result is reported.
+  const totals = new Map<string, { weight: number; votes: number; best: any }>();
+  try {
+    for (const profile of KEY_PROFILE_ENSEMBLE) {
+      let result: any;
+      try {
+        result = runKeyExtractor(essentia, vector, sampleRate, profile);
+      } catch {
+        continue; // a profile unsupported by this essentia build just abstains
+      }
+      const strength = Math.max(0, Number(result.strength) || 0);
+      const candidate = `${result.key}|${result.scale}`;
+      const entry = totals.get(candidate);
+      if (entry) {
+        entry.weight += strength;
+        entry.votes += 1;
+        if (strength > entry.best.strength) entry.best = result;
+      } else {
+        totals.set(candidate, { weight: strength, votes: 1, best: result });
+      }
+    }
+  } finally {
+    vector.delete?.();
+  }
+
+  let winner: { weight: number; votes: number; best: any } | null = null;
+  for (const entry of totals.values()) {
+    if (!winner || entry.weight > winner.weight) winner = entry;
+  }
+  if (!winner) throw new Error("Key detection failed: no key profile produced a result.");
+
+  const result = winner.best;
   const scale: Scale = result.scale === "minor" ? "minor" : "major";
+  // Confidence blends the winner's own strength with how much of the
+  // ensemble agreed, so a unanimous weak call and a lone strong call don't
+  // both report as certain.
+  const agreement = winner.votes / KEY_PROFILE_ENSEMBLE.length;
   return {
     tonicPitchClass: pitchClassFromEssentiaKeyName(result.key),
     tonicName: result.key,
     scale,
-    strength: result.strength,
+    strength: result.strength * agreement,
   };
 }
 
