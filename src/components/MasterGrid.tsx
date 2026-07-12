@@ -1,7 +1,6 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { scaleGridFrequency, scaleStepsFor, type MasterItem, type TuningMode } from "../state/samplesStore";
 import { NOTE_NAMES } from "../audio/theory";
-import { playTone, type ToneHandle } from "../audio/playback";
 
 /**
  * Three octave rows, top to bottom, matching Koala's own pad-grid layout —
@@ -30,6 +29,8 @@ export function MasterGrid({
   tonicPitchClass,
   scale,
   trimSemitones,
+  onPressNote,
+  onReleaseNote,
 }: {
   master: MasterItem;
   tuningMode: TuningMode;
@@ -37,21 +38,23 @@ export function MasterGrid({
   tonicPitchClass: number;
   scale: "major" | "minor";
   trimSemitones: number;
+  /** Starts (or retunes) the manually-played drone note at this frequency. */
+  onPressNote: (frequency: number) => void;
+  /** Stops the manually-played drone note. */
+  onReleaseNote: () => void;
 }) {
   const [activeCell, setActiveCell] = useState<string | null>(null);
-  const toneRef = useRef<ToneHandle | null>(null);
   const steps = scaleStepsFor(scale);
 
   const stop = () => {
-    toneRef.current?.stop();
-    toneRef.current = null;
+    onReleaseNote();
     setActiveCell(null);
   };
 
   const press = (row: number, col: number, octaveShift: number) => {
     const freq = scaleGridFrequency(master, tuningMode, a4Reference, col, octaveShift, trimSemitones);
     if (freq === null) return;
-    toneRef.current = playTone(freq, 0.35);
+    onPressNote(freq);
     setActiveCell(`${row}-${col}`);
   };
 

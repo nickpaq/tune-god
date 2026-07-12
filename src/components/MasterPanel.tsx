@@ -5,12 +5,11 @@ import { MasterGrid } from "./MasterGrid";
 import {
   useSamplesStore,
   masterCorrectionSemitones,
-  scaleGridFrequency,
   type TuningMode,
 } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { NOTE_NAMES, A4_REFERENCE_RANGE, formatCents } from "../audio/theory";
-import { togglePlayback, playSampleWithDrone, type DualHandle } from "../audio/playback";
+import { playMasterLoop, playTone, type MasterSessionHandle, type ToneHandle } from "../audio/playback";
 import { stripExtension } from "../audio/filename";
 import { isKoalaFile } from "../audio/koalaProject";
 import { clipboardReadSupported, findKoalaFileInFileList, readKoalaFileFromClipboard } from "../audio/clipboardImport";
@@ -30,7 +29,9 @@ export function MasterPanel() {
   const [balance, setBalance] = useState(50); // 0 = drone only, 100 = master only
   const [semitoneVal, setSemitoneVal] = useState(0);
   const [centsVal, setCentsVal] = useState(0);
-  const dualRef = useRef<DualHandle | null>(null);
+  const sessionRef = useRef<MasterSessionHandle | null>(null);
+  /** Standalone drone note, used when the keyboard is pressed while the master loop isn't playing. */
+  const standaloneToneRef = useRef<ToneHandle | null>(null);
 
   const handleFiles = useCallback(
     async (files: File[]) => {
@@ -82,7 +83,8 @@ export function MasterPanel() {
 
   useEffect(
     () => () => {
-      dualRef.current?.stop();
+      sessionRef.current?.stop();
+      standaloneToneRef.current?.stop();
     },
     [],
   );
@@ -117,57 +119,60 @@ export function MasterPanel() {
   const trimSemitones = semitoneVal + centsVal / 100;
   const hasKey = tonic !== undefined && scale !== undefined;
 
+  // Always restarts from the beginning and loops until stopped — the drone
+  // is never auto-triggered here, since it's played manually via the
+  // keyboard grid below (see startDroneNote/stopDroneNote).
   const preview = () => {
-    if (dualRef.current) {
-      dualRef.current.stop();
-      dualRef.current = null;
+    if (sessionRef.current) {
+      sessionRef.current.stop();
+      sessionRef.current = null;
       setPlaying(false);
       return;
     }
-    if (playing) {
-      setPlaying(togglePlayback("master", master.channelData, master.sampleRate, () => setPlaying(false)));
-      return;
-    }
-    const freq = hasKey ? scaleGridFrequency(master, state.tuningMode, state.a4Reference, 0, 0, trimSemitones) : null;
-    if (freq !== null) {
-      dualRef.current = playSampleWithDrone(
-        "master",
-        master.channelData,
-        master.sampleRate,
-        { droneFrequency: freq, balance: balance / 100 },
-        () => {
-          dualRef.current = null;
-          setPlaying(false);
-        },
-      );
-      setPlaying(true);
-    } else {
-      setPlaying(togglePlayback("master", master.channelData, master.sampleRate, () => setPlaying(false)));
-    }
+    sessionRef.current = playMasterLoop(
+      "master",
+      master.channelData,
+      master.sampleRate,
+      { balance: balance / 100 },
+      () => {
+        sessionRef.current = null;
+        setPlaying(false);
+      },
+    );
+    setPlaying(true);
   };
 
   const onBalanceChange = (value: number) => {
     setBalance(value);
-    dualRef.current?.setBalance(value / 100);
+    sessionRef.current?.setBalance(value / 100);
   };
 
-  const retuneDrone = (nextSemitone: number, nextCents: number) => {
-    if (!dualRef.current || !hasKey) return;
-    const freq = scaleGridFrequency(master, state.tuningMode, state.a4Reference, 0, 0, nextSemitone + nextCents / 100);
-    // Live AudioParam ramp on the drone oscillator only — the master loop
-    // underneath keeps playing uninterrupted, no restart/click.
-    if (freq !== null) dualRef.current.setDroneFrequency(freq);
+  // Keyboard grid pads: sound alongside the master loop (crossfaded via the
+  // balance slider) when it's playing, or standalone otherwise.
+  const startDroneNote = (frequency: number) => {
+    if (sessionRef.current) {
+      sessionRef.current.startDrone(frequency);
+      return;
+    }
+    standaloneToneRef.current?.stop();
+    standaloneToneRef.current = playTone(frequency, 0.35);
+  };
+  const stopDroneNote = () => {
+    if (sessionRef.current) {
+      sessionRef.current.stopDrone();
+      return;
+    }
+    standaloneToneRef.current?.stop();
+    standaloneToneRef.current = null;
   };
 
   const nudgeSemitone = (delta: number) => {
     const v = Math.max(-12, Math.min(12, semitoneVal + delta));
     setSemitoneVal(v);
-    retuneDrone(v, centsVal);
   };
   const nudgeCents = (delta: number) => {
     const v = Math.max(-50, Math.min(50, centsVal + delta));
     setCentsVal(v);
-    retuneDrone(semitoneVal, v);
   };
 
   return (
@@ -296,11 +301,7 @@ export function MasterPanel() {
                   max={12}
                   step={1}
                   value={semitoneVal}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setSemitoneVal(v);
-                    retuneDrone(v, centsVal);
-                  }}
+                  onChange={(e) => setSemitoneVal(Number(e.target.value))}
                   title="Nudges the comparison drone/grid only — diagnostic, never applied to the master's own audio"
                 />
                 <button className="tune-nudge" onClick={() => nudgeSemitone(1)} title="Up 1 semitone">
@@ -318,11 +319,7 @@ export function MasterPanel() {
                   max={50}
                   step={1}
                   value={centsVal}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setCentsVal(v);
-                    retuneDrone(semitoneVal, v);
-                  }}
+                  onChange={(e) => setCentsVal(Number(e.target.value))}
                   title="Fine cents nudge on the comparison drone/grid"
                 />
                 <button className="tune-nudge" onClick={() => nudgeCents(1)} title="Up 1 cent">
@@ -343,7 +340,6 @@ export function MasterPanel() {
                     onClick={() => {
                       setSemitoneVal(0);
                       setCentsVal(0);
-                      retuneDrone(0, 0);
                     }}
                     title="Clear the diagnostic offset"
                   >
@@ -360,6 +356,8 @@ export function MasterPanel() {
               tonicPitchClass={tonic!}
               scale={scale!}
               trimSemitones={trimSemitones}
+              onPressNote={startDroneNote}
+              onReleaseNote={stopDroneNote}
             />
           </>
         )}

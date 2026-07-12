@@ -155,6 +155,155 @@ export function playTone(frequency: number, volume: number): ToneHandle {
   };
 }
 
+export interface MasterLoopOptions {
+  /** 0 = drone only, 1 = master only. */
+  balance: number;
+}
+
+export interface MasterSessionHandle {
+  /** Fades out and tears down the loop and any currently-sounding drone note. */
+  stop: () => void;
+  /** 0 = drone only, 1 = master only. Live-adjustable, no re-render needed. */
+  setBalance: (balance: number) => void;
+  /** Starts a manually-triggered drone note, or retunes it live if one is already sounding. */
+  startDrone: (frequency: number) => void;
+  /** Fades out the currently-sounding drone note (e.g. keyboard pad released) without touching the loop. */
+  stopDrone: () => void;
+}
+
+/**
+ * Loops the master sample by itself — always from the beginning, no
+ * auto-triggered drone — while exposing `startDrone`/`stopDrone` so a
+ * manually-played keyboard note (see MasterGrid) can sound alongside it.
+ * The loop uses the same declicked-retrigger technique as
+ * `playSampleWithDrone` rather than `AudioBufferSourceNode.loop`, since the
+ * buffer's start/end aren't guaranteed to align and would click at the seam.
+ * `key` participates in the app-wide single-preview slot, so starting this
+ * stops any other preview and vice versa; the drone note it manages is not
+ * itself a separate slot; it lives and dies with this session.
+ */
+export function playMasterLoop(
+  key: string,
+  channelData: Float32Array[],
+  sampleRate: number,
+  options: MasterLoopOptions,
+  onStopped: () => void,
+): MasterSessionHandle {
+  stopActive();
+
+  const ctx = getAudioContext();
+  const buffer = bufferFromChannelData(channelData, sampleRate);
+
+  const sampleBus = ctx.createGain();
+  sampleBus.connect(ctx.destination);
+  const droneBus = ctx.createGain();
+  droneBus.connect(ctx.destination);
+
+  const setBalance = (balance: number) => {
+    const s = Math.max(0, Math.min(1, balance));
+    const now = ctx.currentTime;
+    // The drone is a pure sine at full amplitude, which reads much louder
+    // than a real sample at the same gain value — scaled down so 50/50
+    // balance sounds roughly equal-loudness rather than drone-dominant.
+    sampleBus.gain.setTargetAtTime(s, now, SMOOTH_SEC);
+    droneBus.gain.setTargetAtTime((1 - s) * 0.55, now, SMOOTH_SEC);
+  };
+  setBalance(options.balance);
+
+  let live = true;
+  let currentSource: AudioBufferSourceNode | null = null;
+
+  const scheduleOne = () => {
+    if (!live) return;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const fade = ctx.createGain();
+    source.connect(fade);
+    fade.connect(sampleBus);
+
+    const now = ctx.currentTime;
+    fade.gain.setValueAtTime(0, now);
+    fade.gain.linearRampToValueAtTime(1, now + FADE_SEC);
+    const dur = buffer.duration;
+    if (dur > FADE_SEC * 4) {
+      fade.gain.setValueAtTime(1, now + dur - FADE_SEC);
+      fade.gain.linearRampToValueAtTime(0, now + dur);
+    }
+    source.start(now);
+    currentSource = source;
+    source.onended = () => {
+      if (!live || currentSource !== source) return;
+      scheduleOne();
+    };
+  };
+  scheduleOne();
+
+  let droneOsc: OscillatorNode | null = null;
+  let droneGain: GainNode | null = null;
+
+  const startDrone = (frequency: number) => {
+    if (droneOsc && droneGain) {
+      droneOsc.frequency.setTargetAtTime(frequency, ctx.currentTime, SMOOTH_SEC);
+      return;
+    }
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = frequency;
+    osc.connect(gain);
+    gain.connect(droneBus);
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(1, now + FADE_SEC);
+    osc.start(now);
+    droneOsc = osc;
+    droneGain = gain;
+  };
+
+  const stopDrone = () => {
+    if (!droneOsc || !droneGain) return;
+    const osc = droneOsc;
+    const gain = droneGain;
+    droneOsc = null;
+    droneGain = null;
+    fadeOutAndStop(gain, [osc]);
+    osc.onended = () => {
+      osc.disconnect();
+      gain.disconnect();
+    };
+  };
+
+  const fadeAndStop = () => {
+    if (currentSource) fadeOutAndStop(sampleBus, [currentSource]);
+    if (droneOsc) fadeOutAndStop(droneBus, [droneOsc]);
+    const cleanupAt = (FADE_SEC + 0.02) * 1000;
+    setTimeout(() => {
+      sampleBus.disconnect();
+      droneBus.disconnect();
+    }, cleanupAt);
+  };
+
+  const stop = () => {
+    if (!live) return;
+    live = false;
+    if (active === slot) active = null;
+    fadeAndStop();
+  };
+
+  const slot: ActiveSlot = {
+    key,
+    manual: false,
+    fadeAndStop: () => {
+      live = false;
+      fadeAndStop();
+    },
+    onStopped,
+  };
+  active = slot;
+
+  return { stop, setBalance, startDrone, stopDrone };
+}
+
 export interface DualPlaybackOptions {
   droneFrequency: number;
   /** 0 = drone only, 1 = sample only. */
