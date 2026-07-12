@@ -1,19 +1,25 @@
 import { getAudioContext } from "./decode";
 
+/**
+ * Short gain ramp applied at every start, stop, and natural end of playback.
+ * Starting or cutting audio at a non-zero sample value produces an audible
+ * click/pop; an ~8 ms fade is inaudible as an envelope but removes the
+ * discontinuity entirely. (More robust than snapping to zero crossings,
+ * which shifts timing and still clicks on DC-offset or stereo material —
+ * the two channels never cross zero at the same instant.)
+ */
+const FADE_SEC = 0.008;
+
 interface ActivePlayback {
   key: string;
   source: AudioBufferSourceNode;
-  startCtxTime: number;
-  startOffset: number;
-  durationSec: number;
+  gain: GainNode;
   onStopped: () => void;
   /** Set before an intentional stop() so onended doesn't double-fire callbacks. */
   manual: boolean;
 }
 
 let active: ActivePlayback | null = null;
-// Remembers where each preview was paused so the next tap resumes from there.
-const pausedOffsets = new Map<string, number>();
 
 function bufferFromChannelData(channelData: Float32Array[], sampleRate: number): AudioBuffer {
   const ctx = getAudioContext();
@@ -22,22 +28,17 @@ function bufferFromChannelData(channelData: Float32Array[], sampleRate: number):
   return buffer;
 }
 
-function stopActive(pause: boolean): void {
+function stopActive(): void {
   if (!active) return;
   const a = active;
   a.manual = true;
-  if (pause) {
-    const elapsed = a.startOffset + (getAudioContext().currentTime - a.startCtxTime);
-    if (elapsed > 0 && elapsed < a.durationSec) {
-      pausedOffsets.set(a.key, elapsed);
-    } else {
-      pausedOffsets.delete(a.key);
-    }
-  } else {
-    pausedOffsets.delete(a.key);
-  }
+  const ctx = getAudioContext();
+  const now = ctx.currentTime;
+  a.gain.gain.cancelScheduledValues(now);
+  a.gain.gain.setValueAtTime(a.gain.gain.value, now);
+  a.gain.gain.linearRampToValueAtTime(0, now + FADE_SEC);
   try {
-    a.source.stop();
+    a.source.stop(now + FADE_SEC + 0.002);
   } catch {
     // already stopped
   }
@@ -46,12 +47,14 @@ function stopActive(pause: boolean): void {
 }
 
 /**
- * Tap-to-play / tap-to-pause preview. `key` identifies the sound (e.g. a
- * sample id); tapping the same key pauses and remembers the position, tapping
- * a different key stops the current one and starts the new one. Returns true
- * if the sound is now playing. `onStopped` fires whenever this playback ends
- * for any reason (pause, replaced by another preview, or natural end) so the
- * caller can reset its button state.
+ * Tap-to-play / tap-to-stop preview. `key` identifies the sound (e.g. a
+ * sample id); tapping the same key stops it, tapping a different key stops
+ * the current one and starts the new one. Playback always starts from the
+ * beginning — the underlying buffer may be re-rendered at any time, so
+ * resuming a saved position would land somewhere unrelated in new audio.
+ * Returns true if the sound is now playing. `onStopped` fires whenever this
+ * playback ends for any reason (stopped, replaced by another preview, or
+ * natural end) so the caller can reset its button state.
  */
 export function togglePlayback(
   key: string,
@@ -60,35 +63,36 @@ export function togglePlayback(
   onStopped: () => void,
 ): boolean {
   if (active?.key === key) {
-    stopActive(true);
+    stopActive();
     return false;
   }
-  stopActive(false);
+  stopActive();
 
   const ctx = getAudioContext();
   const buffer = bufferFromChannelData(channelData, sampleRate);
-  const savedOffset = pausedOffsets.get(key) ?? 0;
-  // The buffer may have changed since the pause (e.g. re-processed), so clamp.
-  const offset = savedOffset < buffer.duration ? savedOffset : 0;
-
   const source = ctx.createBufferSource();
   source.buffer = buffer;
-  source.connect(ctx.destination);
-  source.start(0, offset);
 
-  const playback: ActivePlayback = {
-    key,
-    source,
-    startCtxTime: ctx.currentTime,
-    startOffset: offset,
-    durationSec: buffer.duration,
-    onStopped,
-    manual: false,
-  };
+  const gain = ctx.createGain();
+  const now = ctx.currentTime;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(1, now + FADE_SEC);
+  // Declick the natural end too — a buffer that ends off zero would
+  // otherwise pop when the source cuts out.
+  const end = now + buffer.duration;
+  if (buffer.duration > FADE_SEC * 4) {
+    gain.gain.setValueAtTime(1, end - FADE_SEC);
+    gain.gain.linearRampToValueAtTime(0, end);
+  }
+
+  source.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(now);
+
+  const playback: ActivePlayback = { key, source, gain, onStopped, manual: false };
   source.onended = () => {
     if (playback.manual) return;
     if (active === playback) active = null;
-    pausedOffsets.delete(key);
     onStopped();
   };
   active = playback;
@@ -106,18 +110,29 @@ export function playTone(frequency: number, volume: number): ToneHandle {
   const gain = ctx.createGain();
   osc.type = "sine";
   osc.frequency.value = frequency;
-  gain.gain.value = volume;
+  const now = ctx.currentTime;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(volume, now + FADE_SEC);
   osc.connect(gain);
   gain.connect(ctx.destination);
-  osc.start();
+  osc.start(now);
   return {
     stop: () => {
-      osc.stop();
-      osc.disconnect();
-      gain.disconnect();
+      const t = ctx.currentTime;
+      gain.gain.cancelScheduledValues(t);
+      gain.gain.setValueAtTime(gain.gain.value, t);
+      gain.gain.linearRampToValueAtTime(0, t + FADE_SEC);
+      osc.stop(t + FADE_SEC + 0.002);
+      // Nodes disconnect themselves once the source stops; delay so the
+      // fade-out actually reaches the destination.
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
     },
+    // Smoothed to avoid zipper noise while dragging the volume slider.
     setVolume: (v: number) => {
-      gain.gain.value = v;
+      gain.gain.setTargetAtTime(v, ctx.currentTime, 0.02);
     },
   };
 }

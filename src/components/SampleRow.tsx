@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSamplesStore, droneFrequency, type SampleItem } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { togglePlayback, playTone, type ToneHandle } from "../audio/playback";
@@ -15,14 +15,16 @@ function formatShift(semitones: number): string {
   return `${rounded > 0 ? "+" : ""}${rounded}st`;
 }
 
+/** Trim shown as signed semitones.cents, e.g. "+1.07" = up 1 semitone 7 cents. */
 function formatTrim(offset: number): string {
-  const st = Math.trunc(offset);
-  const cents = Math.round((offset - st) * 100);
-  const parts: string[] = [];
-  if (st !== 0) parts.push(`${st > 0 ? "+" : ""}${st}st`);
-  if (cents !== 0) parts.push(`${cents > 0 ? "+" : ""}${cents}c`);
-  return parts.length ? parts.join(" ") : "0";
+  return `${offset > 0 ? "+" : ""}${offset.toFixed(2)}`;
 }
+
+/** First repeat fires after this hold time, then the interval accelerates. */
+const HOLD_START_MS = 400;
+const HOLD_INTERVAL_MS = 150;
+const HOLD_MIN_INTERVAL_MS = 25;
+const HOLD_ACCELERATION = 0.82;
 
 /** One badge summarizing where this sample is in the pipeline, and what the play button will play. */
 function StatusBadge({ sample, tuned }: { sample: SampleItem; tuned: boolean }) {
@@ -128,10 +130,69 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
     setDroning(true);
   };
 
-  const nudge = (deltaSemitones: number) => {
-    const next = Math.round((manualOffset + deltaSemitones) * 100) / 100;
-    trimAndProcess(sample.id, next);
+  // Trim presses update the displayed offset (and invalidate the render)
+  // immediately, but the actual re-render only happens on release — so
+  // holding the cent button doesn't queue dozens of DSP renders.
+  const offsetRef = useRef(manualOffset);
+  const holdingRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!holdingRef.current) offsetRef.current = manualOffset;
+  }, [manualOffset]);
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  const applyStep = useCallback(
+    (step: number) => {
+      offsetRef.current = Math.round((offsetRef.current + step) * 100) / 100;
+      dispatch({ type: "SET_SAMPLE_MANUAL_OFFSET", id: sample.id, semitones: offsetRef.current });
+    },
+    [dispatch, sample.id],
+  );
+
+  const beginTrim = (step: number, repeat: boolean) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    holdingRef.current = true;
+    applyStep(step);
+    if (repeat) {
+      let interval = HOLD_INTERVAL_MS;
+      const tick = () => {
+        applyStep(step);
+        interval = Math.max(HOLD_MIN_INTERVAL_MS, interval * HOLD_ACCELERATION);
+        timerRef.current = window.setTimeout(tick, interval);
+      };
+      timerRef.current = window.setTimeout(tick, HOLD_START_MS);
+    }
   };
+
+  const endTrim = () => {
+    if (!holdingRef.current) return;
+    holdingRef.current = false;
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    trimAndProcess(sample.id, offsetRef.current);
+  };
+
+  const trimButton = (label: string, title: string, step: number, repeat = false) => (
+    <button
+      className="trim-btn"
+      title={title}
+      onPointerDown={beginTrim(step, repeat)}
+      onPointerUp={endTrim}
+      onPointerCancel={endTrim}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {label}
+    </button>
+  );
 
   const applyFix = (cents: number) => {
     const next = Math.round((manualOffset - cents / 100) * 100) / 100;
@@ -177,21 +238,17 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
 
       {trimmable && (
         <div className="sample-card__trim">
-          <button className="trim-btn" onClick={() => nudge(-1)} title="Trim down a semitone and re-render">
-            −st
-          </button>
-          <button className="trim-btn" onClick={() => nudge(-0.05)} title="Trim down 5 cents and re-render">
-            −5c
-          </button>
-          <span className="trim-value" title="Manual trim on top of the computed shift">
-            {formatTrim(manualOffset)}
-          </span>
-          <button className="trim-btn" onClick={() => nudge(0.05)} title="Trim up 5 cents and re-render">
-            +5c
-          </button>
-          <button className="trim-btn" onClick={() => nudge(1)} title="Trim up a semitone and re-render">
-            +st
-          </button>
+          <div className="trim-bar">
+            {trimButton("⟨⟨⟨", "Down an octave (e.g. drop a bass back after tuning it up high)", -12)}
+            {trimButton("⟨⟨", "Down a semitone", -1)}
+            {trimButton("⟨", "Down a cent — hold to accelerate", -0.01, true)}
+            <span className="trim-value" title="Manual trim in semitones on top of the computed shift">
+              {formatTrim(manualOffset)}
+            </span>
+            {trimButton("⟩", "Up a cent — hold to accelerate", 0.01, true)}
+            {trimButton("⟩⟩", "Up a semitone", 1)}
+            {trimButton("⟩⟩⟩", "Up an octave (great for working on bass elements at audible pitch)", 12)}
+          </div>
           {manualOffset !== 0 && (
             <button className="link-btn" onClick={() => trimAndProcess(sample.id, 0)} title="Clear the manual trim and re-render">
               ↺

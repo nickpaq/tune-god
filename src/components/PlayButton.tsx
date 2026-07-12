@@ -9,7 +9,7 @@ export function PlayButton({
 }) {
   return (
     <button className="preview-btn" onClick={onClick} disabled={disabled}>
-      {playing ? "⏸" : "▶"}
+      {playing ? "⏹" : "▶"}
     </button>
   );
 }
