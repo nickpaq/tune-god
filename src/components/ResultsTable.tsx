@@ -52,8 +52,8 @@ export function ResultsTable() {
         )}
       </div>
       <div className="sample-list">
-        {samples.map((s) => (
-          <SampleRow key={s.id} sample={s} />
+        {samples.map((s, i) => (
+          <SampleRow key={s.id} sample={s} number={i + 1} />
         ))}
       </div>
     </section>

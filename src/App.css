@@ -241,12 +241,8 @@
   gap: 0.6rem;
 }
 
-.sample-name {
+.sample-index {
   flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-weight: 700;
   font-size: 1rem;
 }
@@ -421,9 +417,14 @@
 
 .sample-card__controls {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+}
+
+.toggle-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
 }
 
 .toggle-btn--active {

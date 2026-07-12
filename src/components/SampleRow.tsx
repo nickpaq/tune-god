@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useSamplesStore, droneFrequency, type SampleItem } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { togglePlayback, playSampleWithDrone, type DualHandle } from "../audio/playback";
-import { stripExtension } from "../audio/filename";
 import { PlayButton } from "./PlayButton";
 import { PrecisionSlider } from "./PrecisionSlider";
 
@@ -97,7 +96,7 @@ function splitTrim(offset: number): { semitones: number; cents: number } {
   return { semitones, cents: totalCents - semitones * 100 };
 }
 
-export function SampleRow({ sample }: { sample: SampleItem }) {
+export function SampleRow({ sample, number }: { sample: SampleItem; number: number }) {
   const { state, dispatch } = useSamplesStore();
   const { trimAndProcess } = useAppActions();
   const [playing, setPlaying] = useState(false);
@@ -252,9 +251,7 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
   return (
     <div className="sample-card">
       <div className="sample-card__top">
-        <span className="sample-name" title={sample.name}>
-          {stripExtension(sample.name)}
-        </span>
+        <span className="sample-index">{number}</span>
         <StatusBadge sample={sample} tuned={tuned} />
         <VerifyChip sample={sample} />
         <PlayButton playing={playing} onClick={preview} />
