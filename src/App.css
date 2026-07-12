@@ -142,6 +142,36 @@
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--accent-cyan);
+  white-space: nowrap;
+}
+
+.badge--muted {
+  color: var(--muted-color, #888);
+}
+
+.badge--pending {
+  color: var(--accent-pink);
+}
+
+.badge--busy {
+  color: var(--accent-pink);
+  animation: badge-pulse 1s ease-in-out infinite;
+}
+
+.badge--done {
+  color: #3ecf6a;
+  border-color: #3ecf6a;
+}
+
+.badge--error {
+  color: #ff5470;
+  border-color: #ff5470;
+}
+
+@keyframes badge-pulse {
+  50% {
+    opacity: 0.45;
+  }
 }
 
 .link-btn {

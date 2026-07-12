@@ -157,7 +157,23 @@ function withComputedShift(
     sample.mode === "loop" && sample.analysis.bpm && master.analysis?.bpm
       ? master.analysis.bpm / sample.analysis.bpm
       : 1;
-  return { ...sample, pitchShiftSemitones, timeRatio };
+
+  // If this sample was already rendered but the target has since moved (key
+  // override, tuning mode, A4 reference, mode toggle...), the render is
+  // stale: drop it so previews fall back to the original audio and the UI
+  // shows the sample as needing processing again.
+  const changed = (a?: number, b?: number) =>
+    (a === undefined) !== (b === undefined) || (a !== undefined && b !== undefined && Math.abs(a - b) > 1e-9);
+  const stale =
+    sample.processedChannelData &&
+    (changed(pitchShiftSemitones, sample.pitchShiftSemitones) || changed(timeRatio, sample.timeRatio));
+
+  return {
+    ...sample,
+    pitchShiftSemitones,
+    timeRatio,
+    ...(stale ? { processedChannelData: undefined, status: "analyzed" as SampleStatus } : {}),
+  };
 }
 
 function reducer(state: State, action: Action): State {

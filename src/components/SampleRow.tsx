@@ -4,13 +4,52 @@ import { togglePlayback } from "../audio/playback";
 import { stripExtension } from "../audio/filename";
 import { PlayButton } from "./PlayButton";
 
+function formatShift(semitones: number): string {
+  const rounded = Math.round(semitones * 100) / 100;
+  return `${rounded > 0 ? "+" : ""}${rounded}st`;
+}
+
+/** One badge summarizing where this sample is in the pipeline, and what the play button will play. */
+function StatusBadge({ sample, tuned }: { sample: SampleItem; tuned: boolean }) {
+  if (sample.mode === "drum") return <span className="badge badge--muted">untouched</span>;
+  switch (sample.status) {
+    case "pending":
+    case "analyzing":
+      return <span className="badge badge--muted">analyzing…</span>;
+    case "processing":
+      return <span className="badge badge--busy">tuning…</span>;
+    case "error":
+      return (
+        <span className="badge badge--error" title={sample.error}>
+          ⚠ failed
+        </span>
+      );
+    default:
+      if (tuned && sample.pitchShiftSemitones !== undefined) {
+        return (
+          <span className="badge badge--done" title="Preview plays the tuned audio">
+            ✓ tuned {formatShift(sample.pitchShiftSemitones)}
+          </span>
+        );
+      }
+      if (sample.pitchShiftSemitones !== undefined) {
+        return (
+          <span className="badge badge--pending" title="Not processed yet — preview plays the original audio">
+            will shift {formatShift(sample.pitchShiftSemitones)}
+          </span>
+        );
+      }
+      return <span className="badge badge--muted">waiting for master</span>;
+  }
+}
+
 export function SampleRow({ sample }: { sample: SampleItem }) {
   const { dispatch } = useSamplesStore();
   const [playing, setPlaying] = useState(false);
+  const tuned = sample.mode !== "drum" && !!sample.processedChannelData;
 
   const preview = () => {
-    const data =
-      sample.mode === "drum" ? sample.channelData : (sample.processedChannelData ?? sample.channelData);
+    const data = tuned ? sample.processedChannelData! : sample.channelData;
     setPlaying(togglePlayback(sample.id, data, sample.sampleRate, () => setPlaying(false)));
   };
 
@@ -20,6 +59,7 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
         <span className="sample-name" title={sample.name}>
           {stripExtension(sample.name)}
         </span>
+        <StatusBadge sample={sample} tuned={tuned} />
         <PlayButton playing={playing} onClick={preview} />
       </div>
 
