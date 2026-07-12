@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { SampleRow } from "./SampleRow";
-import { useSamplesStore, useTargetInfo } from "../state/samplesStore";
+import { useSamplesStore } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { downloadTunedKoalaProject } from "../audio/koalaProject";
 
@@ -8,7 +8,6 @@ export function ResultsTable() {
   const { state } = useSamplesStore();
   const { processAll, buildTunedMaster } = useAppActions();
   const { samples, koalaProject, master, tuningMode } = state;
-  const targetInfo = useTargetInfo(master);
   const targetBpm = master?.overrideBpm ?? master?.analysis?.bpm;
   const [exporting, setExporting] = useState(false);
   const tunedPadCount = samples.filter(
@@ -25,7 +24,7 @@ export function ResultsTable() {
       await downloadTunedKoalaProject(
         koalaProject,
         samples,
-        { scale: targetInfo?.scale, bpm: targetBpm },
+        { bpm: targetBpm },
         masterReplacement ?? undefined,
       );
     } finally {
