@@ -286,7 +286,8 @@ export function MasterPanel() {
                   step={1}
                   value={balance}
                   onChange={(e) => onBalanceChange(Number(e.target.value))}
-                  title="Fades between the reference drone and the master loop — press play and use this to hear whether the detected key actually matches"
+                  onDoubleClick={() => onBalanceChange(50)}
+                  title="Fades between the reference drone and the master loop — press play and use this to hear whether the detected key actually matches. Double-tap to reset."
                 />
                 <span className="tune-row__label">master</span>
               </div>
@@ -302,7 +303,8 @@ export function MasterPanel() {
                   step={1}
                   value={semitoneVal}
                   onChange={(e) => setSemitoneVal(Number(e.target.value))}
-                  title="Nudges the comparison drone/grid only — diagnostic, never applied to the master's own audio"
+                  onDoubleClick={() => setSemitoneVal(0)}
+                  title="Nudges the comparison drone/grid only — diagnostic, never applied to the master's own audio. Double-tap to reset."
                 />
                 <button className="tune-nudge" onClick={() => nudgeSemitone(1)} title="Up 1 semitone">
                   +1st
@@ -320,7 +322,8 @@ export function MasterPanel() {
                   step={1}
                   value={centsVal}
                   onChange={(e) => setCentsVal(Number(e.target.value))}
-                  title="Fine cents nudge on the comparison drone/grid"
+                  onDoubleClick={() => setCentsVal(0)}
+                  title="Fine cents nudge on the comparison drone/grid. Double-tap to reset."
                 />
                 <button className="tune-nudge" onClick={() => nudgeCents(1)} title="Up 1 cent">
                   +1c
@@ -334,18 +337,6 @@ export function MasterPanel() {
                 >
                   {formatTrim(trimSemitones)}
                 </span>
-                {trimSemitones !== 0 && (
-                  <button
-                    className="link-btn"
-                    onClick={() => {
-                      setSemitoneVal(0);
-                      setCentsVal(0);
-                    }}
-                    title="Clear the diagnostic offset"
-                  >
-                    ↺ reset
-                  </button>
-                )}
               </div>
             </div>
 

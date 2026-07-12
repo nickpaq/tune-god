@@ -62,12 +62,8 @@ function StatusBadge({ sample, tuned }: { sample: SampleItem; tuned: boolean }) 
   }
 }
 
-/**
- * Post-render verification result: the rendered audio's measured cents
- * error vs the target, with a one-tap fix that folds the error into the
- * manual trim and re-renders.
- */
-function VerifyChip({ sample, onFix }: { sample: SampleItem; onFix: (cents: number) => void }) {
+/** Post-render verification result: the rendered audio's measured cents error vs the target. */
+function VerifyChip({ sample }: { sample: SampleItem }) {
   if (sample.mode === "drum" || sample.status !== "done" || !sample.processedChannelData) return null;
   if (sample.verifiedConfidence === undefined) return null;
   if (sample.verifiedConfidence < VERIFY_MIN_CONFIDENCE || sample.verifiedOffsetCents === undefined) {
@@ -86,19 +82,10 @@ function VerifyChip({ sample, onFix }: { sample: SampleItem; onFix: (cents: numb
     );
   }
   return (
-    <>
-      <span className="badge badge--error" title="Rendered audio re-measured off-target">
-        ⚠ {cents > 0 ? "+" : ""}
-        {cents}c off
-      </span>
-      <button
-        className="link-btn"
-        onClick={() => onFix(sample.verifiedOffsetCents!)}
-        title="Fold the measured error into this sample's trim and re-render"
-      >
-        fix
-      </button>
-    </>
+    <span className="badge badge--error" title="Rendered audio re-measured off-target">
+      ⚠ {cents > 0 ? "+" : ""}
+      {cents}c off
+    </span>
   );
 }
 
@@ -259,15 +246,6 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
     commitNow(semitoneVal, v);
   };
 
-  const applyFix = (cents: number) => {
-    const next = Math.round((manualOffset - cents / 100) * 100) / 100;
-    if (commitTimerRef.current !== null) {
-      clearTimeout(commitTimerRef.current);
-      commitTimerRef.current = null;
-    }
-    trimAndProcess(sample.id, next);
-  };
-
   const trimmable = sample.mode !== "drum" && sample.pitchShiftSemitones !== undefined;
 
   return (
@@ -277,7 +255,7 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
           {stripExtension(sample.name)}
         </span>
         <StatusBadge sample={sample} tuned={tuned} />
-        <VerifyChip sample={sample} onFix={applyFix} />
+        <VerifyChip sample={sample} />
         <PlayButton playing={playing} onClick={preview} />
       </div>
 
@@ -316,7 +294,8 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
               step={1}
               value={balance}
               onChange={(e) => onBalanceChange(Number(e.target.value))}
-              title="Fades between the reference drone and the sample — press play and use this to hear beating against the drone"
+              onDoubleClick={() => onBalanceChange(50)}
+              title="Fades between the reference drone and the sample — press play and use this to hear beating against the drone. Double-tap to reset."
             />
             <span className="tune-row__label">sample</span>
           </div>
@@ -332,7 +311,11 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
               step={1}
               value={semitoneVal}
               onChange={(e) => onSemitoneSlider(Number(e.target.value))}
-              title="Semitone trim, ±1 octave"
+              onDoubleClick={() => {
+                setSemitoneVal(0);
+                commitNow(0, centsVal);
+              }}
+              title="Semitone trim, ±1 octave. Double-tap to reset."
             />
             <button className="tune-nudge" onClick={() => nudgeSemitone(1)} title="Up 1 semitone">
               +1st
@@ -350,7 +333,11 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
               step={1}
               value={centsVal}
               onChange={(e) => onCentsSlider(Number(e.target.value))}
-              title="Fine cents trim"
+              onDoubleClick={() => {
+                setCentsVal(0);
+                commitNow(semitoneVal, 0);
+              }}
+              title="Fine cents trim. Double-tap to reset."
             />
             <button className="tune-nudge" onClick={() => nudgeCents(1)} title="Up 1 cent">
               +1c
@@ -361,19 +348,6 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
             <span className="trim-value" title="Manual trim in semitones on top of the computed shift">
               {formatTrim(semitoneVal + centsVal / 100)}
             </span>
-            {manualOffset !== 0 && (
-              <button
-                className="link-btn"
-                onClick={() => {
-                  setSemitoneVal(0);
-                  setCentsVal(0);
-                  commitNow(0, 0);
-                }}
-                title="Clear the manual trim and re-render"
-              >
-                ↺ reset
-              </button>
-            )}
           </div>
         </div>
       )}
