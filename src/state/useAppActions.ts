@@ -2,8 +2,8 @@ import { useCallback } from "react";
 import { decodeFile, toMono, cloneChannelData, monoFromChannelData } from "../audio/decode";
 import { semitonesToRatio } from "../audio/theory";
 import { nextAnalysisWorker, nextRenderWorker } from "../workers/workerClient";
-import { useSamplesStore, type SampleItem } from "./samplesStore";
-import { parseKoalaProject, koalaPadToFile } from "../audio/koalaProject";
+import { useSamplesStore, masterCorrectionSemitones, type SampleItem } from "./samplesStore";
+import { parseKoalaProject, koalaPadToFile, type KoalaMasterReplacement } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/drumDetect";
 import { parseFilenameMetadata } from "../audio/filenameMetadata";
 
@@ -136,5 +136,22 @@ export function useAppActions() {
     await Promise.all(targets.map((s) => processSample(s.id)));
   }, [state.samples, processSample]);
 
-  return { loadMaster, addSampleFiles, loadKoalaProject, processSample, processAll };
+  /**
+   * In "a440" mode the master loop itself is retuned onto its detected
+   * tonic at the chosen reference pitch, so the exported project's own pad
+   * needs correcting too — computed fresh here rather than stored in state,
+   * since it only matters at export time. Returns null in "master" mode
+   * (the master stays pristine) or if this master didn't come from a .koala
+   * project (no pad to swap it into).
+   */
+  const buildTunedMaster = useCallback(async (): Promise<KoalaMasterReplacement | null> => {
+    const { master, tuningMode, a4Reference } = state;
+    if (!master || master.koalaSampleId === undefined || tuningMode !== "a440") return null;
+    const shift = masterCorrectionSemitones(master, tuningMode, a4Reference);
+    const worker = nextRenderWorker();
+    const channelData = await worker.process(master.channelData, master.sampleRate, 1, semitonesToRatio(shift), true);
+    return { koalaSampleId: master.koalaSampleId, sampleRate: master.sampleRate, channelData };
+  }, [state.master, state.tuningMode, state.a4Reference]);
+
+  return { loadMaster, addSampleFiles, loadKoalaProject, processSample, processAll, buildTunedMaster };
 }

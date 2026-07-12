@@ -93,13 +93,21 @@ const KEYBOARD_SCALE: Record<"major" | "minor", string> = {
   minor: "NaturalMinor",
 };
 
+export interface KoalaMasterReplacement {
+  koalaSampleId: number;
+  sampleRate: number;
+  channelData: Float32Array[];
+}
+
 /**
  * Rebuilds the project zip with tuned pad audio swapped in — same zip paths
  * and sample IDs throughout, so sampler.json's pad->sample mapping stays
  * valid. Start/end trim points are updated to match the new file lengths,
  * and each replaced pad's pitch knob is zeroed (the tuning is already baked
  * into the audio, so a leftover knob value would just double up/confuse).
- * The master loop's own pad is never touched — it isn't in `replacements`.
+ * The master loop's own pad is only included in `replacements` in "a440"
+ * mode, where it's also been retuned — in "master" mode it's left out, so
+ * its bytes stay untouched.
  */
 async function buildTunedKoalaFile(
   project: ParsedKoalaProject,
@@ -148,12 +156,25 @@ export async function downloadTunedKoalaProject(
   project: ParsedKoalaProject,
   samples: SampleItem[],
   target: KoalaProjectTarget,
+  masterReplacement?: KoalaMasterReplacement,
 ): Promise<void> {
   const replacements: KoalaReplacement[] = [];
   for (const s of samples) {
     if (s.koalaSampleId === undefined || s.mode !== "tune" || !s.processedChannelData) continue;
     const blob = encodeWav({ sampleRate: s.sampleRate, channelData: s.processedChannelData, bitDepth: 24 });
     replacements.push({ sampleId: s.koalaSampleId, blob, frameCount: s.processedChannelData[0].length });
+  }
+  if (masterReplacement) {
+    const blob = encodeWav({
+      sampleRate: masterReplacement.sampleRate,
+      channelData: masterReplacement.channelData,
+      bitDepth: 24,
+    });
+    replacements.push({
+      sampleId: masterReplacement.koalaSampleId,
+      blob,
+      frameCount: masterReplacement.channelData[0].length,
+    });
   }
   const { blob, filename } = await buildTunedKoalaFile(project, replacements, target);
   downloadBlob(blob, filename);

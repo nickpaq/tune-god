@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { SampleRow } from "./SampleRow";
 import { useSamplesStore, useTargetInfo } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
@@ -5,15 +6,32 @@ import { downloadTunedKoalaProject } from "../audio/koalaProject";
 
 export function ResultsTable() {
   const { state } = useSamplesStore();
-  const { processAll } = useAppActions();
-  const { samples, koalaProject, master } = state;
+  const { processAll, buildTunedMaster } = useAppActions();
+  const { samples, koalaProject, master, tuningMode } = state;
   const targetInfo = useTargetInfo(master);
   const targetBpm = master?.overrideBpm ?? master?.analysis?.bpm;
+  const [exporting, setExporting] = useState(false);
   const tunedPadCount = samples.filter(
     (s) => s.koalaSampleId !== undefined && s.mode === "tune" && s.processedChannelData,
   ).length;
 
   if (samples.length === 0) return null;
+
+  const handleDownload = async () => {
+    if (!koalaProject) return;
+    setExporting(true);
+    try {
+      const masterReplacement = await buildTunedMaster();
+      await downloadTunedKoalaProject(
+        koalaProject,
+        samples,
+        { scale: targetInfo?.scale, bpm: targetBpm },
+        masterReplacement ?? undefined,
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <section className="panel">
@@ -21,17 +39,15 @@ export function ResultsTable() {
         <button onClick={processAll}>Process all</button>
         {koalaProject && (
           <button
-            onClick={() =>
-              downloadTunedKoalaProject(koalaProject, samples, { scale: targetInfo?.scale, bpm: targetBpm })
-            }
-            disabled={tunedPadCount === 0}
+            onClick={handleDownload}
+            disabled={tunedPadCount === 0 || exporting}
             title={
               tunedPadCount === 0
                 ? "Process at least one pad from the imported Koala project first"
-                : `Rebuilds ${koalaProject.originalName} with ${tunedPadCount} tuned pad${tunedPadCount === 1 ? "" : "s"} swapped in`
+                : `Rebuilds ${koalaProject.originalName} with ${tunedPadCount} tuned pad${tunedPadCount === 1 ? "" : "s"} swapped in${tuningMode === "a440" ? ", plus the corrected master loop" : ""}`
             }
           >
-            🐨 Download tuned Koala file
+            {exporting ? "🐨 Preparing…" : "🐨 Download tuned Koala file"}
           </button>
         )}
       </div>

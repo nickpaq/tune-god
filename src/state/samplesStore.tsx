@@ -11,12 +11,14 @@ import type { ParsedKoalaProject } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/drumDetect";
 
 /**
- * "master": tune to the master loop's own tonic, then apply the master's
- * own detected detune (in cents) to everything, so samples match the loop's
- * actual pitch, not standard concert pitch. The master's audio is never
- * touched either way.
- * "a440": tune to the master's tonic at an editable, standard-range A4
- * reference pitch, ignoring the master's own detune entirely.
+ * "master": the master loop's audio is left completely untouched. Its key
+ * and detune are only *detected*, not corrected — samples are tuned to the
+ * tonic and then get that same detune applied, so they match the loop's
+ * actual (possibly imperfect) pitch.
+ * "a440": the master loop itself is also retuned, precisely onto its
+ * detected tonic at an editable, standard-range A4 reference pitch, and
+ * samples are tuned to that same clean tonic/reference — so everything
+ * (master included) ends up at true, correct pitch.
  */
 export type TuningMode = "master" | "a440";
 
@@ -105,6 +107,17 @@ function effectiveMasterKey(master: MasterItem): { tonicPitchClass: number; scal
 function tuningCorrectionSemitones(master: MasterItem, tuningMode: TuningMode, a4Reference: number): number {
   if (tuningMode === "a440") return referenceOffsetSemitones(a4Reference);
   return (master.analysis?.tuningOffsetCents ?? 0) / 100;
+}
+
+/**
+ * Semitone correction to retune the master loop's own audio onto its
+ * detected tonic at the chosen A4 reference. Zero (no-op) in "master" mode,
+ * where the master is left pristine by definition.
+ */
+export function masterCorrectionSemitones(master: MasterItem, tuningMode: TuningMode, a4Reference: number): number {
+  if (tuningMode !== "a440") return 0;
+  const detuneCents = master.analysis?.tuningOffsetCents ?? 0;
+  return -detuneCents / 100 + referenceOffsetSemitones(a4Reference);
 }
 
 /** Computes the semitone shift that lands a sample's detected root on the

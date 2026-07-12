@@ -5,7 +5,9 @@ A local-first web app that helps musicians tune sample batches to match a "maste
 ## What it does
 
 1. **Analyzes a master loop** — detects its key (root + major/minor), tempo (BPM), and its own tuning offset from A440.
-2. **Computes the target pitch** — every sample is tuned to the master loop's literal tonic (root note), whether the key is major or minor, corrected by the master's own tuning offset from A440 in cents. The master loop itself is never re-tuned.
+2. **Computes the target pitch**, in one of two modes:
+   - **Match master loop** (default) — the master's audio is left completely untouched. Every sample is tuned to the master's literal tonic, then detuned by the master's own offset from true pitch, so samples match the loop's actual (possibly imperfect) sound.
+   - **Correct everything to A=440** — the master loop is also retuned, precisely onto its detected tonic at an editable, standard-range A4 reference pitch (415–466 Hz), and samples are tuned to that same clean reference — so everything, master included, ends up at true pitch.
 3. **Analyzes a batch of samples** — detects each sample's root note and (optionally) tempo.
 4. **Tunes and time-stretches** — pitch-shifts each sample onto the target pitch class (formant-preserving), and time-stretches samples flagged as loops to the master's BPM. Samples flagged **Drum** are left untouched.
 5. **Lets you preview, override, and export** — per-sample preview playback, a reference tone generator at the target root frequency, individual WAV downloads, or a ZIP of the whole batch.
