@@ -5,6 +5,7 @@ import { nextAnalysisWorker, nextRenderWorker } from "../workers/workerClient";
 import { useSamplesStore, type SampleItem } from "./samplesStore";
 import { parseKoalaProject, koalaPadToFile } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/drumDetect";
+import { parseFilenameMetadata } from "../audio/filenameMetadata";
 
 function makeId(): string {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -18,6 +19,7 @@ export function useAppActions() {
       const buffer = await decodeFile(file);
       const mono = toMono(buffer);
       const channelData = cloneChannelData(buffer);
+      const filenameMeta = parseFilenameMetadata(file.name);
       dispatch({
         type: "SET_MASTER",
         master: {
@@ -27,6 +29,9 @@ export function useAppActions() {
           channelData,
           status: "analyzing",
           koalaSampleId,
+          overrideTonicPitchClass: filenameMeta.tonicPitchClass,
+          overrideScale: filenameMeta.scale,
+          overrideBpm: filenameMeta.bpm,
         },
       });
       const worker = nextAnalysisWorker();

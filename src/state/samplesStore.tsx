@@ -35,9 +35,10 @@ export interface MasterItem {
   channelData: Float32Array[];
   status: SampleStatus;
   analysis?: MasterAnalysis;
-  /** User override in case detection is wrong. */
+  /** Override in case detection is wrong — pre-filled from the filename when parseable, editable, revertible to analysis. */
   overrideTonicPitchClass?: number;
   overrideScale?: "major" | "minor";
+  overrideBpm?: number;
   koalaSampleId?: number;
 }
 
@@ -50,7 +51,7 @@ interface State {
 type Action =
   | { type: "SET_MASTER"; master: MasterItem }
   | { type: "SET_MASTER_ANALYSIS"; analysis: MasterAnalysis }
-  | { type: "SET_MASTER_OVERRIDE"; tonicPitchClass?: number; scale?: "major" | "minor" }
+  | { type: "SET_MASTER_OVERRIDE"; tonicPitchClass?: number; scale?: "major" | "minor"; bpm?: number }
   | { type: "ADD_SAMPLES"; samples: SampleItem[] }
   | { type: "REMOVE_SAMPLE"; id: string }
   | { type: "SET_SAMPLE_STATUS"; id: string; status: SampleStatus; error?: string }
@@ -106,6 +107,7 @@ function reducer(state: State, action: Action): State {
         ...state.master,
         overrideTonicPitchClass: action.tonicPitchClass,
         overrideScale: action.scale,
+        overrideBpm: action.bpm,
       };
       return { ...state, master, samples: state.samples.map((s) => withComputedShift(master, s)) };
     }
