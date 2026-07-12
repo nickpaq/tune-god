@@ -86,12 +86,15 @@ export interface SampleItem {
   koalaSampleId?: number;
   /** True once the user has explicitly picked a mode — stops auto-detection from overwriting their choice. */
   modeManuallySet?: boolean;
-  /** User trim folded into the computed shift — the escape hatch when detection got the root wrong. */
+  /**
+   * User trim folded into the computed shift — the escape hatch when
+   * detection got the root wrong. Also where the post-render verify pass
+   * (see `renderSample` in useAppActions.ts) folds in its own correction: it
+   * re-measures the rendered audio's pitch and silently nudges this value by
+   * whatever cents error it finds, then re-renders — so this can end up
+   * slightly different from whatever the user last dragged the sliders to.
+   */
   manualOffsetSemitones?: number;
-  /** Measured cents error of the *rendered* audio vs the target, from the post-process verify pass. */
-  verifiedOffsetCents?: number;
-  /** Confidence of that measurement (0..1); low values mean "couldn't reliably re-detect a pitch". */
-  verifiedConfidence?: number;
 }
 
 export interface MasterItem {
@@ -129,7 +132,6 @@ type Action =
   | { type: "SET_SAMPLE_MODE"; id: string; mode: SampleMode }
   | { type: "SET_SAMPLE_PROCESSED"; id: string; channelData: Float32Array[] }
   | { type: "SET_SAMPLE_MANUAL_OFFSET"; id: string; semitones: number }
-  | { type: "SET_SAMPLE_VERIFIED"; id: string; cents?: number; confidence?: number }
   | { type: "SET_KOALA_PROJECT"; project: ParsedKoalaProject | null }
   | { type: "SET_TUNING_MODE"; mode: TuningMode }
   | { type: "SET_A4_REFERENCE"; hz: number }
@@ -299,14 +301,7 @@ function withComputedShift(
     ...sample,
     pitchShiftSemitones,
     timeRatio,
-    ...(stale
-      ? {
-          processedChannelData: undefined,
-          status: "analyzed" as SampleStatus,
-          verifiedOffsetCents: undefined,
-          verifiedConfidence: undefined,
-        }
-      : {}),
+    ...(stale ? { processedChannelData: undefined, status: "analyzed" as SampleStatus } : {}),
   };
 }
 
@@ -381,14 +376,7 @@ function reducer(state: State, action: Action): State {
         ...state,
         samples: state.samples.map((s) =>
           s.id === action.id
-            ? {
-                ...s,
-                processedChannelData: action.channelData,
-                status: "done",
-                // Fresh render — the old measurement no longer describes it.
-                verifiedOffsetCents: undefined,
-                verifiedConfidence: undefined,
-              }
+            ? { ...s, processedChannelData: action.channelData, status: "done" }
             : s,
         ),
       };
@@ -404,13 +392,6 @@ function reducer(state: State, action: Action): State {
                 state.a4Reference,
               )
             : s,
-        ),
-      };
-    case "SET_SAMPLE_VERIFIED":
-      return {
-        ...state,
-        samples: state.samples.map((s) =>
-          s.id === action.id ? { ...s, verifiedOffsetCents: action.cents, verifiedConfidence: action.confidence } : s,
         ),
       };
     case "SET_KOALA_PROJECT":

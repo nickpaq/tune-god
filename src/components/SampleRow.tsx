@@ -9,10 +9,6 @@ import { PrecisionSlider } from "./PrecisionSlider";
 /** "bass" mode transposes the preview drone+sample up this many octaves, to make a low fundamental easier to hear/tune. */
 const BASS_PREVIEW_OCTAVE_SHIFT = 3;
 
-/** Below this measured confidence the verify result is noise (e.g. a texture with no clear pitch). */
-const VERIFY_MIN_CONFIDENCE = 0.35;
-/** |error| within this many cents counts as in tune (≈ the audibility threshold). */
-const VERIFY_OK_CENTS = 10;
 /**
  * How long after the last slider/nudge change before the real (DSP-quality)
  * render fires in the background. What you actually hear while dragging
@@ -66,33 +62,6 @@ function StatusBadge({ sample, tuned }: { sample: SampleItem; tuned: boolean }) 
   }
 }
 
-/** Post-render verification result: the rendered audio's measured cents error vs the target. */
-function VerifyChip({ sample }: { sample: SampleItem }) {
-  if (sample.mode === "drum" || sample.status !== "done" || !sample.processedChannelData) return null;
-  if (sample.verifiedConfidence === undefined) return null;
-  if (sample.verifiedConfidence < VERIFY_MIN_CONFIDENCE || sample.verifiedOffsetCents === undefined) {
-    return (
-      <span className="badge badge--muted" title="Couldn't reliably re-detect a pitch in the rendered audio">
-        unverified
-      </span>
-    );
-  }
-  const cents = Math.round(sample.verifiedOffsetCents);
-  if (Math.abs(cents) <= VERIFY_OK_CENTS) {
-    return (
-      <span className="badge badge--done" title="Rendered audio re-measured within the audibility threshold of the target">
-        ✓ {cents === 0 ? "on pitch" : `${cents > 0 ? "+" : ""}${cents}c`}
-      </span>
-    );
-  }
-  return (
-    <span className="badge badge--error" title="Rendered audio re-measured off-target">
-      ⚠ {cents > 0 ? "+" : ""}
-      {cents}c off
-    </span>
-  );
-}
-
 /** Splits a semitone-fraction trim into whole semitones + cents, both rounded to the nearest cent. */
 function splitTrim(offset: number): { semitones: number; cents: number } {
   const totalCents = Math.round(offset * 100);
@@ -115,9 +84,10 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
   const pendingRef = useRef(false);
   const commitTimerRef = useRef<number | null>(null);
 
-  // Reflects external changes (e.g. the verify "fix" button, or the trim
-  // being reset elsewhere) into the sliders — but not while the user is
-  // actively dragging/debouncing a change of their own, which would fight it.
+  // Reflects external changes (e.g. the silent post-render auto-correction
+  // in renderSample, or the trim being reset elsewhere) into the sliders —
+  // but not while the user is actively dragging/debouncing a change of
+  // their own, which would fight it.
   useEffect(() => {
     if (pendingRef.current) return;
     const split = splitTrim(manualOffset);
@@ -245,7 +215,6 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
         {state.handedness === "right" && playButton}
         <span className="sample-index">{number}</span>
         <StatusBadge sample={sample} tuned={tuned} />
-        <VerifyChip sample={sample} />
         {state.handedness !== "right" && playButton}
       </div>
 

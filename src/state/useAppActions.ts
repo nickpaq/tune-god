@@ -11,6 +11,13 @@ function makeId(): string {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 }
 
+/** Below this measured confidence, a verify pass is noise (e.g. a texture with no clear pitch) — never auto-corrected. */
+const AUTO_CORRECT_MIN_CONFIDENCE = 0.35;
+/** Cents error at or above which a render's measured pitch gets folded back in as an automatic correction. */
+const AUTO_CORRECT_MIN_CENTS = 1;
+/** Safety cap on correction passes per render, in case the detector never converges below the threshold. */
+const MAX_AUTO_CORRECT_PASSES = 5;
+
 export function useAppActions() {
   const { state, dispatch } = useSamplesStore();
 
@@ -112,13 +119,17 @@ export function useAppActions() {
   );
 
   /**
-   * Renders a sample at an explicit shift, then runs the verify pass:
-   * re-detects the pitch of the *rendered* audio and stores its cents error
-   * vs the target, so mistunes surface in the UI before export. Verification
-   * is best-effort — a failure there never fails the render.
+   * Renders a sample at an explicit shift, then runs a silent verify pass:
+   * re-detects the pitch of the *rendered* audio, and if it's off by at
+   * least a cent (and the re-detection is confident enough to trust — a
+   * low-confidence measurement is more likely detector noise than a real
+   * mistune), folds that error straight back into the sample's manual trim
+   * and re-renders, repeating until it lands within a cent or the pass
+   * limit is hit. Verification is best-effort — a failure there never fails
+   * the render, it just skips auto-correction for this pass.
    */
   const renderSample = useCallback(
-    async (sample: SampleItem, shiftSemitones: number) => {
+    async (sample: SampleItem, shiftSemitones: number, pass = 0) => {
       const id = sample.id;
       dispatch({ type: "SET_SAMPLE_STATUS", id, status: "processing" });
       const worker = nextRenderWorker();
@@ -131,7 +142,7 @@ export function useAppActions() {
         dispatch({ type: "SET_SAMPLE_PROCESSED", id, channelData: processed });
 
         const master = state.master;
-        if (master) {
+        if (master && pass < MAX_AUTO_CORRECT_PASSES) {
           try {
             const measured = await nextAnalysisWorker().measurePitch(
               monoFromChannelData(processed),
@@ -139,14 +150,23 @@ export function useAppActions() {
             );
             const cents =
               measured === null ? null : verifyErrorCents(master, state.tuningMode, state.a4Reference, measured.midi);
-            dispatch({
-              type: "SET_SAMPLE_VERIFIED",
-              id,
-              cents: cents ?? undefined,
-              confidence: measured?.confidence ?? 0,
-            });
+            if (
+              cents !== null &&
+              (measured?.confidence ?? 0) >= AUTO_CORRECT_MIN_CONFIDENCE &&
+              Math.abs(cents) >= AUTO_CORRECT_MIN_CENTS
+            ) {
+              const correctedShift = shiftSemitones - cents / 100;
+              const correctedManualOffset =
+                Math.round(((sample.manualOffsetSemitones ?? 0) - cents / 100) * 100) / 100;
+              dispatch({ type: "SET_SAMPLE_MANUAL_OFFSET", id, semitones: correctedManualOffset });
+              await renderSample(
+                { ...sample, manualOffsetSemitones: correctedManualOffset },
+                correctedShift,
+                pass + 1,
+              );
+            }
           } catch {
-            dispatch({ type: "SET_SAMPLE_VERIFIED", id, cents: undefined, confidence: 0 });
+            // Best-effort — a failed re-measurement just skips auto-correction for this pass.
           }
         }
       } catch (err) {
