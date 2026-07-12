@@ -178,7 +178,7 @@ export function MasterPanel() {
   return (
     <section className="panel">
       <div className="master-summary">
-        <div>
+        <div className="master-summary__header">
           <PlayButton playing={playing} onClick={preview} />
           <strong>{stripExtension(master.name)}</strong>
           <button className="link-btn" onClick={() => dispatch({ type: "CLEAR_MASTER" })}>

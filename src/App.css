@@ -89,7 +89,7 @@
   gap: 0.65rem;
 }
 
-.master-summary > div {
+.master-summary__header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
