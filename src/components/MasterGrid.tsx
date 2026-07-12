@@ -87,10 +87,8 @@ export function MasterGrid({
                 onPointerLeave={stop}
                 onPointerCancel={stop}
                 onContextMenu={(e) => e.preventDefault()}
-                title={`${name}${isTonic ? " — tonic" : ""}`}
-              >
-                {name}
-              </button>
+                aria-label={`${name}${isTonic ? " — tonic" : ""}`}
+              />
             );
           })}
         </div>
