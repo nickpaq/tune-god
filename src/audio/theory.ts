@@ -55,20 +55,6 @@ export function smallestSignedShift(fromPitchClass: number, toPitchClass: number
   return diff;
 }
 
-/**
- * White-key target pitch class: the pitch class a sample's root must be tuned
- * to so that, once mapped to middle C in a DAW, the white keys play the
- * detected key. The white keys form a major scale from C (equivalently, its
- * relative minor from A), so:
- *   - major key: tune to the tonic itself (C key plays the root).
- *   - minor key: tune to the relative major root (tonic + 3 semitones), which
- *     lands the minor tonic on the A key — e.g. F minor tunes samples to G#/Ab
- *     so pressing A plays F and the white keys play the F minor scale.
- */
-export function targetPitchClassFor(scale: Scale, tonicPitchClass: number): number {
-  return scale === "major" ? tonicPitchClass : (tonicPitchClass + 3) % 12;
-}
-
 /** Converts a semitone shift ratio for pitch-shifting APIs (e.g. Rubber Band's pitch scale). */
 export function semitonesToRatio(semitones: number): number {
   return Math.pow(2, semitones / 12);

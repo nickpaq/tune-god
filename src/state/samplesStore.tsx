@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useReducer } from "react";
 import type { MasterAnalysis, SampleAnalysis } from "../audio/analysisTypes";
-import { smallestSignedShift, pitchClassOf, semitonesToRatio, targetPitchClassFor } from "../audio/theory";
+import { smallestSignedShift, pitchClassOf, semitonesToRatio } from "../audio/theory";
 import type { ParsedKoalaProject } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/drumDetect";
 
@@ -71,12 +71,13 @@ function effectiveMasterKey(master: MasterItem): { tonicPitchClass: number; scal
 }
 
 /** Computes the semitone shift that lands a sample's detected root on the
- * white-key target pitch class (C for major, A for minor), folding in the
- * master loop's own tuning correction so everything lands on true A440. */
+ * master key's tonic, folding in the master loop's own tuning correction
+ * (in cents) so everything lands on true A440. The master loop itself is
+ * never re-tuned — only this correction, applied to the other samples. */
 function computeShiftSemitones(master: MasterItem, sample: SampleAnalysis): number | undefined {
   const key = effectiveMasterKey(master);
   if (!key) return undefined;
-  const targetClass = targetPitchClassFor(key.scale, key.tonicPitchClass);
+  const targetClass = key.tonicPitchClass;
   const detectedClass = pitchClassOf(sample.detectedMidi);
   const tuningCorrection = -(master.analysis?.tuningOffsetCents ?? 0) / 100;
   const baseShift = smallestSignedShift(detectedClass, targetClass);
@@ -189,10 +190,9 @@ export function useSamplesStore() {
 
 export interface TargetInfo {
   tonicPitchClass: number;
+  /** Also the pitch class samples are tuned to — every key now tunes to the literal tonic. */
   tonicName: string;
   scale: "major" | "minor";
-  /** Pitch class samples are tuned to (tonic for major, relative major root for minor). */
-  sampleTargetName: string;
 }
 
 export function useTargetInfo(master: MasterItem | null): TargetInfo | null {
@@ -200,13 +200,11 @@ export function useTargetInfo(master: MasterItem | null): TargetInfo | null {
     if (!master) return null;
     const key = effectiveMasterKey(master);
     if (!key) return null;
-    const targetClass = targetPitchClassFor(key.scale, key.tonicPitchClass);
     const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     return {
       tonicPitchClass: key.tonicPitchClass,
       tonicName: names[key.tonicPitchClass],
       scale: key.scale,
-      sampleTargetName: names[targetClass],
     };
   }, [master]);
 }
