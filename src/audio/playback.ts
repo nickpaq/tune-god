@@ -9,17 +9,29 @@ import { getAudioContext } from "./decode";
  * the two channels never cross zero at the same instant.)
  */
 const FADE_SEC = 0.008;
+/** Gain smoothing time constant for live-adjustable controls (balance, tone volume). */
+const SMOOTH_SEC = 0.02;
 
-interface ActivePlayback {
+interface ActiveSlot {
   key: string;
-  source: AudioBufferSourceNode;
-  gain: GainNode;
-  onStopped: () => void;
-  /** Set before an intentional stop() so onended doesn't double-fire callbacks. */
   manual: boolean;
+  /** Fades the slot's audio to silence and tears it down; does not fire onStopped. */
+  fadeAndStop: () => void;
+  onStopped: () => void;
 }
 
-let active: ActivePlayback | null = null;
+// Only one preview (sample toggle, drone+sample pair, or standalone tone)
+// plays at a time app-wide; starting any of them stops whatever was active.
+let active: ActiveSlot | null = null;
+
+function stopActive(): void {
+  if (!active) return;
+  const a = active;
+  a.manual = true;
+  active = null;
+  a.fadeAndStop();
+  a.onStopped();
+}
 
 function bufferFromChannelData(channelData: Float32Array[], sampleRate: number): AudioBuffer {
   const ctx = getAudioContext();
@@ -28,22 +40,20 @@ function bufferFromChannelData(channelData: Float32Array[], sampleRate: number):
   return buffer;
 }
 
-function stopActive(): void {
-  if (!active) return;
-  const a = active;
-  a.manual = true;
+function fadeOutAndStop(gain: GainNode, stoppables: Array<{ stop: (when?: number) => void }>): void {
   const ctx = getAudioContext();
   const now = ctx.currentTime;
-  a.gain.gain.cancelScheduledValues(now);
-  a.gain.gain.setValueAtTime(a.gain.gain.value, now);
-  a.gain.gain.linearRampToValueAtTime(0, now + FADE_SEC);
-  try {
-    a.source.stop(now + FADE_SEC + 0.002);
-  } catch {
-    // already stopped
+  gain.gain.cancelScheduledValues(now);
+  gain.gain.setValueAtTime(gain.gain.value, now);
+  gain.gain.linearRampToValueAtTime(0, now + FADE_SEC);
+  const stopAt = now + FADE_SEC + 0.002;
+  for (const s of stoppables) {
+    try {
+      s.stop(stopAt);
+    } catch {
+      // already stopped
+    }
   }
-  active = null;
-  a.onStopped();
 }
 
 /**
@@ -77,8 +87,6 @@ export function togglePlayback(
   const now = ctx.currentTime;
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(1, now + FADE_SEC);
-  // Declick the natural end too — a buffer that ends off zero would
-  // otherwise pop when the source cuts out.
   const end = now + buffer.duration;
   if (buffer.duration > FADE_SEC * 4) {
     gain.gain.setValueAtTime(1, end - FADE_SEC);
@@ -89,13 +97,18 @@ export function togglePlayback(
   gain.connect(ctx.destination);
   source.start(now);
 
-  const playback: ActivePlayback = { key, source, gain, onStopped, manual: false };
+  const slot: ActiveSlot = {
+    key,
+    manual: false,
+    fadeAndStop: () => fadeOutAndStop(gain, [source]),
+    onStopped,
+  };
   source.onended = () => {
-    if (playback.manual) return;
-    if (active === playback) active = null;
+    if (slot.manual) return;
+    if (active === slot) active = null;
     onStopped();
   };
-  active = playback;
+  active = slot;
   return true;
 }
 
@@ -105,6 +118,8 @@ export interface ToneHandle {
 }
 
 export function playTone(frequency: number, volume: number): ToneHandle {
+  stopActive();
+
   const ctx = getAudioContext();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -116,23 +131,136 @@ export function playTone(frequency: number, volume: number): ToneHandle {
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.start(now);
-  return {
-    stop: () => {
-      const t = ctx.currentTime;
-      gain.gain.cancelScheduledValues(t);
-      gain.gain.setValueAtTime(gain.gain.value, t);
-      gain.gain.linearRampToValueAtTime(0, t + FADE_SEC);
-      osc.stop(t + FADE_SEC + 0.002);
-      // Nodes disconnect themselves once the source stops; delay so the
-      // fade-out actually reaches the destination.
+
+  const slot: ActiveSlot = {
+    key: `tone:${frequency}`,
+    manual: false,
+    fadeAndStop: () => {
+      fadeOutAndStop(gain, [osc]);
       osc.onended = () => {
         osc.disconnect();
         gain.disconnect();
       };
     },
+    onStopped: () => {},
+  };
+  active = slot;
+
+  return {
+    stop: () => stopActive(),
     // Smoothed to avoid zipper noise while dragging the volume slider.
     setVolume: (v: number) => {
-      gain.gain.setTargetAtTime(v, ctx.currentTime, 0.02);
+      gain.gain.setTargetAtTime(v, ctx.currentTime, SMOOTH_SEC);
     },
   };
+}
+
+export interface DualHandle {
+  stop: () => void;
+  /** 0 = drone only, 1 = sample only. Live-adjustable, no re-render needed. */
+  setBalance: (balance: number) => void;
+}
+
+/**
+ * Plays a sample and a reference drone together, so mistunes surface as
+ * audible beating against the drone rather than needing a separate
+ * visual/numeric check. The sample loops (via declicked retrigger, not
+ * AudioBufferSourceNode.loop — that would click at the seam since the
+ * buffer's start/end aren't guaranteed to align) so there's time to hear
+ * the beat frequency settle; the drone sustains continuously underneath.
+ * `key` participates in the app-wide single-preview slot like
+ * `togglePlayback`, so starting this stops any other preview and vice versa.
+ */
+export function playSampleWithDrone(
+  key: string,
+  channelData: Float32Array[],
+  sampleRate: number,
+  droneFrequency: number,
+  initialBalance: number,
+  onStopped: () => void,
+): DualHandle {
+  stopActive();
+
+  const ctx = getAudioContext();
+  const buffer = bufferFromChannelData(channelData, sampleRate);
+
+  const sampleBus = ctx.createGain();
+  sampleBus.connect(ctx.destination);
+  const droneBus = ctx.createGain();
+  droneBus.connect(ctx.destination);
+
+  const osc = ctx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.value = droneFrequency;
+  osc.connect(droneBus);
+  osc.start();
+
+  let live = true;
+  let currentSource: AudioBufferSourceNode | null = null;
+
+  const scheduleOne = () => {
+    if (!live) return;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const fade = ctx.createGain();
+    source.connect(fade);
+    fade.connect(sampleBus);
+
+    const now = ctx.currentTime;
+    fade.gain.setValueAtTime(0, now);
+    fade.gain.linearRampToValueAtTime(1, now + FADE_SEC);
+    const dur = buffer.duration;
+    if (dur > FADE_SEC * 4) {
+      fade.gain.setValueAtTime(1, now + dur - FADE_SEC);
+      fade.gain.linearRampToValueAtTime(0, now + dur);
+    }
+    source.start(now);
+    currentSource = source;
+    source.onended = () => {
+      if (!live || currentSource !== source) return;
+      scheduleOne();
+    };
+  };
+  scheduleOne();
+
+  const setBalance = (balance: number) => {
+    const s = Math.max(0, Math.min(1, balance));
+    const now = ctx.currentTime;
+    // The drone is a pure sine at full amplitude, which reads much louder
+    // than a real sample at the same gain value — scaled down so 50/50
+    // balance sounds roughly equal-loudness rather than drone-dominant.
+    sampleBus.gain.setTargetAtTime(s, now, SMOOTH_SEC);
+    droneBus.gain.setTargetAtTime((1 - s) * 0.55, now, SMOOTH_SEC);
+  };
+  setBalance(initialBalance);
+
+  const stop = () => {
+    if (!live) return;
+    live = false;
+    if (active === slot) active = null;
+    fadeAndStop();
+  };
+
+  const fadeAndStop = () => {
+    if (currentSource) fadeOutAndStop(sampleBus, [currentSource]);
+    fadeOutAndStop(droneBus, [osc]);
+    osc.onended = () => {
+      osc.disconnect();
+      droneBus.disconnect();
+      sampleBus.disconnect();
+    };
+  };
+
+  const slot: ActiveSlot = {
+    key,
+    manual: false,
+    fadeAndStop: () => {
+      live = false;
+      fadeAndStop();
+    },
+    onStopped,
+  };
+  active = slot;
+
+  return { stop, setBalance };
 }
