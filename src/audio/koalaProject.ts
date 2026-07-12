@@ -81,9 +81,17 @@ interface KoalaReplacement {
 }
 
 export interface KoalaProjectTarget {
+  /** Master loop's key, mirrored into song.json's keyboard scale lock. */
+  scale?: "major" | "minor";
   /** Master loop's tempo, written into sequence.json so playback matches the tuned pads. */
   bpm?: number;
 }
+
+/** Koala's keyboardScale strings, as found in a real export (PascalCase, "NaturalMinor" for minor). */
+const KEYBOARD_SCALE: Record<"major" | "minor", string> = {
+  major: "Major",
+  minor: "NaturalMinor",
+};
 
 export interface KoalaMasterReplacement {
   koalaSampleId: number;
@@ -123,6 +131,13 @@ async function buildTunedKoalaFile(
     project.zip.file(`sampler/${r.sampleId}.wav`, r.blob);
   }
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
+
+  if (project.songJson && target.scale) {
+    const songJson = JSON.parse(JSON.stringify(project.songJson));
+    songJson.keyboardMode = true;
+    songJson.keyboardScale = KEYBOARD_SCALE[target.scale];
+    project.zip.file("song.json", JSON.stringify(songJson));
+  }
 
   if (project.sequenceJson && target.bpm && Number.isFinite(target.bpm)) {
     const sequenceJson = JSON.parse(JSON.stringify(project.sequenceJson));
