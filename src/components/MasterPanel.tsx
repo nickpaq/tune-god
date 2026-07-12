@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Dropzone } from "./Dropzone";
 import { PlayButton } from "./PlayButton";
 import { MasterGrid } from "./MasterGrid";
+import { PrecisionSlider } from "./PrecisionSlider";
 import {
   useSamplesStore,
   masterCorrectionSemitones,
@@ -279,15 +280,14 @@ export function MasterPanel() {
             <div className="tune-stack">
               <div className="tune-row tune-row--balance">
                 <span className="tune-row__label">drone</span>
-                <input
-                  type="range"
+                <PrecisionSlider
                   min={0}
                   max={100}
                   step={1}
                   value={balance}
-                  onChange={(e) => onBalanceChange(Number(e.target.value))}
+                  onChange={onBalanceChange}
                   onDoubleClick={() => onBalanceChange(50)}
-                  title="Fades between the reference drone and the master loop — press play and use this to hear whether the detected key actually matches. Double-tap to reset."
+                  title="Fades between the reference drone and the master loop — press play and use this to hear whether the detected key actually matches. Drag down to slow the scrub. Double-tap to reset."
                 />
                 <span className="tune-row__label">master</span>
               </div>
@@ -296,15 +296,14 @@ export function MasterPanel() {
                 <button className="tune-nudge" onClick={() => nudgeSemitone(-1)} title="Down 1 semitone">
                   −1st
                 </button>
-                <input
-                  type="range"
+                <PrecisionSlider
                   min={-12}
                   max={12}
                   step={1}
                   value={semitoneVal}
-                  onChange={(e) => setSemitoneVal(Number(e.target.value))}
+                  onChange={setSemitoneVal}
                   onDoubleClick={() => setSemitoneVal(0)}
-                  title="Nudges the comparison drone/grid only — diagnostic, never applied to the master's own audio. Double-tap to reset."
+                  title="Nudges the comparison drone/grid only — diagnostic, never applied to the master's own audio. Drag down to slow the scrub. Double-tap to reset."
                 />
                 <button className="tune-nudge" onClick={() => nudgeSemitone(1)} title="Up 1 semitone">
                   +1st
@@ -315,15 +314,14 @@ export function MasterPanel() {
                 <button className="tune-nudge" onClick={() => nudgeCents(-1)} title="Down 1 cent">
                   −1c
                 </button>
-                <input
-                  type="range"
+                <PrecisionSlider
                   min={-50}
                   max={50}
                   step={1}
                   value={centsVal}
-                  onChange={(e) => setCentsVal(Number(e.target.value))}
+                  onChange={setCentsVal}
                   onDoubleClick={() => setCentsVal(0)}
-                  title="Fine cents nudge on the comparison drone/grid. Double-tap to reset."
+                  title="Fine cents nudge on the comparison drone/grid. Drag down to slow the scrub. Double-tap to reset."
                 />
                 <button className="tune-nudge" onClick={() => nudgeCents(1)} title="Up 1 cent">
                   +1c

@@ -4,6 +4,7 @@ import { useAppActions } from "../state/useAppActions";
 import { togglePlayback, playSampleWithDrone, type DualHandle } from "../audio/playback";
 import { stripExtension } from "../audio/filename";
 import { PlayButton } from "./PlayButton";
+import { PrecisionSlider } from "./PrecisionSlider";
 
 /** Below this measured confidence the verify result is noise (e.g. a texture with no clear pitch). */
 const VERIFY_MIN_CONFIDENCE = 0.35;
@@ -287,15 +288,14 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
         <div className="tune-stack">
           <div className="tune-row tune-row--balance">
             <span className="tune-row__label">drone</span>
-            <input
-              type="range"
+            <PrecisionSlider
               min={0}
               max={100}
               step={1}
               value={balance}
-              onChange={(e) => onBalanceChange(Number(e.target.value))}
+              onChange={onBalanceChange}
               onDoubleClick={() => onBalanceChange(50)}
-              title="Fades between the reference drone and the sample — press play and use this to hear beating against the drone. Double-tap to reset."
+              title="Fades between the reference drone and the sample — press play and use this to hear beating against the drone. Drag down to slow the scrub. Double-tap to reset."
             />
             <span className="tune-row__label">sample</span>
           </div>
@@ -304,18 +304,17 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
             <button className="tune-nudge" onClick={() => nudgeSemitone(-1)} title="Down 1 semitone">
               −1st
             </button>
-            <input
-              type="range"
+            <PrecisionSlider
               min={-12}
               max={12}
               step={1}
               value={semitoneVal}
-              onChange={(e) => onSemitoneSlider(Number(e.target.value))}
+              onChange={onSemitoneSlider}
               onDoubleClick={() => {
                 setSemitoneVal(0);
                 commitNow(0, centsVal);
               }}
-              title="Semitone trim, ±1 octave. Double-tap to reset."
+              title="Semitone trim, ±1 octave. Drag down to slow the scrub. Double-tap to reset."
             />
             <button className="tune-nudge" onClick={() => nudgeSemitone(1)} title="Up 1 semitone">
               +1st
@@ -326,18 +325,17 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
             <button className="tune-nudge" onClick={() => nudgeCents(-1)} title="Down 1 cent">
               −1c
             </button>
-            <input
-              type="range"
+            <PrecisionSlider
               min={-50}
               max={50}
               step={1}
               value={centsVal}
-              onChange={(e) => onCentsSlider(Number(e.target.value))}
+              onChange={onCentsSlider}
               onDoubleClick={() => {
                 setCentsVal(0);
                 commitNow(semitoneVal, 0);
               }}
-              title="Fine cents trim. Double-tap to reset."
+              title="Fine cents trim. Drag down to slow the scrub. Double-tap to reset."
             />
             <button className="tune-nudge" onClick={() => nudgeCents(1)} title="Up 1 cent">
               +1c
