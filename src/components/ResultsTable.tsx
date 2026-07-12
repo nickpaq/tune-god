@@ -1,12 +1,14 @@
 import { SampleRow } from "./SampleRow";
-import { useSamplesStore } from "../state/samplesStore";
+import { useSamplesStore, useTargetInfo } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { downloadTunedKoalaProject } from "../audio/koalaProject";
 
 export function ResultsTable() {
   const { state } = useSamplesStore();
   const { processAll } = useAppActions();
-  const { samples, koalaProject } = state;
+  const { samples, koalaProject, master } = state;
+  const targetInfo = useTargetInfo(master);
+  const targetBpm = master?.overrideBpm ?? master?.analysis?.bpm;
   const tunedPadCount = samples.filter(
     (s) => s.koalaSampleId !== undefined && s.mode === "tune" && s.processedChannelData,
   ).length;
@@ -19,7 +21,9 @@ export function ResultsTable() {
         <button onClick={processAll}>Process all</button>
         {koalaProject && (
           <button
-            onClick={() => downloadTunedKoalaProject(koalaProject, samples)}
+            onClick={() =>
+              downloadTunedKoalaProject(koalaProject, samples, { scale: targetInfo?.scale, bpm: targetBpm })
+            }
             disabled={tunedPadCount === 0}
             title={
               tunedPadCount === 0
