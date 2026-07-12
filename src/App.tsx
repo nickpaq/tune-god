@@ -5,6 +5,10 @@ import { ReferenceTone } from "./components/ReferenceTone";
 import { Logo } from "./components/Logo";
 import "./App.css";
 
+// Undecided whether the tone generator earns its place — hidden for now,
+// not removed, so it's a one-line flip either way.
+const SHOW_TONE_GENERATOR = false;
+
 function App() {
   return (
     <SamplesProvider>
@@ -17,7 +21,7 @@ function App() {
         </header>
         <main className="app-main">
           <MasterPanel />
-          <ReferenceTone />
+          {SHOW_TONE_GENERATOR && <ReferenceTone />}
           <ResultsTable />
         </main>
       </div>

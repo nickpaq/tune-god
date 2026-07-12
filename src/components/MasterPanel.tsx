@@ -141,7 +141,6 @@ export function MasterPanel() {
                 <option value="minor">minor</option>
               </select>
             </label>
-            <span className="badge">confidence {(a.keyStrength * 100).toFixed(0)}%</span>
             <span className="badge">{a.bpm.toFixed(1)} BPM</span>
             <span className="badge">tuning {formatCents(a.tuningOffsetCents)}</span>
           </div>
