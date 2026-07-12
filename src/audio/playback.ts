@@ -40,6 +40,77 @@ function bufferFromChannelData(channelData: Float32Array[], sampleRate: number):
   return buffer;
 }
 
+interface LoopWindow {
+  /** Offset into the buffer, in seconds, where each retrigger cycle starts. */
+  startSec: number;
+  /** Length of the looped segment, in seconds. */
+  durationSec: number;
+}
+
+/** How far (in seconds) to search outward from a target index for a zero crossing. */
+const ZERO_CROSSING_SEARCH_SEC = 0.05;
+/** Never loop a segment shorter than this, even on a very short buffer. */
+const MIN_LOOP_SEC = 0.05;
+
+/**
+ * Picks a short, mid-sample loop window instead of the whole buffer: from a
+ * zero crossing near the midpoint to a zero crossing near the 3/4 mark.
+ * Skipping straight to the sustain (past the attack transient) and looping
+ * a short segment makes preview retriggers land every fraction of a second
+ * instead of every full playthrough, so a freshly-rendered buffer (or a
+ * live detune change) is audible almost immediately instead of after
+ * waiting out the entire original sample — and starting/ending on zero
+ * crossings keeps the short loop from buzzing at the seam. 3/4 rather than
+ * the tail end keeps the window inside the sample's sustain, before it's
+ * decayed to near-silence.
+ */
+function computeLoopWindow(buffer: AudioBuffer): LoopWindow {
+  const length = buffer.length;
+  const sampleRate = buffer.sampleRate;
+  if (length < 2) return { startSec: 0, durationSec: buffer.duration };
+
+  const channels: Float32Array[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) channels.push(buffer.getChannelData(ch));
+  const sumAt = (i: number): number => {
+    let sum = 0;
+    for (const c of channels) sum += c[i];
+    return sum;
+  };
+
+  const searchRadius = Math.max(1, Math.min(Math.round(sampleRate * ZERO_CROSSING_SEARCH_SEC), Math.floor(length / 8)));
+
+  const nearestZeroCrossing = (target: number): number => {
+    const lo = Math.max(0, target - searchRadius);
+    const hi = Math.min(length - 2, target + searchRadius);
+    let best = target;
+    let bestDist = Infinity;
+    for (let i = lo; i <= hi; i++) {
+      const cur = sumAt(i);
+      const next = sumAt(i + 1);
+      if ((cur <= 0 && next > 0) || (cur >= 0 && next < 0)) {
+        const dist = Math.abs(i - target);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = i;
+        }
+      }
+    }
+    return best;
+  };
+
+  const startIdx = nearestZeroCrossing(Math.floor(length / 2));
+  const minLoopSamples = Math.round(sampleRate * MIN_LOOP_SEC);
+  const endIdx = Math.min(
+    Math.max(nearestZeroCrossing(Math.floor(length * 0.75)), startIdx + minLoopSamples),
+    length - 1,
+  );
+
+  return {
+    startSec: startIdx / sampleRate,
+    durationSec: Math.max((endIdx - startIdx) / sampleRate, minLoopSamples / sampleRate),
+  };
+}
+
 function fadeOutAndStop(gain: GainNode, stoppables: Array<{ stop: (when?: number) => void }>): void {
   const ctx = getAudioContext();
   const now = ctx.currentTime;
@@ -338,11 +409,15 @@ export interface DualHandle {
 /**
  * Plays a sample and a reference drone together, so mistunes surface as
  * audible beating against the drone rather than needing a separate
- * visual/numeric check. The sample loops (via declicked retrigger, not
- * AudioBufferSourceNode.loop — that would click at the seam since the
- * buffer's start/end aren't guaranteed to align) so there's time to hear
- * the beat frequency settle; the drone sustains continuously underneath.
- * `key` participates in the app-wide single-preview slot like
+ * visual/numeric check. Rather than looping the whole sample, it loops a
+ * short mid-sample window (see `computeLoopWindow`) via declicked retrigger
+ * (not `AudioBufferSourceNode.loop` — that would click at the seam since
+ * the window's start/end aren't guaranteed to align); the drone sustains
+ * continuously underneath. The short window means retriggers land every
+ * fraction of a second instead of every full playthrough, so a live detune
+ * change or a freshly-landed background render (see `setBuffer`) is audible
+ * almost immediately rather than after waiting out the whole original
+ * sample. `key` participates in the app-wide single-preview slot like
  * `togglePlayback`, so starting this stops any other preview and vice versa.
  */
 export function playSampleWithDrone(
@@ -356,6 +431,7 @@ export function playSampleWithDrone(
 
   const ctx = getAudioContext();
   let buffer = bufferFromChannelData(channelData, sampleRate);
+  let loopWindow = computeLoopWindow(buffer);
   let detuneCents = options.detuneCents ?? 0;
 
   const sampleBus = ctx.createGain();
@@ -382,14 +458,14 @@ export function playSampleWithDrone(
     fade.connect(sampleBus);
 
     const now = ctx.currentTime;
+    const dur = loopWindow.durationSec;
     fade.gain.setValueAtTime(0, now);
     fade.gain.linearRampToValueAtTime(1, now + FADE_SEC);
-    const dur = buffer.duration;
     if (dur > FADE_SEC * 4) {
       fade.gain.setValueAtTime(1, now + dur - FADE_SEC);
       fade.gain.linearRampToValueAtTime(0, now + dur);
     }
-    source.start(now);
+    source.start(now, loopWindow.startSec, dur);
     currentSource = source;
     source.onended = () => {
       if (!live || currentSource !== source) return;
@@ -420,6 +496,7 @@ export function playSampleWithDrone(
 
   const setBuffer = (nextChannelData: Float32Array[], nextDetuneCents = 0) => {
     buffer = bufferFromChannelData(nextChannelData, sampleRate);
+    loopWindow = computeLoopWindow(buffer);
     detuneCents = nextDetuneCents;
     // Deliberately doesn't touch currentSource — the cycle already in
     // flight finishes on the old buffer, and the next retrigger (scheduled
