@@ -155,10 +155,33 @@ export function playTone(frequency: number, volume: number): ToneHandle {
   };
 }
 
+export interface DualPlaybackOptions {
+  droneFrequency: number;
+  /** 0 = drone only, 1 = sample only. */
+  balance: number;
+  /** Live pitch preview offset in cents, applied via the native AudioParam — no DSP. */
+  detuneCents?: number;
+}
+
 export interface DualHandle {
   stop: () => void;
   /** 0 = drone only, 1 = sample only. Live-adjustable, no re-render needed. */
   setBalance: (balance: number) => void;
+  /**
+   * Retunes the currently playing source in real time via the native
+   * `detune` AudioParam — instant, no worker round-trip. This is the cheap
+   * preview path for auditioning a trim while dragging; the expensive
+   * high-quality resample/Rubber Band render only needs to happen once,
+   * when the value settles (see `setBuffer`).
+   */
+  setDetuneCents: (cents: number) => void;
+  /**
+   * Swaps in freshly-rendered (DSP-quality) audio, e.g. once a background
+   * render lands. Takes effect at the next loop retrigger rather than
+   * cutting the currently playing cycle short, so the handoff never clicks
+   * or restarts mid-note.
+   */
+  setBuffer: (channelData: Float32Array[], detuneCents?: number) => void;
 }
 
 /**
@@ -175,14 +198,14 @@ export function playSampleWithDrone(
   key: string,
   channelData: Float32Array[],
   sampleRate: number,
-  droneFrequency: number,
-  initialBalance: number,
+  options: DualPlaybackOptions,
   onStopped: () => void,
 ): DualHandle {
   stopActive();
 
   const ctx = getAudioContext();
-  const buffer = bufferFromChannelData(channelData, sampleRate);
+  let buffer = bufferFromChannelData(channelData, sampleRate);
+  let detuneCents = options.detuneCents ?? 0;
 
   const sampleBus = ctx.createGain();
   sampleBus.connect(ctx.destination);
@@ -191,7 +214,7 @@ export function playSampleWithDrone(
 
   const osc = ctx.createOscillator();
   osc.type = "sine";
-  osc.frequency.value = droneFrequency;
+  osc.frequency.value = options.droneFrequency;
   osc.connect(droneBus);
   osc.start();
 
@@ -202,6 +225,7 @@ export function playSampleWithDrone(
     if (!live) return;
     const source = ctx.createBufferSource();
     source.buffer = buffer;
+    source.detune.value = detuneCents;
     const fade = ctx.createGain();
     source.connect(fade);
     fade.connect(sampleBus);
@@ -232,7 +256,20 @@ export function playSampleWithDrone(
     sampleBus.gain.setTargetAtTime(s, now, SMOOTH_SEC);
     droneBus.gain.setTargetAtTime((1 - s) * 0.55, now, SMOOTH_SEC);
   };
-  setBalance(initialBalance);
+  setBalance(options.balance);
+
+  const setDetuneCents = (cents: number) => {
+    detuneCents = cents;
+    currentSource?.detune.setTargetAtTime(cents, ctx.currentTime, SMOOTH_SEC);
+  };
+
+  const setBuffer = (nextChannelData: Float32Array[], nextDetuneCents = 0) => {
+    buffer = bufferFromChannelData(nextChannelData, sampleRate);
+    detuneCents = nextDetuneCents;
+    // Deliberately doesn't touch currentSource — the cycle already in
+    // flight finishes on the old buffer, and the next retrigger (scheduled
+    // via source.onended above) picks up this new one automatically.
+  };
 
   const stop = () => {
     if (!live) return;
@@ -262,5 +299,5 @@ export function playSampleWithDrone(
   };
   active = slot;
 
-  return { stop, setBalance };
+  return { stop, setBalance, setDetuneCents, setBuffer };
 }

@@ -9,8 +9,14 @@ import { PlayButton } from "./PlayButton";
 const VERIFY_MIN_CONFIDENCE = 0.35;
 /** |error| within this many cents counts as in tune (≈ the audibility threshold). */
 const VERIFY_OK_CENTS = 10;
-/** How long after the last slider/nudge change before it's re-rendered. */
-const COMMIT_DEBOUNCE_MS = 150;
+/**
+ * How long after the last slider/nudge change before the real (DSP-quality)
+ * render fires in the background. What you actually hear while dragging
+ * updates instantly via the native `detune` AudioParam (see playback.ts),
+ * so this only paces how often the expensive resample/Rubber Band worker
+ * call runs — it doesn't gate audible feedback.
+ */
+const COMMIT_DEBOUNCE_MS = 300;
 
 function formatShift(semitones: number): string {
   const rounded = Math.round(semitones * 100) / 100;
@@ -136,26 +142,49 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
     [],
   );
 
-  // If the sample gets re-rendered (a trim commit landing) while it's
-  // playing, restart the loop with the fresh audio so the comparison
-  // against the drone reflects what was just dialed in.
+  // Keeps whatever's actually playing in sync with the store, so the
+  // expensive render pipeline never has to be on the hot path for what you
+  // hear. Two distinct cases:
+  //  - A background render just landed (processedChannelData appeared) —
+  //    swap to the exact final audio, detune reset to 0. Content differs,
+  //    so this waits for the next loop retrigger rather than cutting the
+  //    current cycle short.
+  //  - No processed render yet (still dragging, or freshly invalidated by
+  //    another trim change) — content is unchanged raw audio, so the shift
+  //    is applied purely via the live `detune` AudioParam. Instant, no
+  //    worker round-trip, no waiting for a loop boundary.
   useEffect(() => {
-    if (dualRef.current && sample.processedChannelData) {
-      dualRef.current.stop();
-      dualRef.current = startDual();
+    if (!dualRef.current) return;
+    if (sample.processedChannelData) {
+      dualRef.current.setBuffer(sample.processedChannelData, 0);
+    } else {
+      dualRef.current.setBuffer(sample.channelData, (sample.pitchShiftSemitones ?? 0) * 100);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sample.processedChannelData]);
+
+  useEffect(() => {
+    if (!dualRef.current || sample.processedChannelData) return;
+    dualRef.current.setDetuneCents((sample.pitchShiftSemitones ?? 0) * 100);
+  }, [sample.pitchShiftSemitones, sample.processedChannelData]);
 
   const startDual = (): DualHandle | null => {
     if (!state.master) return null;
     const freq = droneFrequency(state.master, sample, state.tuningMode, state.a4Reference);
     if (freq === null) return null;
-    const data = sample.processedChannelData ?? sample.channelData;
-    return playSampleWithDrone(sample.id, data, sample.sampleRate, freq, balance / 100, () => {
-      dualRef.current = null;
-      setPlaying(false);
-    });
+    const usesProcessed = !!sample.processedChannelData;
+    const data = usesProcessed ? sample.processedChannelData! : sample.channelData;
+    const detuneCents = usesProcessed ? 0 : (sample.pitchShiftSemitones ?? 0) * 100;
+    return playSampleWithDrone(
+      sample.id,
+      data,
+      sample.sampleRate,
+      { droneFrequency: freq, balance: balance / 100, detuneCents },
+      () => {
+        dualRef.current = null;
+        setPlaying(false);
+      },
+    );
   };
 
   const preview = () => {
