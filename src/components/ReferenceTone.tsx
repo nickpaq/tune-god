@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSamplesStore, useTargetInfo } from "../state/samplesStore";
 import { midiToFrequency, smallestSignedShift } from "../audio/theory";
 import { playTone, type ToneHandle } from "../audio/playback";
+import { PlayButton } from "./PlayButton";
 
 export function ReferenceTone() {
   const { state } = useSamplesStore();
@@ -35,13 +36,9 @@ export function ReferenceTone() {
 
   return (
     <section className="panel panel--tone">
-      <h2>
-        Target key: {target.tonicName} {target.scale}
-      </h2>
       <div className="tone-controls">
-        <button onClick={toggle}>
-          {playing ? "■ Stop" : `▶ Root tone (${target.tonicName}, ${frequency.toFixed(1)} Hz)`}
-        </button>
+        <span className="tone-label">Tone Generator</span>
+        <PlayButton playing={playing} onClick={toggle} />
         <input
           type="range"
           min={0}
