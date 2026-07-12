@@ -267,13 +267,60 @@
   gap: 0.5rem;
 }
 
-.tune-row input[type="range"] {
+.precision-slider {
   flex: 1 1 auto;
-  accent-color: var(--accent-cyan);
+  display: flex;
+  align-items: center;
+  height: 24px;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-.tune-row--balance input[type="range"] {
-  accent-color: var(--accent-pink);
+.precision-slider__track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 25%, transparent);
+}
+
+.precision-slider__fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-cyan);
+}
+
+.precision-slider__thumb {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.precision-slider:focus-visible {
+  outline: none;
+}
+
+.precision-slider:focus-visible .precision-slider__thumb {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+.tune-row--balance .precision-slider__fill {
+  background: var(--accent-pink);
+}
+
+.tune-row--balance .precision-slider:focus-visible .precision-slider__thumb {
+  outline-color: var(--accent-pink);
 }
 
 .tune-row__label {

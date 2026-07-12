@@ -18,14 +18,18 @@ interface DragState {
 }
 
 /**
- * A drop-in replacement for `<input type="range">` that overrides pointer
- * dragging with relative-motion physics (so a drag moves the value by how
- * far the pointer travels, not by jumping to its absolute position) and
- * slows that motion the further the pointer strays vertically from where
- * the drag started. Rendered as a real range input — same element, same
- * CSS targeting (`input[type="range"]`), same keyboard behavior (arrow
- * keys still go through the native `onChange`) — only pointer-driven
- * dragging is customized.
+ * A custom slider — not a native `<input type="range">` — because iOS
+ * Safari runs its own built-in touch-drag-to-position handling on real range
+ * inputs regardless of `preventDefault()`/`touch-action` on pointer events,
+ * which fought with the relative-motion dragging below and made the thumb
+ * visibly ping-pong between the two. Rendering our own track/thumb means
+ * there's no competing native behavior left to suppress.
+ *
+ * Pointer dragging moves the value by how far the pointer travels rather
+ * than jumping to its absolute position, and slows that motion the further
+ * the pointer strays vertically from where the drag started. Keyboard
+ * (arrow/Home/End/Page keys) and double-click-to-reset are reimplemented
+ * manually since there's no native input backing them anymore.
  */
 export function PrecisionSlider({
   min,
@@ -46,7 +50,7 @@ export function PrecisionSlider({
   title?: string;
   className?: string;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
 
   const snapToStep = (v: number) => {
@@ -54,17 +58,18 @@ export function PrecisionSlider({
     return Math.min(max, Math.max(min, stepped));
   };
 
-  const onPointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
-    inputRef.current?.setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { pointerId: e.pointerId, lastX: e.clientX, startY: e.clientY, value };
   };
 
-  const onPointerMove = (e: React.PointerEvent<HTMLInputElement>) => {
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    const el = inputRef.current;
-    if (!drag || !el || drag.pointerId !== e.pointerId) return;
-    const trackWidth = el.getBoundingClientRect().width || 1;
+    const track = trackRef.current;
+    if (!drag || !track || drag.pointerId !== e.pointerId) return;
+    e.preventDefault();
+    const trackWidth = track.getBoundingClientRect().width || 1;
     const dx = e.clientX - drag.lastX;
     drag.lastX = e.clientX;
     const verticalDistance = Math.abs(e.clientY - drag.startY);
@@ -74,27 +79,65 @@ export function PrecisionSlider({
     onChange(snapToStep(drag.value));
   };
 
-  const endDrag = (e: React.PointerEvent<HTMLInputElement>) => {
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null;
   };
 
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const bigStep = step * 10;
+    switch (e.key) {
+      case "ArrowRight":
+      case "ArrowUp":
+        e.preventDefault();
+        onChange(snapToStep(value + step));
+        break;
+      case "ArrowLeft":
+      case "ArrowDown":
+        e.preventDefault();
+        onChange(snapToStep(value - step));
+        break;
+      case "PageUp":
+        e.preventDefault();
+        onChange(snapToStep(value + bigStep));
+        break;
+      case "PageDown":
+        e.preventDefault();
+        onChange(snapToStep(value - bigStep));
+        break;
+      case "Home":
+        e.preventDefault();
+        onChange(min);
+        break;
+      case "End":
+        e.preventDefault();
+        onChange(max);
+        break;
+    }
+  };
+
+  const pct = ((value - min) / (max - min)) * 100;
+
   return (
-    <input
-      ref={inputRef}
-      type="range"
-      min={min}
-      max={max}
-      step={step}
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
+    <div
+      className={["precision-slider", className].filter(Boolean).join(" ")}
+      role="slider"
+      tabIndex={0}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      aria-label={title}
+      title={title}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onDoubleClick={onDoubleClick}
-      title={title}
-      className={className}
-      style={{ touchAction: "none" }}
-    />
+      onKeyDown={onKeyDown}
+    >
+      <div className="precision-slider__track" ref={trackRef}>
+        <div className="precision-slider__fill" style={{ width: `${pct}%` }} />
+        <div className="precision-slider__thumb" style={{ left: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
