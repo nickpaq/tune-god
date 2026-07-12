@@ -6,6 +6,7 @@ import {
   semitonesToRatio,
   clampA4Reference,
   referenceOffsetSemitones,
+  midiToFrequency,
 } from "../audio/theory";
 import type { ParsedKoalaProject } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/sampleModeDetect";
@@ -52,6 +53,12 @@ export interface SampleItem {
   koalaSampleId?: number;
   /** True once the user has explicitly picked a mode — stops auto-detection from overwriting their choice. */
   modeManuallySet?: boolean;
+  /** User trim folded into the computed shift — the escape hatch when detection got the root wrong. */
+  manualOffsetSemitones?: number;
+  /** Measured cents error of the *rendered* audio vs the target, from the post-process verify pass. */
+  verifiedOffsetCents?: number;
+  /** Confidence of that measurement (0..1); low values mean "couldn't reliably re-detect a pitch". */
+  verifiedConfidence?: number;
 }
 
 export interface MasterItem {
@@ -87,6 +94,8 @@ type Action =
   | { type: "SET_SAMPLE_ANALYSIS"; id: string; analysis: SampleAnalysis }
   | { type: "SET_SAMPLE_MODE"; id: string; mode: SampleMode }
   | { type: "SET_SAMPLE_PROCESSED"; id: string; channelData: Float32Array[] }
+  | { type: "SET_SAMPLE_MANUAL_OFFSET"; id: string; semitones: number }
+  | { type: "SET_SAMPLE_VERIFIED"; id: string; cents?: number; confidence?: number }
   | { type: "SET_KOALA_PROJECT"; project: ParsedKoalaProject | null }
   | { type: "SET_TUNING_MODE"; mode: TuningMode }
   | { type: "SET_A4_REFERENCE"; hz: number }
@@ -145,6 +154,52 @@ function computeShiftSemitones(
   return baseShift + fractionalOffset + tuningCorrection;
 }
 
+/** The (fractional) pitch class every tuned sample should land on: tonic plus the mode's correction. */
+function targetPitchClassFraction(master: MasterItem, tuningMode: TuningMode, a4Reference: number): number | null {
+  const key = effectiveMasterKey(master);
+  if (!key) return null;
+  const pc = (key.tonicPitchClass + tuningCorrectionSemitones(master, tuningMode, a4Reference)) % 12;
+  return (pc + 12) % 12;
+}
+
+/**
+ * Signed cents error of a measured (fractional) MIDI pitch vs the tuning
+ * target, octave-agnostic and wrapped to ±600c. Null when the master's key
+ * isn't known yet.
+ */
+export function verifyErrorCents(
+  master: MasterItem,
+  tuningMode: TuningMode,
+  a4Reference: number,
+  measuredMidi: number,
+): number | null {
+  const targetPc = targetPitchClassFraction(master, tuningMode, a4Reference);
+  if (targetPc === null) return null;
+  let diff = (((measuredMidi % 12) + 12) % 12) - targetPc;
+  if (diff > 6) diff -= 12;
+  if (diff < -6) diff += 12;
+  return diff * 100;
+}
+
+/**
+ * Frequency for a per-sample verification drone: the exact target pitch
+ * (tonic + mode correction, *without* the sample's manual trim — the drone
+ * is the truth to tune toward), voiced in the octave nearest where the
+ * tuned sample actually sits.
+ */
+export function droneFrequency(
+  master: MasterItem,
+  sample: SampleItem,
+  tuningMode: TuningMode,
+  a4Reference: number,
+): number | null {
+  const targetPc = targetPitchClassFraction(master, tuningMode, a4Reference);
+  if (targetPc === null || !sample.analysis) return null;
+  const tunedMidi = sample.analysis.detectedMidi + (sample.pitchShiftSemitones ?? 0);
+  const droneMidi = targetPc + 12 * Math.round((tunedMidi - targetPc) / 12);
+  return midiToFrequency(droneMidi);
+}
+
 function withComputedShift(
   master: MasterItem | null,
   sample: SampleItem,
@@ -152,7 +207,9 @@ function withComputedShift(
   a4Reference: number,
 ): SampleItem {
   if (!master || !sample.analysis) return sample;
-  const pitchShiftSemitones = computeShiftSemitones(master, sample.analysis, tuningMode, a4Reference);
+  const baseShift = computeShiftSemitones(master, sample.analysis, tuningMode, a4Reference);
+  const pitchShiftSemitones =
+    baseShift === undefined ? undefined : baseShift + (sample.manualOffsetSemitones ?? 0);
   const timeRatio =
     sample.mode === "loop" && sample.analysis.bpm && master.analysis?.bpm
       ? master.analysis.bpm / sample.analysis.bpm
@@ -172,7 +229,14 @@ function withComputedShift(
     ...sample,
     pitchShiftSemitones,
     timeRatio,
-    ...(stale ? { processedChannelData: undefined, status: "analyzed" as SampleStatus } : {}),
+    ...(stale
+      ? {
+          processedChannelData: undefined,
+          status: "analyzed" as SampleStatus,
+          verifiedOffsetCents: undefined,
+          verifiedConfidence: undefined,
+        }
+      : {}),
   };
 }
 
@@ -246,7 +310,37 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         samples: state.samples.map((s) =>
-          s.id === action.id ? { ...s, processedChannelData: action.channelData, status: "done" } : s,
+          s.id === action.id
+            ? {
+                ...s,
+                processedChannelData: action.channelData,
+                status: "done",
+                // Fresh render — the old measurement no longer describes it.
+                verifiedOffsetCents: undefined,
+                verifiedConfidence: undefined,
+              }
+            : s,
+        ),
+      };
+    case "SET_SAMPLE_MANUAL_OFFSET":
+      return {
+        ...state,
+        samples: state.samples.map((s) =>
+          s.id === action.id
+            ? withComputedShift(
+                state.master,
+                { ...s, manualOffsetSemitones: action.semitones },
+                state.tuningMode,
+                state.a4Reference,
+              )
+            : s,
+        ),
+      };
+    case "SET_SAMPLE_VERIFIED":
+      return {
+        ...state,
+        samples: state.samples.map((s) =>
+          s.id === action.id ? { ...s, verifiedOffsetCents: action.cents, verifiedConfidence: action.confidence } : s,
         ),
       };
     case "SET_KOALA_PROJECT":

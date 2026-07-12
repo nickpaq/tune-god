@@ -252,6 +252,40 @@
   flex: 0 0 auto;
 }
 
+.sample-card__trim {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.trim-btn {
+  border: 1.5px solid var(--border-color);
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.trim-btn:hover {
+  border-color: var(--accent-cyan);
+}
+
+.trim-value {
+  min-width: 4.5rem;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+}
+
+.trim-drone {
+  margin-left: auto;
+}
+
 .sample-card__controls {
   display: flex;
   flex-wrap: wrap;

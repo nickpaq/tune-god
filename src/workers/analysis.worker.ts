@@ -60,6 +60,13 @@ const api = {
       bpmConfidence,
     };
   },
+
+  /** Re-detects the pitch of already-rendered audio, for the post-process verify pass. */
+  async measurePitch(mono: Float32Array, sampleRate: number): Promise<{ midi: number; confidence: number } | null> {
+    const pitch = dominantPitch(mono, sampleRate);
+    if (!pitch) return null;
+    return { midi: frequencyToMidi(pitch.frequency), confidence: pitch.confidence };
+  },
 };
 
 export type AnalysisWorkerApi = typeof api;

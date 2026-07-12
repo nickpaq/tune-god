@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { decodeFile, toMono, cloneChannelData, monoFromChannelData } from "../audio/decode";
 import { semitonesToRatio } from "../audio/theory";
 import { nextAnalysisWorker, nextRenderWorker } from "../workers/workerClient";
-import { useSamplesStore, masterCorrectionSemitones, type SampleItem } from "./samplesStore";
+import { useSamplesStore, masterCorrectionSemitones, verifyErrorCents, type SampleItem } from "./samplesStore";
 import { parseKoalaProject, koalaPadToFile, type KoalaMasterReplacement } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/sampleModeDetect";
 import { parseFilenameMetadata } from "../audio/filenameMetadata";
@@ -111,26 +111,75 @@ export function useAppActions() {
     [loadMaster, addSampleFiles, dispatch],
   );
 
-  const processSample = useCallback(
-    async (id: string) => {
-      const sample = state.samples.find((s) => s.id === id);
-      if (!sample || sample.mode === "drum") return;
-      if (sample.pitchShiftSemitones === undefined) return;
-
+  /**
+   * Renders a sample at an explicit shift, then runs the verify pass:
+   * re-detects the pitch of the *rendered* audio and stores its cents error
+   * vs the target, so mistunes surface in the UI before export. Verification
+   * is best-effort — a failure there never fails the render.
+   */
+  const renderSample = useCallback(
+    async (sample: SampleItem, shiftSemitones: number) => {
+      const id = sample.id;
       dispatch({ type: "SET_SAMPLE_STATUS", id, status: "processing" });
       const worker = nextRenderWorker();
-      const pitchScale = semitonesToRatio(sample.pitchShiftSemitones);
+      const pitchScale = semitonesToRatio(shiftSemitones);
       try {
         const processed =
           sample.mode === "loop"
             ? await worker.process(sample.channelData, sample.sampleRate, sample.timeRatio ?? 1, pitchScale, true)
             : await worker.resamplePitch(sample.channelData, pitchScale);
         dispatch({ type: "SET_SAMPLE_PROCESSED", id, channelData: processed });
+
+        const master = state.master;
+        if (master) {
+          try {
+            const measured = await nextAnalysisWorker().measurePitch(
+              monoFromChannelData(processed),
+              sample.sampleRate,
+            );
+            const cents =
+              measured === null ? null : verifyErrorCents(master, state.tuningMode, state.a4Reference, measured.midi);
+            dispatch({
+              type: "SET_SAMPLE_VERIFIED",
+              id,
+              cents: cents ?? undefined,
+              confidence: measured?.confidence ?? 0,
+            });
+          } catch {
+            dispatch({ type: "SET_SAMPLE_VERIFIED", id, cents: undefined, confidence: 0 });
+          }
+        }
       } catch (err) {
         dispatch({ type: "SET_SAMPLE_STATUS", id, status: "error", error: String(err) });
       }
     },
-    [state.samples, dispatch],
+    [state.master, state.tuningMode, state.a4Reference, dispatch],
+  );
+
+  const processSample = useCallback(
+    async (id: string) => {
+      const sample = state.samples.find((s) => s.id === id);
+      if (!sample || sample.mode === "drum") return;
+      if (sample.pitchShiftSemitones === undefined) return;
+      await renderSample(sample, sample.pitchShiftSemitones);
+    },
+    [state.samples, renderSample],
+  );
+
+  /**
+   * Applies a manual trim and re-renders immediately. The new shift is
+   * computed here rather than read back from state, since the dispatch
+   * won't have landed yet when the render starts.
+   */
+  const trimAndProcess = useCallback(
+    async (id: string, manualOffsetSemitones: number) => {
+      const sample = state.samples.find((s) => s.id === id);
+      if (!sample || sample.mode === "drum" || sample.pitchShiftSemitones === undefined) return;
+      dispatch({ type: "SET_SAMPLE_MANUAL_OFFSET", id, semitones: manualOffsetSemitones });
+      const delta = manualOffsetSemitones - (sample.manualOffsetSemitones ?? 0);
+      await renderSample(sample, sample.pitchShiftSemitones + delta);
+    },
+    [state.samples, renderSample, dispatch],
   );
 
   const processAll = useCallback(async () => {
@@ -155,5 +204,5 @@ export function useAppActions() {
     return { koalaSampleId: master.koalaSampleId, sampleRate: master.sampleRate, channelData };
   }, [state.master, state.tuningMode, state.a4Reference]);
 
-  return { loadMaster, addSampleFiles, loadKoalaProject, processSample, processAll, buildTunedMaster };
+  return { loadMaster, addSampleFiles, loadKoalaProject, processSample, processAll, trimAndProcess, buildTunedMaster };
 }
