@@ -60,6 +60,22 @@ export function semitonesToRatio(semitones: number): number {
   return Math.pow(2, semitones / 12);
 }
 
+/**
+ * Accepted range for an editable A4 reference pitch: 415 Hz (Baroque/A415
+ * pitch) to 466 Hz (historical "high pitch"/Chorton), the conventional
+ * bounds used by tuner/DAW reference-pitch controls.
+ */
+export const A4_REFERENCE_RANGE = { min: 415, max: 466 } as const;
+
+export function clampA4Reference(hz: number): number {
+  return Math.min(A4_REFERENCE_RANGE.max, Math.max(A4_REFERENCE_RANGE.min, hz));
+}
+
+/** Semitone correction that retunes from true A440 to an alternate A4 reference. */
+export function referenceOffsetSemitones(a4Reference: number): number {
+  return 12 * Math.log2(a4Reference / 440);
+}
+
 export function formatCents(cents: number): string {
   const rounded = Math.round(cents);
   if (rounded === 0) return "in tune";

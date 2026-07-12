@@ -121,12 +121,17 @@
   gap: 0.2rem;
 }
 
-.master-detail select {
+.master-detail select,
+.master-detail input[type="number"] {
   background: transparent;
   border: 1.5px solid var(--border-color);
   border-radius: 8px;
   color: var(--text);
   padding: 0.3rem 0.5rem;
+}
+
+.master-detail input[type="number"] {
+  width: 5rem;
 }
 
 .badge {

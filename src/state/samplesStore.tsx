@@ -1,8 +1,24 @@
 import React, { createContext, useContext, useMemo, useReducer } from "react";
 import type { MasterAnalysis, SampleAnalysis } from "../audio/analysisTypes";
-import { smallestSignedShift, pitchClassOf, semitonesToRatio } from "../audio/theory";
+import {
+  smallestSignedShift,
+  pitchClassOf,
+  semitonesToRatio,
+  clampA4Reference,
+  referenceOffsetSemitones,
+} from "../audio/theory";
 import type { ParsedKoalaProject } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/drumDetect";
+
+/**
+ * "master": tune to the master loop's own tonic, then apply the master's
+ * own detected detune (in cents) to everything, so samples match the loop's
+ * actual pitch, not standard concert pitch. The master's audio is never
+ * touched either way.
+ * "a440": tune to the master's tonic at an editable, standard-range A4
+ * reference pitch, ignoring the master's own detune entirely.
+ */
+export type TuningMode = "master" | "a440";
 
 export type SampleMode = "tune" | "drum";
 export type SampleStatus = "pending" | "analyzing" | "analyzed" | "processing" | "done" | "error";
@@ -46,6 +62,9 @@ interface State {
   master: MasterItem | null;
   samples: SampleItem[];
   koalaProject: ParsedKoalaProject | null;
+  tuningMode: TuningMode;
+  /** A4 reference in Hz, only used when tuningMode is "a440". Clamped to A4_REFERENCE_RANGE. */
+  a4Reference: number;
 }
 
 type Action =
@@ -60,8 +79,12 @@ type Action =
   | { type: "SET_SAMPLE_LOOP"; id: string; isLoop: boolean }
   | { type: "SET_SAMPLE_PROCESSED"; id: string; channelData: Float32Array[] }
   | { type: "SET_KOALA_PROJECT"; project: ParsedKoalaProject | null }
+  | { type: "SET_TUNING_MODE"; mode: TuningMode }
+  | { type: "SET_A4_REFERENCE"; hz: number }
   | { type: "CLEAR_MASTER" }
   | { type: "RESET" };
+
+const DEFAULT_A4_REFERENCE = 440;
 
 function effectiveMasterKey(master: MasterItem): { tonicPitchClass: number; scale: "major" | "minor" } | null {
   const tonicPitchClass = master.overrideTonicPitchClass ?? master.analysis?.tonicPitchClass;
@@ -70,24 +93,46 @@ function effectiveMasterKey(master: MasterItem): { tonicPitchClass: number; scal
   return { tonicPitchClass, scale };
 }
 
+/**
+ * Semitone correction folded into every sample's shift, on top of landing on
+ * the master's tonic pitch class:
+ *  - "master": the master loop's own detected detune (in cents), applied
+ *    with the same sign, so samples match the loop's actual pitch — not
+ *    standard concert pitch. The master's audio is never re-tuned itself.
+ *  - "a440": the master's detune is ignored; samples are corrected to the
+ *    chosen (editable) A4 reference pitch instead.
+ */
+function tuningCorrectionSemitones(master: MasterItem, tuningMode: TuningMode, a4Reference: number): number {
+  if (tuningMode === "a440") return referenceOffsetSemitones(a4Reference);
+  return (master.analysis?.tuningOffsetCents ?? 0) / 100;
+}
+
 /** Computes the semitone shift that lands a sample's detected root on the
- * master key's tonic, folding in the master loop's own tuning correction
- * (in cents) so everything lands on true A440. The master loop itself is
- * never re-tuned — only this correction, applied to the other samples. */
-function computeShiftSemitones(master: MasterItem, sample: SampleAnalysis): number | undefined {
+ * master key's tonic, folding in the active tuning-mode correction. */
+function computeShiftSemitones(
+  master: MasterItem,
+  sample: SampleAnalysis,
+  tuningMode: TuningMode,
+  a4Reference: number,
+): number | undefined {
   const key = effectiveMasterKey(master);
   if (!key) return undefined;
   const targetClass = key.tonicPitchClass;
   const detectedClass = pitchClassOf(sample.detectedMidi);
-  const tuningCorrection = -(master.analysis?.tuningOffsetCents ?? 0) / 100;
+  const tuningCorrection = tuningCorrectionSemitones(master, tuningMode, a4Reference);
   const baseShift = smallestSignedShift(detectedClass, targetClass);
   const fractionalOffset = Math.round(sample.detectedMidi) - sample.detectedMidi;
   return baseShift + fractionalOffset + tuningCorrection;
 }
 
-function withComputedShift(master: MasterItem | null, sample: SampleItem): SampleItem {
+function withComputedShift(
+  master: MasterItem | null,
+  sample: SampleItem,
+  tuningMode: TuningMode,
+  a4Reference: number,
+): SampleItem {
   if (!master || !sample.analysis) return sample;
-  const pitchShiftSemitones = computeShiftSemitones(master, sample.analysis);
+  const pitchShiftSemitones = computeShiftSemitones(master, sample.analysis, tuningMode, a4Reference);
   const timeRatio =
     sample.isLoop && sample.analysis.bpm && master.analysis?.bpm ? master.analysis.bpm / sample.analysis.bpm : 1;
   return { ...sample, pitchShiftSemitones, timeRatio };
@@ -100,7 +145,11 @@ function reducer(state: State, action: Action): State {
     case "SET_MASTER_ANALYSIS": {
       if (!state.master) return state;
       const master = { ...state.master, analysis: action.analysis, status: "analyzed" as SampleStatus };
-      return { ...state, master, samples: state.samples.map((s) => withComputedShift(master, s)) };
+      return {
+        ...state,
+        master,
+        samples: state.samples.map((s) => withComputedShift(master, s, state.tuningMode, state.a4Reference)),
+      };
     }
     case "SET_MASTER_OVERRIDE": {
       if (!state.master) return state;
@@ -110,7 +159,11 @@ function reducer(state: State, action: Action): State {
         overrideScale: action.scale,
         overrideBpm: action.bpm,
       };
-      return { ...state, master, samples: state.samples.map((s) => withComputedShift(master, s)) };
+      return {
+        ...state,
+        master,
+        samples: state.samples.map((s) => withComputedShift(master, s, state.tuningMode, state.a4Reference)),
+      };
     }
     case "ADD_SAMPLES":
       return { ...state, samples: [...state.samples, ...action.samples] };
@@ -129,7 +182,12 @@ function reducer(state: State, action: Action): State {
         samples: state.samples.map((s) => {
           if (s.id !== action.id) return s;
           const mode = s.modeManuallySet ? s.mode : guessSampleMode(s.name, action.analysis);
-          return withComputedShift(state.master, { ...s, analysis: action.analysis, status: "analyzed", mode });
+          return withComputedShift(
+            state.master,
+            { ...s, analysis: action.analysis, status: "analyzed", mode },
+            state.tuningMode,
+            state.a4Reference,
+          );
         }),
       };
     case "SET_SAMPLE_MODE":
@@ -143,7 +201,9 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         samples: state.samples.map((s) =>
-          s.id === action.id ? withComputedShift(state.master, { ...s, isLoop: action.isLoop }) : s,
+          s.id === action.id
+            ? withComputedShift(state.master, { ...s, isLoop: action.isLoop }, state.tuningMode, state.a4Reference)
+            : s,
         ),
       };
     case "SET_SAMPLE_PROCESSED":
@@ -155,6 +215,20 @@ function reducer(state: State, action: Action): State {
       };
     case "SET_KOALA_PROJECT":
       return { ...state, koalaProject: action.project };
+    case "SET_TUNING_MODE":
+      return {
+        ...state,
+        tuningMode: action.mode,
+        samples: state.samples.map((s) => withComputedShift(state.master, s, action.mode, state.a4Reference)),
+      };
+    case "SET_A4_REFERENCE": {
+      const a4Reference = clampA4Reference(action.hz);
+      return {
+        ...state,
+        a4Reference,
+        samples: state.samples.map((s) => withComputedShift(state.master, s, state.tuningMode, a4Reference)),
+      };
+    }
     case "CLEAR_MASTER":
       return {
         ...state,
@@ -168,7 +242,7 @@ function reducer(state: State, action: Action): State {
         })),
       };
     case "RESET":
-      return { master: null, samples: [], koalaProject: null };
+      return { master: null, samples: [], koalaProject: null, tuningMode: "master", a4Reference: DEFAULT_A4_REFERENCE };
     default:
       return state;
   }
@@ -177,7 +251,13 @@ function reducer(state: State, action: Action): State {
 const StoreContext = createContext<{ state: State; dispatch: React.Dispatch<Action> } | null>(null);
 
 export function SamplesProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, { master: null, samples: [], koalaProject: null });
+  const [state, dispatch] = useReducer(reducer, {
+    master: null,
+    samples: [],
+    koalaProject: null,
+    tuningMode: "master",
+    a4Reference: DEFAULT_A4_REFERENCE,
+  });
   const value = useMemo(() => ({ state, dispatch }), [state]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

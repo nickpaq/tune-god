@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Dropzone } from "./Dropzone";
 import { PlayButton } from "./PlayButton";
-import { useSamplesStore } from "../state/samplesStore";
+import { useSamplesStore, type TuningMode } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
-import { NOTE_NAMES, formatCents } from "../audio/theory";
+import { NOTE_NAMES, A4_REFERENCE_RANGE, formatCents } from "../audio/theory";
 import { togglePlayback } from "../audio/playback";
 import { stripExtension } from "../audio/filename";
 import { isKoalaFile } from "../audio/koalaProject";
@@ -150,6 +150,29 @@ export function MasterPanel() {
             </label>
             <span className="badge">{bpm?.toFixed(1)} BPM</span>
             <span className="badge">tuning {formatCents(a.tuningOffsetCents)}</span>
+            <label>
+              Tuning
+              <select
+                value={state.tuningMode}
+                onChange={(e) => dispatch({ type: "SET_TUNING_MODE", mode: e.target.value as TuningMode })}
+              >
+                <option value="master">Tune to master loop</option>
+                <option value="a440">Tune to A=440</option>
+              </select>
+            </label>
+            {state.tuningMode === "a440" && (
+              <label>
+                A4 (Hz)
+                <input
+                  type="number"
+                  min={A4_REFERENCE_RANGE.min}
+                  max={A4_REFERENCE_RANGE.max}
+                  step={0.1}
+                  value={state.a4Reference}
+                  onChange={(e) => dispatch({ type: "SET_A4_REFERENCE", hz: Number(e.target.value) })}
+                />
+              </label>
+            )}
             {hasOverride && (
               <button
                 className="link-btn"
