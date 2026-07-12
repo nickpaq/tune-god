@@ -21,6 +21,20 @@
 
 body {
   margin: 0;
+  /* Prevents iOS's long-press text-selection callout from popping up over
+     labels/values during press-and-hold gestures (e.g. holding a keyboard
+     grid note) — the rest of the UI isn't meant to be copy/selectable. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+select,
+textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
+  -webkit-touch-callout: default;
 }
 
 /* Chunky outlined pill/rounded-rect, matches the hardware-sampler look —
