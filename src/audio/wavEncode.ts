@@ -71,11 +71,3 @@ export function encodeWav({ sampleRate, channelData, bitDepth = 16 }: WavEncodeO
 
   return new Blob([buffer], { type: "audio/wav" });
 }
-
-export function audioBufferToWav(buffer: AudioBuffer, bitDepth: 16 | 24 = 16): Blob {
-  const channelData: Float32Array[] = [];
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    channelData.push(buffer.getChannelData(ch));
-  }
-  return encodeWav({ sampleRate: buffer.sampleRate, channelData, bitDepth });
-}

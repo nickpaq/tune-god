@@ -91,7 +91,7 @@ function yinFrame(
 }
 
 /** Runs YIN across a whole mono buffer, returning one estimate per hop. */
-export function yinTrack(mono: Float32Array, options: YinOptions): YinFrameResult[] {
+function yinTrack(mono: Float32Array, options: YinOptions): YinFrameResult[] {
   const { sampleRate } = options;
   const frameSize = options.frameSize ?? DEFAULTS.frameSize;
   const hopSize = options.hopSize ?? DEFAULTS.hopSize;

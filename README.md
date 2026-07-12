@@ -21,7 +21,7 @@ All decoding, analysis, and DSP run in Web Workers via WebAssembly and the Web A
 - React + TypeScript + Vite, `vite-plugin-pwa` for offline installability.
 - [essentia.js](https://mtg.github.io/essentia.js/) (WASM) for key detection (`KeyExtractor`) and BPM (`RhythmExtractor2013`).
 - A custom YIN pitch tracker for per-sample fundamental/tuning detection (no model weights to ship — keeps the installed app small on iOS's tight storage quota).
-- [Rubber Band Library](https://breakfastquay.com/rubberband/) (WASM) for the master loop and Loop-mode samples' pitch-shifting/time-stretching; a small linear-interpolation resampler handles One-shot mode instead.
+- [Rubber Band Library](https://breakfastquay.com/rubberband/) (WASM) for the master loop and Loop-mode samples' pitch-shifting/time-stretching; a windowed-sinc (bandlimited, anti-aliased) resampler handles One-shot mode instead.
 - `jszip` for batch export, `comlink` for the worker RPC layer.
 
 See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for licensing details — Rubber Band is GPL-licensed.

@@ -45,10 +45,6 @@ function stopActive(pause: boolean): void {
   a.onStopped();
 }
 
-export function stopPlayback(): void {
-  stopActive(false);
-}
-
 /**
  * Tap-to-play / tap-to-pause preview. `key` identifies the sound (e.g. a
  * sample id); tapping the same key pauses and remembers the position, tapping
