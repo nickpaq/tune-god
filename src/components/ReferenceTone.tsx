@@ -3,12 +3,15 @@ import { useSamplesStore, useTargetInfo } from "../state/samplesStore";
 import { midiToFrequency, smallestSignedShift } from "../audio/theory";
 import { playTone, type ToneHandle } from "../audio/playback";
 import { PlayButton } from "./PlayButton";
+import { PrecisionSlider } from "./PrecisionSlider";
+
+const DEFAULT_VOLUME = 0.3;
 
 export function ReferenceTone() {
   const { state } = useSamplesStore();
   const target = useTargetInfo(state.master);
   const [playing, setPlaying] = useState(false);
-  const [volume, setVolume] = useState(0.3);
+  const [volume, setVolume] = useState(DEFAULT_VOLUME);
   const handleRef = useRef<ToneHandle | null>(null);
 
   useEffect(() => {
@@ -39,13 +42,14 @@ export function ReferenceTone() {
       <div className="tone-controls">
         <span className="tone-label">Tone Generator</span>
         <PlayButton playing={playing} onClick={toggle} />
-        <input
-          type="range"
+        <PrecisionSlider
           min={0}
           max={1}
           step={0.01}
           value={volume}
-          onChange={(e) => setVolume(Number(e.target.value))}
+          onChange={setVolume}
+          onDoubleClick={() => setVolume(DEFAULT_VOLUME)}
+          title="Tone volume. Drag down to slow the scrub. Double-tap to reset."
         />
       </div>
     </section>

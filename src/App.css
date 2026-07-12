@@ -204,9 +204,12 @@
   font-size: 1rem;
 }
 
-.panel--tone input[type="range"] {
-  flex: 1 1 auto;
-  accent-color: var(--accent-pink);
+.panel--tone .precision-slider__fill {
+  background: var(--accent-pink);
+}
+
+.panel--tone .precision-slider:focus-visible .precision-slider__thumb {
+  outline-color: var(--accent-pink);
 }
 
 .batch-actions {
