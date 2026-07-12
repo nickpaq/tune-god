@@ -87,6 +87,11 @@ export function MasterPanel() {
   const a = master.analysis;
   const tonic = master.overrideTonicPitchClass ?? a?.tonicPitchClass;
   const scale = master.overrideScale ?? a?.scale;
+  const bpm = master.overrideBpm ?? a?.bpm;
+  const hasOverride =
+    master.overrideTonicPitchClass !== undefined ||
+    master.overrideScale !== undefined ||
+    master.overrideBpm !== undefined;
 
   return (
     <section className="panel">
@@ -115,6 +120,7 @@ export function MasterPanel() {
                     type: "SET_MASTER_OVERRIDE",
                     tonicPitchClass: Number(e.target.value),
                     scale,
+                    bpm,
                   })
                 }
               >
@@ -134,6 +140,7 @@ export function MasterPanel() {
                     type: "SET_MASTER_OVERRIDE",
                     tonicPitchClass: tonic,
                     scale: e.target.value as "major" | "minor",
+                    bpm,
                   })
                 }
               >
@@ -141,8 +148,24 @@ export function MasterPanel() {
                 <option value="minor">minor</option>
               </select>
             </label>
-            <span className="badge">{a.bpm.toFixed(1)} BPM</span>
+            <span className="badge">{bpm?.toFixed(1)} BPM</span>
             <span className="badge">tuning {formatCents(a.tuningOffsetCents)}</span>
+            {hasOverride && (
+              <button
+                className="link-btn"
+                onClick={() =>
+                  dispatch({
+                    type: "SET_MASTER_OVERRIDE",
+                    tonicPitchClass: undefined,
+                    scale: undefined,
+                    bpm: undefined,
+                  })
+                }
+                title="Discard the filename/manual key & BPM and use the built-in detection instead"
+              >
+                🔄 use detected
+              </button>
+            )}
           </div>
         )}
       </div>
