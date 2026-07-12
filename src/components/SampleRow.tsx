@@ -262,30 +262,34 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
         <button
           className={`toggle-btn${sample.mode === "loop" ? " toggle-btn--active" : ""}`}
           onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "loop" })}
-          title="Rubber Band: tuned and time-stretched to the master's BPM, exact duration and formants preserved"
+          aria-label="Loop"
+          title="Loop: Rubber Band, tuned and time-stretched to the master's BPM, exact duration and formants preserved"
         >
-          Loop
+          🔁
         </button>
         <button
           className={`toggle-btn${sample.mode === "oneshot" ? " toggle-btn--active" : ""}`}
           onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "oneshot" })}
-          title="Windowed-sinc resample: tuned by pitch-shifting playback speed, keeps transients crisp"
+          aria-label="One-shot"
+          title="One-shot: windowed-sinc resample, tuned by pitch-shifting playback speed, keeps transients crisp"
         >
-          One-shot
+          🎹
         </button>
         <button
           className={`toggle-btn${sample.mode === "bass" ? " toggle-btn--active" : ""}`}
           onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "bass" })}
-          title="Same as one-shot, but previews 3 octaves up (sample and drone together) and loops the sample's back half — easier to hear the pitch of a low-fundamental, sliding 808-style tail"
+          aria-label="Bass"
+          title="Bass: same as one-shot, but previews 3 octaves up (sample and drone together) and loops the sample's back half — easier to hear the pitch of a low-fundamental, sliding 808-style tail"
         >
-          Bass
+          ⬆️
         </button>
         <button
           className={`toggle-btn${sample.mode === "drum" ? " toggle-btn--active" : ""}`}
           onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "drum" })}
-          title="Left completely untouched"
+          aria-label="Drum"
+          title="Drum: left completely untouched"
         >
-          Drum
+          🥁
         </button>
       </div>
 

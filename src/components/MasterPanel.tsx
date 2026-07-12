@@ -13,7 +13,7 @@ import { NOTE_NAMES, A4_REFERENCE_RANGE, formatCents, formatSignedSemitones, for
 import { playMasterLoop, playTone, type MasterSessionHandle, type ToneHandle } from "../audio/playback";
 import { stripExtension } from "../audio/filename";
 import { isKoalaFile } from "../audio/koalaProject";
-import { clipboardReadSupported, findKoalaFileInFileList, readKoalaFileFromClipboard } from "../audio/clipboardImport";
+import { findKoalaFileInFileList } from "../audio/clipboardImport";
 
 /** Trim shown as signed semitones.cents, e.g. "+1.07" = up 1 semitone 7 cents. */
 function formatTrim(offset: number): string {
@@ -53,19 +53,6 @@ export function MasterPanel() {
     [loadKoalaProject, loadMaster],
   );
 
-  const handlePasteClick = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const file = await readKoalaFileFromClipboard();
-      await loadKoalaProject(file);
-    } catch (err) {
-      setError(String(err instanceof Error ? err.message : err));
-    } finally {
-      setBusy(false);
-    }
-  }, [loadKoalaProject]);
-
   // Native Cmd/Ctrl+V (or iOS's Edit menu paste) — a fallback alongside the
   // explicit button, since the Async Clipboard API's permission/type support
   // varies a lot across browsers.
@@ -98,11 +85,6 @@ export function MasterPanel() {
           allowKoala
           onFiles={handleFiles}
         />
-        {clipboardReadSupported && (
-          <button className="link-btn" onClick={handlePasteClick} disabled={busy}>
-            📋 paste project from clipboard
-          </button>
-        )}
         {busy && <p className="muted">Analyzing…</p>}
         {error && <p className="error">{error}</p>}
       </section>
