@@ -200,6 +200,41 @@ export function droneFrequency(
   return midiToFrequency(droneMidi);
 }
 
+/** Semitone offsets from the tonic for each of the 7 scale degrees, index 0 = tonic. */
+export const MAJOR_SCALE_STEPS = [0, 2, 4, 5, 7, 9, 11] as const;
+export const NATURAL_MINOR_SCALE_STEPS = [0, 2, 3, 5, 7, 8, 10] as const;
+
+export function scaleStepsFor(scale: "major" | "minor"): readonly number[] {
+  return scale === "minor" ? NATURAL_MINOR_SCALE_STEPS : MAJOR_SCALE_STEPS;
+}
+
+/**
+ * Frequency for one pad of the master-key verification grid: scale degree
+ * `col` (0 = tonic, 1..6 = the rest of the detected major/minor scale in
+ * order) voiced `octaveShift` semitones from the octave nearest middle C,
+ * plus the same tuning-mode correction (the master's own detune in "master"
+ * mode, or the A4 reference offset in "a440" mode) a real tuned sample
+ * would receive, plus an optional diagnostic trim on top — so a pad sounds
+ * exactly like a one-shot tuned to that degree and dropped into Koala
+ * would, letting a wrong key/scale detection surface by ear immediately.
+ */
+export function scaleGridFrequency(
+  master: MasterItem,
+  tuningMode: TuningMode,
+  a4Reference: number,
+  col: number,
+  octaveShift: number,
+  trimSemitones = 0,
+): number | null {
+  const key = effectiveMasterKey(master);
+  if (!key) return null;
+  const steps = scaleStepsFor(key.scale);
+  const degree = steps[col] ?? 0;
+  const baseMidi = 60 + smallestSignedShift(0, key.tonicPitchClass);
+  const correction = tuningCorrectionSemitones(master, tuningMode, a4Reference);
+  return midiToFrequency(baseMidi + degree + octaveShift + correction + trimSemitones);
+}
+
 function withComputedShift(
   master: MasterItem | null,
   sample: SampleItem,

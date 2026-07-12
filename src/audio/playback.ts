@@ -182,6 +182,8 @@ export interface DualHandle {
    * or restarts mid-note.
    */
   setBuffer: (channelData: Float32Array[], detuneCents?: number) => void;
+  /** Retunes the drone oscillator live via its own AudioParam — no restart of the sample/loop underneath. */
+  setDroneFrequency: (frequency: number) => void;
 }
 
 /**
@@ -263,6 +265,10 @@ export function playSampleWithDrone(
     currentSource?.detune.setTargetAtTime(cents, ctx.currentTime, SMOOTH_SEC);
   };
 
+  const setDroneFrequency = (frequency: number) => {
+    osc.frequency.setTargetAtTime(frequency, ctx.currentTime, SMOOTH_SEC);
+  };
+
   const setBuffer = (nextChannelData: Float32Array[], nextDetuneCents = 0) => {
     buffer = bufferFromChannelData(nextChannelData, sampleRate);
     detuneCents = nextDetuneCents;
@@ -299,5 +305,5 @@ export function playSampleWithDrone(
   };
   active = slot;
 
-  return { stop, setBalance, setDetuneCents, setBuffer };
+  return { stop, setBalance, setDetuneCents, setBuffer, setDroneFrequency };
 }

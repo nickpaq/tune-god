@@ -315,6 +315,60 @@
   color: var(--accent-cyan);
 }
 
+.key-grid {
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.key-grid__row {
+  display: flex;
+}
+
+.key-grid__row + .key-grid__row {
+  border-top: 1px solid var(--border-color);
+}
+
+.key-grid__cell {
+  flex: 1 1 0;
+  aspect-ratio: 1;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--muted-color, #888);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 60ms ease-out;
+}
+
+.key-grid__cell:last-child {
+  border-right: none;
+}
+
+.key-grid__cell--tonic {
+  color: #fff;
+}
+
+.key-grid__cell--tonic.key-grid__cell--dark {
+  background: #5a2e38;
+}
+
+.key-grid__cell--tonic.key-grid__cell--bright {
+  background: #a13a4a;
+}
+
+.key-grid__cell--active {
+  background: #ffffff !important;
+  color: #111 !important;
+}
+
 .sample-card__controls {
   display: flex;
   flex-wrap: wrap;

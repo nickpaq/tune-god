@@ -1,13 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Dropzone } from "./Dropzone";
 import { PlayButton } from "./PlayButton";
-import { useSamplesStore, masterCorrectionSemitones, type TuningMode } from "../state/samplesStore";
+import { MasterGrid } from "./MasterGrid";
+import {
+  useSamplesStore,
+  masterCorrectionSemitones,
+  scaleGridFrequency,
+  type TuningMode,
+} from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { NOTE_NAMES, A4_REFERENCE_RANGE, formatCents } from "../audio/theory";
-import { togglePlayback } from "../audio/playback";
+import { togglePlayback, playSampleWithDrone, type DualHandle } from "../audio/playback";
 import { stripExtension } from "../audio/filename";
 import { isKoalaFile } from "../audio/koalaProject";
 import { clipboardReadSupported, findKoalaFileInFileList, readKoalaFileFromClipboard } from "../audio/clipboardImport";
+
+/** Trim shown as signed semitones.cents, e.g. "+1.07" = up 1 semitone 7 cents. */
+function formatTrim(offset: number): string {
+  return `${offset > 0 ? "+" : ""}${offset.toFixed(2)}`;
+}
 
 export function MasterPanel() {
   const { state, dispatch } = useSamplesStore();
@@ -16,6 +27,10 @@ export function MasterPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [balance, setBalance] = useState(50); // 0 = drone only, 100 = master only
+  const [semitoneVal, setSemitoneVal] = useState(0);
+  const [centsVal, setCentsVal] = useState(0);
+  const dualRef = useRef<DualHandle | null>(null);
 
   const handleFiles = useCallback(
     async (files: File[]) => {
@@ -65,6 +80,13 @@ export function MasterPanel() {
     return () => document.removeEventListener("paste", onPaste);
   }, [master, handleFiles]);
 
+  useEffect(
+    () => () => {
+      dualRef.current?.stop();
+    },
+    [],
+  );
+
   if (!master) {
     return (
       <section className="panel">
@@ -92,17 +114,67 @@ export function MasterPanel() {
     master.overrideTonicPitchClass !== undefined ||
     master.overrideScale !== undefined ||
     master.overrideBpm !== undefined;
+  const trimSemitones = semitoneVal + centsVal / 100;
+  const hasKey = tonic !== undefined && scale !== undefined;
+
+  const preview = () => {
+    if (dualRef.current) {
+      dualRef.current.stop();
+      dualRef.current = null;
+      setPlaying(false);
+      return;
+    }
+    if (playing) {
+      setPlaying(togglePlayback("master", master.channelData, master.sampleRate, () => setPlaying(false)));
+      return;
+    }
+    const freq = hasKey ? scaleGridFrequency(master, state.tuningMode, state.a4Reference, 0, 0, trimSemitones) : null;
+    if (freq !== null) {
+      dualRef.current = playSampleWithDrone(
+        "master",
+        master.channelData,
+        master.sampleRate,
+        { droneFrequency: freq, balance: balance / 100 },
+        () => {
+          dualRef.current = null;
+          setPlaying(false);
+        },
+      );
+      setPlaying(true);
+    } else {
+      setPlaying(togglePlayback("master", master.channelData, master.sampleRate, () => setPlaying(false)));
+    }
+  };
+
+  const onBalanceChange = (value: number) => {
+    setBalance(value);
+    dualRef.current?.setBalance(value / 100);
+  };
+
+  const retuneDrone = (nextSemitone: number, nextCents: number) => {
+    if (!dualRef.current || !hasKey) return;
+    const freq = scaleGridFrequency(master, state.tuningMode, state.a4Reference, 0, 0, nextSemitone + nextCents / 100);
+    // Live AudioParam ramp on the drone oscillator only — the master loop
+    // underneath keeps playing uninterrupted, no restart/click.
+    if (freq !== null) dualRef.current.setDroneFrequency(freq);
+  };
+
+  const nudgeSemitone = (delta: number) => {
+    const v = Math.max(-12, Math.min(12, semitoneVal + delta));
+    setSemitoneVal(v);
+    retuneDrone(v, centsVal);
+  };
+  const nudgeCents = (delta: number) => {
+    const v = Math.max(-50, Math.min(50, centsVal + delta));
+    setCentsVal(v);
+    retuneDrone(semitoneVal, v);
+  };
 
   return (
     <section className="panel">
       <div className="master-summary">
         <div>
-          <PlayButton
-            playing={playing}
-            onClick={() =>
-              setPlaying(togglePlayback("master", master.channelData, master.sampleRate, () => setPlaying(false)))
-            }
-          />
+          <PlayButton playing={playing} onClick={preview} />
           <strong>{stripExtension(master.name)}</strong>
           <button className="link-btn" onClick={() => dispatch({ type: "CLEAR_MASTER" })}>
             ✕ clear
@@ -195,6 +267,101 @@ export function MasterPanel() {
               </button>
             )}
           </div>
+        )}
+
+        {hasKey && (
+          <>
+            <div className="tune-stack">
+              <div className="tune-row tune-row--balance">
+                <span className="tune-row__label">drone</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={balance}
+                  onChange={(e) => onBalanceChange(Number(e.target.value))}
+                  title="Fades between the reference drone and the master loop — press play and use this to hear whether the detected key actually matches"
+                />
+                <span className="tune-row__label">master</span>
+              </div>
+
+              <div className="tune-row">
+                <button className="tune-nudge" onClick={() => nudgeSemitone(-1)} title="Down 1 semitone">
+                  −1st
+                </button>
+                <input
+                  type="range"
+                  min={-12}
+                  max={12}
+                  step={1}
+                  value={semitoneVal}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setSemitoneVal(v);
+                    retuneDrone(v, centsVal);
+                  }}
+                  title="Nudges the comparison drone/grid only — diagnostic, never applied to the master's own audio"
+                />
+                <button className="tune-nudge" onClick={() => nudgeSemitone(1)} title="Up 1 semitone">
+                  +1st
+                </button>
+              </div>
+
+              <div className="tune-row">
+                <button className="tune-nudge" onClick={() => nudgeCents(-1)} title="Down 1 cent">
+                  −1c
+                </button>
+                <input
+                  type="range"
+                  min={-50}
+                  max={50}
+                  step={1}
+                  value={centsVal}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setCentsVal(v);
+                    retuneDrone(semitoneVal, v);
+                  }}
+                  title="Fine cents nudge on the comparison drone/grid"
+                />
+                <button className="tune-nudge" onClick={() => nudgeCents(1)} title="Up 1 cent">
+                  +1c
+                </button>
+              </div>
+
+              <div className="tune-row tune-row--footer">
+                <span
+                  className="trim-value"
+                  title="Diagnostic offset applied to the drone/grid tones only — if this needs to be large to match the master, the detected key or its tuning offset is probably wrong"
+                >
+                  {formatTrim(trimSemitones)}
+                </span>
+                {trimSemitones !== 0 && (
+                  <button
+                    className="link-btn"
+                    onClick={() => {
+                      setSemitoneVal(0);
+                      setCentsVal(0);
+                      retuneDrone(0, 0);
+                    }}
+                    title="Clear the diagnostic offset"
+                  >
+                    ↺ reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <MasterGrid
+              master={master}
+              tuningMode={state.tuningMode}
+              a4Reference={state.a4Reference}
+              tonicPitchClass={tonic!}
+              scale={scale!}
+              trimSemitones={trimSemitones}
+            />
+          </>
         )}
       </div>
     </section>
