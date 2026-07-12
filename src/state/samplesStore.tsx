@@ -24,6 +24,33 @@ import { guessSampleMode } from "../audio/sampleModeDetect";
 export type TuningMode = "master" | "a440";
 
 /**
+ * Which side of each row's controls the play button sits on. "right" is for
+ * right-handed use (thumb naturally falls on the left side of the screen
+ * when the phone is held in the right hand) — "left" is the default,
+ * matching the button's original position on the right.
+ */
+export type Handedness = "left" | "right";
+
+const HANDEDNESS_STORAGE_KEY = "koalatune.handedness";
+
+function loadHandedness(): Handedness {
+  try {
+    const stored = localStorage.getItem(HANDEDNESS_STORAGE_KEY);
+    return stored === "right" ? "right" : "left";
+  } catch {
+    return "left";
+  }
+}
+
+export function saveHandedness(handedness: Handedness): void {
+  try {
+    localStorage.setItem(HANDEDNESS_STORAGE_KEY, handedness);
+  } catch {
+    // Best-effort — private browsing / storage quota, etc.
+  }
+}
+
+/**
  * "loop": tuned and time-stretched to the master's BPM via Rubber Band —
  * preserves exact duration and formants.
  * "oneshot": tuned via a simple resample (pitch-shift only) — no Rubber
@@ -88,6 +115,7 @@ interface State {
   tuningMode: TuningMode;
   /** A4 reference in Hz, only used when tuningMode is "a440". Clamped to A4_REFERENCE_RANGE. */
   a4Reference: number;
+  handedness: Handedness;
 }
 
 type Action =
@@ -105,6 +133,7 @@ type Action =
   | { type: "SET_KOALA_PROJECT"; project: ParsedKoalaProject | null }
   | { type: "SET_TUNING_MODE"; mode: TuningMode }
   | { type: "SET_A4_REFERENCE"; hz: number }
+  | { type: "SET_HANDEDNESS"; handedness: Handedness }
   | { type: "CLEAR_MASTER" }
   | { type: "RESET" };
 
@@ -400,6 +429,9 @@ function reducer(state: State, action: Action): State {
         samples: state.samples.map((s) => withComputedShift(state.master, s, state.tuningMode, a4Reference)),
       };
     }
+    case "SET_HANDEDNESS":
+      saveHandedness(action.handedness);
+      return { ...state, handedness: action.handedness };
     case "CLEAR_MASTER":
       return {
         ...state,
@@ -413,7 +445,14 @@ function reducer(state: State, action: Action): State {
         })),
       };
     case "RESET":
-      return { master: null, samples: [], koalaProject: null, tuningMode: "master", a4Reference: DEFAULT_A4_REFERENCE };
+      return {
+        master: null,
+        samples: [],
+        koalaProject: null,
+        tuningMode: "master",
+        a4Reference: DEFAULT_A4_REFERENCE,
+        handedness: state.handedness,
+      };
     default:
       return state;
   }
@@ -428,6 +467,7 @@ export function SamplesProvider({ children }: { children: React.ReactNode }) {
     koalaProject: null,
     tuningMode: "master",
     a4Reference: DEFAULT_A4_REFERENCE,
+    handedness: loadHandedness(),
   });
   const value = useMemo(() => ({ state, dispatch }), [state]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

@@ -40,141 +40,74 @@ function bufferFromChannelData(channelData: Float32Array[], sampleRate: number):
   return buffer;
 }
 
-interface LoopWindow {
-  /** Offset into the buffer, in seconds, where each retrigger cycle starts. */
-  startSec: number;
-  /** Length of the looped segment, in seconds. */
-  durationSec: number;
-}
-
-/** How far (in seconds) to search outward from a target index for a zero crossing. */
-const ZERO_CROSSING_SEARCH_SEC = 0.05;
-/** Never loop a segment shorter than this, even on a very short buffer. */
-const MIN_LOOP_SEC = 0.05;
-/** Block size for scanning backward for trailing silence in the bass-tail window. */
-const SILENCE_SCAN_BLOCK_SEC = 0.01;
-/** A block is "silent" once its RMS falls below this fraction of the segment's peak. */
-const SILENCE_FLOOR_RATIO = 0.02;
-
 function bufferChannels(buffer: AudioBuffer): Float32Array[] {
   const channels: Float32Array[] = [];
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) channels.push(buffer.getChannelData(ch));
   return channels;
 }
 
-/** Nearest sample index to `target` (within `searchRadius`) where the summed-channel signal crosses zero. */
-function nearestZeroCrossing(channels: Float32Array[], length: number, searchRadius: number, target: number): number {
+/** How far forward (in seconds) to search for a zero crossing before giving up on a clean cut. */
+const RELEASE_ZERO_CROSSING_SEARCH_SEC = 0.05;
+
+/** First sample index at or after `target` where the summed-channel signal crosses zero, or null if none found within `maxSearchSamples`. */
+function nextZeroCrossingForward(
+  channels: Float32Array[],
+  length: number,
+  target: number,
+  maxSearchSamples: number,
+): number | null {
   const sumAt = (i: number): number => {
     let sum = 0;
     for (const c of channels) sum += c[i];
     return sum;
   };
-  const lo = Math.max(0, target - searchRadius);
-  const hi = Math.min(length - 2, target + searchRadius);
-  let best = target;
-  let bestDist = Infinity;
-  for (let i = lo; i <= hi; i++) {
+  const start = Math.max(0, Math.min(target, length - 2));
+  const end = Math.min(length - 2, start + maxSearchSamples);
+  let prev = sumAt(start);
+  for (let i = start + 1; i <= end; i++) {
     const cur = sumAt(i);
-    const next = sumAt(i + 1);
-    if ((cur <= 0 && next > 0) || (cur >= 0 && next < 0)) {
-      const dist = Math.abs(i - target);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = i;
-      }
-    }
+    if ((prev <= 0 && cur > 0) || (prev >= 0 && cur < 0)) return i;
+    prev = cur;
   }
-  return best;
+  return null;
 }
 
 /**
- * Picks a short, mid-sample loop window instead of the whole buffer: from a
- * zero crossing near the midpoint to a zero crossing near the 3/4 mark.
- * Skipping straight to the sustain (past the attack transient) and looping
- * a short segment makes preview retriggers land every fraction of a second
- * instead of every full playthrough, so a freshly-rendered buffer (or a
- * live detune change) is audible almost immediately instead of after
- * waiting out the entire original sample — and starting/ending on zero
- * crossings keeps the short loop from buzzing at the seam. 3/4 rather than
- * the tail end keeps the window inside the sample's sustain, before it's
- * decayed to near-silence.
+ * Stops a one-shot source at the next zero crossing at or after wherever it
+ * actually is in the buffer right now — a genuinely silent cut, no fade
+ * needed, since the waveform itself is at zero there. `playbackRate` folds
+ * in any live detune (the `detune` AudioParam resamples playback, so real
+ * elapsed time doesn't map 1:1 to buffer position once it's non-zero).
+ * Falls back to the standard short declick fade if no crossing turns up
+ * within the search window (e.g. DC-heavy material, or already near the
+ * buffer's end).
  */
-function computeLoopWindow(buffer: AudioBuffer): LoopWindow {
-  const length = buffer.length;
-  const sampleRate = buffer.sampleRate;
-  if (length < 2) return { startSec: 0, durationSec: buffer.duration };
+function stopAtZeroCrossing(
+  buffer: AudioBuffer,
+  source: AudioBufferSourceNode,
+  fade: GainNode,
+  startedAt: number,
+  playbackRate: number,
+): void {
+  const ctx = getAudioContext();
+  const rate = playbackRate > 0 ? playbackRate : 1;
+  const elapsed = Math.max(0, ctx.currentTime - startedAt);
+  const posSamples = Math.floor(elapsed * buffer.sampleRate * rate);
+  if (posSamples >= buffer.length - 1) return; // already played out naturally
 
   const channels = bufferChannels(buffer);
-  const searchRadius = Math.max(1, Math.min(Math.round(sampleRate * ZERO_CROSSING_SEARCH_SEC), Math.floor(length / 8)));
-
-  const startIdx = nearestZeroCrossing(channels, length, searchRadius, Math.floor(length / 2));
-  const minLoopSamples = Math.round(sampleRate * MIN_LOOP_SEC);
-  const endIdx = Math.min(
-    Math.max(nearestZeroCrossing(channels, length, searchRadius, Math.floor(length * 0.75)), startIdx + minLoopSamples),
-    length - 1,
-  );
-
-  return {
-    startSec: startIdx / sampleRate,
-    durationSec: Math.max((endIdx - startIdx) / sampleRate, minLoopSamples / sampleRate),
-  };
-}
-
-/**
- * Loop window for "bass" mode: from the midpoint to the end of the sample,
- * trailing dead space trimmed off. 808-style low end often has a long,
- * pitch-sliding decay tail — looping the whole back half (rather than just
- * to the 3/4 mark) lets that slide play out and repeat, instead of getting
- * cut mid-glide. Trailing near-silence is trimmed (scanning backward in
- * ~10ms blocks for the last one still above ~2% of the back half's peak
- * level) so the loop doesn't spend most of its cycle on inaudible tail.
- */
-function computeBassLoopWindow(buffer: AudioBuffer): LoopWindow {
-  const length = buffer.length;
-  const sampleRate = buffer.sampleRate;
-  if (length < 2) return { startSec: 0, durationSec: buffer.duration };
-
-  const channels = bufferChannels(buffer);
-  const searchRadius = Math.max(1, Math.min(Math.round(sampleRate * ZERO_CROSSING_SEARCH_SEC), Math.floor(length / 8)));
-  const startIdx = nearestZeroCrossing(channels, length, searchRadius, Math.floor(length / 2));
-
-  let peak = 0;
-  for (const c of channels) {
-    for (let i = startIdx; i < length; i++) {
-      const v = Math.abs(c[i]);
-      if (v > peak) peak = v;
-    }
+  const maxSearchSamples = Math.round(buffer.sampleRate * RELEASE_ZERO_CROSSING_SEARCH_SEC);
+  const crossingIdx = nextZeroCrossingForward(channels, buffer.length, posSamples, maxSearchSamples);
+  if (crossingIdx === null) {
+    fadeOutAndStop(fade, [source]);
+    return;
   }
-  const threshold = peak * SILENCE_FLOOR_RATIO;
-
-  const blockSize = Math.max(1, Math.round(sampleRate * SILENCE_SCAN_BLOCK_SEC));
-  let lastLoudBlockEnd = length;
-  for (let blockEnd = length; blockEnd > startIdx; blockEnd -= blockSize) {
-    const blockStart = Math.max(startIdx, blockEnd - blockSize);
-    let sumSq = 0;
-    let count = 0;
-    for (const c of channels) {
-      for (let i = blockStart; i < blockEnd; i++) {
-        sumSq += c[i] * c[i];
-        count++;
-      }
-    }
-    const rms = Math.sqrt(sumSq / Math.max(count, 1));
-    if (rms > threshold) {
-      lastLoudBlockEnd = blockEnd;
-      break;
-    }
-    lastLoudBlockEnd = blockStart;
+  const stopAt = ctx.currentTime + (crossingIdx - posSamples) / (buffer.sampleRate * rate);
+  try {
+    source.stop(stopAt);
+  } catch {
+    // already stopped
   }
-
-  const minLoopSamples = Math.round(sampleRate * MIN_LOOP_SEC);
-  const rawEndIdx = Math.max(lastLoudBlockEnd, startIdx + minLoopSamples);
-  const endIdx = Math.min(nearestZeroCrossing(channels, length, searchRadius, rawEndIdx), length - 1);
-
-  return {
-    startSec: startIdx / sampleRate,
-    durationSec: Math.max((Math.max(endIdx, startIdx + minLoopSamples) - startIdx) / sampleRate, minLoopSamples / sampleRate),
-  };
 }
 
 function fadeOutAndStop(gain: GainNode, stoppables: Array<{ stop: (when?: number) => void }>): void {
@@ -194,25 +127,38 @@ function fadeOutAndStop(gain: GainNode, stoppables: Array<{ stop: (when?: number
 }
 
 /**
- * Tap-to-play / tap-to-stop preview. `key` identifies the sound (e.g. a
- * sample id); tapping the same key stops it, tapping a different key stops
- * the current one and starts the new one. Playback always starts from the
- * beginning — the underlying buffer may be re-rendered at any time, so
- * resuming a saved position would land somewhere unrelated in new audio.
- * Returns true if the sound is now playing. `onStopped` fires whenever this
- * playback ends for any reason (stopped, replaced by another preview, or
- * natural end) so the caller can reset its button state.
+ * Handle for a press-triggered preview. `release` always exists; the
+ * `set*` methods only exist on the drone-paired variant (see
+ * `pressSampleWithDrone`) and are no-ops to call on the plain one.
  */
-export function togglePlayback(
+export interface PressHandle {
+  /** Stops the sample at the next zero crossing (or a short fade as a fallback), and stops the drone if any. */
+  release: () => void;
+  setBalance?: (balance: number) => void;
+  setDetuneCents?: (cents: number) => void;
+  setBuffer?: (channelData: Float32Array[], detuneCents?: number) => void;
+  setDroneFrequency?: (frequency: number) => void;
+}
+
+export type PressDualHandle = Required<PressHandle>;
+
+/**
+ * Press-to-play preview: `key` identifies the sound (e.g. a sample id).
+ * Every call starts fresh from the beginning — including retriggering the
+ * same key while it's already sounding — since the underlying buffer may be
+ * re-rendered at any time, so resuming a saved position would land
+ * somewhere unrelated in new audio. Plays through to its natural end unless
+ * `release()` is called first, which cuts it at the next zero crossing
+ * instead of an arbitrary point. `onStopped` fires only if this playback
+ * gets superseded by another preview starting elsewhere — not on a normal
+ * `release()`, which the caller already knows about.
+ */
+export function pressSample(
   key: string,
   channelData: Float32Array[],
   sampleRate: number,
   onStopped: () => void,
-): boolean {
-  if (active?.key === key) {
-    stopActive();
-    return false;
-  }
+): PressHandle {
   stopActive();
 
   const ctx = getAudioContext();
@@ -224,10 +170,10 @@ export function togglePlayback(
   const now = ctx.currentTime;
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(1, now + FADE_SEC);
-  const end = now + buffer.duration;
-  if (buffer.duration > FADE_SEC * 4) {
-    gain.gain.setValueAtTime(1, end - FADE_SEC);
-    gain.gain.linearRampToValueAtTime(0, end);
+  const dur = buffer.duration;
+  if (dur > FADE_SEC * 4) {
+    gain.gain.setValueAtTime(1, now + dur - FADE_SEC);
+    gain.gain.linearRampToValueAtTime(0, now + dur);
   }
 
   source.connect(gain);
@@ -241,12 +187,18 @@ export function togglePlayback(
     onStopped,
   };
   source.onended = () => {
-    if (slot.manual) return;
     if (active === slot) active = null;
-    onStopped();
+    source.disconnect();
+    gain.disconnect();
   };
   active = slot;
-  return true;
+
+  const release = () => {
+    if (active === slot) active = null;
+    stopAtZeroCrossing(buffer, source, gain, now, 1);
+  };
+
+  return { release };
 }
 
 export interface ToneHandle {
@@ -441,7 +393,7 @@ export function playMasterLoop(
   return { stop, setBalance, startDrone, stopDrone };
 }
 
-export interface DualPlaybackOptions {
+export interface PressDualOptions {
   droneFrequency: number;
   /** 0 = drone only, 1 = sample only. */
   balance: number;
@@ -453,66 +405,32 @@ export interface DualPlaybackOptions {
    * heard/tuned by ear more easily. Never affects the actual exported audio.
    */
   previewOctaveShift?: number;
-  /**
-   * "sustain" (default) loops a short mid-sample window up to the 3/4 mark;
-   * "bassTail" loops from the midpoint to the (silence-trimmed) end instead,
-   * so a sliding 808-style decay tail plays out and repeats rather than
-   * being cut at a fixed fraction through the sample.
-   */
-  loopStyle?: "sustain" | "bassTail";
-}
-
-export interface DualHandle {
-  stop: () => void;
-  /** 0 = drone only, 1 = sample only. Live-adjustable, no re-render needed. */
-  setBalance: (balance: number) => void;
-  /**
-   * Retunes the currently playing source in real time via the native
-   * `detune` AudioParam — instant, no worker round-trip. This is the cheap
-   * preview path for auditioning a trim while dragging; the expensive
-   * high-quality resample/Rubber Band render only needs to happen once,
-   * when the value settles (see `setBuffer`).
-   */
-  setDetuneCents: (cents: number) => void;
-  /**
-   * Swaps in freshly-rendered (DSP-quality) audio, e.g. once a background
-   * render lands. Takes effect at the next loop retrigger rather than
-   * cutting the currently playing cycle short, so the handoff never clicks
-   * or restarts mid-note.
-   */
-  setBuffer: (channelData: Float32Array[], detuneCents?: number) => void;
-  /** Retunes the drone oscillator live via its own AudioParam — no restart of the sample/loop underneath. */
-  setDroneFrequency: (frequency: number) => void;
 }
 
 /**
- * Plays a sample and a reference drone together, so mistunes surface as
- * audible beating against the drone rather than needing a separate
- * visual/numeric check. Rather than looping the whole sample, it loops a
- * short mid-sample window (see `computeLoopWindow`) via declicked retrigger
- * (not `AudioBufferSourceNode.loop` — that would click at the seam since
- * the window's start/end aren't guaranteed to align); the drone sustains
- * continuously underneath. The short window means retriggers land every
- * fraction of a second instead of every full playthrough, so a live detune
- * change or a freshly-landed background render (see `setBuffer`) is audible
- * almost immediately rather than after waiting out the whole original
- * sample. `key` participates in the app-wide single-preview slot like
- * `togglePlayback`, so starting this stops any other preview and vice versa.
+ * Plays a sample once, together with a continuous reference drone, so
+ * mistunes surface as audible beating against the drone rather than needing
+ * a separate visual/numeric check. Press-triggered: starts the sample from
+ * the beginning (retriggering immediately if it's already sounding) and
+ * starts the drone alongside it; the drone keeps sustaining for as long as
+ * the button is held even after the sample itself finishes, and both stop
+ * together on `release()` — the sample cut at the next zero crossing, the
+ * drone with its usual short fade. `key` participates in the app-wide
+ * single-preview slot, so starting this stops any other preview and vice
+ * versa.
  */
-export function playSampleWithDrone(
+export function pressSampleWithDrone(
   key: string,
   channelData: Float32Array[],
   sampleRate: number,
-  options: DualPlaybackOptions,
+  options: PressDualOptions,
   onStopped: () => void,
-): DualHandle {
+): PressDualHandle {
   stopActive();
 
   const ctx = getAudioContext();
-  const computeWindow = options.loopStyle === "bassTail" ? computeBassLoopWindow : computeLoopWindow;
   const octaveShiftCents = (options.previewOctaveShift ?? 0) * 1200;
   let buffer = bufferFromChannelData(channelData, sampleRate);
-  let loopWindow = computeWindow(buffer);
   let detuneCents = options.detuneCents ?? 0;
 
   const sampleBus = ctx.createGain();
@@ -526,35 +444,6 @@ export function playSampleWithDrone(
   osc.connect(droneBus);
   osc.start();
 
-  let live = true;
-  let currentSource: AudioBufferSourceNode | null = null;
-
-  const scheduleOne = () => {
-    if (!live) return;
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.detune.value = detuneCents + octaveShiftCents;
-    const fade = ctx.createGain();
-    source.connect(fade);
-    fade.connect(sampleBus);
-
-    const now = ctx.currentTime;
-    const dur = loopWindow.durationSec;
-    fade.gain.setValueAtTime(0, now);
-    fade.gain.linearRampToValueAtTime(1, now + FADE_SEC);
-    if (dur > FADE_SEC * 4) {
-      fade.gain.setValueAtTime(1, now + dur - FADE_SEC);
-      fade.gain.linearRampToValueAtTime(0, now + dur);
-    }
-    source.start(now, loopWindow.startSec, dur);
-    currentSource = source;
-    source.onended = () => {
-      if (!live || currentSource !== source) return;
-      scheduleOne();
-    };
-  };
-  scheduleOne();
-
   const setBalance = (balance: number) => {
     const s = Math.max(0, Math.min(1, balance));
     const now = ctx.currentTime;
@@ -565,6 +454,41 @@ export function playSampleWithDrone(
     droneBus.gain.setTargetAtTime((1 - s) * 0.55, now, SMOOTH_SEC);
   };
   setBalance(options.balance);
+
+  let currentSource: AudioBufferSourceNode | null = null;
+  let currentFade: GainNode | null = null;
+  let startedAt = 0;
+
+  const playOnce = () => {
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.detune.value = detuneCents + octaveShiftCents;
+    const fade = ctx.createGain();
+    source.connect(fade);
+    fade.connect(sampleBus);
+
+    const now = ctx.currentTime;
+    fade.gain.setValueAtTime(0, now);
+    fade.gain.linearRampToValueAtTime(1, now + FADE_SEC);
+    const dur = buffer.duration;
+    if (dur > FADE_SEC * 4) {
+      fade.gain.setValueAtTime(1, now + dur - FADE_SEC);
+      fade.gain.linearRampToValueAtTime(0, now + dur);
+    }
+    source.start(now);
+    currentSource = source;
+    currentFade = fade;
+    startedAt = now;
+    source.onended = () => {
+      if (currentSource === source) {
+        currentSource = null;
+        currentFade = null;
+      }
+      source.disconnect();
+      fade.disconnect();
+    };
+  };
+  playOnce();
 
   const setDetuneCents = (cents: number) => {
     detuneCents = cents;
@@ -577,22 +501,17 @@ export function playSampleWithDrone(
 
   const setBuffer = (nextChannelData: Float32Array[], nextDetuneCents = 0) => {
     buffer = bufferFromChannelData(nextChannelData, sampleRate);
-    loopWindow = computeWindow(buffer);
     detuneCents = nextDetuneCents;
-    // Deliberately doesn't touch currentSource — the cycle already in
-    // flight finishes on the old buffer, and the next retrigger (scheduled
-    // via source.onended above) picks up this new one automatically.
+    // Takes effect on the *next* press — the sample already sounding
+    // finishes on the buffer it started with.
   };
 
-  const stop = () => {
-    if (!live) return;
-    live = false;
+  const release = () => {
     if (active === slot) active = null;
-    fadeAndStop();
-  };
-
-  const fadeAndStop = () => {
-    if (currentSource) fadeOutAndStop(sampleBus, [currentSource]);
+    if (currentSource && currentFade) {
+      const rate = Math.pow(2, (detuneCents + octaveShiftCents) / 1200);
+      stopAtZeroCrossing(buffer, currentSource, currentFade, startedAt, rate);
+    }
     fadeOutAndStop(droneBus, [osc]);
     osc.onended = () => {
       osc.disconnect();
@@ -605,12 +524,12 @@ export function playSampleWithDrone(
     key,
     manual: false,
     fadeAndStop: () => {
-      live = false;
-      fadeAndStop();
+      if (currentSource) fadeOutAndStop(sampleBus, [currentSource]);
+      fadeOutAndStop(droneBus, [osc]);
     },
     onStopped,
   };
   active = slot;
 
-  return { stop, setBalance, setDetuneCents, setBuffer, setDroneFrequency };
+  return { release, setBalance, setDetuneCents, setBuffer, setDroneFrequency };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSamplesStore, droneFrequency, type SampleItem } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
-import { togglePlayback, playSampleWithDrone, type DualHandle } from "../audio/playback";
+import { pressSample, pressSampleWithDrone, type PressHandle, type PressDualHandle } from "../audio/playback";
 import { formatSignedSemitones, formatSignedCents } from "../audio/theory";
 import { PlayButton } from "./PlayButton";
 import { PrecisionSlider } from "./PrecisionSlider";
@@ -105,7 +105,7 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
   const { trimAndProcess } = useAppActions();
   const [playing, setPlaying] = useState(false);
   const [balance, setBalanceState] = useState(50); // 0 = drone only, 100 = sample only
-  const dualRef = useRef<DualHandle | null>(null);
+  const activeRef = useRef<PressHandle | PressDualHandle | null>(null);
   const tuned = sample.mode !== "drum" && !!sample.processedChannelData;
   const manualOffset = sample.manualOffsetSemitones ?? 0;
 
@@ -128,92 +128,80 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
   useEffect(
     () => () => {
       if (commitTimerRef.current !== null) clearTimeout(commitTimerRef.current);
-      dualRef.current?.stop();
+      activeRef.current?.release();
     },
     [],
   );
 
-  // Keeps whatever's actually playing in sync with the store, so the
-  // expensive render pipeline never has to be on the hot path for what you
-  // hear. Two distinct cases:
+  // Keeps whatever's currently sounding (i.e. the button is still held) in
+  // sync with the store, so the expensive render pipeline never has to be on
+  // the hot path for what you hear. Two distinct cases:
   //  - A background render just landed (processedChannelData appeared) —
-  //    swap to the exact final audio, detune reset to 0. Content differs,
-  //    so this waits for the next loop retrigger rather than cutting the
-  //    current cycle short.
+  //    swap to the exact final audio, detune reset to 0. Only affects the
+  //    *next* press — see `setBuffer` in playback.ts.
   //  - No processed render yet (still dragging, or freshly invalidated by
   //    another trim change) — content is unchanged raw audio, so the shift
   //    is applied purely via the live `detune` AudioParam. Instant, no
-  //    worker round-trip, no waiting for a loop boundary.
+  //    worker round-trip.
   useEffect(() => {
-    if (!dualRef.current) return;
     if (sample.processedChannelData) {
-      dualRef.current.setBuffer(sample.processedChannelData, 0);
+      activeRef.current?.setBuffer?.(sample.processedChannelData, 0);
     } else {
-      dualRef.current.setBuffer(sample.channelData, (sample.pitchShiftSemitones ?? 0) * 100);
+      activeRef.current?.setBuffer?.(sample.channelData, (sample.pitchShiftSemitones ?? 0) * 100);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sample.processedChannelData]);
 
   useEffect(() => {
-    if (!dualRef.current || sample.processedChannelData) return;
-    dualRef.current.setDetuneCents((sample.pitchShiftSemitones ?? 0) * 100);
+    if (sample.processedChannelData) return;
+    activeRef.current?.setDetuneCents?.((sample.pitchShiftSemitones ?? 0) * 100);
   }, [sample.pitchShiftSemitones, sample.processedChannelData]);
 
-  const startDual = (): DualHandle | null => {
-    if (!state.master) return null;
-    const freq = droneFrequency(state.master, sample, state.tuningMode, state.a4Reference);
-    if (freq === null) return null;
-    const usesProcessed = !!sample.processedChannelData;
-    const data = usesProcessed ? sample.processedChannelData! : sample.channelData;
-    const detuneCents = usesProcessed ? 0 : (sample.pitchShiftSemitones ?? 0) * 100;
-    const isBass = sample.mode === "bass";
-    return playSampleWithDrone(
-      sample.id,
-      data,
-      sample.sampleRate,
-      {
-        droneFrequency: freq,
-        balance: balance / 100,
-        detuneCents,
-        previewOctaveShift: isBass ? BASS_PREVIEW_OCTAVE_SHIFT : 0,
-        loopStyle: isBass ? "bassTail" : "sustain",
-      },
-      () => {
-        dualRef.current = null;
-        setPlaying(false);
-      },
-    );
+  const startPreview = () => {
+    activeRef.current?.release();
+    if (state.master) {
+      const freq = droneFrequency(state.master, sample, state.tuningMode, state.a4Reference);
+      if (freq !== null) {
+        const usesProcessed = !!sample.processedChannelData;
+        const data = usesProcessed ? sample.processedChannelData! : sample.channelData;
+        const detuneCents = usesProcessed ? 0 : (sample.pitchShiftSemitones ?? 0) * 100;
+        const isBass = sample.mode === "bass";
+        activeRef.current = pressSampleWithDrone(
+          sample.id,
+          data,
+          sample.sampleRate,
+          {
+            droneFrequency: freq,
+            balance: balance / 100,
+            detuneCents,
+            previewOctaveShift: isBass ? BASS_PREVIEW_OCTAVE_SHIFT : 0,
+          },
+          () => {
+            activeRef.current = null;
+            setPlaying(false);
+          },
+        );
+        setPlaying(true);
+        return;
+      }
+    }
+    const data = sample.processedChannelData ?? sample.channelData;
+    activeRef.current = pressSample(sample.id, data, sample.sampleRate, () => {
+      activeRef.current = null;
+      setPlaying(false);
+    });
+    setPlaying(true);
   };
 
-  const preview = () => {
-    if (dualRef.current) {
-      dualRef.current.stop();
-      dualRef.current = null;
-      setPlaying(false);
-      return;
-    }
-    if (playing) {
-      // Was a plain (drone-less) toggle; toggling the same key again stops it.
-      setPlaying(
-        togglePlayback(sample.id, sample.processedChannelData ?? sample.channelData, sample.sampleRate, () =>
-          setPlaying(false),
-        ),
-      );
-      return;
-    }
-    const handle = startDual();
-    if (handle) {
-      dualRef.current = handle;
-      setPlaying(true);
-    } else {
-      const data = sample.processedChannelData ?? sample.channelData;
-      setPlaying(togglePlayback(sample.id, data, sample.sampleRate, () => setPlaying(false)));
-    }
+  const stopPreview = () => {
+    activeRef.current?.release();
+    activeRef.current = null;
+    setPlaying(false);
   };
 
   const onBalanceChange = (value: number) => {
     setBalanceState(value);
-    dualRef.current?.setBalance(value / 100);
+    activeRef.current?.setBalance?.(value / 100);
   };
 
   const scheduleCommit = (semitones: number, cents: number) => {
@@ -249,13 +237,16 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
 
   const trimmable = sample.mode !== "drum" && sample.pitchShiftSemitones !== undefined;
 
+  const playButton = <PlayButton playing={playing} onPress={startPreview} onRelease={stopPreview} />;
+
   return (
     <div className="sample-card">
       <div className="sample-card__top">
+        {state.handedness === "right" && playButton}
         <span className="sample-index">{number}</span>
         <StatusBadge sample={sample} tuned={tuned} />
         <VerifyChip sample={sample} />
-        <PlayButton playing={playing} onClick={preview} />
+        {state.handedness !== "right" && playButton}
       </div>
 
       <div className="sample-card__controls">
@@ -279,7 +270,7 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
           className={`toggle-btn${sample.mode === "bass" ? " toggle-btn--active" : ""}`}
           onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "bass" })}
           aria-label="Bass"
-          title="Bass: same as one-shot, but previews 3 octaves up (sample and drone together) and loops the sample's back half — easier to hear the pitch of a low-fundamental, sliding 808-style tail"
+          title="Bass: same as one-shot, but previews 3 octaves up (sample and drone together) — easier to hear the pitch of a low-fundamental, sliding 808-style tail"
         >
           ⬆️
         </button>

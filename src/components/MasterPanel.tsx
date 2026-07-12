@@ -153,11 +153,12 @@ export function MasterPanel() {
     <section className="panel">
       <div className="master-summary">
         <div className="master-summary__header">
-          <PlayButton playing={playing} onClick={preview} />
+          {state.handedness === "right" && <PlayButton playing={playing} onClick={preview} />}
           <strong>{stripExtension(master.name)}</strong>
           <button className="link-btn" onClick={() => dispatch({ type: "CLEAR_MASTER" })}>
             ✕ clear
           </button>
+          {state.handedness !== "right" && <PlayButton playing={playing} onClick={preview} />}
         </div>
         {master.status === "analyzing" && <p className="muted">Analyzing…</p>}
         {a && (
