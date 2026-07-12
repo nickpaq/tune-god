@@ -81,3 +81,13 @@ export function formatCents(cents: number): string {
   if (rounded === 0) return "in tune";
   return rounded > 0 ? `+${rounded}c` : `${rounded}c`;
 }
+
+/** Signed whole semitones for a slider's floating value bubble, e.g. 3 -> "+3", -2 -> "-2", 0 -> "0". */
+export function formatSignedSemitones(v: number): string {
+  return `${v > 0 ? "+" : v < 0 ? "-" : ""}${Math.abs(v)}`;
+}
+
+/** Signed whole cents for a slider's floating value bubble, e.g. 15 -> "+15c", -30 -> "-30c", 0 -> "0c". */
+export function formatSignedCents(v: number): string {
+  return `${v > 0 ? "+" : v < 0 ? "-" : ""}${Math.abs(v)}c`;
+}

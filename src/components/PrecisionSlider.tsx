@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useState, useRef } from "react";
 
 /**
  * How much a slider's horizontal drag is slowed per pixel of vertical travel
@@ -40,6 +40,7 @@ export function PrecisionSlider({
   onDoubleClick,
   title,
   className,
+  valueLabel,
 }: {
   min: number;
   max: number;
@@ -49,9 +50,12 @@ export function PrecisionSlider({
   onDoubleClick?: () => void;
   title?: string;
   className?: string;
+  /** When set, shows a floating bubble above the thumb with this text while the slider is being dragged. */
+  valueLabel?: (value: number) => string;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const snapToStep = (v: number) => {
     const stepped = Math.round(v / step) * step;
@@ -62,6 +66,7 @@ export function PrecisionSlider({
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { pointerId: e.pointerId, lastX: e.clientX, startY: e.clientY, value };
+    setDragging(true);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -80,7 +85,10 @@ export function PrecisionSlider({
   };
 
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null;
+    if (dragRef.current?.pointerId === e.pointerId) {
+      dragRef.current = null;
+      setDragging(false);
+    }
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -137,6 +145,11 @@ export function PrecisionSlider({
       <div className="precision-slider__track" ref={trackRef}>
         <div className="precision-slider__fill" style={{ width: `${pct}%` }} />
         <div className="precision-slider__thumb" style={{ left: `${pct}%` }} />
+        {dragging && valueLabel && (
+          <div className="precision-slider__bubble" style={{ left: `${pct}%` }}>
+            {valueLabel(value)}
+          </div>
+        )}
       </div>
     </div>
   );

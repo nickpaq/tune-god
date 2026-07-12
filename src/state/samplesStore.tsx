@@ -29,9 +29,15 @@ export type TuningMode = "master" | "a440";
  * "oneshot": tuned via a simple resample (pitch-shift only) — no Rubber
  * Band, no formant preservation, no BPM matching; duration drifts with
  * pitch but transients stay crisp.
+ * "bass": processed identically to "oneshot" (same resample, no time
+ * ratio) — the only difference is in preview: the audition drone/sample
+ * are transposed up 3 octaves and the preview loop covers the sample's
+ * back half (silence-trimmed) instead of just its sustain, so a
+ * low-fundamental, sliding-pitch 808-style tail is easier to hear/tune by
+ * ear. Never affects the actual exported audio.
  * "drum": left completely untouched.
  */
-export type SampleMode = "loop" | "oneshot" | "drum";
+export type SampleMode = "loop" | "oneshot" | "bass" | "drum";
 export type SampleStatus = "pending" | "analyzing" | "analyzed" | "processing" | "done" | "error";
 
 export interface SampleItem {

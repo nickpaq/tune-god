@@ -51,6 +51,41 @@ interface LoopWindow {
 const ZERO_CROSSING_SEARCH_SEC = 0.05;
 /** Never loop a segment shorter than this, even on a very short buffer. */
 const MIN_LOOP_SEC = 0.05;
+/** Block size for scanning backward for trailing silence in the bass-tail window. */
+const SILENCE_SCAN_BLOCK_SEC = 0.01;
+/** A block is "silent" once its RMS falls below this fraction of the segment's peak. */
+const SILENCE_FLOOR_RATIO = 0.02;
+
+function bufferChannels(buffer: AudioBuffer): Float32Array[] {
+  const channels: Float32Array[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) channels.push(buffer.getChannelData(ch));
+  return channels;
+}
+
+/** Nearest sample index to `target` (within `searchRadius`) where the summed-channel signal crosses zero. */
+function nearestZeroCrossing(channels: Float32Array[], length: number, searchRadius: number, target: number): number {
+  const sumAt = (i: number): number => {
+    let sum = 0;
+    for (const c of channels) sum += c[i];
+    return sum;
+  };
+  const lo = Math.max(0, target - searchRadius);
+  const hi = Math.min(length - 2, target + searchRadius);
+  let best = target;
+  let bestDist = Infinity;
+  for (let i = lo; i <= hi; i++) {
+    const cur = sumAt(i);
+    const next = sumAt(i + 1);
+    if ((cur <= 0 && next > 0) || (cur >= 0 && next < 0)) {
+      const dist = Math.abs(i - target);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+  }
+  return best;
+}
 
 /**
  * Picks a short, mid-sample loop window instead of the whole buffer: from a
@@ -69,45 +104,76 @@ function computeLoopWindow(buffer: AudioBuffer): LoopWindow {
   const sampleRate = buffer.sampleRate;
   if (length < 2) return { startSec: 0, durationSec: buffer.duration };
 
-  const channels: Float32Array[] = [];
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) channels.push(buffer.getChannelData(ch));
-  const sumAt = (i: number): number => {
-    let sum = 0;
-    for (const c of channels) sum += c[i];
-    return sum;
-  };
-
+  const channels = bufferChannels(buffer);
   const searchRadius = Math.max(1, Math.min(Math.round(sampleRate * ZERO_CROSSING_SEARCH_SEC), Math.floor(length / 8)));
 
-  const nearestZeroCrossing = (target: number): number => {
-    const lo = Math.max(0, target - searchRadius);
-    const hi = Math.min(length - 2, target + searchRadius);
-    let best = target;
-    let bestDist = Infinity;
-    for (let i = lo; i <= hi; i++) {
-      const cur = sumAt(i);
-      const next = sumAt(i + 1);
-      if ((cur <= 0 && next > 0) || (cur >= 0 && next < 0)) {
-        const dist = Math.abs(i - target);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = i;
-        }
-      }
-    }
-    return best;
-  };
-
-  const startIdx = nearestZeroCrossing(Math.floor(length / 2));
+  const startIdx = nearestZeroCrossing(channels, length, searchRadius, Math.floor(length / 2));
   const minLoopSamples = Math.round(sampleRate * MIN_LOOP_SEC);
   const endIdx = Math.min(
-    Math.max(nearestZeroCrossing(Math.floor(length * 0.75)), startIdx + minLoopSamples),
+    Math.max(nearestZeroCrossing(channels, length, searchRadius, Math.floor(length * 0.75)), startIdx + minLoopSamples),
     length - 1,
   );
 
   return {
     startSec: startIdx / sampleRate,
     durationSec: Math.max((endIdx - startIdx) / sampleRate, minLoopSamples / sampleRate),
+  };
+}
+
+/**
+ * Loop window for "bass" mode: from the midpoint to the end of the sample,
+ * trailing dead space trimmed off. 808-style low end often has a long,
+ * pitch-sliding decay tail — looping the whole back half (rather than just
+ * to the 3/4 mark) lets that slide play out and repeat, instead of getting
+ * cut mid-glide. Trailing near-silence is trimmed (scanning backward in
+ * ~10ms blocks for the last one still above ~2% of the back half's peak
+ * level) so the loop doesn't spend most of its cycle on inaudible tail.
+ */
+function computeBassLoopWindow(buffer: AudioBuffer): LoopWindow {
+  const length = buffer.length;
+  const sampleRate = buffer.sampleRate;
+  if (length < 2) return { startSec: 0, durationSec: buffer.duration };
+
+  const channels = bufferChannels(buffer);
+  const searchRadius = Math.max(1, Math.min(Math.round(sampleRate * ZERO_CROSSING_SEARCH_SEC), Math.floor(length / 8)));
+  const startIdx = nearestZeroCrossing(channels, length, searchRadius, Math.floor(length / 2));
+
+  let peak = 0;
+  for (const c of channels) {
+    for (let i = startIdx; i < length; i++) {
+      const v = Math.abs(c[i]);
+      if (v > peak) peak = v;
+    }
+  }
+  const threshold = peak * SILENCE_FLOOR_RATIO;
+
+  const blockSize = Math.max(1, Math.round(sampleRate * SILENCE_SCAN_BLOCK_SEC));
+  let lastLoudBlockEnd = length;
+  for (let blockEnd = length; blockEnd > startIdx; blockEnd -= blockSize) {
+    const blockStart = Math.max(startIdx, blockEnd - blockSize);
+    let sumSq = 0;
+    let count = 0;
+    for (const c of channels) {
+      for (let i = blockStart; i < blockEnd; i++) {
+        sumSq += c[i] * c[i];
+        count++;
+      }
+    }
+    const rms = Math.sqrt(sumSq / Math.max(count, 1));
+    if (rms > threshold) {
+      lastLoudBlockEnd = blockEnd;
+      break;
+    }
+    lastLoudBlockEnd = blockStart;
+  }
+
+  const minLoopSamples = Math.round(sampleRate * MIN_LOOP_SEC);
+  const rawEndIdx = Math.max(lastLoudBlockEnd, startIdx + minLoopSamples);
+  const endIdx = Math.min(nearestZeroCrossing(channels, length, searchRadius, rawEndIdx), length - 1);
+
+  return {
+    startSec: startIdx / sampleRate,
+    durationSec: Math.max((Math.max(endIdx, startIdx + minLoopSamples) - startIdx) / sampleRate, minLoopSamples / sampleRate),
   };
 }
 
@@ -381,6 +447,19 @@ export interface DualPlaybackOptions {
   balance: number;
   /** Live pitch preview offset in cents, applied via the native AudioParam — no DSP. */
   detuneCents?: number;
+  /**
+   * Preview-only octave shift applied to *both* the sample and the drone
+   * together (e.g. 3 for "bass" mode) — lets a low-fundamental sample be
+   * heard/tuned by ear more easily. Never affects the actual exported audio.
+   */
+  previewOctaveShift?: number;
+  /**
+   * "sustain" (default) loops a short mid-sample window up to the 3/4 mark;
+   * "bassTail" loops from the midpoint to the (silence-trimmed) end instead,
+   * so a sliding 808-style decay tail plays out and repeats rather than
+   * being cut at a fixed fraction through the sample.
+   */
+  loopStyle?: "sustain" | "bassTail";
 }
 
 export interface DualHandle {
@@ -430,8 +509,10 @@ export function playSampleWithDrone(
   stopActive();
 
   const ctx = getAudioContext();
+  const computeWindow = options.loopStyle === "bassTail" ? computeBassLoopWindow : computeLoopWindow;
+  const octaveShiftCents = (options.previewOctaveShift ?? 0) * 1200;
   let buffer = bufferFromChannelData(channelData, sampleRate);
-  let loopWindow = computeLoopWindow(buffer);
+  let loopWindow = computeWindow(buffer);
   let detuneCents = options.detuneCents ?? 0;
 
   const sampleBus = ctx.createGain();
@@ -441,7 +522,7 @@ export function playSampleWithDrone(
 
   const osc = ctx.createOscillator();
   osc.type = "sine";
-  osc.frequency.value = options.droneFrequency;
+  osc.frequency.value = options.droneFrequency * Math.pow(2, options.previewOctaveShift ?? 0);
   osc.connect(droneBus);
   osc.start();
 
@@ -452,7 +533,7 @@ export function playSampleWithDrone(
     if (!live) return;
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.detune.value = detuneCents;
+    source.detune.value = detuneCents + octaveShiftCents;
     const fade = ctx.createGain();
     source.connect(fade);
     fade.connect(sampleBus);
@@ -487,16 +568,16 @@ export function playSampleWithDrone(
 
   const setDetuneCents = (cents: number) => {
     detuneCents = cents;
-    currentSource?.detune.setTargetAtTime(cents, ctx.currentTime, SMOOTH_SEC);
+    currentSource?.detune.setTargetAtTime(cents + octaveShiftCents, ctx.currentTime, SMOOTH_SEC);
   };
 
   const setDroneFrequency = (frequency: number) => {
-    osc.frequency.setTargetAtTime(frequency, ctx.currentTime, SMOOTH_SEC);
+    osc.frequency.setTargetAtTime(frequency * Math.pow(2, options.previewOctaveShift ?? 0), ctx.currentTime, SMOOTH_SEC);
   };
 
   const setBuffer = (nextChannelData: Float32Array[], nextDetuneCents = 0) => {
     buffer = bufferFromChannelData(nextChannelData, sampleRate);
-    loopWindow = computeLoopWindow(buffer);
+    loopWindow = computeWindow(buffer);
     detuneCents = nextDetuneCents;
     // Deliberately doesn't touch currentSource — the cycle already in
     // flight finishes on the old buffer, and the next retrigger (scheduled

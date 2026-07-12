@@ -9,7 +9,7 @@ import {
   type TuningMode,
 } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
-import { NOTE_NAMES, A4_REFERENCE_RANGE, formatCents } from "../audio/theory";
+import { NOTE_NAMES, A4_REFERENCE_RANGE, formatCents, formatSignedSemitones, formatSignedCents } from "../audio/theory";
 import { playMasterLoop, playTone, type MasterSessionHandle, type ToneHandle } from "../audio/playback";
 import { stripExtension } from "../audio/filename";
 import { isKoalaFile } from "../audio/koalaProject";
@@ -167,15 +167,6 @@ export function MasterPanel() {
     standaloneToneRef.current = null;
   };
 
-  const nudgeSemitone = (delta: number) => {
-    const v = Math.max(-12, Math.min(12, semitoneVal + delta));
-    setSemitoneVal(v);
-  };
-  const nudgeCents = (delta: number) => {
-    const v = Math.max(-50, Math.min(50, centsVal + delta));
-    setCentsVal(v);
-  };
-
   return (
     <section className="panel">
       <div className="master-summary">
@@ -278,7 +269,7 @@ export function MasterPanel() {
         {hasKey && (
           <>
             <div className="tune-stack">
-              <div className="tune-row tune-row--balance">
+              <div className="tune-row tune-row--boxed tune-row--balance">
                 <span className="tune-row__label">drone</span>
                 <PrecisionSlider
                   min={0}
@@ -292,10 +283,7 @@ export function MasterPanel() {
                 <span className="tune-row__label">master</span>
               </div>
 
-              <div className="tune-row">
-                <button className="tune-nudge" onClick={() => nudgeSemitone(-1)} title="Down 1 semitone">
-                  −1st
-                </button>
+              <div className="tune-row tune-row--boxed">
                 <PrecisionSlider
                   min={-12}
                   max={12}
@@ -303,17 +291,12 @@ export function MasterPanel() {
                   value={semitoneVal}
                   onChange={setSemitoneVal}
                   onDoubleClick={() => setSemitoneVal(0)}
+                  valueLabel={formatSignedSemitones}
                   title="Nudges the comparison drone/grid only — diagnostic, never applied to the master's own audio. Drag down to slow the scrub. Double-tap to reset."
                 />
-                <button className="tune-nudge" onClick={() => nudgeSemitone(1)} title="Up 1 semitone">
-                  +1st
-                </button>
               </div>
 
-              <div className="tune-row">
-                <button className="tune-nudge" onClick={() => nudgeCents(-1)} title="Down 1 cent">
-                  −1c
-                </button>
+              <div className="tune-row tune-row--boxed">
                 <PrecisionSlider
                   min={-50}
                   max={50}
@@ -321,11 +304,9 @@ export function MasterPanel() {
                   value={centsVal}
                   onChange={setCentsVal}
                   onDoubleClick={() => setCentsVal(0)}
+                  valueLabel={formatSignedCents}
                   title="Fine cents nudge on the comparison drone/grid. Drag down to slow the scrub. Double-tap to reset."
                 />
-                <button className="tune-nudge" onClick={() => nudgeCents(1)} title="Up 1 cent">
-                  +1c
-                </button>
               </div>
 
               <div className="tune-row tune-row--footer">

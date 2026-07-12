@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useSamplesStore, droneFrequency, type SampleItem } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
 import { togglePlayback, playSampleWithDrone, type DualHandle } from "../audio/playback";
+import { formatSignedSemitones, formatSignedCents } from "../audio/theory";
 import { PlayButton } from "./PlayButton";
 import { PrecisionSlider } from "./PrecisionSlider";
+
+/** "bass" mode transposes the preview drone+sample up this many octaves, to make a low fundamental easier to hear/tune. */
+const BASS_PREVIEW_OCTAVE_SHIFT = 3;
 
 /** Below this measured confidence the verify result is noise (e.g. a texture with no clear pitch). */
 const VERIFY_MIN_CONFIDENCE = 0.35;
@@ -162,11 +166,18 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
     const usesProcessed = !!sample.processedChannelData;
     const data = usesProcessed ? sample.processedChannelData! : sample.channelData;
     const detuneCents = usesProcessed ? 0 : (sample.pitchShiftSemitones ?? 0) * 100;
+    const isBass = sample.mode === "bass";
     return playSampleWithDrone(
       sample.id,
       data,
       sample.sampleRate,
-      { droneFrequency: freq, balance: balance / 100, detuneCents },
+      {
+        droneFrequency: freq,
+        balance: balance / 100,
+        detuneCents,
+        previewOctaveShift: isBass ? BASS_PREVIEW_OCTAVE_SHIFT : 0,
+        loopStyle: isBass ? "bassTail" : "sustain",
+      },
       () => {
         dualRef.current = null;
         setPlaying(false);
@@ -235,16 +246,6 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
     setCentsVal(v);
     scheduleCommit(semitoneVal, v);
   };
-  const nudgeSemitone = (delta: number) => {
-    const v = Math.max(-12, Math.min(12, semitoneVal + delta));
-    setSemitoneVal(v);
-    commitNow(v, centsVal);
-  };
-  const nudgeCents = (delta: number) => {
-    const v = Math.max(-50, Math.min(50, centsVal + delta));
-    setCentsVal(v);
-    commitNow(semitoneVal, v);
-  };
 
   const trimmable = sample.mode !== "drum" && sample.pitchShiftSemitones !== undefined;
 
@@ -273,6 +274,13 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
           One-shot
         </button>
         <button
+          className={`toggle-btn${sample.mode === "bass" ? " toggle-btn--active" : ""}`}
+          onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "bass" })}
+          title="Same as one-shot, but previews 3 octaves up (sample and drone together) and loops the sample's back half — easier to hear the pitch of a low-fundamental, sliding 808-style tail"
+        >
+          Bass
+        </button>
+        <button
           className={`toggle-btn${sample.mode === "drum" ? " toggle-btn--active" : ""}`}
           onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "drum" })}
           title="Left completely untouched"
@@ -283,7 +291,7 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
 
       {trimmable && (
         <div className="tune-stack">
-          <div className="tune-row tune-row--balance">
+          <div className="tune-row tune-row--boxed tune-row--balance">
             <span className="tune-row__label">drone</span>
             <PrecisionSlider
               min={0}
@@ -297,10 +305,7 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
             <span className="tune-row__label">sample</span>
           </div>
 
-          <div className="tune-row">
-            <button className="tune-nudge" onClick={() => nudgeSemitone(-1)} title="Down 1 semitone">
-              −1st
-            </button>
+          <div className="tune-row tune-row--boxed">
             <PrecisionSlider
               min={-12}
               max={12}
@@ -311,17 +316,12 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
                 setSemitoneVal(0);
                 commitNow(0, centsVal);
               }}
+              valueLabel={formatSignedSemitones}
               title="Semitone trim, ±1 octave. Drag down to slow the scrub. Double-tap to reset."
             />
-            <button className="tune-nudge" onClick={() => nudgeSemitone(1)} title="Up 1 semitone">
-              +1st
-            </button>
           </div>
 
-          <div className="tune-row">
-            <button className="tune-nudge" onClick={() => nudgeCents(-1)} title="Down 1 cent">
-              −1c
-            </button>
+          <div className="tune-row tune-row--boxed">
             <PrecisionSlider
               min={-50}
               max={50}
@@ -332,11 +332,9 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
                 setCentsVal(0);
                 commitNow(semitoneVal, 0);
               }}
+              valueLabel={formatSignedCents}
               title="Fine cents trim. Drag down to slow the scrub. Double-tap to reset."
             />
-            <button className="tune-nudge" onClick={() => nudgeCents(1)} title="Up 1 cent">
-              +1c
-            </button>
           </div>
 
           <div className="tune-row tune-row--footer">
