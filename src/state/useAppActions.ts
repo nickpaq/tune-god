@@ -4,7 +4,7 @@ import { semitonesToRatio } from "../audio/theory";
 import { nextAnalysisWorker, nextRenderWorker } from "../workers/workerClient";
 import { useSamplesStore, masterCorrectionSemitones, type SampleItem } from "./samplesStore";
 import { parseKoalaProject, koalaPadToFile, type KoalaMasterReplacement } from "../audio/koalaProject";
-import { guessSampleMode } from "../audio/drumDetect";
+import { guessSampleMode } from "../audio/sampleModeDetect";
 import { parseFilenameMetadata } from "../audio/filenameMetadata";
 
 function makeId(): string {
@@ -56,7 +56,6 @@ export function useAppActions() {
             channelData: cloneChannelData(buffer),
             status: "pending",
             mode: guessSampleMode(file.name),
-            isLoop: false,
             koalaSampleId: koalaSampleIds?.[i],
           });
         } catch {
@@ -65,17 +64,22 @@ export function useAppActions() {
       }
       dispatch({ type: "ADD_SAMPLES", samples: items });
 
-      for (const item of items) {
-        dispatch({ type: "SET_SAMPLE_STATUS", id: item.id, status: "analyzing" });
-        const worker = nextAnalysisWorker();
-        const mono = monoFromChannelData(item.channelData);
-        try {
-          const analysis = await worker.analyzeSample(mono, item.sampleRate, item.isLoop);
-          dispatch({ type: "SET_SAMPLE_ANALYSIS", id: item.id, analysis });
-        } catch (err) {
-          dispatch({ type: "SET_SAMPLE_STATUS", id: item.id, status: "error", error: String(err) });
-        }
-      }
+      // Spread across the whole analysis worker pool instead of awaiting
+      // one at a time — bpm detection now always runs (see analysis.worker),
+      // so a sequential loop here would serialize the whole batch behind it.
+      await Promise.all(
+        items.map(async (item) => {
+          dispatch({ type: "SET_SAMPLE_STATUS", id: item.id, status: "analyzing" });
+          const worker = nextAnalysisWorker();
+          const mono = monoFromChannelData(item.channelData);
+          try {
+            const analysis = await worker.analyzeSample(mono, item.sampleRate);
+            dispatch({ type: "SET_SAMPLE_ANALYSIS", id: item.id, analysis });
+          } catch (err) {
+            dispatch({ type: "SET_SAMPLE_STATUS", id: item.id, status: "error", error: String(err) });
+          }
+        }),
+      );
     },
     [dispatch],
   );
@@ -115,14 +119,12 @@ export function useAppActions() {
 
       dispatch({ type: "SET_SAMPLE_STATUS", id, status: "processing" });
       const worker = nextRenderWorker();
+      const pitchScale = semitonesToRatio(sample.pitchShiftSemitones);
       try {
-        const processed = await worker.process(
-          sample.channelData,
-          sample.sampleRate,
-          sample.timeRatio ?? 1,
-          semitonesToRatio(sample.pitchShiftSemitones),
-          true,
-        );
+        const processed =
+          sample.mode === "loop"
+            ? await worker.process(sample.channelData, sample.sampleRate, sample.timeRatio ?? 1, pitchScale, true)
+            : await worker.resamplePitch(sample.channelData, pitchScale);
         dispatch({ type: "SET_SAMPLE_PROCESSED", id, channelData: processed });
       } catch (err) {
         dispatch({ type: "SET_SAMPLE_STATUS", id, status: "error", error: String(err) });
@@ -132,7 +134,7 @@ export function useAppActions() {
   );
 
   const processAll = useCallback(async () => {
-    const targets = state.samples.filter((s) => s.mode === "tune" && s.status !== "processing");
+    const targets = state.samples.filter((s) => s.mode !== "drum" && s.status !== "processing");
     await Promise.all(targets.map((s) => processSample(s.id)));
   }, [state.samples, processSample]);
 

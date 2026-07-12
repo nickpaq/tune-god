@@ -25,16 +25,25 @@ export function SampleRow({ sample }: { sample: SampleItem }) {
 
       <div className="sample-card__controls">
         <button
-          className={`toggle-btn${sample.mode === "tune" ? " toggle-btn--active" : ""}`}
-          onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "tune" })}
+          className={`toggle-btn${sample.mode === "loop" ? " toggle-btn--active" : ""}`}
+          onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "loop" })}
+          title="Rubber Band: tuned and time-stretched to the master's BPM, exact duration and formants preserved"
         >
-          Tune
+          Loop
+        </button>
+        <button
+          className={`toggle-btn${sample.mode === "oneshot" ? " toggle-btn--active" : ""}`}
+          onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "oneshot" })}
+          title="Simple resample: tuned by pitch-shifting playback speed, keeps transients crisp"
+        >
+          One-shot
         </button>
         <button
           className={`toggle-btn${sample.mode === "drum" ? " toggle-btn--active" : ""}`}
           onClick={() => dispatch({ type: "SET_SAMPLE_MODE", id: sample.id, mode: "drum" })}
+          title="Left completely untouched"
         >
-          Skip
+          Drum
         </button>
       </div>
     </div>

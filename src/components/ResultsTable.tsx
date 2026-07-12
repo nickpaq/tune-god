@@ -12,7 +12,7 @@ export function ResultsTable() {
   const targetBpm = master?.overrideBpm ?? master?.analysis?.bpm;
   const [exporting, setExporting] = useState(false);
   const tunedPadCount = samples.filter(
-    (s) => s.koalaSampleId !== undefined && s.mode === "tune" && s.processedChannelData,
+    (s) => s.koalaSampleId !== undefined && s.mode !== "drum" && s.processedChannelData,
   ).length;
 
   if (samples.length === 0) return null;

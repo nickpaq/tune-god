@@ -8,9 +8,11 @@ A local-first web app that helps musicians tune sample batches to match a "maste
 2. **Computes the target pitch**, in one of two modes:
    - **Match master loop** (default) — the master's audio is left completely untouched. Every sample is tuned to the master's literal tonic, then detuned by the master's own offset from true pitch, so samples match the loop's actual (possibly imperfect) sound.
    - **Correct everything to A=440** — the master loop is also retuned, precisely onto its detected tonic at an editable, standard-range A4 reference pitch (415–466 Hz), and samples are tuned to that same clean reference — so everything, master included, ends up at true pitch.
-3. **Analyzes a batch of samples** — detects each sample's root note and (optionally) tempo.
-4. **Tunes and time-stretches** — pitch-shifts each sample onto the target pitch class (formant-preserving), and time-stretches samples flagged as loops to the master's BPM. Samples flagged **Drum** are left untouched.
-5. **Lets you preview, override, and export** — per-sample preview playback, a reference tone generator at the target root frequency, individual WAV downloads, or a ZIP of the whole batch.
+3. **Analyzes a batch of samples** — detects each sample's root note and tempo, and guesses a per-sample mode from its filename/duration/pitch confidence (always overridable):
+   - **Loop** — tuned and time-stretched to the master's BPM via Rubber Band, preserving exact duration and formants.
+   - **One-shot** — tuned via a simple resample (pitch-shift by changing playback speed, no Rubber Band). Duration drifts slightly with pitch and formants shift with it too, but transients stay crisp instead of getting smeared by a phase vocoder — the classic sampler-pitch-knob approach, better suited to plucked/percussive one-shots like pianos.
+   - **Drum** — left completely untouched.
+4. **Lets you preview, override, and export** — per-sample preview playback, a reference tone generator at the target root frequency, individual WAV downloads, or a ZIP of the whole batch.
 
 All decoding, analysis, and DSP run in Web Workers via WebAssembly and the Web Audio API — nothing is ever sent to a server.
 
@@ -19,7 +21,7 @@ All decoding, analysis, and DSP run in Web Workers via WebAssembly and the Web A
 - React + TypeScript + Vite, `vite-plugin-pwa` for offline installability.
 - [essentia.js](https://mtg.github.io/essentia.js/) (WASM) for key detection (`KeyExtractor`) and BPM (`RhythmExtractor2013`).
 - A custom YIN pitch tracker for per-sample fundamental/tuning detection (no model weights to ship — keeps the installed app small on iOS's tight storage quota).
-- [Rubber Band Library](https://breakfastquay.com/rubberband/) (WASM) for pitch-shifting and time-stretching.
+- [Rubber Band Library](https://breakfastquay.com/rubberband/) (WASM) for the master loop and Loop-mode samples' pitch-shifting/time-stretching; a small linear-interpolation resampler handles One-shot mode instead.
 - `jszip` for batch export, `comlink` for the worker RPC layer.
 
 See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for licensing details — Rubber Band is GPL-licensed.

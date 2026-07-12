@@ -33,18 +33,19 @@ const api = {
     };
   },
 
-  async analyzeSample(mono: Float32Array, sampleRate: number, detectBpmToo: boolean): Promise<SampleAnalysis> {
+  async analyzeSample(mono: Float32Array, sampleRate: number): Promise<SampleAnalysis> {
     const pitch = dominantPitch(mono, sampleRate);
     let bpm: number | null = null;
     let bpmConfidence = 0;
-    if (detectBpmToo) {
-      try {
-        const rhythm = await detectBpm(mono, sampleRate);
-        bpm = rhythm.bpm;
-        bpmConfidence = rhythm.confidence;
-      } catch {
-        bpm = null;
-      }
+    // Always attempted (not just for samples guessed as loops): a sample
+    // can be switched to "loop" by the user after analysis, and time-
+    // stretching needs bpm to already be there when that happens.
+    try {
+      const rhythm = await detectBpm(mono, sampleRate);
+      bpm = rhythm.bpm;
+      bpmConfidence = rhythm.confidence;
+    } catch {
+      bpm = null;
     }
 
     if (!pitch) {

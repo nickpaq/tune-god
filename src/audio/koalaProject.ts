@@ -160,7 +160,7 @@ export async function downloadTunedKoalaProject(
 ): Promise<void> {
   const replacements: KoalaReplacement[] = [];
   for (const s of samples) {
-    if (s.koalaSampleId === undefined || s.mode !== "tune" || !s.processedChannelData) continue;
+    if (s.koalaSampleId === undefined || s.mode === "drum" || !s.processedChannelData) continue;
     const blob = encodeWav({ sampleRate: s.sampleRate, channelData: s.processedChannelData, bitDepth: 24 });
     replacements.push({ sampleId: s.koalaSampleId, blob, frameCount: s.processedChannelData[0].length });
   }

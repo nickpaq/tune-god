@@ -8,7 +8,7 @@ import {
   referenceOffsetSemitones,
 } from "../audio/theory";
 import type { ParsedKoalaProject } from "../audio/koalaProject";
-import { guessSampleMode } from "../audio/drumDetect";
+import { guessSampleMode } from "../audio/sampleModeDetect";
 
 /**
  * "master": the master loop's audio is left completely untouched. Its key
@@ -22,7 +22,15 @@ import { guessSampleMode } from "../audio/drumDetect";
  */
 export type TuningMode = "master" | "a440";
 
-export type SampleMode = "tune" | "drum";
+/**
+ * "loop": tuned and time-stretched to the master's BPM via Rubber Band —
+ * preserves exact duration and formants.
+ * "oneshot": tuned via a simple resample (pitch-shift only) — no Rubber
+ * Band, no formant preservation, no BPM matching; duration drifts with
+ * pitch but transients stay crisp.
+ * "drum": left completely untouched.
+ */
+export type SampleMode = "loop" | "oneshot" | "drum";
 export type SampleStatus = "pending" | "analyzing" | "analyzed" | "processing" | "done" | "error";
 
 export interface SampleItem {
@@ -35,14 +43,14 @@ export interface SampleItem {
   error?: string;
   analysis?: SampleAnalysis;
   mode: SampleMode;
-  isLoop: boolean;
   /** Computed once master + analysis are both known. */
   pitchShiftSemitones?: number;
+  /** Only meaningful for "loop" — the resample path used for "oneshot" ignores it. */
   timeRatio?: number;
   processedChannelData?: Float32Array[];
   /** Set when this sample came from a pad in an imported .koala project. */
   koalaSampleId?: number;
-  /** True once the user has explicitly clicked Tune/Drum — stops auto-detection from overwriting their choice. */
+  /** True once the user has explicitly picked a mode — stops auto-detection from overwriting their choice. */
   modeManuallySet?: boolean;
 }
 
@@ -78,7 +86,6 @@ type Action =
   | { type: "SET_SAMPLE_STATUS"; id: string; status: SampleStatus; error?: string }
   | { type: "SET_SAMPLE_ANALYSIS"; id: string; analysis: SampleAnalysis }
   | { type: "SET_SAMPLE_MODE"; id: string; mode: SampleMode }
-  | { type: "SET_SAMPLE_LOOP"; id: string; isLoop: boolean }
   | { type: "SET_SAMPLE_PROCESSED"; id: string; channelData: Float32Array[] }
   | { type: "SET_KOALA_PROJECT"; project: ParsedKoalaProject | null }
   | { type: "SET_TUNING_MODE"; mode: TuningMode }
@@ -147,7 +154,9 @@ function withComputedShift(
   if (!master || !sample.analysis) return sample;
   const pitchShiftSemitones = computeShiftSemitones(master, sample.analysis, tuningMode, a4Reference);
   const timeRatio =
-    sample.isLoop && sample.analysis.bpm && master.analysis?.bpm ? master.analysis.bpm / sample.analysis.bpm : 1;
+    sample.mode === "loop" && sample.analysis.bpm && master.analysis?.bpm
+      ? master.analysis.bpm / sample.analysis.bpm
+      : 1;
   return { ...sample, pitchShiftSemitones, timeRatio };
 }
 
@@ -207,15 +216,13 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         samples: state.samples.map((s) =>
-          s.id === action.id ? { ...s, mode: action.mode, modeManuallySet: true } : s,
-        ),
-      };
-    case "SET_SAMPLE_LOOP":
-      return {
-        ...state,
-        samples: state.samples.map((s) =>
           s.id === action.id
-            ? withComputedShift(state.master, { ...s, isLoop: action.isLoop }, state.tuningMode, state.a4Reference)
+            ? withComputedShift(
+                state.master,
+                { ...s, mode: action.mode, modeManuallySet: true },
+                state.tuningMode,
+                state.a4Reference,
+              )
             : s,
         ),
       };
