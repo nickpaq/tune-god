@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { scaleGridFrequency, scaleStepsFor, type MasterItem, type TuningMode } from "../state/samplesStore";
+import { scaleGridFrequency, scaleStepsFor } from "../state/samplesStore";
 import { NOTE_NAMES } from "../audio/theory";
 
 /**
@@ -14,27 +14,24 @@ const ROWS: { octaveShift: number; shade: "dark" | "bright" }[] = [
 ];
 
 /**
- * A Koala-style pad grid for verifying the master's detected key by ear:
- * column 0 (highlighted) is the tonic, columns 1-6 are the rest of the
- * detected major/minor scale in order, each row an octave. Press and hold a
- * pad to hear that exact pitch — including whatever tuning-mode correction
- * and diagnostic trim a real tuned one-shot dropped into Koala would carry
- * — so a wrong key or scale reads as an obviously wrong-sounding pad
- * instead of a number you have to trust.
+ * A Koala-style pad grid for verifying the master's key by ear: column 0
+ * (highlighted) is the tonic, columns 1-6 are the rest of the chosen
+ * major/minor scale in order, each row an octave. Press and hold a pad to
+ * hear that exact pitch, anchored to the by-ear tonic frequency plus an
+ * optional diagnostic trim — so a wrong key or scale choice reads as an
+ * obviously wrong-sounding pad instead of a number you have to trust. The
+ * scale switch (major/minor) lives in MasterPanel; this just renders
+ * whichever one is passed in.
  */
 export function MasterGrid({
-  master,
-  tuningMode,
-  a4Reference,
+  tonicFrequencyHz,
   tonicPitchClass,
   scale,
   trimSemitones,
   onPressNote,
   onReleaseNote,
 }: {
-  master: MasterItem;
-  tuningMode: TuningMode;
-  a4Reference: number;
+  tonicFrequencyHz: number;
   tonicPitchClass: number;
   scale: "major" | "minor";
   trimSemitones: number;
@@ -52,8 +49,7 @@ export function MasterGrid({
   };
 
   const press = (row: number, col: number, octaveShift: number) => {
-    const freq = scaleGridFrequency(master, tuningMode, a4Reference, col, octaveShift, trimSemitones);
-    if (freq === null) return;
+    const freq = scaleGridFrequency(tonicFrequencyHz, scale, col, octaveShift, trimSemitones);
     onPressNote(freq);
     setActiveCell(`${row}-${col}`);
   };

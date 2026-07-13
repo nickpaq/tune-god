@@ -1,27 +1,8 @@
 import React, { createContext, useContext, useMemo, useReducer } from "react";
-import type { MasterAnalysis, SampleAnalysis } from "../audio/analysisTypes";
-import {
-  smallestSignedShift,
-  pitchClassOf,
-  semitonesToRatio,
-  clampA4Reference,
-  referenceOffsetSemitones,
-  midiToFrequency,
-} from "../audio/theory";
+import type { SampleAnalysis } from "../audio/analysisTypes";
+import { smallestSignedShift, semitonesToRatio, midiToFrequency } from "../audio/theory";
 import type { ParsedKoalaProject } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/sampleModeDetect";
-
-/**
- * "master": the master loop's audio is left completely untouched. Its key
- * and detune are only *detected*, not corrected — samples are tuned to the
- * tonic and then get that same detune applied, so they match the loop's
- * actual (possibly imperfect) pitch.
- * "a440": the master loop itself is also retuned, precisely onto its
- * detected tonic at an editable, standard-range A4 reference pitch, and
- * samples are tuned to that same clean tonic/reference — so everything
- * (master included) ends up at true, correct pitch.
- */
-export type TuningMode = "master" | "a440";
 
 /**
  * Which side of each row's controls the play button sits on. "right" is for
@@ -58,10 +39,8 @@ export function saveHandedness(handedness: Handedness): void {
  * pitch but transients stay crisp.
  * "bass": processed identically to "oneshot" (same resample, no time
  * ratio) — the only difference is in preview: the audition drone/sample
- * are transposed up 3 octaves and the preview loop covers the sample's
- * back half (silence-trimmed) instead of just its sustain, so a
- * low-fundamental, sliding-pitch 808-style tail is easier to hear/tune by
- * ear. Never affects the actual exported audio.
+ * are transposed up 3 octaves, making a low-fundamental easier to hear/tune
+ * by ear. Never affects the actual exported audio.
  * "drum": left completely untouched.
  */
 export type SampleMode = "loop" | "oneshot" | "bass" | "drum";
@@ -77,7 +56,7 @@ export interface SampleItem {
   error?: string;
   analysis?: SampleAnalysis;
   mode: SampleMode;
-  /** Computed once master + analysis are both known. */
+  /** Computed once the master's tonic (pitch class + by-ear frequency) and this sample's own analysis are both known. */
   pitchShiftSemitones?: number;
   /** Only meaningful for "loop" — the resample path used for "oneshot" ignores it. */
   timeRatio?: number;
@@ -102,12 +81,21 @@ export interface MasterItem {
   name: string;
   sampleRate: number;
   channelData: Float32Array[];
-  status: SampleStatus;
-  analysis?: MasterAnalysis;
-  /** Override in case detection is wrong — pre-filled from the filename when parseable, editable, revertible to analysis. */
-  overrideTonicPitchClass?: number;
-  overrideScale?: "major" | "minor";
-  overrideBpm?: number;
+  /** Tonic pitch class (0=C..11=B) — set by the user (pre-filled from the filename when parseable), never auto-detected. */
+  tonicPitchClass?: number;
+  /** Set by the user by ear (which scale the keyboard's 7 degrees sound right in), never auto-detected. */
+  scale?: "major" | "minor";
+  /** Set by the user (pre-filled from the filename when parseable), never auto-detected. */
+  bpm?: number;
+  /**
+   * The tonic's *actual* frequency, tuned by ear against the master loop
+   * using the tone generator's "Play Root" drone — this loop may not sit at
+   * a clean equal-tempered pitch at all, so this is the real ground truth
+   * every sample gets tuned to, not a value derived from `tonicPitchClass`.
+   * Defaults to the standard equal-tempered frequency for `tonicPitchClass`
+   * (nearest middle C) whenever the tonic changes, as a starting point.
+   */
+  tonicFrequencyHz?: number;
   koalaSampleId?: number;
 }
 
@@ -115,16 +103,13 @@ interface State {
   master: MasterItem | null;
   samples: SampleItem[];
   koalaProject: ParsedKoalaProject | null;
-  tuningMode: TuningMode;
-  /** A4 reference in Hz, only used when tuningMode is "a440". Clamped to A4_REFERENCE_RANGE. */
-  a4Reference: number;
   handedness: Handedness;
 }
 
 type Action =
   | { type: "SET_MASTER"; master: MasterItem }
-  | { type: "SET_MASTER_ANALYSIS"; analysis: MasterAnalysis }
-  | { type: "SET_MASTER_OVERRIDE"; tonicPitchClass?: number; scale?: "major" | "minor"; bpm?: number }
+  | { type: "SET_MASTER_KEY"; tonicPitchClass?: number; scale?: "major" | "minor"; bpm?: number }
+  | { type: "SET_MASTER_TONIC_FREQUENCY"; hz: number }
   | { type: "ADD_SAMPLES"; samples: SampleItem[] }
   | { type: "REMOVE_SAMPLE"; id: string }
   | { type: "SET_SAMPLE_STATUS"; id: string; status: SampleStatus; error?: string }
@@ -133,108 +118,66 @@ type Action =
   | { type: "SET_SAMPLE_PROCESSED"; id: string; channelData: Float32Array[] }
   | { type: "SET_SAMPLE_MANUAL_OFFSET"; id: string; semitones: number }
   | { type: "SET_KOALA_PROJECT"; project: ParsedKoalaProject | null }
-  | { type: "SET_TUNING_MODE"; mode: TuningMode }
-  | { type: "SET_A4_REFERENCE"; hz: number }
   | { type: "SET_HANDEDNESS"; handedness: Handedness }
   | { type: "CLEAR_MASTER" }
   | { type: "RESET" };
 
-const DEFAULT_A4_REFERENCE = 440;
-
 function effectiveMasterKey(master: MasterItem): { tonicPitchClass: number; scale: "major" | "minor" } | null {
-  const tonicPitchClass = master.overrideTonicPitchClass ?? master.analysis?.tonicPitchClass;
-  const scale = master.overrideScale ?? master.analysis?.scale;
-  if (tonicPitchClass === undefined || scale === undefined) return null;
-  return { tonicPitchClass, scale };
+  if (master.tonicPitchClass === undefined || master.scale === undefined) return null;
+  return { tonicPitchClass: master.tonicPitchClass, scale: master.scale };
+}
+
+/** Standard equal-tempered frequency for a pitch class, voiced in the octave nearest middle C — the tone generator's starting point before the user nudges it by ear. */
+export function standardTonicFrequency(tonicPitchClass: number): number {
+  return midiToFrequency(60 + smallestSignedShift(0, tonicPitchClass));
 }
 
 /**
- * Semitone correction folded into every sample's shift, on top of landing on
- * the master's tonic pitch class:
- *  - "master": the master loop's own detected detune (in cents), applied
- *    with the same sign, so samples match the loop's actual pitch — not
- *    standard concert pitch. The master's audio is never re-tuned itself.
- *  - "a440": the master's detune is ignored; samples are corrected to the
- *    chosen (editable) A4 reference pitch instead.
+ * Nearest octave-multiple of `tonicFrequencyHz` to `frequency` — i.e. the
+ * tonic, transposed into whichever octave sits closest to the given
+ * frequency. Frequency-based rather than pitch-class/MIDI-based, since the
+ * tonic's own Hz is a manually ear-tuned value that need not land on a
+ * clean equal-tempered grid at all.
  */
-function tuningCorrectionSemitones(master: MasterItem, tuningMode: TuningMode, a4Reference: number): number {
-  if (tuningMode === "a440") return referenceOffsetSemitones(a4Reference);
-  return (master.analysis?.tuningOffsetCents ?? 0) / 100;
+function nearestTonicOctave(tonicFrequencyHz: number, frequency: number): number {
+  const n = Math.round(Math.log2(frequency / tonicFrequencyHz));
+  return tonicFrequencyHz * Math.pow(2, n);
 }
 
 /**
- * Semitone correction to retune the master loop's own audio onto its
- * detected tonic at the chosen A4 reference. Zero (no-op) in "master" mode,
- * where the master is left pristine by definition.
+ * Semitone shift that lands a sample's detected fundamental on the nearest
+ * possible tonic *in its own original octave* — i.e. the smallest move, not
+ * a jump to some canonical octave. Undefined until the master has both a
+ * tonic pitch class (for display/keyboard purposes) and a by-ear tonic
+ * frequency (the actual tuning target).
  */
-export function masterCorrectionSemitones(master: MasterItem, tuningMode: TuningMode, a4Reference: number): number {
-  if (tuningMode !== "a440") return 0;
-  const detuneCents = master.analysis?.tuningOffsetCents ?? 0;
-  return -detuneCents / 100 + referenceOffsetSemitones(a4Reference);
-}
-
-/** Computes the semitone shift that lands a sample's detected root on the
- * master key's tonic, folding in the active tuning-mode correction. */
-function computeShiftSemitones(
-  master: MasterItem,
-  sample: SampleAnalysis,
-  tuningMode: TuningMode,
-  a4Reference: number,
-): number | undefined {
-  const key = effectiveMasterKey(master);
-  if (!key) return undefined;
-  const targetClass = key.tonicPitchClass;
-  const detectedClass = pitchClassOf(sample.detectedMidi);
-  const tuningCorrection = tuningCorrectionSemitones(master, tuningMode, a4Reference);
-  const baseShift = smallestSignedShift(detectedClass, targetClass);
-  const fractionalOffset = Math.round(sample.detectedMidi) - sample.detectedMidi;
-  return baseShift + fractionalOffset + tuningCorrection;
-}
-
-/** The (fractional) pitch class every tuned sample should land on: tonic plus the mode's correction. */
-function targetPitchClassFraction(master: MasterItem, tuningMode: TuningMode, a4Reference: number): number | null {
-  const key = effectiveMasterKey(master);
-  if (!key) return null;
-  const pc = (key.tonicPitchClass + tuningCorrectionSemitones(master, tuningMode, a4Reference)) % 12;
-  return (pc + 12) % 12;
+function computeShiftSemitones(master: MasterItem, sample: SampleAnalysis): number | undefined {
+  if (!effectiveMasterKey(master) || master.tonicFrequencyHz === undefined) return undefined;
+  const target = nearestTonicOctave(master.tonicFrequencyHz, sample.frequency);
+  return 12 * Math.log2(target / sample.frequency);
 }
 
 /**
- * Signed cents error of a measured (fractional) MIDI pitch vs the tuning
- * target, octave-agnostic and wrapped to ±600c. Null when the master's key
- * isn't known yet.
+ * Signed cents error of a measured frequency vs the nearest tonic octave to
+ * it — octave-agnostic, since "in tune" just means landing on *a* tonic
+ * octave, not a specific one. Null until the master has a by-ear tonic
+ * frequency.
  */
-export function verifyErrorCents(
-  master: MasterItem,
-  tuningMode: TuningMode,
-  a4Reference: number,
-  measuredMidi: number,
-): number | null {
-  const targetPc = targetPitchClassFraction(master, tuningMode, a4Reference);
-  if (targetPc === null) return null;
-  let diff = (((measuredMidi % 12) + 12) % 12) - targetPc;
-  if (diff > 6) diff -= 12;
-  if (diff < -6) diff += 12;
-  return diff * 100;
+export function verifyErrorCents(master: MasterItem, measuredFrequency: number): number | null {
+  if (master.tonicFrequencyHz === undefined) return null;
+  const target = nearestTonicOctave(master.tonicFrequencyHz, measuredFrequency);
+  return 1200 * Math.log2(measuredFrequency / target);
 }
 
 /**
- * Frequency for a per-sample verification drone: the exact target pitch
- * (tonic + mode correction, *without* the sample's manual trim — the drone
- * is the truth to tune toward), voiced in the octave nearest where the
- * tuned sample actually sits.
+ * Frequency for a per-sample verification drone: the tonic, voiced in the
+ * octave nearest where the tuned sample actually sits (*without* the
+ * sample's manual trim — the drone is the truth to tune toward).
  */
-export function droneFrequency(
-  master: MasterItem,
-  sample: SampleItem,
-  tuningMode: TuningMode,
-  a4Reference: number,
-): number | null {
-  const targetPc = targetPitchClassFraction(master, tuningMode, a4Reference);
-  if (targetPc === null || !sample.analysis) return null;
-  const tunedMidi = sample.analysis.detectedMidi + (sample.pitchShiftSemitones ?? 0);
-  const droneMidi = targetPc + 12 * Math.round((tunedMidi - targetPc) / 12);
-  return midiToFrequency(droneMidi);
+export function droneFrequency(master: MasterItem, sample: SampleItem): number | null {
+  if (master.tonicFrequencyHz === undefined || !sample.analysis) return null;
+  const tunedFrequency = sample.analysis.frequency * semitonesToRatio(sample.pitchShiftSemitones ?? 0);
+  return nearestTonicOctave(master.tonicFrequencyHz, tunedFrequency);
 }
 
 /** Semitone offsets from the tonic for each of the 7 scale degrees, index 0 = tonic. */
@@ -247,50 +190,34 @@ export function scaleStepsFor(scale: "major" | "minor"): readonly number[] {
 
 /**
  * Frequency for one pad of the master-key verification grid: scale degree
- * `col` (0 = tonic, 1..6 = the rest of the detected major/minor scale in
- * order) voiced `octaveShift` semitones from the octave nearest middle C,
- * plus the same tuning-mode correction (the master's own detune in "master"
- * mode, or the A4 reference offset in "a440" mode) a real tuned sample
- * would receive, plus an optional diagnostic trim on top — so a pad sounds
- * exactly like a one-shot tuned to that degree and dropped into Koala
- * would, letting a wrong key/scale detection surface by ear immediately.
+ * `col` (0 = tonic, 1..6 = the rest of the chosen major/minor scale in
+ * order) voiced `octaveShift` semitones from the by-ear tonic frequency,
+ * plus an optional diagnostic trim — so a pad sounds exactly like a
+ * one-shot tuned to that degree and dropped into Koala would, letting a
+ * wrong key/scale choice surface by ear immediately.
  */
 export function scaleGridFrequency(
-  master: MasterItem,
-  tuningMode: TuningMode,
-  a4Reference: number,
+  tonicFrequencyHz: number,
+  scale: "major" | "minor",
   col: number,
   octaveShift: number,
   trimSemitones = 0,
-): number | null {
-  const key = effectiveMasterKey(master);
-  if (!key) return null;
-  const steps = scaleStepsFor(key.scale);
+): number {
+  const steps = scaleStepsFor(scale);
   const degree = steps[col] ?? 0;
-  const baseMidi = 60 + smallestSignedShift(0, key.tonicPitchClass);
-  const correction = tuningCorrectionSemitones(master, tuningMode, a4Reference);
-  return midiToFrequency(baseMidi + degree + octaveShift + correction + trimSemitones);
+  return tonicFrequencyHz * semitonesToRatio(degree + octaveShift + trimSemitones);
 }
 
-function withComputedShift(
-  master: MasterItem | null,
-  sample: SampleItem,
-  tuningMode: TuningMode,
-  a4Reference: number,
-): SampleItem {
+function withComputedShift(master: MasterItem | null, sample: SampleItem): SampleItem {
   if (!master || !sample.analysis) return sample;
-  const baseShift = computeShiftSemitones(master, sample.analysis, tuningMode, a4Reference);
-  const pitchShiftSemitones =
-    baseShift === undefined ? undefined : baseShift + (sample.manualOffsetSemitones ?? 0);
-  const timeRatio =
-    sample.mode === "loop" && sample.analysis.bpm && master.analysis?.bpm
-      ? master.analysis.bpm / sample.analysis.bpm
-      : 1;
+  const baseShift = computeShiftSemitones(master, sample.analysis);
+  const pitchShiftSemitones = baseShift === undefined ? undefined : baseShift + (sample.manualOffsetSemitones ?? 0);
+  const timeRatio = sample.mode === "loop" && sample.analysis.bpm && master.bpm ? master.bpm / sample.analysis.bpm : 1;
 
   // If this sample was already rendered but the target has since moved (key
-  // override, tuning mode, A4 reference, mode toggle...), the render is
-  // stale: drop it so previews fall back to the original audio and the UI
-  // shows the sample as needing processing again.
+  // change, tonic frequency nudge, mode toggle...), the render is stale:
+  // drop it so previews fall back to the original audio and the UI shows
+  // the sample as needing processing again.
   const changed = (a?: number, b?: number) =>
     (a === undefined) !== (b === undefined) || (a !== undefined && b !== undefined && Math.abs(a - b) > 1e-9);
   const stale =
@@ -309,28 +236,28 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "SET_MASTER":
       return { ...state, master: action.master };
-    case "SET_MASTER_ANALYSIS": {
+    case "SET_MASTER_KEY": {
       if (!state.master) return state;
-      const master = { ...state.master, analysis: action.analysis, status: "analyzed" as SampleStatus };
-      return {
-        ...state,
-        master,
-        samples: state.samples.map((s) => withComputedShift(master, s, state.tuningMode, state.a4Reference)),
-      };
-    }
-    case "SET_MASTER_OVERRIDE": {
-      if (!state.master) return state;
-      const master = {
+      // Changing which pitch class is the tonic resets the by-ear-tuned
+      // frequency back to a sane standard-tuning default for the new note —
+      // the old fine-tuned Hz value was for a different note entirely.
+      const tonicChanged = action.tonicPitchClass !== state.master.tonicPitchClass;
+      const master: MasterItem = {
         ...state.master,
-        overrideTonicPitchClass: action.tonicPitchClass,
-        overrideScale: action.scale,
-        overrideBpm: action.bpm,
+        tonicPitchClass: action.tonicPitchClass,
+        scale: action.scale,
+        bpm: action.bpm,
+        tonicFrequencyHz:
+          tonicChanged && action.tonicPitchClass !== undefined
+            ? standardTonicFrequency(action.tonicPitchClass)
+            : state.master.tonicFrequencyHz,
       };
-      return {
-        ...state,
-        master,
-        samples: state.samples.map((s) => withComputedShift(master, s, state.tuningMode, state.a4Reference)),
-      };
+      return { ...state, master, samples: state.samples.map((s) => withComputedShift(master, s)) };
+    }
+    case "SET_MASTER_TONIC_FREQUENCY": {
+      if (!state.master) return state;
+      const master = { ...state.master, tonicFrequencyHz: action.hz };
+      return { ...state, master, samples: state.samples.map((s) => withComputedShift(master, s)) };
     }
     case "ADD_SAMPLES":
       return { ...state, samples: [...state.samples, ...action.samples] };
@@ -349,12 +276,7 @@ function reducer(state: State, action: Action): State {
         samples: state.samples.map((s) => {
           if (s.id !== action.id) return s;
           const mode = s.modeManuallySet ? s.mode : guessSampleMode(s.name, action.analysis);
-          return withComputedShift(
-            state.master,
-            { ...s, analysis: action.analysis, status: "analyzed", mode },
-            state.tuningMode,
-            state.a4Reference,
-          );
+          return withComputedShift(state.master, { ...s, analysis: action.analysis, status: "analyzed", mode });
         }),
       };
     case "SET_SAMPLE_MODE":
@@ -362,12 +284,7 @@ function reducer(state: State, action: Action): State {
         ...state,
         samples: state.samples.map((s) =>
           s.id === action.id
-            ? withComputedShift(
-                state.master,
-                { ...s, mode: action.mode, modeManuallySet: true },
-                state.tuningMode,
-                state.a4Reference,
-              )
+            ? withComputedShift(state.master, { ...s, mode: action.mode, modeManuallySet: true })
             : s,
         ),
       };
@@ -375,9 +292,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         samples: state.samples.map((s) =>
-          s.id === action.id
-            ? { ...s, processedChannelData: action.channelData, status: "done" }
-            : s,
+          s.id === action.id ? { ...s, processedChannelData: action.channelData, status: "done" } : s,
         ),
       };
     case "SET_SAMPLE_MANUAL_OFFSET":
@@ -385,31 +300,12 @@ function reducer(state: State, action: Action): State {
         ...state,
         samples: state.samples.map((s) =>
           s.id === action.id
-            ? withComputedShift(
-                state.master,
-                { ...s, manualOffsetSemitones: action.semitones },
-                state.tuningMode,
-                state.a4Reference,
-              )
+            ? withComputedShift(state.master, { ...s, manualOffsetSemitones: action.semitones })
             : s,
         ),
       };
     case "SET_KOALA_PROJECT":
       return { ...state, koalaProject: action.project };
-    case "SET_TUNING_MODE":
-      return {
-        ...state,
-        tuningMode: action.mode,
-        samples: state.samples.map((s) => withComputedShift(state.master, s, action.mode, state.a4Reference)),
-      };
-    case "SET_A4_REFERENCE": {
-      const a4Reference = clampA4Reference(action.hz);
-      return {
-        ...state,
-        a4Reference,
-        samples: state.samples.map((s) => withComputedShift(state.master, s, state.tuningMode, a4Reference)),
-      };
-    }
     case "SET_HANDEDNESS":
       saveHandedness(action.handedness);
       return { ...state, handedness: action.handedness };
@@ -426,14 +322,7 @@ function reducer(state: State, action: Action): State {
         })),
       };
     case "RESET":
-      return {
-        master: null,
-        samples: [],
-        koalaProject: null,
-        tuningMode: "master",
-        a4Reference: DEFAULT_A4_REFERENCE,
-        handedness: state.handedness,
-      };
+      return { master: null, samples: [], koalaProject: null, handedness: state.handedness };
     default:
       return state;
   }
@@ -446,8 +335,6 @@ export function SamplesProvider({ children }: { children: React.ReactNode }) {
     master: null,
     samples: [],
     koalaProject: null,
-    tuningMode: "master",
-    a4Reference: DEFAULT_A4_REFERENCE,
     handedness: loadHandedness(),
   });
   const value = useMemo(() => ({ state, dispatch }), [state]);

@@ -1,4 +1,5 @@
 import { getAudioContext } from "./decode";
+import { createDroneOscillator } from "./droneWave";
 
 /**
  * Short gain ramp applied at every start, stop, and natural end of playback.
@@ -204,15 +205,16 @@ export function pressSample(
 export interface ToneHandle {
   stop: () => void;
   setVolume: (volume: number) => void;
+  /** Retunes the drone live via its own AudioParam — no restart. */
+  setFrequency: (frequency: number) => void;
 }
 
 export function playTone(frequency: number, volume: number): ToneHandle {
   stopActive();
 
   const ctx = getAudioContext();
-  const osc = ctx.createOscillator();
+  const osc = createDroneOscillator();
   const gain = ctx.createGain();
-  osc.type = "sine";
   osc.frequency.value = frequency;
   const now = ctx.currentTime;
   gain.gain.setValueAtTime(0, now);
@@ -240,6 +242,9 @@ export function playTone(frequency: number, volume: number): ToneHandle {
     // Smoothed to avoid zipper noise while dragging the volume slider.
     setVolume: (v: number) => {
       gain.gain.setTargetAtTime(v, ctx.currentTime, SMOOTH_SEC);
+    },
+    setFrequency: (f: number) => {
+      osc.frequency.setTargetAtTime(f, ctx.currentTime, SMOOTH_SEC);
     },
   };
 }
@@ -335,9 +340,8 @@ export function playMasterLoop(
       droneOsc.frequency.setTargetAtTime(frequency, ctx.currentTime, SMOOTH_SEC);
       return;
     }
-    const osc = ctx.createOscillator();
+    const osc = createDroneOscillator();
     const gain = ctx.createGain();
-    osc.type = "sine";
     osc.frequency.value = frequency;
     osc.connect(gain);
     gain.connect(droneBus);
@@ -438,8 +442,7 @@ export function pressSampleWithDrone(
   const droneBus = ctx.createGain();
   droneBus.connect(ctx.destination);
 
-  const osc = ctx.createOscillator();
-  osc.type = "sine";
+  const osc = createDroneOscillator();
   osc.frequency.value = options.droneFrequency * Math.pow(2, options.previewOctaveShift ?? 0);
   osc.connect(droneBus);
   osc.start();

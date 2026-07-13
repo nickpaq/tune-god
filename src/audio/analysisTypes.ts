@@ -1,17 +1,3 @@
-import type { Scale } from "./theory";
-
-export interface MasterAnalysis {
-  tonicPitchClass: number;
-  tonicName: string;
-  scale: Scale;
-  keyStrength: number;
-  bpm: number;
-  bpmConfidence: number;
-  /** Cents offset of the loop's own tuning from equal temperament @ A440. */
-  tuningOffsetCents: number;
-  tuningConfidence: number;
-}
-
 export interface SampleAnalysis {
   /** Fractional MIDI note of the detected fundamental. */
   detectedMidi: number;

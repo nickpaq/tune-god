@@ -1,9 +1,9 @@
 import { useCallback } from "react";
-import { decodeFile, toMono, cloneChannelData, monoFromChannelData } from "../audio/decode";
+import { decodeFile, cloneChannelData, monoFromChannelData } from "../audio/decode";
 import { semitonesToRatio } from "../audio/theory";
 import { nextAnalysisWorker, nextRenderWorker } from "../workers/workerClient";
-import { useSamplesStore, masterCorrectionSemitones, verifyErrorCents, type SampleItem } from "./samplesStore";
-import { parseKoalaProject, koalaPadToFile, type KoalaMasterReplacement } from "../audio/koalaProject";
+import { useSamplesStore, verifyErrorCents, standardTonicFrequency, type SampleItem } from "./samplesStore";
+import { parseKoalaProject, koalaPadToFile } from "../audio/koalaProject";
 import { guessSampleMode } from "../audio/sampleModeDetect";
 import { parseFilenameMetadata } from "../audio/filenameMetadata";
 
@@ -21,10 +21,16 @@ const MAX_AUTO_CORRECT_PASSES = 5;
 export function useAppActions() {
   const { state, dispatch } = useSamplesStore();
 
+  /**
+   * The master loop's own key/scale/BPM/tuning are never auto-detected —
+   * they're set by the user (a filename like "...Am_124bpm.wav" gives a
+   * starting guess when parseable), and the tonic's actual frequency is
+   * tuned by ear against the loop using the tone generator's "Play Root"
+   * drone. The master's audio itself is never analyzed or altered.
+   */
   const loadMaster = useCallback(
     async (file: File, koalaSampleId?: number) => {
       const buffer = await decodeFile(file);
-      const mono = toMono(buffer);
       const channelData = cloneChannelData(buffer);
       const filenameMeta = parseFilenameMetadata(file.name);
       dispatch({
@@ -34,16 +40,14 @@ export function useAppActions() {
           name: file.name,
           sampleRate: buffer.sampleRate,
           channelData,
-          status: "analyzing",
           koalaSampleId,
-          overrideTonicPitchClass: filenameMeta.tonicPitchClass,
-          overrideScale: filenameMeta.scale,
-          overrideBpm: filenameMeta.bpm,
+          tonicPitchClass: filenameMeta.tonicPitchClass,
+          scale: filenameMeta.scale,
+          bpm: filenameMeta.bpm,
+          tonicFrequencyHz:
+            filenameMeta.tonicPitchClass !== undefined ? standardTonicFrequency(filenameMeta.tonicPitchClass) : undefined,
         },
       });
-      const worker = nextAnalysisWorker();
-      const analysis = await worker.analyzeMaster(mono, buffer.sampleRate);
-      dispatch({ type: "SET_MASTER_ANALYSIS", analysis });
     },
     [dispatch],
   );
@@ -148,8 +152,7 @@ export function useAppActions() {
               monoFromChannelData(processed),
               sample.sampleRate,
             );
-            const cents =
-              measured === null ? null : verifyErrorCents(master, state.tuningMode, state.a4Reference, measured.midi);
+            const cents = measured === null ? null : verifyErrorCents(master, measured.frequency);
             if (
               cents !== null &&
               (measured?.confidence ?? 0) >= AUTO_CORRECT_MIN_CONFIDENCE &&
@@ -173,7 +176,7 @@ export function useAppActions() {
         dispatch({ type: "SET_SAMPLE_STATUS", id, status: "error", error: String(err) });
       }
     },
-    [state.master, state.tuningMode, state.a4Reference, dispatch],
+    [state.master, dispatch],
   );
 
   const processSample = useCallback(
@@ -207,22 +210,5 @@ export function useAppActions() {
     await Promise.all(targets.map((s) => processSample(s.id)));
   }, [state.samples, processSample]);
 
-  /**
-   * In "a440" mode the master loop itself is retuned onto its detected
-   * tonic at the chosen reference pitch, so the exported project's own pad
-   * needs correcting too — computed fresh here rather than stored in state,
-   * since it only matters at export time. Returns null in "master" mode
-   * (the master stays pristine) or if this master didn't come from a .koala
-   * project (no pad to swap it into).
-   */
-  const buildTunedMaster = useCallback(async (): Promise<KoalaMasterReplacement | null> => {
-    const { master, tuningMode, a4Reference } = state;
-    if (!master || master.koalaSampleId === undefined || tuningMode !== "a440") return null;
-    const shift = masterCorrectionSemitones(master, tuningMode, a4Reference);
-    const worker = nextRenderWorker();
-    const channelData = await worker.process(master.channelData, master.sampleRate, 1, semitonesToRatio(shift), true);
-    return { koalaSampleId: master.koalaSampleId, sampleRate: master.sampleRate, channelData };
-  }, [state.master, state.tuningMode, state.a4Reference]);
-
-  return { loadMaster, addSampleFiles, loadKoalaProject, processSample, processAll, trimAndProcess, buildTunedMaster };
+  return { loadMaster, addSampleFiles, loadKoalaProject, processSample, processAll, trimAndProcess };
 }

@@ -213,24 +213,41 @@
   text-decoration: underline;
 }
 
-.panel--tone .tone-controls {
+.tone-controls {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.6rem 0.8rem;
 }
 
 .tone-label {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  font-size: 1rem;
+  font-size: 0.85rem;
 }
 
-.panel--tone .precision-slider__fill {
+.tone-frequency {
+  width: 5.5rem;
+}
+
+.tone-unit {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.tone-controls .precision-slider {
+  min-width: 6rem;
+}
+
+.tone-controls .precision-slider__fill {
   background: var(--accent-pink);
 }
 
-.panel--tone .precision-slider:focus-visible .precision-slider__thumb {
+.tone-controls .precision-slider:focus-visible .precision-slider__thumb {
   outline-color: var(--accent-pink);
 }
 

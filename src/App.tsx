@@ -1,13 +1,8 @@
 import { SamplesProvider, useSamplesStore } from "./state/samplesStore";
 import { MasterPanel } from "./components/MasterPanel";
 import { ResultsTable } from "./components/ResultsTable";
-import { ReferenceTone } from "./components/ReferenceTone";
 import { Logo } from "./components/Logo";
 import "./App.css";
-
-// Undecided whether the tone generator earns its place — hidden for now,
-// not removed, so it's a one-line flip either way.
-const SHOW_TONE_GENERATOR = false;
 
 /** Flips which side of every row's controls the play button sits on. */
 function HandednessSwitch() {
@@ -35,7 +30,6 @@ function AppContent() {
       </header>
       <main className="app-main">
         <MasterPanel />
-        {SHOW_TONE_GENERATOR && <ReferenceTone />}
         <ResultsTable />
       </main>
     </div>

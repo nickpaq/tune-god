@@ -6,10 +6,10 @@ import { downloadTunedKoalaProject } from "../audio/koalaProject";
 
 export function ResultsTable() {
   const { state } = useSamplesStore();
-  const { processAll, buildTunedMaster } = useAppActions();
-  const { samples, koalaProject, master, tuningMode } = state;
+  const { processAll } = useAppActions();
+  const { samples, koalaProject, master } = state;
   const targetInfo = useTargetInfo(master);
-  const targetBpm = master?.overrideBpm ?? master?.analysis?.bpm;
+  const targetBpm = master?.bpm;
   const [exporting, setExporting] = useState(false);
   const tunedPadCount = samples.filter(
     (s) => s.koalaSampleId !== undefined && s.mode !== "drum" && s.processedChannelData,
@@ -21,13 +21,7 @@ export function ResultsTable() {
     if (!koalaProject) return;
     setExporting(true);
     try {
-      const masterReplacement = await buildTunedMaster();
-      await downloadTunedKoalaProject(
-        koalaProject,
-        samples,
-        { scale: targetInfo?.scale, bpm: targetBpm },
-        masterReplacement ?? undefined,
-      );
+      await downloadTunedKoalaProject(koalaProject, samples, { scale: targetInfo?.scale, bpm: targetBpm });
     } finally {
       setExporting(false);
     }
@@ -44,7 +38,7 @@ export function ResultsTable() {
             title={
               tunedPadCount === 0
                 ? "Process at least one pad from the imported Koala project first"
-                : `Rebuilds ${koalaProject.originalName} with ${tunedPadCount} tuned pad${tunedPadCount === 1 ? "" : "s"} swapped in${tuningMode === "a440" ? ", plus the corrected master loop" : ""}`
+                : `Rebuilds ${koalaProject.originalName} with ${tunedPadCount} tuned pad${tunedPadCount === 1 ? "" : "s"} swapped in`
             }
           >
             {exporting ? "🐨 Preparing…" : "🐨 Download tuned Koala file"}

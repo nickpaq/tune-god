@@ -3,13 +3,10 @@ import { Dropzone } from "./Dropzone";
 import { PlayButton } from "./PlayButton";
 import { MasterGrid } from "./MasterGrid";
 import { PrecisionSlider } from "./PrecisionSlider";
-import {
-  useSamplesStore,
-  masterCorrectionSemitones,
-  type TuningMode,
-} from "../state/samplesStore";
+import { ReferenceTone } from "./ReferenceTone";
+import { useSamplesStore } from "../state/samplesStore";
 import { useAppActions } from "../state/useAppActions";
-import { NOTE_NAMES, A4_REFERENCE_RANGE, formatCents, formatSignedSemitones, formatSignedCents } from "../audio/theory";
+import { NOTE_NAMES, formatSignedSemitones, formatSignedCents } from "../audio/theory";
 import { playMasterLoop, playTone, type MasterSessionHandle, type ToneHandle } from "../audio/playback";
 import { stripExtension } from "../audio/filename";
 import { isKoalaFile } from "../audio/koalaProject";
@@ -91,16 +88,9 @@ export function MasterPanel() {
     );
   }
 
-  const a = master.analysis;
-  const tonic = master.overrideTonicPitchClass ?? a?.tonicPitchClass;
-  const scale = master.overrideScale ?? a?.scale;
-  const bpm = master.overrideBpm ?? a?.bpm;
-  const hasOverride =
-    master.overrideTonicPitchClass !== undefined ||
-    master.overrideScale !== undefined ||
-    master.overrideBpm !== undefined;
+  const { tonicPitchClass: tonic, scale, bpm, tonicFrequencyHz } = master;
   const trimSemitones = semitoneVal + centsVal / 100;
-  const hasKey = tonic !== undefined && scale !== undefined;
+  const hasKey = tonic !== undefined && scale !== undefined && tonicFrequencyHz !== undefined;
 
   // Always restarts from the beginning and loops until stopped — the drone
   // is never auto-triggered here, since it's played manually via the
@@ -160,97 +150,74 @@ export function MasterPanel() {
           </button>
           {state.handedness !== "right" && <PlayButton playing={playing} onClick={preview} />}
         </div>
-        {master.status === "analyzing" && <p className="muted">Analyzing…</p>}
-        {a && (
-          <div className="master-detail">
-            <label>
-              Key
-              <select
-                value={tonic}
-                onChange={(e) =>
-                  dispatch({
-                    type: "SET_MASTER_OVERRIDE",
-                    tonicPitchClass: Number(e.target.value),
-                    scale,
-                    bpm,
-                  })
-                }
-              >
-                {NOTE_NAMES.map((n, i) => (
-                  <option key={n} value={i}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Scale
-              <select
-                value={scale}
-                onChange={(e) =>
-                  dispatch({
-                    type: "SET_MASTER_OVERRIDE",
-                    tonicPitchClass: tonic,
-                    scale: e.target.value as "major" | "minor",
-                    bpm,
-                  })
-                }
-              >
-                <option value="major">major</option>
-                <option value="minor">minor</option>
-              </select>
-            </label>
-            <span className="badge">{bpm?.toFixed(1)} BPM</span>
-            <span className="badge">detected {formatCents(a.tuningOffsetCents)}</span>
-            <label>
-              Tuning
-              <select
-                value={state.tuningMode}
-                onChange={(e) => dispatch({ type: "SET_TUNING_MODE", mode: e.target.value as TuningMode })}
-              >
-                <option value="master">Match master loop (leave it untouched)</option>
-                <option value="a440">Correct everything to A=440</option>
-              </select>
-            </label>
-            {state.tuningMode === "a440" && (
-              <>
-                <label>
-                  A4 (Hz)
-                  <input
-                    type="number"
-                    min={A4_REFERENCE_RANGE.min}
-                    max={A4_REFERENCE_RANGE.max}
-                    step={0.1}
-                    value={state.a4Reference}
-                    onChange={(e) => dispatch({ type: "SET_A4_REFERENCE", hz: Number(e.target.value) })}
-                  />
-                </label>
-                <span className="badge" title="The master loop's own audio will be retuned by this amount on export">
-                  master correction {formatCents(masterCorrectionSemitones(master, state.tuningMode, state.a4Reference) * 100)}
-                </span>
-              </>
-            )}
-            {hasOverride && (
-              <button
-                className="link-btn"
-                onClick={() =>
-                  dispatch({
-                    type: "SET_MASTER_OVERRIDE",
-                    tonicPitchClass: undefined,
-                    scale: undefined,
-                    bpm: undefined,
-                  })
-                }
-                title="Discard the filename/manual key & BPM and use the built-in detection instead"
-              >
-                🔄 use detected
-              </button>
-            )}
-          </div>
-        )}
+
+        <div className="master-detail">
+          <label>
+            Key
+            <select
+              value={tonic ?? ""}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_MASTER_KEY",
+                  tonicPitchClass: Number(e.target.value),
+                  scale,
+                  bpm,
+                })
+              }
+            >
+              <option value="" disabled>
+                — choose by ear —
+              </option>
+              {NOTE_NAMES.map((n, i) => (
+                <option key={n} value={i}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Scale
+            <select
+              value={scale ?? ""}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_MASTER_KEY",
+                  tonicPitchClass: tonic,
+                  scale: e.target.value as "major" | "minor",
+                  bpm,
+                })
+              }
+            >
+              <option value="" disabled>
+                — choose by ear —
+              </option>
+              <option value="major">major</option>
+              <option value="minor">minor</option>
+            </select>
+          </label>
+          <label>
+            BPM
+            <input
+              type="number"
+              min={1}
+              step={0.1}
+              value={bpm ?? ""}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_MASTER_KEY",
+                  tonicPitchClass: tonic,
+                  scale,
+                  bpm: e.target.value === "" ? undefined : Number(e.target.value),
+                })
+              }
+            />
+          </label>
+        </div>
 
         {hasKey && (
           <>
+            <ReferenceTone />
+
             <div className="tune-stack">
               <div className="tune-row tune-row--boxed tune-row--balance">
                 <span className="tune-row__label">drone</span>
@@ -261,7 +228,7 @@ export function MasterPanel() {
                   value={balance}
                   onChange={onBalanceChange}
                   onDoubleClick={() => onBalanceChange(50)}
-                  title="Fades between the reference drone and the master loop — press play and use this to hear whether the detected key actually matches. Drag down to slow the scrub. Double-tap to reset."
+                  title="Fades between the reference drone and the master loop — press play and use this to hear whether the chosen key actually matches. Drag down to slow the scrub. Double-tap to reset."
                 />
                 <span className="tune-row__label">master</span>
               </div>
@@ -295,7 +262,7 @@ export function MasterPanel() {
               <div className="tune-row tune-row--footer">
                 <span
                   className="trim-value"
-                  title="Diagnostic offset applied to the drone/grid tones only — if this needs to be large to match the master, the detected key or its tuning offset is probably wrong"
+                  title="Diagnostic offset applied to the drone/grid tones only — if this needs to be large to match the master, the chosen key or tonic frequency is probably wrong"
                 >
                   {formatTrim(trimSemitones)}
                 </span>
@@ -303,9 +270,7 @@ export function MasterPanel() {
             </div>
 
             <MasterGrid
-              master={master}
-              tuningMode={state.tuningMode}
-              a4Reference={state.a4Reference}
+              tonicFrequencyHz={tonicFrequencyHz!}
               tonicPitchClass={tonic!}
               scale={scale!}
               trimSemitones={trimSemitones}

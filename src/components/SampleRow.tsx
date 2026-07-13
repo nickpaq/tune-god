@@ -130,7 +130,7 @@ export function SampleRow({ sample, number }: { sample: SampleItem; number: numb
   const startPreview = () => {
     activeRef.current?.release();
     if (state.master) {
-      const freq = droneFrequency(state.master, sample, state.tuningMode, state.a4Reference);
+      const freq = droneFrequency(state.master, sample);
       if (freq !== null) {
         const usesProcessed = !!sample.processedChannelData;
         const data = usesProcessed ? sample.processedChannelData! : sample.channelData;
