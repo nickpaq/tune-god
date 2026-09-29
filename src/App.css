@@ -7,6 +7,7 @@
 
 /* The screenshot is the background; everything else is positioned over it. */
 .phone {
+  --radius: 2.5cqw; /* shared corner radius for every pane, pad and bottom-row button */
   position: relative;
   width: min(100vw, calc(100dvh * 919 / 1999));
   aspect-ratio: 919 / 1999;
@@ -28,7 +29,7 @@
 .pad {
   padding: 0;
   border: 0.3cqw solid rgba(216, 206, 208, 0.45);
-  border-radius: 1.8cqw;
+  border-radius: var(--radius);
   background: var(--pad-empty);
   box-shadow: 0.6cqw 0.6cqw 0 rgba(0, 0, 0, 0.35);
 }
@@ -61,7 +62,7 @@
 .banks {
   display: flex;
   border: 0.3cqw solid var(--line);
-  border-radius: 1.8cqw;
+  border-radius: var(--radius);
   background: var(--bg);
   overflow: hidden;
 }
@@ -96,7 +97,7 @@
 .teal {
   padding: 3.5cqw 4cqw;
   border: 0.3cqw solid var(--line);
-  border-radius: 4.8cqw;
+  border-radius: var(--radius);
   background: var(--panel);
   box-shadow: 0 0 0 0.8cqw var(--bg); /* hides the screenshot's placeholder colour at the edges */
   color: #fff;
@@ -255,7 +256,7 @@
 /* ---- pink section ---- */
 .pink {
   border: 0.3cqw solid var(--line);
-  border-radius: 1.8cqw;
+  border-radius: var(--radius);
   background: var(--panel);
   box-shadow: 0 0 0 0.8cqw var(--bg);
   display: flex;
@@ -305,7 +306,7 @@
   width: 23cqw;
   overflow: hidden;
   border: 0.3cqw solid var(--line);
-  border-radius: 2cqw;
+  border-radius: var(--radius);
   background: var(--bg);
   padding: 0 1cqw;
   font-size: 3.6cqw;
@@ -339,7 +340,7 @@
 
 .stop {
   border: 0.3cqw solid var(--line);
-  border-radius: 1.8cqw;
+  border-radius: var(--radius);
   background: var(--bg);
   padding: 0;
   font-size: 3.6cqw;
@@ -349,7 +350,7 @@
 
 .export {
   border: 0.3cqw solid var(--line);
-  border-radius: 1.8cqw;
+  border-radius: var(--radius);
   background: var(--bg);
   padding: 0;
   font-size: 3.6cqw;
@@ -370,7 +371,7 @@
 
 .menu-button {
   border: 0.3cqw solid var(--line);
-  border-radius: 1.8cqw;
+  border-radius: var(--radius);
   background: var(--bg);
   padding: 0;
   font-size: 6cqw;
@@ -384,8 +385,8 @@
   flex-direction: column;
   justify-content: space-evenly;
   padding: 0 4cqw;
-  border: 0.3cqw solid var(--line);
-  border-radius: 3cqw;
+  border: 0.var(--radius) solid var(--line);
+  border-radius: var(--radius);
   background: var(--bg);
   font-size: 3.2cqw;
   font-weight: 700;

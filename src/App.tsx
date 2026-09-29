@@ -32,9 +32,14 @@ const box = (x: number, y: number, w: number, h: number) => ({
   height: `${(h / H) * 100}%`,
 });
 
-const PAD_COLS = [28, 245, 462, 679];
+// Every pane shares one left/right edge, and the pad grid spans exactly that width.
+const LEFT = 20;
+const RIGHT = 899;
+const CONTENT_W = RIGHT - LEFT;
+const PAD_GAP = 17;
+const PAD_W = (CONTENT_W - 3 * PAD_GAP) / 4;
+const PAD_COLS = [0, 1, 2, 3].map((c) => LEFT + c * (PAD_W + PAD_GAP));
 const PAD_ROWS = [991, 1198, 1406, 1613];
-const PAD_W = 200;
 const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
 /** Peak level every sample is normalized to on export. */
@@ -208,7 +213,8 @@ function App() {
       }}
     >
       <div className="phone" style={{ backgroundImage: `url(${background})` }}>
-        {/* Hides what's baked into the screenshot: pad 15's selection ring, the "C" bank highlight, MUTE/SOLO and SAMPLES. */}
+        {/* Hides what's baked into the screenshot: the screenshot's pad grid, the "C" bank highlight, MUTE/SOLO and SAMPLES. */}
+        <div className="cover" style={box(0, 975, W, 845)} />
         <div className="cover" style={box(446, 1598, 230, 220)} />
         <div className="cover" style={box(288, 1826, 330, 100)} />
         <div className="cover" style={box(725, 1826, 175, 100)} />
@@ -216,7 +222,7 @@ function App() {
 
         <button
           className="menu-button"
-          style={box(815, 195, 75, 65)}
+          style={box(RIGHT - 75, 195, 75, 65)}
           onClick={() => setMenuOpen((open) => !open)}
           aria-label="Export options"
           aria-expanded={menuOpen}
@@ -224,7 +230,7 @@ function App() {
           ☰
         </button>
         {menuOpen && (
-          <div className="menu" style={box(400, 268, 490, 130)}>
+          <div className="menu" style={box(RIGHT - 490, 268, 490, 130)}>
             <label>
               <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
               Normalize −6 dB
@@ -236,7 +242,7 @@ function App() {
           </div>
         )}
 
-        <section className="teal" style={box(13, 280, 888, 510)}>
+        <section className="teal" style={box(LEFT, 280, CONTENT_W, 510)}>
           {selectedPad ? (
             <PadPanel
               pad={selectedPad}
@@ -265,7 +271,7 @@ function App() {
           )}
         </section>
 
-        <section className="pink" style={box(19, 801, 875, 169)}>
+        <section className="pink" style={box(LEFT, 801, CONTENT_W, 169)}>
           <Keyboard selected={keyPc} onSelect={setKeyPc} />
           <button
             className="tune-all"
@@ -329,14 +335,14 @@ function App() {
           })}
         </div>
 
-        <button className="stop" style={box(28, 1836, 245, 80)} onClick={stopAll}>
+        <button className="stop" style={box(LEFT, 1836, 245, 80)} onClick={stopAll}>
           Stop
         </button>
 
 
         <button
           className="export"
-          style={box(735, 1836, 155, 80)}
+          style={box(RIGHT - 155, 1836, 155, 80)}
           disabled={!canExport}
           onClick={exportProject}
         >
