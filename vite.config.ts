@@ -12,9 +12,7 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],
-      // essentia.js / rubberband WASM assets are large; precache them so the
-      // app works fully offline after the first load (the whole point of an
-      // iOS-installed, local-processing PWA).
+      // Precache everything so the app works fully offline after the first load.
       workbox: {
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,wasm,svg,png,ico}"],
@@ -22,9 +20,9 @@ export default defineConfig({
       manifest: {
         name: "KoalaTune",
         short_name: "KoalaTune",
-        description: "Detect the key of a loop, tune a sample batch to match, and time-stretch loops — on-device.",
-        theme_color: "#18131e",
-        background_color: "#18131e",
+        description: "Tune a Koala project's pads to a key — on-device.",
+        theme_color: "#2d111d",
+        background_color: "#2d111d",
         display: "standalone",
         start_url: "/",
         scope: "/",

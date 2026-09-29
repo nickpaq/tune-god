@@ -1,17 +1,16 @@
 :root {
-  --text: #f4f1f7;
-  --text-muted: #b2a9bd;
-  --bg: #18131e;
-  --panel-bg: #1e1826;
-  --border-color: rgba(244, 241, 247, 0.55);
-  --border-strong: rgba(244, 241, 247, 0.85);
-  --accent-pink: #ef4f70;
-  --accent-pink-text: #ffffff;
-  --accent-cyan: #4fd1e6;
+  --bg: #2d111d;
+  --pad: #84293b;
+  --pad-loaded: #a83a55;
+  --ring: #ec455f;
+  --line: #d8ced0;
+  --cyan: #62cbf9;
+  --green: #3ddc84;
+  --ink: #14332d;
   color-scheme: dark;
-  color: var(--text);
+  color: #fff;
   background: var(--bg);
-  font: 16px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.3 "DIN Alternate", "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -21,55 +20,16 @@
 
 body {
   margin: 0;
-  /* Prevents iOS's long-press text-selection callout from popping up over
-     labels/values during press-and-hold gestures (e.g. holding a keyboard
-     grid note) — the rest of the UI isn't meant to be copy/selectable. */
+  background: var(--bg);
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
 }
 
-input,
-select,
-textarea {
-  -webkit-user-select: auto;
-  user-select: auto;
-  -webkit-touch-callout: default;
-}
-
-/* Chunky outlined pill/rounded-rect, matches the hardware-sampler look —
-   uppercase bold label, transparent dark fill. Classed buttons (toggle
-   states, links, chips) override this with higher-specificity selectors. */
 button {
   font: inherit;
+  color: inherit;
   cursor: pointer;
-  background: transparent;
-  border: 1.5px solid var(--border-color);
-  border-radius: 10px;
-  color: var(--text);
-  padding: 0.45rem 0.85rem;
-  font-weight: 700;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
-}
-
-button:hover:not(:disabled) {
-  border-color: var(--border-strong);
-}
-
-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-input,
-select {
-  font: inherit;
-  color: inherit;
-}
-
-table {
-  color: inherit;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }

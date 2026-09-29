@@ -41,6 +41,7 @@ export function PrecisionSlider({
   title,
   className,
   valueLabel,
+  bipolar,
 }: {
   min: number;
   max: number;
@@ -52,6 +53,8 @@ export function PrecisionSlider({
   className?: string;
   /** When set, shows a floating bubble above the thumb with this text while the slider is being dragged. */
   valueLabel?: (value: number) => string;
+  /** Fills from the middle of the track outward instead of from the left edge (for ± trim sliders). */
+  bipolar?: boolean;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -124,6 +127,9 @@ export function PrecisionSlider({
   };
 
   const pct = ((value - min) / (max - min)) * 100;
+  const fillStyle = bipolar
+    ? { left: `${Math.min(pct, 50)}%`, width: `${Math.abs(pct - 50)}%` }
+    : { width: `${pct}%` };
 
   return (
     <div
@@ -143,7 +149,7 @@ export function PrecisionSlider({
       onKeyDown={onKeyDown}
     >
       <div className="precision-slider__track" ref={trackRef}>
-        <div className="precision-slider__fill" style={{ width: `${pct}%` }} />
+        <div className="precision-slider__fill" style={fillStyle} />
         <div className="precision-slider__thumb" style={{ left: `${pct}%` }} />
         {dragging && valueLabel && (
           <div className="precision-slider__bubble" style={{ left: `${pct}%` }}>
