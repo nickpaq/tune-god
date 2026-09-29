@@ -29,6 +29,13 @@ const RELEASE_FADE = 0.15;
 const CUT_FADE = 0.008;
 const MAX_TONE_GAIN = 0.5;
 
+export interface PadHandle {
+  /** Holds briefly, then fades the pad (and tone) out. */
+  release: () => void;
+  /** Retunes the playing pad immediately, without restarting it. */
+  setShift: (semitones: number) => void;
+}
+
 interface ActivePad {
   gain: GainNode;
   stop: (hold: number, fade: number) => void;
@@ -60,7 +67,7 @@ export function startPad(
   sampleRate: number,
   shiftSemitones: number,
   tonePitchClass: number | null,
-): () => void {
+): PadHandle {
   const ctx = readyContext();
   activePads.get(pad)?.stop(0, CUT_FADE);
 
@@ -105,7 +112,11 @@ export function startPad(
     },
   };
   activePads.set(pad, voice);
-  return () => voice.stop(RELEASE_HOLD, RELEASE_FADE);
+  return {
+    release: () => voice.stop(RELEASE_HOLD, RELEASE_FADE),
+    setShift: (semitones) =>
+      source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
+  };
 }
 
 /** Starts a sine tone on `pitchClass` (0 = C) in the octave from middle C; returns a function that releases it. */

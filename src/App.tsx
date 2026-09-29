@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard } from "./components/Keyboard";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import {
@@ -12,7 +12,7 @@ import {
   isKoalaFile,
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
-import { startPad } from "./audio/player";
+import { startPad, type PadHandle } from "./audio/player";
 import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
 import { normalizeWithGain } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
@@ -75,7 +75,7 @@ function App() {
   const [spread, setSpread] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toneOn, setToneOn] = useState(false);
-  const releasePad = useRef<Map<number, () => void>>(new Map());
+  const releasePad = useRef<Map<number, PadHandle>>(new Map());
   const loadToken = useRef(0);
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
@@ -141,7 +141,7 @@ function App() {
     const pad = pads[index];
     if (!pad) return;
     setSelected(index);
-    releasePad.current.get(index)?.();
+    releasePad.current.get(index)?.release();
     releasePad.current.set(
       index,
       startPad(
@@ -155,9 +155,17 @@ function App() {
   };
 
   const liftPad = (index: number) => {
-    releasePad.current.get(index)?.();
+    releasePad.current.get(index)?.release();
     releasePad.current.delete(index);
   };
+
+  // Slider and key changes retune any pad that is currently held, so tuning is audible live.
+  useEffect(() => {
+    for (const [index, handle] of releasePad.current) {
+      const pad = pads[index];
+      if (pad) handle.setShift(shiftFor(pad, tunedTarget));
+    }
+  }, [pads, tunedTarget]);
 
   const tuneAll = () => {
     if (keyPc === null) return;
