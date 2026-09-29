@@ -50,14 +50,12 @@ function App() {
   const [projectName, setProjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const loadToken = useRef(0);
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
   const loadProject = useCallback(async (file: File) => {
     const token = ++loadToken.current;
-    setError(null);
     setLoading(true);
     try {
       const project = await parseKoalaProject(file);
@@ -96,7 +94,8 @@ function App() {
           });
       }
     } catch (err) {
-      if (token === loadToken.current) setError(err instanceof Error ? err.message : String(err));
+      // Not a usable project: stay on the drop screen rather than showing an error.
+      console.error(err);
     } finally {
       if (token === loadToken.current) setLoading(false);
     }
@@ -105,7 +104,6 @@ function App() {
   const pickFile = (files: FileList | File[] | null | undefined) => {
     const file = Array.from(files ?? []).find(isKoalaFile);
     if (file) void loadProject(file);
-    else if (files && files.length) setError("Please choose a .koala project file.");
   };
 
   const patchPad = (index: number, patch: Partial<Pad>) =>
@@ -131,7 +129,6 @@ function App() {
     const project = projectRef.current;
     if (!project) return;
     setExporting(true);
-    setError(null);
     try {
       const tuned = [];
       for (const pad of Object.values(pads)) {
@@ -143,7 +140,7 @@ function App() {
       const { blob, filename } = await buildTunedKoala(project, tuned);
       downloadBlob(blob, filename);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      console.error(err);
     } finally {
       setExporting(false);
     }
@@ -170,7 +167,7 @@ function App() {
 
         <section className="teal" style={box(13, 280, 888, 510)}>
           {selectedPad ? (
-            <PadPanel pad={selectedPad} shift={shiftFor(selectedPad, tunedTarget)} onChange={(patch) => patchPad(selectedPad.index, patch)} />
+            <PadPanel pad={selectedPad} onChange={(patch) => patchPad(selectedPad.index, patch)} />
           ) : hasProject ? (
             <div className="teal__message">
               <strong>{projectName}</strong>
@@ -180,7 +177,7 @@ function App() {
             <label className="dropzone">
               <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
               <strong>{loading ? "Loading…" : "Drop a .koala project"}</strong>
-              <span>{error ?? "or tap to choose one"}</span>
+              <span>or tap to choose one</span>
             </label>
           )}
         </section>
@@ -224,8 +221,6 @@ function App() {
         <button className="export" style={box(735, 1836, 155, 80)} disabled={!canExport} onClick={exportProject}>
           {exporting ? "…" : "Export"}
         </button>
-
-        {error && hasProject && <div className="toast">{error}</div>}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { PrecisionSlider } from "./PrecisionSlider";
-import { NOTE_NAMES, formatSignedCents, formatSignedSemitones, pitchClassOf } from "../audio/theory";
+import { formatSignedCents, formatSignedSemitones } from "../audio/theory";
 
 export interface Pad {
   /** 0-based grid slot across all four banks. */
@@ -19,27 +19,19 @@ export interface Pad {
 /** What the teal section shows for the selected pad: tune toggle and the two trim sliders. */
 export function PadPanel({
   pad,
-  shift,
   onChange,
 }: {
   pad: Pad;
-  /** Total semitone shift currently applied (computed + trim), shown so the tuning is visible. */
-  shift: number;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
 }) {
-  const root =
-    pad.detectedMidi === undefined
-      ? "analyzing…"
-      : pad.detectedMidi === null
-        ? "no clear pitch"
-        : `root ${NOTE_NAMES[pitchClassOf(pad.detectedMidi)]}${pad.tune ? ` · shift ${shift >= 0 ? "+" : ""}${shift.toFixed(2)}st` : ""}`;
+  const status = pad.tune ? "Bang on · adjust if needed" : "Not tuned";
 
   return (
     <div className="pad-panel">
       <div className="pad-panel__head">
         <div>
           <div className="pad-panel__title">PAD {(pad.index % 16) + 1}</div>
-          <div className="pad-panel__sub">{root}</div>
+          <div className="pad-panel__sub">{status}</div>
         </div>
         <button
           className={`tune-toggle${pad.tune ? " tune-toggle--on" : ""}`}
