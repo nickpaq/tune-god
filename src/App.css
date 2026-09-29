@@ -337,6 +337,16 @@
   border-color: var(--cyan);
 }
 
+.stop {
+  border: 0.3cqw solid var(--line);
+  border-radius: 1.8cqw;
+  background: var(--bg);
+  padding: 0;
+  font-size: 3.6cqw;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .export {
   border: 0.3cqw solid var(--line);
   border-radius: 1.8cqw;

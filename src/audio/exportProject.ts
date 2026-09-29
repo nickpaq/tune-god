@@ -5,14 +5,16 @@ export interface TunedSample {
   sampleId: number;
   sampleRate: number;
   channelData: Float32Array[];
+  /** True when the audio length changed (pitch-shifted), so trim points and the pitch knob must be reset. */
+  retimed: boolean;
 }
 
 /**
  * Rebuilds the project zip with the tuned samples swapped in — same zip paths
  * and sample IDs, so sampler.json's pad->sample mapping stays valid. Each
- * replaced pad's trim points are reset to the new file length and its pitch
- * knob zeroed (the tuning is baked into the audio now). Untouched samples
- * keep their original bytes.
+ * retimed pad's trim points are reset to the new file length and its pitch
+ * knob zeroed (the tuning is baked into the audio now). Samples that were only
+ * gain-adjusted keep their trim points.
  */
 export async function buildTunedKoala(
   project: ParsedKoalaProject,
@@ -23,7 +25,7 @@ export async function buildTunedKoala(
 
   for (const pad of samplerJson.pads ?? []) {
     const t = byId.get(pad.sampleId);
-    if (!t) continue;
+    if (!t?.retimed) continue;
     const frames = t.channelData[0].length;
     pad.start = 0;
     pad.zoomStart = 0;

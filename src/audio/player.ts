@@ -41,6 +41,12 @@ export function playPad(pad: number, channelData: Float32Array[], sampleRate: nu
   source.start();
 }
 
+/** Cuts off every pad that is currently playing. */
+export function stopAll(): void {
+  for (const source of activePads.values()) source.stop();
+  activePads.clear();
+}
+
 /** Starts a sine tone on `pitchClass` (0 = C) in the octave from middle C; returns a function that releases it. */
 export function startSine(pitchClass: number): () => void {
   const ctx = readyContext();

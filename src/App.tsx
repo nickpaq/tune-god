@@ -12,8 +12,9 @@ import {
   isKoalaFile,
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
-import { playPad } from "./audio/player";
+import { playPad, stopAll } from "./audio/player";
 import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
+import { normalizeWithGain } from "./audio/gain";
 import { NOTE_NAMES, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
@@ -35,6 +36,8 @@ const PAD_ROWS = [991, 1198, 1406, 1613];
 const PAD_W = 200;
 const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
+/** Peak level every sample is normalized to on export. */
+const EXPORT_GAIN_DB = -6;
 
 /**
  * Total semitone shift for a pad: the shortest move (never more than 6 up or
@@ -141,7 +144,10 @@ function App() {
     );
   };
 
-  /** Bakes every tuned pad's shift into its audio (windowed-sinc resample) and downloads the rebuilt project. */
+  /**
+   * Bakes every tuned pad's shift into its audio (windowed-sinc resample), then
+   * peak-normalizes every sample and applies EXPORT_GAIN_DB, and downloads the rebuilt project.
+   */
   const exportProject = async () => {
     const project = projectRef.current;
     if (!project) return;
@@ -150,15 +156,15 @@ function App() {
       const tuned = [];
       for (const pad of Object.values(pads)) {
         const shift = shiftFor(pad, tunedTarget);
-        if (!pad.tune || Math.abs(shift) < 1e-6) continue;
-        const channelData = await getRenderWorker().resamplePitch(
-          pad.channelData,
-          semitonesToRatio(shift),
-        );
+        const retimed = pad.tune && Math.abs(shift) >= 1e-6;
+        const channelData = retimed
+          ? await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift))
+          : pad.channelData;
         tuned.push({
           sampleId: pad.sampleId,
           sampleRate: pad.sampleRate,
-          channelData,
+          channelData: normalizeWithGain(channelData, EXPORT_GAIN_DB),
+          retimed,
         });
       }
       const { blob, filename } = await buildTunedKoala(project, tuned);
@@ -170,7 +176,7 @@ function App() {
     }
   };
 
-  const canExport = Object.values(pads).some((p) => p.tune) && !exporting;
+  const canExport = Object.keys(pads).length > 0 && analyzing === 0 && !exporting;
   const hasProject = Object.keys(pads).length > 0;
   const selectedPad = selected !== null ? pads[selected] : undefined;
 
@@ -282,6 +288,10 @@ function App() {
             );
           })}
         </div>
+
+        <button className="stop" style={box(28, 1836, 245, 80)} onClick={stopAll}>
+          Stop
+        </button>
 
         <button
           className="export"
