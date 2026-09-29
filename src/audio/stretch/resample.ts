@@ -5,39 +5,59 @@
 // running them through a phase-vocoder, which can smear percussive/plucked
 // attacks.
 //
-// Interpolation is windowed-sinc (bandlimited), not linear: linear
-// interpolation rolls off highs and — when pitching up — aliases, folding
-// inharmonic mirror frequencies into the audible band. The sinc kernel's
-// cutoff is scaled by the read speed so upward shifts stay alias-free.
+// Interpolation is a long Kaiser-windowed sinc (bandlimited), not linear:
+// linear interpolation rolls off highs and — when pitching up — aliases,
+// folding inharmonic mirror frequencies into the audible band. The kernel's
+// cutoff is scaled by the read speed so upward shifts stay alias-free, and
+// the kernel table is linearly interpolated between phases and accumulated
+// in double precision, so the resampler's own error sits far below the
+// 24-bit noise floor of the exported WAVs.
 
 /** Taps on each side of the read position (kernel length = 2 * HALF_TAPS). */
-const HALF_TAPS = 16;
-/** Fractional read positions are quantized to this many kernel phases. */
-const PHASES = 512;
+const HALF_TAPS = 64;
+/** Kaiser shape: ~100 dB stopband, transition band under 10% of Nyquist. */
+const KAISER_BETA = 10;
+/** Kernel phases across one sample; rows are linearly interpolated, so error is ~1e-7. */
+const PHASES = 1024;
+
+/** Zeroth-order modified Bessel function of the first kind (series expansion). */
+function besselI0(x: number): number {
+  let sum = 1;
+  let term = 1;
+  const q = (x * x) / 4;
+  for (let k = 1; k < 60; k++) {
+    term *= q / (k * k);
+    sum += term;
+    if (term < sum * 1e-17) break;
+  }
+  return sum;
+}
 
 /**
- * Precomputes a Hann-windowed sinc kernel for every fractional phase, each
- * row normalized to unity DC gain. `cutoff` < 1 lowpasses the kernel for
- * anti-aliased upward shifts; 1 = plain bandlimited interpolation.
+ * Precomputes a Kaiser-windowed sinc kernel for PHASES + 1 fractional phases, each row
+ * normalized to unity DC gain. `cutoff` < 1 lowpasses the kernel for anti-aliased upward
+ * shifts; 1 = plain bandlimited interpolation.
  */
 function buildKernelTable(cutoff: number): Float32Array {
   const taps = 2 * HALF_TAPS;
-  const table = new Float32Array(PHASES * taps);
-  for (let p = 0; p < PHASES; p++) {
+  const table = new Float32Array((PHASES + 1) * taps);
+  const norm = besselI0(KAISER_BETA);
+  for (let p = 0; p <= PHASES; p++) {
     const frac = p / PHASES;
     const row = p * taps;
+    const values = new Float64Array(taps);
     let sum = 0;
     for (let t = 0; t < taps; t++) {
       const k = t - HALF_TAPS + 1; // tap's integer offset from floor(srcPos)
       const d = frac - k; // distance from the exact read position, |d| <= HALF_TAPS
       const x = Math.PI * cutoff * d;
       const sinc = x === 0 ? 1 : Math.sin(x) / x;
-      const window = 0.5 + 0.5 * Math.cos((Math.PI * d) / HALF_TAPS);
-      const tap = cutoff * sinc * window;
-      table[row + t] = tap;
-      sum += tap;
+      const r = d / HALF_TAPS;
+      const window = Math.abs(r) >= 1 ? 0 : besselI0(KAISER_BETA * Math.sqrt(1 - r * r)) / norm;
+      values[t] = cutoff * sinc * window;
+      sum += values[t];
     }
-    for (let t = 0; t < taps; t++) table[row + t] /= sum;
+    for (let t = 0; t < taps; t++) table[row + t] = values[t] / sum;
   }
   return table;
 }
@@ -59,14 +79,24 @@ export function resamplePitchShift(channelData: Float32Array[], pitchScale: numb
     for (let i = 0; i < outputLength; i++) {
       const srcPos = i * pitchScale;
       const base = Math.floor(srcPos);
-      const phase = Math.min(PHASES - 1, Math.round((srcPos - base) * PHASES));
-      const row = phase * taps;
+      const phasePos = (srcPos - base) * PHASES;
+      const phase = Math.min(PHASES - 1, Math.floor(phasePos));
+      const w = phasePos - phase;
+      const rowA = phase * taps;
+      const rowB = rowA + taps;
+      const first = base - HALF_TAPS + 1;
       let sum = 0;
-      for (let t = 0; t < taps; t++) {
-        // Edge taps clamp to the first/last sample rather than dropping out,
-        // which keeps the kernel's unity gain intact at the boundaries.
-        const idx = Math.min(inputLength - 1, Math.max(0, base + t - HALF_TAPS + 1));
-        sum += input[idx] * kernel[row + t];
+      if (first >= 0 && first + taps <= inputLength) {
+        for (let t = 0; t < taps; t++) {
+          sum += input[first + t] * (kernel[rowA + t] * (1 - w) + kernel[rowB + t] * w);
+        }
+      } else {
+        // Beyond the ends the signal is treated as silence.
+        for (let t = 0; t < taps; t++) {
+          const idx = first + t;
+          if (idx < 0 || idx >= inputLength) continue;
+          sum += input[idx] * (kernel[rowA + t] * (1 - w) + kernel[rowB + t] * w);
+        }
       }
       output[i] = sum;
     }

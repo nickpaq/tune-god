@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard } from "./components/Keyboard";
 import { PadPanel, type Pad } from "./components/PadPanel";
-import {
-  decodeFile,
-  monoFromChannelData,
-  cloneChannelData,
-} from "./audio/decode";
+import { decodeNative, monoFromChannelData } from "./audio/decode";
 import {
   parseKoalaProject,
   koalaPadToFile,
@@ -128,13 +124,13 @@ function App() {
       const slots = project.pads.filter((p) => p.pad >= 0 && p.pad < 64);
       setAnalyzing(slots.length);
       for (const ref of slots) {
-        const buffer = await decodeFile(await koalaPadToFile(project, ref));
+        const decoded = await decodeNative(await koalaPadToFile(project, ref));
         if (token !== loadToken.current) return;
         const pad: Pad = {
           index: ref.pad,
           sampleId: ref.sampleId,
-          sampleRate: buffer.sampleRate,
-          channelData: cloneChannelData(buffer),
+          sampleRate: decoded.sampleRate,
+          channelData: decoded.channelData,
           tune: false,
           semis: 0,
           cents: 0,
