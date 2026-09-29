@@ -413,3 +413,29 @@
   width: 5cqw;
   height: 5cqw;
 }
+
+.pad--colored {
+  color: #000;
+}
+
+.pad-panel__category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3cqw;
+  font-size: 3.2cqw;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.pad-panel__category select {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5cqw;
+  border: 0.3cqw solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: #fff;
+  font: inherit;
+  text-transform: none;
+}

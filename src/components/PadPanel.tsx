@@ -1,4 +1,5 @@
 import { PrecisionSlider } from "./PrecisionSlider";
+import { CATEGORIES, type CategoryId } from "../audio/classify";
 import { formatSignedCents, formatSignedSemitones } from "../audio/theory";
 
 export interface Pad {
@@ -10,6 +11,8 @@ export interface Pad {
   channelData: Float32Array[];
   /** Fractional MIDI of the detected root; null = no clear pitch, undefined = still analyzing. */
   detectedMidi?: number | null;
+  /** Guessed (or manually chosen) sound category, used for auto-colouring. */
+  category?: CategoryId;
   tune: boolean;
   /** Manual trim on top of the computed shift. */
   semis: number;
@@ -20,12 +23,15 @@ export interface Pad {
 export function PadPanel({
   pad,
   autoShift,
+  autoColor,
   onChange,
 }: {
   pad: Pad;
   /** Semitones the automatic tuning moved this pad (excludes manual slider trim). */
   autoShift: number;
-  onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
+  /** Shows the sound-category dropdown. */
+  autoColor: boolean;
+  onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "category">>) => void;
 }) {
   const status = pad.tune ? `✓ Tuned ${autoShift >= 0 ? "+" : "−"}${Math.abs(autoShift).toFixed(2)} st` : "Not tuned";
 
@@ -44,6 +50,22 @@ export function PadPanel({
           {pad.tune ? "🎹 Tune" : "🥁 Don't tune"}
         </button>
       </div>
+
+      {autoColor && (
+        <label className="pad-panel__category">
+          <span>Sound type</span>
+          <select
+            value={pad.category ?? "other"}
+            onChange={(e) => onChange({ category: e.target.value as CategoryId })}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label} ({c.koalaLabel})
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className={`pad-panel__slider${pad.tune ? "" : " pad-panel__slider--off"}`}>
         <div className="pad-panel__label">

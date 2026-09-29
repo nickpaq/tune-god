@@ -16,6 +16,7 @@ import { startPad, type PadHandle } from "./audio/player";
 import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
 import { normalizeWithGain } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
+import { categoryById, type CategoryId } from "./audio/classify";
 import { NOTE_NAMES, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
@@ -74,6 +75,7 @@ function App() {
   const [normalize, setNormalize] = useState(false);
   const [spread, setSpread] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [autoColor, setAutoColor] = useState(false);
   const [toneOn, setToneOn] = useState(false);
   const releasePad = useRef<Map<number, PadHandle>>(new Map());
   const loadToken = useRef(0);
@@ -110,13 +112,13 @@ function App() {
         setPads((prev) => ({ ...prev, [ref.pad]: pad }));
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
-          .detectMidi(monoFromChannelData(pad.channelData), pad.sampleRate)
-          .catch(() => null)
-          .then((detectedMidi) => {
+          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
+          .catch(() => ({ midi: null, category: "other" as const }))
+          .then(({ midi: detectedMidi, category }) => {
             if (token !== loadToken.current) return;
             setPads((prev) => ({
               ...prev,
-              [ref.pad]: { ...prev[ref.pad], detectedMidi },
+              [ref.pad]: { ...prev[ref.pad], detectedMidi, category },
             }));
             setAnalyzing((n) => n - 1);
           });
@@ -167,6 +169,11 @@ function App() {
     }
   }, [pads, tunedTarget]);
 
+  const toggleAutoColor = (on: boolean) => {
+    if (on && !window.confirm("Auto-color pads will replace the existing pad colors and color labels in your project when you export. Continue?")) return;
+    setAutoColor(on);
+  };
+
   const tuneAll = () => {
     if (keyPc === null) return;
     setTunedTarget(keyPc);
@@ -212,7 +219,11 @@ function App() {
           retimed,
         });
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { resetGain: normalize, pans });
+      const colors = new Map<number, CategoryId>();
+      if (autoColor) {
+        for (const p of Object.values(pads)) if (p.category) colors.set(p.sampleId, p.category);
+      }
+      const { blob, filename } = await buildTunedKoala(project, tuned, { resetGain: normalize, pans, colors });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -222,7 +233,7 @@ function App() {
   };
 
   const canExport =
-    (normalize ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune)) &&
+    (normalize || autoColor ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune)) &&
     analyzing === 0 &&
     !exporting;
   const hasProject = Object.keys(pads).length > 0;
@@ -264,6 +275,10 @@ function App() {
               <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
               Spread tuned pads
             </label>
+            <label>
+              <input type="checkbox" checked={autoColor} onChange={(e) => toggleAutoColor(e.target.checked)} />
+              Auto-color pads by sound type
+            </label>
           </div>
         )}
 
@@ -271,6 +286,7 @@ function App() {
           {selectedPad ? (
             <PadPanel
               pad={selectedPad}
+              autoColor={autoColor}
               autoShift={shiftFor(
                 { ...selectedPad, semis: 0, cents: 0 },
                 tunedTarget,
@@ -316,6 +332,7 @@ function App() {
           const cls = [
             "pad",
             pad && "pad--loaded",
+            pad && autoColor && "pad--colored",
             pad?.tune && "pad--tuned",
             selected === index && "pad--selected",
           ]
@@ -325,12 +342,12 @@ function App() {
             <button
               key={slot}
               className={cls}
-              style={box(
-                PAD_COLS[slot % 4],
-                PAD_ROWS[Math.floor(slot / 4)],
-                PAD_W,
-                PAD_H,
-              )}
+              style={{
+                ...box(PAD_COLS[slot % 4], PAD_ROWS[Math.floor(slot / 4)], PAD_W, PAD_H),
+                ...(pad && autoColor
+                  ? { background: categoryById(pad.category ?? "other").screenColor }
+                  : null),
+              }}
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.currentTarget.setPointerCapture(e.pointerId);
