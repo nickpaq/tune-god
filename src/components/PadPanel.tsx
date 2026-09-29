@@ -17,9 +17,12 @@ export interface Pad {
 /** What the teal section shows for the selected pad: tune toggle and the two trim sliders. */
 export function PadPanel({
   pad,
+  shift,
   onChange,
 }: {
   pad: Pad;
+  /** Total semitone shift currently applied (computed + trim), shown so the tuning is visible. */
+  shift: number;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
 }) {
   const root =
@@ -27,7 +30,7 @@ export function PadPanel({
       ? "analyzing…"
       : pad.detectedMidi === null
         ? "no clear pitch"
-        : `root ${NOTE_NAMES[pitchClassOf(pad.detectedMidi)]}`;
+        : `root ${NOTE_NAMES[pitchClassOf(pad.detectedMidi)]}${pad.tune ? ` · shift ${shift >= 0 ? "+" : ""}${shift.toFixed(2)}st` : ""}`;
 
   return (
     <div className="pad-panel">

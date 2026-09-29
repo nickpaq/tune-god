@@ -114,7 +114,7 @@ function App() {
     if (keyPc === null) return;
     setTunedTarget(keyPc);
     setPads((prev) =>
-      Object.fromEntries(Object.entries(prev).map(([i, p]) => [i, { ...p, tune: true, semis: 0, cents: 0 }])),
+      Object.fromEntries(Object.entries(prev).map(([i, p]) => [i, { ...p, tune: p.detectedMidi != null, semis: 0, cents: 0 }])),
     );
   };
 
@@ -137,7 +137,7 @@ function App() {
 
         <section className="teal" style={box(13, 280, 888, 510)}>
           {selectedPad ? (
-            <PadPanel pad={selectedPad} onChange={(patch) => patchPad(selectedPad.index, patch)} />
+            <PadPanel pad={selectedPad} shift={shiftFor(selectedPad, tunedTarget)} onChange={(patch) => patchPad(selectedPad.index, patch)} />
           ) : hasProject ? (
             <div className="teal__message">
               <strong>{projectName}</strong>

@@ -145,8 +145,8 @@ function pitchClassOfFrequency(frequency: number): number {
  * The median within the winning class then stays robust to attack
  * transients and short pitch-bend at note-off, as before.
  */
-export function dominantPitch(mono: Float32Array, sampleRate: number): YinFrameResult | null {
-  const track = yinTrack(mono, { sampleRate });
+function pickPitch(mono: Float32Array, options: YinOptions): YinFrameResult | null {
+  const track = yinTrack(mono, options);
   if (track.length === 0) return null;
 
   const confident = track.filter((f) => f.confidence >= 0.5);
@@ -171,4 +171,57 @@ export function dominantPitch(mono: Float32Array, sampleRate: number): YinFrameR
   const median = sorted[Math.floor(sorted.length / 2)];
   const avgConfidence = winners.reduce((sum, f) => sum + f.confidence, 0) / winners.length;
   return { frequency: median.frequency, confidence: avgConfidence, timeSeconds: median.timeSeconds };
+}
+
+/** Only the start of a sample is analysed — long loops would otherwise cost seconds for no benefit. */
+const ANALYSIS_SECONDS = 4;
+
+/**
+ * Sub-bass fundamentals (808s sit around 25-45 Hz) need a much longer frame
+ * than the default to fit even two periods, so they get a second, slower pass
+ * when the normal one finds nothing.
+ */
+const LOW_PITCH_OPTIONS = { frameSize: 8192, hopSize: 4096, minFrequency: 20, maxFrequency: 400 };
+const LOW_PITCH_SECONDS = 1.5;
+
+/**
+ * YIN's frame-level estimate is only good to ~10-15 cents (short frames, lag
+ * quantization). This re-measures the period on one long window, searching
+ * only within +-20% of the estimate (so it can't jump to a multiple), and
+ * interpolates the minimum of the difference function — accurate to a cent or
+ * two on a steady note, so a note that is 30 cents flat reads 30 cents flat.
+ */
+function refineFrequency(mono: Float32Array, sampleRate: number, estimate: YinFrameResult): number {
+  const loLag = Math.max(2, Math.floor(sampleRate / (estimate.frequency * 1.2)));
+  const hiLag = Math.ceil(sampleRate / (estimate.frequency * 0.8));
+  const window = Math.min(8192, mono.length - hiLag - 1);
+  if (window < 4 * hiLag) return estimate.frequency;
+  const start = Math.max(0, Math.min(mono.length - window - hiLag - 1, Math.round(estimate.timeSeconds * sampleRate)));
+
+  const diff = new Float64Array(hiLag + 2);
+  for (let tau = loLag - 1; tau <= hiLag + 1; tau++) {
+    let sum = 0;
+    for (let i = start; i < start + window; i++) {
+      const delta = mono[i] - mono[i + tau];
+      sum += delta * delta;
+    }
+    diff[tau] = sum;
+  }
+  let best = loLag;
+  for (let tau = loLag; tau <= hiLag; tau++) if (diff[tau] < diff[best]) best = tau;
+  if (best <= loLag || best >= hiLag) return estimate.frequency;
+
+  const s0 = diff[best - 1];
+  const s1 = diff[best];
+  const s2 = diff[best + 1];
+  const denom = 2 * (2 * s1 - s2 - s0);
+  return sampleRate / (denom === 0 ? best : best + (s2 - s0) / denom);
+}
+
+export function dominantPitch(mono: Float32Array, sampleRate: number): YinFrameResult | null {
+  const head = mono.subarray(0, Math.min(mono.length, ANALYSIS_SECONDS * sampleRate));
+  const picked =
+    pickPitch(head, { sampleRate }) ?? pickPitch(head.subarray(0, LOW_PITCH_SECONDS * sampleRate), { sampleRate, ...LOW_PITCH_OPTIONS });
+  if (!picked) return null;
+  return { ...picked, frequency: refineFrequency(head, sampleRate, picked) };
 }
