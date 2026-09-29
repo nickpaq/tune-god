@@ -368,11 +368,11 @@
   cursor: not-allowed;
 }
 
-.normalize {
+.switches {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5cqw;
+  gap: 3cqw;
   background: var(--bg);
   font-size: 2.6cqw;
   font-weight: 700;
@@ -380,7 +380,13 @@
   color: #fff;
 }
 
-.normalize input {
+.switches label {
+  display: flex;
+  align-items: center;
+  gap: 1.5cqw;
+}
+
+.switches input {
   accent-color: var(--cyan);
   width: 3.6cqw;
   height: 3.6cqw;

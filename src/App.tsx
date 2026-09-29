@@ -15,6 +15,7 @@ import {
 import { playPad, stopAll } from "./audio/player";
 import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
 import { normalizeWithGain } from "./audio/gain";
+import { balancedSpread } from "./audio/spread";
 import { NOTE_NAMES, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
@@ -38,6 +39,8 @@ const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
 /** Peak level every sample is normalized to on export. */
 const EXPORT_GAIN_DB = -6;
+/** Widest spread pan, in percent either side of centre. */
+const MAX_SPREAD_PERCENT = 40;
 
 /**
  * Total semitone shift for a pad: the shortest move (never more than 6 up or
@@ -64,6 +67,7 @@ function App() {
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [normalize, setNormalize] = useState(false);
+  const [spread, setSpread] = useState(false);
   const loadToken = useRef(0);
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
@@ -156,6 +160,13 @@ function App() {
     setExporting(true);
     try {
       const tuned = [];
+      // Koala's pan runs 0..1 (0.5 = centre) for L100..R100, so N percent is N/200 off centre.
+      const pans = new Map<number, number>();
+      if (spread) {
+        const tunedPads = Object.values(pads).filter((p) => p.tune);
+        const offsets = balancedSpread(tunedPads.length, MAX_SPREAD_PERCENT);
+        tunedPads.forEach((p, i) => pans.set(p.sampleId, 0.5 + offsets[i] / 200));
+      }
       for (const pad of Object.values(pads)) {
         const shift = shiftFor(pad, tunedTarget);
         const retimed = pad.tune && Math.abs(shift) >= 1e-6;
@@ -170,7 +181,7 @@ function App() {
           retimed,
         });
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { resetGain: normalize });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { resetGain: normalize, pans });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -299,10 +310,16 @@ function App() {
           Stop
         </button>
 
-        <label className="normalize" style={box(296, 1805, 315, 30)}>
-          <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
-          Normalize −6 dB
-        </label>
+        <div className="switches" style={box(296, 1805, 315, 30)}>
+          <label>
+            <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
+            Normalize −6 dB
+          </label>
+          <label>
+            <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
+            Spread
+          </label>
+        </div>
 
         <button
           className="export"

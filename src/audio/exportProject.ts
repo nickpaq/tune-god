@@ -15,17 +15,20 @@ export interface TunedSample {
  * retimed pad's trim points are reset to the new file length and its pitch
  * knob zeroed (the tuning is baked into the audio now). Samples that were only
  * gain-adjusted keep their trim points. With `resetGain`, every replaced pad's
- * volume knob (`vol`, 1 = 0 dB) is reset to unity too (the level is baked into the audio).
+ * volume knob (`vol`, 1 = 0 dB) is reset to unity too (the level is baked into the audio). `pans` maps sampleId to a Koala pan value
+ * (0..1, 0.5 = centre) written to every pad using that sample.
  */
 export async function buildTunedKoala(
   project: ParsedKoalaProject,
   tuned: TunedSample[],
-  { resetGain = false }: { resetGain?: boolean } = {},
+  { resetGain = false, pans }: { resetGain?: boolean; pans?: Map<number, number> } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
 
   for (const pad of samplerJson.pads ?? []) {
+    const pan = pans?.get(pad.sampleId);
+    if (pan !== undefined) pad.pan = pan;
     const t = byId.get(pad.sampleId);
     if (!t) continue;
     if (resetGain) pad.vol = 1;
