@@ -38,14 +38,14 @@
 }
 
 .pad--tuned::after {
-  content: "";
+  content: "✓";
   position: absolute;
-  top: 8%;
+  top: 5%;
   right: 8%;
-  width: 6%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: var(--cyan);
+  font-size: 6cqw;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--cyan);
 }
 
 .pad:active {

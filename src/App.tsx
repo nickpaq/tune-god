@@ -184,10 +184,11 @@ function App() {
       }}
     >
       <div className="phone" style={{ backgroundImage: `url(${background})` }}>
-        {/* Hides the selection ring baked into the screenshot's pad 15 and its "C" bank highlight. */}
+        {/* Hides what's baked into the screenshot: pad 15's selection ring, the "C" bank highlight, MUTE/SOLO and SAMPLES. */}
         <div className="cover" style={box(446, 1598, 230, 220)} />
         <div className="cover" style={box(288, 1826, 330, 100)} />
         <div className="cover" style={box(725, 1826, 175, 100)} />
+        <div className="cover" style={box(18, 1826, 265, 100)} />
 
         <section className="teal" style={box(13, 280, 888, 510)}>
           {selectedPad ? (
