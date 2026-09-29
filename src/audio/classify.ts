@@ -2,62 +2,40 @@
 // Filename keywords win when present; otherwise a few cheap acoustic features (length, decay,
 // spectral balance, whether a pitch was found) drive simple rules. No ML model or library.
 
-export type CategoryId =
-  | "kick"
-  | "snare"
-  | "hat"
-  | "perc"
-  | "bass"
-  | "keys"
-  | "synth"
-  | "vocal"
-  | "fx"
-  | "loop"
-  | "other";
+export type CategoryId = "kick" | "snare" | "hat" | "bass" | "melodic" | "other";
 
 export interface Category {
   id: CategoryId;
   label: string;
-  /** Koala's own colour name for the category's pad colour. */
-  koalaLabel: string;
-  /** Hex Koala stores in sampler.json; written back on export. */
-  koalaColor: string;
-  /** How the colour looks on Koala's pads, used for the on-screen pads. */
-  screenColor: string;
-  /** Whether text drawn over `screenColor` should be dark. */
-  lightPad: boolean;
 }
 
+/** Order matters: a palette lists its colours in this same order. */
 export const CATEGORIES: Category[] = [
-  { id: "kick", label: "Kick", koalaLabel: "Red", koalaColor: "#FF586F", screenColor: "#EB6472", lightPad: false },
-  { id: "snare", label: "Snare / Clap", koalaLabel: "Orange", koalaColor: "#EC7131", screenColor: "#DC7741", lightPad: false },
-  { id: "hat", label: "Hi-hat / Cymbal", koalaLabel: "Yellow", koalaColor: "#FFE658", screenColor: "#FBE671", lightPad: true },
-  { id: "perc", label: "Percussion", koalaLabel: "Dark Pink", koalaColor: "#CA3A7E", screenColor: "#BA457C", lightPad: false },
-  { id: "bass", label: "Bass / 808", koalaLabel: "Dark Purple", koalaColor: "#302383", screenColor: "#2E247D", lightPad: false },
-  { id: "keys", label: "Keys / Pluck", koalaLabel: "Light Blue", koalaColor: "#01D1FD", screenColor: "#60CDF8", lightPad: true },
-  { id: "synth", label: "Synth / Pad", koalaLabel: "Purple", koalaColor: "#B758FF", screenColor: "#AB5CF5", lightPad: false },
-  { id: "vocal", label: "Vocal", koalaLabel: "Green", koalaColor: "#47D604", screenColor: "#73D240", lightPad: true },
-  { id: "fx", label: "FX / Riser", koalaLabel: "Seafoam", koalaColor: "#00FDB5", screenColor: "#73F8B9", lightPad: true },
-  { id: "loop", label: "Loop / Texture", koalaLabel: "Dark Blue", koalaColor: "#5874FF", screenColor: "#5F73F6", lightPad: false },
-  { id: "other", label: "Other", koalaLabel: "White", koalaColor: "#D9D9D9", screenColor: "#D8D8D8", lightPad: true },
+  { id: "kick", label: "Kick" },
+  { id: "snare", label: "Snare / Clap" },
+  { id: "hat", label: "Hats / Cymbals" },
+  { id: "bass", label: "Bass / 808" },
+  { id: "melodic", label: "Melodic" },
+  { id: "other", label: "Other (vocal, FX, loops)" },
 ];
 
-export function categoryById(id: CategoryId): Category {
-  return CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1];
+export function categoryIndex(id: CategoryId): number {
+  return Math.max(0, CATEGORIES.findIndex((c) => c.id === id));
+}
+
+export function categoryLabel(id: CategoryId): string {
+  return CATEGORIES[categoryIndex(id)].label;
 }
 
 // Order matters: the first matching rule wins, so specific words come before generic ones.
+// Vocals, FX, loops and other percussion all fall through to "other".
 const NAME_RULES: [CategoryId, RegExp][] = [
   ["kick", /\b(kick|kik|bd|bassdrum|bass drum)\b/],
   ["snare", /\b(snare|clap|rim|rimshot|snap|sd)\b/],
   ["hat", /\b(hi ?hat|hh|hat|hats|cymbal|crash|ride|shaker|open ?hat|closed ?hat)\b/],
-  ["vocal", /\b(vocal|vocals|vox|voice|choir|acapella|chant|adlib|ad-lib|sung|singing)\b/],
-  ["fx", /\b(fx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell)\b/],
+  ["other", /\b(vocal|vocals|vox|voice|choir|acapella|chant|adlib|ad-lib|fx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|loop|break|breakbeat|amen|ambience|ambient|atmos|drone|tom|toms|perc|percussion|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|drum)\b/],
   ["bass", /\b(808|bass|sub|reese)\b/],
-  ["loop", /\b(loop|break|breakbeat|amen|ambience|ambient|atmos|drone)\b/],
-  ["perc", /\b(tom|toms|perc|percussion|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|drum)\b/],
-  ["keys", /\b(piano|keys|key|bell|bells|pluck|guitar|harp|mallet|marimba|kalimba|rhodes|epiano|stab|vibraphone|glock|glockenspiel|celesta|chime)\b/],
-  ["synth", /\b(pad|synth|lead|chord|chords|strings|string|organ|arp|saw|brass|horn|flute)\b/],
+  ["melodic", /\b(piano|keys|key|bell|bells|pluck|guitar|harp|mallet|marimba|kalimba|rhodes|epiano|stab|vibraphone|glock|glockenspiel|celesta|chime|pad|synth|lead|chord|chords|strings|string|organ|arp|saw|brass|horn|flute)\b/],
 ];
 
 /** Category implied by a file name, or null when it has no telltale word. */
@@ -212,19 +190,17 @@ export function classifySample(
   if (!f) return "other";
   const pitched = detectedMidi != null;
 
-  if (f.duration >= 4) return pitched ? "synth" : "loop";
+  if (f.duration >= 4) return pitched ? "melodic" : "other";
   if (f.low > 0.7 && f.duration < 0.6 && f.decay < 0.5) return "kick";
 
   if (pitched) {
-    if (detectedMidi < 50 && f.centroid < 600) return "bass";
-    return f.decay > 0.8 ? "synth" : "keys";
+    return detectedMidi < 50 && f.centroid < 600 ? "bass" : "melodic";
   }
 
   if (f.duration < 1.5) {
     if (f.centroid > 6500 && f.high > 0.5) return "hat";
     if (f.low > 0.45 && f.centroid < 500) return "kick";
     if (f.flatness > 0.15 && f.centroid > 1500) return "snare";
-    return "perc";
   }
-  return f.flatness > 0.1 ? "fx" : "other";
+  return "other";
 }

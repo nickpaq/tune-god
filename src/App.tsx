@@ -16,7 +16,10 @@ import { startPad, type PadHandle } from "./audio/player";
 import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
 import { normalizeWithGain } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
-import { categoryById, type CategoryId } from "./audio/classify";
+import { categoryLabel, CATEGORIES, type CategoryId } from "./audio/classify";
+import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
+import { PalettePicker } from "./components/PalettePicker";
+import { loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
@@ -62,27 +65,38 @@ function shiftFor(pad: Pad, target: number | null): number {
   return base + pad.semis + pad.cents / 100;
 }
 
+/** Older saves may hold category ids that no longer exist. */
+function validCategory(id: CategoryId | undefined): CategoryId {
+  return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
+}
+
 function App() {
+  // Read once: what the previous visit left behind.
+  const saved = useRef(loadState()).current;
   const [pads, setPads] = useState<Record<number, Pad>>({});
-  const [bank, setBank] = useState(0);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [keyPc, setKeyPc] = useState<number | null>(null);
-  const [tunedTarget, setTunedTarget] = useState<number | null>(null);
+  const [bank, setBank] = useState(saved.bank ?? 0);
+  const [selected, setSelected] = useState<number | null>(saved.selected ?? null);
+  const [keyPc, setKeyPc] = useState<number | null>(saved.keyPc ?? null);
+  const [tunedTarget, setTunedTarget] = useState<number | null>(saved.tunedTarget ?? null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
-  const [normalize, setNormalize] = useState(false);
-  const [spread, setSpread] = useState(false);
+  const [normalize, setNormalize] = useState(saved.normalize ?? false);
+  const [spread, setSpread] = useState(saved.spread ?? false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [autoColor, setAutoColor] = useState(false);
-  const [toneOn, setToneOn] = useState(false);
+  const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
+  const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
   const releasePad = useRef<Map<number, PadHandle>>(new Map());
-  const tunedTargetRef = useRef<number | null>(null);
+  const tunedTargetRef = useRef<number | null>(saved.tunedTarget ?? null);
+  /** Per-pad choices from the last visit, applied as each pad finishes analysis. */
+  const restorePads = useRef<Record<number, SavedPad>>(saved.pads ?? {});
   const loadToken = useRef(0);
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
-  const loadProject = useCallback(async (file: File) => {
+  const loadProject = useCallback(async (file: File, restore = false) => {
     const token = ++loadToken.current;
     setLoading(true);
     try {
@@ -90,12 +104,17 @@ function App() {
       if (token !== loadToken.current) return;
       projectRef.current = project;
       setPads({});
-      setSelected(null);
-      setKeyPc(null);
-      setTunedTarget(null);
-      tunedTargetRef.current = null;
+      if (!restore) {
+        setSelected(null);
+        setKeyPc(null);
+        setTunedTarget(null);
+        tunedTargetRef.current = null;
+        restorePads.current = {};
+        setBank(Math.min(3, Math.floor(project.pads[0].pad / 16)));
+        void saveProjectFile(file);
+        saveState({ pads: {} });
+      }
       setProjectName(project.originalName.replace(/\.koala$/i, ""));
-      setBank(Math.min(3, Math.floor(project.pads[0].pad / 16)));
 
       const slots = project.pads.filter((p) => p.pad >= 0 && p.pad < 64);
       setAnalyzing(slots.length);
@@ -118,17 +137,23 @@ function App() {
           .catch(() => ({ midi: null, category: "other" as const }))
           .then(({ midi: detectedMidi, category }) => {
             if (token !== loadToken.current) return;
-            setPads((prev) => ({
-              ...prev,
-              [ref.pad]: {
-                ...prev[ref.pad],
-                detectedMidi,
-                category,
-                tune: prev[ref.pad].tuneLocked
-                  ? prev[ref.pad].tune
-                  : tunedTargetRef.current !== null && detectedMidi != null,
-              },
-            }));
+            setPads((prev) => {
+              const remembered = restorePads.current[ref.pad];
+              const cur = prev[ref.pad];
+              return {
+                ...prev,
+                [ref.pad]: {
+                  ...cur,
+                  detectedMidi,
+                  ...(remembered ? { ...remembered, category: validCategory(remembered.category) } : {
+                    category,
+                    tune: cur.tuneLocked
+                      ? cur.tune
+                      : tunedTargetRef.current !== null && detectedMidi != null,
+                  }),
+                },
+              };
+            });
             setAnalyzing((n) => n - 1);
           });
       }
@@ -139,6 +164,28 @@ function App() {
       if (token === loadToken.current) setLoading(false);
     }
   }, []);
+
+  // Reopen the last project, if there was one.
+  useEffect(() => {
+    void loadProjectFile().then((file) => {
+      if (file) void loadProject(file, true);
+    });
+  }, [loadProject]);
+
+  useEffect(() => {
+    saveState({ normalize, spread, autoColor, paletteId, toneOn, bank, selected, keyPc, tunedTarget });
+  }, [normalize, spread, autoColor, paletteId, toneOn, bank, selected, keyPc, tunedTarget]);
+
+  // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
+  useEffect(() => {
+    if (analyzing > 0 || loading || Object.keys(pads).length === 0) return;
+    const out: Record<number, SavedPad> = {};
+    for (const p of Object.values(pads)) {
+      out[p.index] = { tune: p.tune, tuneLocked: p.tuneLocked, semis: p.semis, cents: p.cents, category: p.category };
+    }
+    restorePads.current = out;
+    saveState({ pads: out });
+  }, [pads, analyzing, loading]);
 
   const pickFile = (files: FileList | File[] | null | undefined) => {
     const file = Array.from(files ?? []).find(isKoalaFile);
@@ -230,9 +277,11 @@ function App() {
           retimed,
         });
       }
-      const colors = new Map<number, CategoryId>();
+      const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
-        for (const p of Object.values(pads)) if (p.category) colors.set(p.sampleId, p.category);
+        for (const p of Object.values(pads)) {
+          if (p.category) colors.set(p.sampleId, { color: colorFor(palette, p.category), label: categoryLabel(p.category) });
+        }
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, { resetGain: normalize, pans, colors });
       downloadBlob(blob, filename);
@@ -243,6 +292,7 @@ function App() {
     }
   };
 
+  const palette = paletteById(paletteId);
   const canExport =
     (normalize || autoColor ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune)) &&
     analyzing === 0 &&
@@ -290,6 +340,17 @@ function App() {
               <input type="checkbox" checked={autoColor} onChange={(e) => toggleAutoColor(e.target.checked)} />
               Auto-color pads by sound type
             </label>
+            {autoColor && (
+              <button
+                className="menu__button"
+                onClick={() => {
+                  setPaletteOpen(true);
+                  setMenuOpen(false);
+                }}
+              >
+                Color palette: {palette.name}
+              </button>
+            )}
           </div>
         )}
 
@@ -348,7 +409,10 @@ function App() {
               style={{
                 ...box(PAD_COLS[slot % 4], PAD_ROWS[Math.floor(slot / 4)], PAD_W, PAD_H),
                 ...(pad && autoColor
-                  ? { background: categoryById(pad.category ?? "other").screenColor }
+                  ? (() => {
+                      const bg = colorFor(palette, pad.category ?? "other");
+                      return { background: bg, color: textColorOn(bg) };
+                    })()
                   : null),
               }}
               onPointerDown={(e) => {
@@ -392,6 +456,10 @@ function App() {
           Tone
         </button>
 
+
+        {paletteOpen && (
+          <PalettePicker selectedId={paletteId} onSelect={setPaletteId} onClose={() => setPaletteOpen(false)} />
+        )}
 
         <button
           className="export"
