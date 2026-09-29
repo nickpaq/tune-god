@@ -271,7 +271,7 @@ function App() {
           )}
         </section>
 
-        <section className="pink" style={box(LEFT, 801, CONTENT_W, 169)}>
+        <section className="pink" style={box(LEFT, 806, CONTENT_W, 169)}>
           <Keyboard selected={keyPc} onSelect={setKeyPc} />
           <button
             className="tune-all"
