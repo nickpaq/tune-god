@@ -1,5 +1,6 @@
 import * as Comlink from "comlink";
 import type { AnalysisWorkerApi } from "./analysis.worker";
+import type { RenderWorkerApi } from "./render.worker";
 
 // A small fixed pool keeps the UI thread free while a whole project's pads are analyzed.
 const POOL_SIZE = Math.max(2, Math.min(4, navigator.hardwareConcurrency || 2));
@@ -14,4 +15,11 @@ export function nextAnalysisWorker(): Comlink.Remote<AnalysisWorkerApi> {
     );
   }
   return pool[next++ % pool.length];
+}
+
+let renderWorker: Comlink.Remote<RenderWorkerApi> | null = null;
+
+export function getRenderWorker(): Comlink.Remote<RenderWorkerApi> {
+  renderWorker ??= Comlink.wrap<RenderWorkerApi>(new Worker(new URL("./render.worker.ts", import.meta.url), { type: "module" }));
+  return renderWorker;
 }

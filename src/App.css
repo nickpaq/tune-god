@@ -328,3 +328,23 @@
   text-align: center;
   font-size: 4cqw;
 }
+
+.export {
+  border: 0.3cqw solid var(--line);
+  border-radius: 1.8cqw;
+  background: var(--bg);
+  font-size: 4.4cqw;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.export:not(:disabled) {
+  background: var(--green);
+  color: #06301a;
+  border-color: var(--green);
+}
+
+.export:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

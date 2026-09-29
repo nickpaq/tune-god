@@ -2,10 +2,11 @@ import { useCallback, useRef, useState } from "react";
 import { Keyboard } from "./components/Keyboard";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeFile, monoFromChannelData, cloneChannelData } from "./audio/decode";
-import { parseKoalaProject, koalaPadToFile, isKoalaFile } from "./audio/koalaProject";
+import { parseKoalaProject, koalaPadToFile, isKoalaFile, type ParsedKoalaProject } from "./audio/koalaProject";
 import { playPad } from "./audio/player";
-import { NOTE_NAMES } from "./audio/theory";
-import { nextAnalysisWorker } from "./workers/workerClient";
+import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
+import { NOTE_NAMES, semitonesToRatio } from "./audio/theory";
+import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
 import "./App.css";
 
@@ -50,7 +51,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const loadToken = useRef(0);
+  const projectRef = useRef<ParsedKoalaProject | null>(null);
 
   const loadProject = useCallback(async (file: File) => {
     const token = ++loadToken.current;
@@ -59,6 +62,7 @@ function App() {
     try {
       const project = await parseKoalaProject(file);
       if (token !== loadToken.current) return;
+      projectRef.current = project;
       setPads({});
       setSelected(null);
       setKeyPc(null);
@@ -73,6 +77,7 @@ function App() {
         if (token !== loadToken.current) return;
         const pad: Pad = {
           index: ref.pad,
+          sampleId: ref.sampleId,
           sampleRate: buffer.sampleRate,
           channelData: cloneChannelData(buffer),
           tune: false,
@@ -121,6 +126,30 @@ function App() {
     );
   };
 
+  /** Bakes every tuned pad's shift into its audio (windowed-sinc resample) and downloads the rebuilt project. */
+  const exportProject = async () => {
+    const project = projectRef.current;
+    if (!project) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const tuned = [];
+      for (const pad of Object.values(pads)) {
+        const shift = shiftFor(pad, tunedTarget);
+        if (!pad.tune || Math.abs(shift) < 1e-6) continue;
+        const channelData = await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift));
+        tuned.push({ sampleId: pad.sampleId, sampleRate: pad.sampleRate, channelData });
+      }
+      const { blob, filename } = await buildTunedKoala(project, tuned);
+      downloadBlob(blob, filename);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const canExport = Object.values(pads).some((p) => p.tune) && !exporting;
   const hasProject = Object.keys(pads).length > 0;
   const selectedPad = selected !== null ? pads[selected] : undefined;
 
@@ -137,6 +166,7 @@ function App() {
         {/* Hides the selection ring baked into the screenshot's pad 15 and its "C" bank highlight. */}
         <div className="cover" style={box(446, 1598, 230, 220)} />
         <div className="cover" style={box(288, 1826, 330, 100)} />
+        <div className="cover" style={box(725, 1826, 175, 100)} />
 
         <section className="teal" style={box(13, 280, 888, 510)}>
           {selectedPad ? (
@@ -190,6 +220,10 @@ function App() {
             </button>
           ))}
         </div>
+
+        <button className="export" style={box(735, 1836, 155, 80)} disabled={!canExport} onClick={exportProject}>
+          {exporting ? "…" : "Export"}
+        </button>
 
         {error && hasProject && <div className="toast">{error}</div>}
       </div>

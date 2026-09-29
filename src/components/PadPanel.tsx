@@ -4,6 +4,8 @@ import { NOTE_NAMES, formatSignedCents, formatSignedSemitones, pitchClassOf } fr
 export interface Pad {
   /** 0-based grid slot across all four banks. */
   index: number;
+  /** The sample's id inside the .koala project, used when writing tuned audio back. */
+  sampleId: number;
   sampleRate: number;
   channelData: Float32Array[];
   /** Fractional MIDI of the detected root; null = no clear pitch, undefined = still analyzing. */
