@@ -12,15 +12,20 @@ export interface Category {
 /** Order matters: a palette lists its colours in this same order. */
 export const CATEGORIES: Category[] = [
   { id: "kick", label: "Kick" },
-  { id: "snare", label: "Snare / Clap" },
-  { id: "hat", label: "Hats / Cymbals" },
-  { id: "bass", label: "Bass / 808" },
+  { id: "snare", label: "Snare" },
+  { id: "hat", label: "Hat" },
+  { id: "bass", label: "Bass" },
   { id: "melodic", label: "Melodic" },
-  { id: "other", label: "Other (vocal, FX, loops)" },
+  { id: "other", label: "Other" },
 ];
 
 export function categoryIndex(id: CategoryId): number {
   return Math.max(0, CATEGORIES.findIndex((c) => c.id === id));
+}
+
+/** Only pitched categories are tuned by default; drums and everything else are left alone. */
+export function isTunedCategory(id: CategoryId | undefined): boolean {
+  return id === "bass" || id === "melodic";
 }
 
 export function categoryLabel(id: CategoryId): string {

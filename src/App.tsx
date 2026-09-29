@@ -16,7 +16,7 @@ import { startPad, type PadHandle } from "./audio/player";
 import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
 import { normalizeWithGain } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
-import { categoryLabel, CATEGORIES, type CategoryId } from "./audio/classify";
+import { categoryLabel, isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { PalettePicker } from "./components/PalettePicker";
 import { loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
@@ -68,6 +68,12 @@ function shiftFor(pad: Pad, target: number | null): number {
 /** Older saves may hold category ids that no longer exist. */
 function validCategory(id: CategoryId | undefined): CategoryId {
   return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
+}
+
+/** A pad's default Tune state: the user's manual choice if locked, else on for bass/melodic with a detected pitch. */
+function tuneDefault(locked: boolean | undefined, current: boolean, category: CategoryId | undefined, detectedMidi: number | null | undefined, target: number | null): boolean {
+  if (locked) return current;
+  return target !== null && detectedMidi != null && isTunedCategory(category);
 }
 
 function App() {
@@ -148,12 +154,14 @@ function App() {
                 [ref.pad]: {
                   ...cur,
                   detectedMidi,
-                  ...(remembered ? { ...remembered, category: validCategory(remembered.category) } : {
-                    category,
-                    tune: cur.tuneLocked
-                      ? cur.tune
-                      : tunedTargetRef.current !== null && detectedMidi != null,
-                  }),
+                  ...(remembered ? { ...remembered, category: validCategory(remembered.category) } : { category }),
+                  tune: tuneDefault(
+                    remembered?.tuneLocked || cur.tuneLocked,
+                    remembered?.tuneLocked ? remembered.tune : cur.tune,
+                    remembered ? validCategory(remembered.category) : category,
+                    detectedMidi,
+                    tunedTargetRef.current,
+                  ),
                 },
               };
             });
@@ -252,7 +260,7 @@ function App() {
     tunedTargetRef.current = pc;
     setPads((prev) =>
       Object.fromEntries(
-        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: p.detectedMidi != null }]),
+        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: tuneDefault(false, false, p.category, p.detectedMidi, pc) }]),
       ),
     );
   };
@@ -382,9 +390,15 @@ function App() {
                 { ...selectedPad, semis: 0, cents: 0 },
                 tunedTarget,
               )}
-              onChange={(patch) =>
-                patchPad(selectedPad.index, "tune" in patch ? { ...patch, tuneLocked: true } : patch)
-              }
+              onChange={(patch) => {
+                if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
+                else if (patch.category && !selectedPad.tuneLocked) {
+                  patchPad(selectedPad.index, {
+                    ...patch,
+                    tune: tuneDefault(false, false, patch.category, selectedPad.detectedMidi, tunedTarget),
+                  });
+                } else patchPad(selectedPad.index, patch);
+              }}
             />
           ) : hasProject ? (
             <div className="teal__message">
