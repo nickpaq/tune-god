@@ -382,6 +382,10 @@
   color: #000;
 }
 
+.pad--colored.pad--tuned::after {
+  color: #000;
+}
+
 .pad-panel__category {
   display: flex;
   align-items: center;

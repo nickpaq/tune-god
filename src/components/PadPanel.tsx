@@ -62,7 +62,7 @@ export function PadPanel({
           >
             {CATEGORIES.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.label} ({c.koalaLabel})
+                {c.label}
               </option>
             ))}
           </select>
