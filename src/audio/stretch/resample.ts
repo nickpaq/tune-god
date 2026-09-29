@@ -28,7 +28,7 @@ function besselI0(x: number): number {
   for (let k = 1; k < 60; k++) {
     term *= q / (k * k);
     sum += term;
-    if (term < sum * 1e-17) break;
+    if (term < sum * Number.EPSILON) break;
   }
   return sum;
 }
