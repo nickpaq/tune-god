@@ -230,7 +230,7 @@ function App() {
           ☰
         </button>
         {menuOpen && (
-          <div className="menu" style={box(RIGHT - 490, 268, 490, 130)}>
+          <div className="menu" style={{ top: `${(268 / H) * 100}%`, right: `${((W - RIGHT) / W) * 100}%` }}>
             <label>
               <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
               Normalize −6 dB
