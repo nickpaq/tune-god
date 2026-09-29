@@ -4,7 +4,7 @@ import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeFile, monoFromChannelData, cloneChannelData } from "./audio/decode";
 import { parseKoalaProject, koalaPadToFile, isKoalaFile } from "./audio/koalaProject";
 import { playPad } from "./audio/player";
-import { NOTE_NAMES, pitchClassOf, smallestSignedShift } from "./audio/theory";
+import { NOTE_NAMES } from "./audio/theory";
 import { nextAnalysisWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
 import "./App.css";
@@ -26,13 +26,16 @@ const PAD_W = 200;
 const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
 
-/** Total semitone shift for a pad: root -> target key (incl. fractional detune) plus the manual trim. */
+/**
+ * Total semitone shift for a pad: the shortest move (never more than 6 up or
+ * down) from its exact detected pitch onto the target note, plus the manual trim.
+ */
 function shiftFor(pad: Pad, target: number | null): number {
   if (!pad.tune) return 0;
   let base = 0;
   if (target !== null && pad.detectedMidi != null) {
-    base =
-      smallestSignedShift(pitchClassOf(pad.detectedMidi), target) + (Math.round(pad.detectedMidi) - pad.detectedMidi);
+    base = (((target - pad.detectedMidi) % 12) + 12) % 12;
+    if (base > 6) base -= 12;
   }
   return base + pad.semis + pad.cents / 100;
 }
