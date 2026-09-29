@@ -9,8 +9,8 @@ import {
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
 import { startPad, type PadHandle } from "./audio/player";
-import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
-import { normalizeWithGain } from "./audio/gain";
+import { buildTunedKoala, downloadBlob, type TunedSample } from "./audio/exportProject";
+import { applyGainDb } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
 import { categoryLabel, isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
@@ -42,8 +42,8 @@ const PAD_COLS = [0, 1, 2, 3].map((c) => LEFT + c * (PAD_W + PAD_GAP));
 const PAD_ROWS = [991, 1198, 1406, 1613];
 const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
-/** Peak level every sample is normalized to on export. */
-const EXPORT_GAIN_DB = -6;
+/** Loudest peak allowed after loudness balancing; the balance is set so nothing exceeds this. */
+const PEAK_CEILING_DB = -6;
 /** Widest spread pan, in percent either side of centre. */
 const MAX_SPREAD_PERCENT = 40;
 
@@ -92,6 +92,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [normalizing, setNormalizing] = useState(false);
   /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
   const [exportProgress, setExportProgress] = useState("");
   const [normalize, setNormalize] = useState(saved.normalize ?? false);
@@ -229,13 +230,24 @@ function App() {
     );
   };
 
-  /** Renders every pad at the export level so taps are audibly level-matched. */
-  const normalizeNow = () => {
-    setNormalizedData(
-      Object.fromEntries(
-        Object.values(pads).map((p) => [p.index, normalizeWithGain(p.channelData, EXPORT_GAIN_DB)]),
-      ),
-    );
+  /**
+   * Loudness-balances every pad so taps are audibly level-matched. Measured on the untuned audio,
+   * so it can differ from the export's gains by a fraction of a dB where tuning changes a pad.
+   */
+  const normalizeNow = async () => {
+    setNormalizing(true);
+    try {
+      const list = Object.values(pads);
+      const gains = await getRenderWorker().balance(
+        list.map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category })),
+        PEAK_CEILING_DB,
+      );
+      setNormalizedData(Object.fromEntries(list.map((p, i) => [p.index, applyGainDb(p.channelData, gains[i])])));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setNormalizing(false);
+    }
   };
 
   const liftPad = (index: number) => {
@@ -273,15 +285,15 @@ function App() {
 
   /**
    * Bakes every tuned pad's shift into its audio (windowed-sinc resample) and downloads the
-   * rebuilt project. With the normalize switch on, every sample is also peak-normalized to
-   * EXPORT_GAIN_DB and its pad gain knob reset to zero.
+   * rebuilt project. With the normalize switch on, every sample is also loudness-balanced
+   * (see audio/loudness.ts) and its pad gain knob reset to zero.
    */
   const exportProject = async () => {
     const project = projectRef.current;
     if (!project) return;
     setExporting(true);
     try {
-      const tuned = [];
+      const tuned: TunedSample[] = [];
       // Koala's pan runs 0..1 (0.5 = centre) for L100..R100, so N percent is N/200 off centre.
       const pans = new Map<number, number>();
       if (spread) {
@@ -291,6 +303,7 @@ function App() {
         tunedPads.forEach((p, i) => pans.set(p.sampleId, 0.5 + offsets[i] / 200));
       }
       const allPads = Object.values(pads);
+      const rendered: { pad: Pad; channelData: Float32Array[]; retimed: boolean }[] = [];
       let done = 0;
       for (const pad of allPads) {
         setExportProgress(`${done++}/${allPads.length}`);
@@ -301,13 +314,23 @@ function App() {
           ? await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift))
           : pad.channelData;
         if (retimed && !normalize) channelData = limitPeak(channelData);
-        tuned.push({
-          sampleId: pad.sampleId,
-          sampleRate: pad.sampleRate,
-          channelData: normalize ? normalizeWithGain(channelData, EXPORT_GAIN_DB) : channelData,
-          retimed,
-        });
+        rendered.push({ pad, channelData, retimed });
       }
+      // Balance on the final, tuned audio so the gains match what is actually exported.
+      const gains = normalize
+        ? await getRenderWorker().balance(
+            rendered.map((r) => ({ channelData: r.channelData, sampleRate: r.pad.sampleRate, category: r.pad.category })),
+            PEAK_CEILING_DB,
+          )
+        : [];
+      rendered.forEach((r, i) => {
+        tuned.push({
+          sampleId: r.pad.sampleId,
+          sampleRate: r.pad.sampleRate,
+          channelData: normalize ? applyGainDb(r.channelData, gains[i]) : r.channelData,
+          retimed: r.retimed,
+        });
+      });
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of Object.values(pads)) {
@@ -365,10 +388,10 @@ function App() {
           <div className="menu" style={{ top: `${(268 / H) * 100}%`, right: `${((W - RIGHT) / W) * 100}%` }}>
             <label>
               <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
-              Normalize −6 dB
+              Balance loudness
             </label>
-            <button className="menu__button" disabled={!normalize || !hasProject} onClick={normalizeNow}>
-              Normalize now
+            <button className="menu__button" disabled={!normalize || !hasProject || normalizing} onClick={normalizeNow}>
+              {normalizing ? "Normalizing…" : "Normalize now"}
             </button>
             <label>
               <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
