@@ -79,9 +79,17 @@
   border-right: 0;
 }
 
+.bank--empty {
+  color: rgba(255, 255, 255, 0.3);
+}
+
 .bank--active {
   background: var(--cyan);
   color: var(--on-cyan);
+}
+
+.bank--active.bank--empty {
+  color: rgba(6, 33, 46, 0.45);
 }
 
 /* ---- teal section ---- */

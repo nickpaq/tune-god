@@ -264,15 +264,23 @@ function App() {
         })}
 
         <div className="banks" style={box(296, 1836, 315, 80)}>
-          {BANKS.map((name, i) => (
-            <button
-              key={name}
-              className={bank === i ? "bank bank--active" : "bank"}
-              onClick={() => setBank(i)}
-            >
-              {name}
-            </button>
-          ))}
+          {BANKS.map((name, i) => {
+            const hasSamples = Object.keys(pads).some(
+              (index) => Math.floor(Number(index) / 16) === i,
+            );
+            const cls = [
+              "bank",
+              bank === i && "bank--active",
+              !hasSamples && "bank--empty",
+            ]
+              .filter(Boolean)
+              .join(" ");
+            return (
+              <button key={name} className={cls} onClick={() => setBank(i)}>
+                {name}
+              </button>
+            );
+          })}
         </div>
 
         <button
