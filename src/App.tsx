@@ -68,6 +68,7 @@ function App() {
   const [exporting, setExporting] = useState(false);
   const [normalize, setNormalize] = useState(false);
   const [spread, setSpread] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const loadToken = useRef(0);
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
@@ -213,6 +214,28 @@ function App() {
         <div className="cover" style={box(725, 1826, 175, 100)} />
         <div className="cover" style={box(18, 1826, 265, 100)} />
 
+        <button
+          className="menu-button"
+          style={box(815, 195, 75, 65)}
+          onClick={() => setMenuOpen((open) => !open)}
+          aria-label="Export options"
+          aria-expanded={menuOpen}
+        >
+          ☰
+        </button>
+        {menuOpen && (
+          <div className="menu" style={box(400, 268, 490, 130)}>
+            <label>
+              <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
+              Normalize −6 dB
+            </label>
+            <label>
+              <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
+              Spread tuned pads
+            </label>
+          </div>
+        )}
+
         <section className="teal" style={box(13, 280, 888, 510)}>
           {selectedPad ? (
             <PadPanel
@@ -310,16 +333,6 @@ function App() {
           Stop
         </button>
 
-        <div className="switches" style={box(296, 1805, 315, 30)}>
-          <label>
-            <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
-            Normalize −6 dB
-          </label>
-          <label>
-            <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
-            Spread
-          </label>
-        </div>
 
         <button
           className="export"

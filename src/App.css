@@ -368,26 +368,41 @@
   cursor: not-allowed;
 }
 
-.switches {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3cqw;
+.menu-button {
+  border: 0.3cqw solid var(--line);
+  border-radius: 1.8cqw;
   background: var(--bg);
-  font-size: 2.6cqw;
-  font-weight: 700;
-  text-transform: uppercase;
+  padding: 0;
+  font-size: 6cqw;
+  line-height: 1;
   color: #fff;
 }
 
-.switches label {
+.menu {
+  z-index: 10;
   display: flex;
-  align-items: center;
-  gap: 1.5cqw;
+  flex-direction: column;
+  justify-content: space-evenly;
+  padding: 0 4cqw;
+  border: 0.3cqw solid var(--line);
+  border-radius: 3cqw;
+  background: var(--bg);
+  font-size: 3.2cqw;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #fff;
 }
 
-.switches input {
+.menu label {
+  display: flex;
+  align-items: center;
+  gap: 3cqw;
+}
+
+.menu input {
   accent-color: var(--cyan);
-  width: 3.6cqw;
-  height: 3.6cqw;
+  flex: none;
+  width: 5cqw;
+  height: 5cqw;
 }
