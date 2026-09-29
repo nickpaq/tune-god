@@ -5,8 +5,8 @@
   --ring: #ec455f;
   --line: #d8ced0;
   --cyan: #62cbf9;
-  --green: #3ddc84;
-  --ink: #14332d;
+  --panel: #3a1727;
+  --on-cyan: #06212e;
   color-scheme: dark;
   color: #fff;
   background: var(--bg);
