@@ -1,10 +1,9 @@
-// Minimal Web Audio playback for the pad grid: one-shot pad playback with a
-// pitch shift, and a held sine tone for the key picker.
+// Minimal Web Audio playback for the pad grid: held, looping, monophonic pad playback with a
+// pitch shift and optional reference tone, and a held sine tone for the key picker.
 import { getAudioContext } from "./decode";
 import { midiToFrequency, semitonesToRatio } from "./theory";
 
 const bufferCache = new WeakMap<Float32Array[], AudioBuffer>();
-const activePads = new Map<number, AudioBufferSourceNode>();
 
 function bufferFor(ctx: AudioContext, channelData: Float32Array[], sampleRate: number): AudioBuffer {
   let buffer = bufferCache.get(channelData);
@@ -22,29 +21,91 @@ function readyContext(): AudioContext {
   return ctx;
 }
 
-/**
- * Plays a pad from the start, cutting off any earlier hit of the same pad.
- * The shift is applied as a playback-rate change (a resample), which is
- * exactly how the tuned one-shot would sound once baked into the project.
- */
-export function playPad(pad: number, channelData: Float32Array[], sampleRate: number, shiftSemitones: number): void {
-  const ctx = readyContext();
-  activePads.get(pad)?.stop();
-  const source = ctx.createBufferSource();
-  source.buffer = bufferFor(ctx, channelData, sampleRate);
-  source.playbackRate.value = semitonesToRatio(shiftSemitones);
-  source.connect(ctx.destination);
-  source.onended = () => {
-    if (activePads.get(pad) === source) activePads.delete(pad);
-  };
-  activePads.set(pad, source);
-  source.start();
+/** Pad gain is held for this long after release before the fade starts. */
+const RELEASE_HOLD = 0.03;
+/** Length of the fade-out that follows the hold. */
+const RELEASE_FADE = 0.15;
+/** Quick fade used when a retrigger cuts off the previous hit of the same pad. */
+const CUT_FADE = 0.008;
+const MAX_TONE_GAIN = 0.5;
+
+interface ActivePad {
+  gain: GainNode;
+  stop: (hold: number, fade: number) => void;
 }
 
-/** Cuts off every pad that is currently playing. */
-export function stopAll(): void {
-  for (const source of activePads.values()) source.stop();
-  activePads.clear();
+const activePads = new Map<number, ActivePad>();
+
+/** RMS over all channels; used to level-match the reference tone to the sample. */
+function rms(channelData: Float32Array[]): number {
+  let sum = 0;
+  let count = 0;
+  for (const data of channelData) {
+    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+    count += data.length;
+  }
+  return count ? Math.sqrt(sum / count) : 0;
+}
+
+/**
+ * Starts a pad looping for as long as it is held, cutting off any earlier hit of the same pad
+ * (monophonic). With `withTone`, a sine on `tonePitchClass` plays at the sample's RMS level.
+ * The shift is applied as a playback-rate change (a resample), which is exactly how the tuned
+ * sample would sound once baked into the project. Returns a release function that holds
+ * briefly, then fades both voices out.
+ */
+export function startPad(
+  pad: number,
+  channelData: Float32Array[],
+  sampleRate: number,
+  shiftSemitones: number,
+  tonePitchClass: number | null,
+): () => void {
+  const ctx = readyContext();
+  activePads.get(pad)?.stop(0, CUT_FADE);
+
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  const source = ctx.createBufferSource();
+  source.buffer = bufferFor(ctx, channelData, sampleRate);
+  source.loop = true;
+  source.playbackRate.value = semitonesToRatio(shiftSemitones);
+  source.connect(gain);
+
+  let osc: OscillatorNode | null = null;
+  if (tonePitchClass !== null) {
+    osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = midiToFrequency(60 + tonePitchClass);
+    const toneGain = ctx.createGain();
+    // A sine of amplitude a has RMS a / sqrt(2), so this matches the sample's RMS.
+    toneGain.gain.value = Math.min(MAX_TONE_GAIN, rms(channelData) * Math.SQRT2);
+    osc.connect(toneGain).connect(gain);
+    osc.start();
+  }
+  source.start();
+
+  let stopped = false;
+  const voice: ActivePad = {
+    gain,
+    stop: (hold, fade) => {
+      if (stopped) return;
+      stopped = true;
+      const t = ctx.currentTime;
+      gain.gain.cancelScheduledValues(t);
+      gain.gain.setValueAtTime(gain.gain.value, t);
+      gain.gain.setValueAtTime(gain.gain.value, t + hold);
+      gain.gain.linearRampToValueAtTime(0, t + hold + fade);
+      source.stop(t + hold + fade + 0.02);
+      osc?.stop(t + hold + fade + 0.02);
+      source.onended = () => {
+        gain.disconnect();
+        if (activePads.get(pad) === voice) activePads.delete(pad);
+      };
+    },
+  };
+  activePads.set(pad, voice);
+  return () => voice.stop(RELEASE_HOLD, RELEASE_FADE);
 }
 
 /** Starts a sine tone on `pitchClass` (0 = C) in the octave from middle C; returns a function that releases it. */

@@ -12,7 +12,7 @@ import {
   isKoalaFile,
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
-import { playPad, stopAll } from "./audio/player";
+import { startPad } from "./audio/player";
 import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
 import { normalizeWithGain } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
@@ -74,6 +74,8 @@ function App() {
   const [normalize, setNormalize] = useState(false);
   const [spread, setSpread] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [toneOn, setToneOn] = useState(false);
+  const releasePad = useRef<Map<number, () => void>>(new Map());
   const loadToken = useRef(0);
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
@@ -135,11 +137,26 @@ function App() {
   const patchPad = (index: number, patch: Partial<Pad>) =>
     setPads((prev) => ({ ...prev, [index]: { ...prev[index], ...patch } }));
 
-  const tapPad = (index: number) => {
+  const pressPad = (index: number) => {
     const pad = pads[index];
     if (!pad) return;
     setSelected(index);
-    playPad(index, pad.channelData, pad.sampleRate, shiftFor(pad, tunedTarget));
+    releasePad.current.get(index)?.();
+    releasePad.current.set(
+      index,
+      startPad(
+        index,
+        pad.channelData,
+        pad.sampleRate,
+        shiftFor(pad, tunedTarget),
+        toneOn ? keyPc : null,
+      ),
+    );
+  };
+
+  const liftPad = (index: number) => {
+    releasePad.current.get(index)?.();
+    releasePad.current.delete(index);
   };
 
   const tuneAll = () => {
@@ -308,8 +325,11 @@ function App() {
               )}
               onPointerDown={(e) => {
                 e.preventDefault();
-                tapPad(index);
+                e.currentTarget.setPointerCapture(e.pointerId);
+                pressPad(index);
               }}
+              onPointerUp={() => liftPad(index)}
+              onPointerCancel={() => liftPad(index)}
               aria-label={`Pad ${slot + 1}`}
             />
           );
@@ -335,8 +355,13 @@ function App() {
           })}
         </div>
 
-        <button className="stop" style={box(LEFT, 1836, 245, 80)} onClick={stopAll}>
-          Stop
+        <button
+          className={`tone${toneOn ? " tone--on" : ""}`}
+          style={box(LEFT, 1836, 245, 80)}
+          aria-pressed={toneOn}
+          onClick={() => setToneOn((on) => !on)}
+        >
+          Tone
         </button>
 
 

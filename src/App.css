@@ -338,7 +338,7 @@
   border-color: var(--cyan);
 }
 
-.stop {
+.tone {
   border: 0.3cqw solid var(--line);
   border-radius: var(--radius);
   background: var(--bg);
@@ -346,6 +346,11 @@
   font-size: 3.6cqw;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.tone--on {
+  background: var(--cyan);
+  color: var(--on-cyan);
 }
 
 .export {
