@@ -18,6 +18,14 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
