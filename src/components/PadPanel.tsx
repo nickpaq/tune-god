@@ -19,12 +19,15 @@ export interface Pad {
 /** What the teal section shows for the selected pad: tune toggle and the two trim sliders. */
 export function PadPanel({
   pad,
+  autoShift,
   onChange,
 }: {
   pad: Pad;
+  /** Semitones the automatic tuning moved this pad (excludes manual slider trim). */
+  autoShift: number;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
 }) {
-  const status = pad.tune ? "Bang on · adjust if needed" : "Not tuned";
+  const status = pad.tune ? `✓ Tuned ${autoShift >= 0 ? "+" : "−"}${Math.abs(autoShift).toFixed(2)} st` : "Not tuned";
 
   return (
     <div className="pad-panel">

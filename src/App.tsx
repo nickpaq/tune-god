@@ -1,8 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 import { Keyboard } from "./components/Keyboard";
 import { PadPanel, type Pad } from "./components/PadPanel";
-import { decodeFile, monoFromChannelData, cloneChannelData } from "./audio/decode";
-import { parseKoalaProject, koalaPadToFile, isKoalaFile, type ParsedKoalaProject } from "./audio/koalaProject";
+import {
+  decodeFile,
+  monoFromChannelData,
+  cloneChannelData,
+} from "./audio/decode";
+import {
+  parseKoalaProject,
+  koalaPadToFile,
+  isKoalaFile,
+  type ParsedKoalaProject,
+} from "./audio/koalaProject";
 import { playPad } from "./audio/player";
 import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
 import { NOTE_NAMES, semitonesToRatio } from "./audio/theory";
@@ -89,7 +98,10 @@ function App() {
           .catch(() => null)
           .then((detectedMidi) => {
             if (token !== loadToken.current) return;
-            setPads((prev) => ({ ...prev, [ref.pad]: { ...prev[ref.pad], detectedMidi } }));
+            setPads((prev) => ({
+              ...prev,
+              [ref.pad]: { ...prev[ref.pad], detectedMidi },
+            }));
             setAnalyzing((n) => n - 1);
           });
       }
@@ -120,7 +132,12 @@ function App() {
     if (keyPc === null) return;
     setTunedTarget(keyPc);
     setPads((prev) =>
-      Object.fromEntries(Object.entries(prev).map(([i, p]) => [i, { ...p, tune: p.detectedMidi != null, semis: 0, cents: 0 }])),
+      Object.fromEntries(
+        Object.entries(prev).map(([i, p]) => [
+          i,
+          { ...p, tune: p.detectedMidi != null, semis: 0, cents: 0 },
+        ]),
+      ),
     );
   };
 
@@ -134,8 +151,15 @@ function App() {
       for (const pad of Object.values(pads)) {
         const shift = shiftFor(pad, tunedTarget);
         if (!pad.tune || Math.abs(shift) < 1e-6) continue;
-        const channelData = await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift));
-        tuned.push({ sampleId: pad.sampleId, sampleRate: pad.sampleRate, channelData });
+        const channelData = await getRenderWorker().resamplePitch(
+          pad.channelData,
+          semitonesToRatio(shift),
+        );
+        tuned.push({
+          sampleId: pad.sampleId,
+          sampleRate: pad.sampleRate,
+          channelData,
+        });
       }
       const { blob, filename } = await buildTunedKoala(project, tuned);
       downloadBlob(blob, filename);
@@ -167,7 +191,14 @@ function App() {
 
         <section className="teal" style={box(13, 280, 888, 510)}>
           {selectedPad ? (
-            <PadPanel pad={selectedPad} onChange={(patch) => patchPad(selectedPad.index, patch)} />
+            <PadPanel
+              pad={selectedPad}
+              autoShift={shiftFor(
+                { ...selectedPad, semis: 0, cents: 0 },
+                tunedTarget,
+              )}
+              onChange={(patch) => patchPad(selectedPad.index, patch)}
+            />
           ) : hasProject ? (
             <div className="teal__message">
               <strong>{projectName}</strong>
@@ -175,7 +206,12 @@ function App() {
             </div>
           ) : (
             <label className="dropzone">
-              <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
+              <input
+                type="file"
+                accept=".koala"
+                hidden
+                onChange={(e) => pickFile(e.target.files)}
+              />
               <strong>{loading ? "Loading…" : "Drop a .koala project"}</strong>
               <span>or tap to choose one</span>
             </label>
@@ -184,23 +220,39 @@ function App() {
 
         <section className="pink" style={box(19, 801, 875, 169)}>
           <Keyboard selected={keyPc} onSelect={setKeyPc} />
-          <button className="tune-all" disabled={keyPc === null || !hasProject || analyzing > 0} onClick={tuneAll}>
+          <button
+            className="tune-all"
+            disabled={keyPc === null || !hasProject || analyzing > 0}
+            onClick={tuneAll}
+          >
             Tune all
-            <small>{keyPc === null ? "pick a key" : `to ${NOTE_NAMES[keyPc]}`}</small>
+            <small>
+              {keyPc === null ? "pick a key" : `to ${NOTE_NAMES[keyPc]}`}
+            </small>
           </button>
         </section>
 
         {Array.from({ length: 16 }, (_, slot) => {
           const index = bank * 16 + slot;
           const pad = pads[index];
-          const cls = ["pad", pad && "pad--loaded", pad?.tune && "pad--tuned", selected === index && "pad--selected"]
+          const cls = [
+            "pad",
+            pad && "pad--loaded",
+            pad?.tune && "pad--tuned",
+            selected === index && "pad--selected",
+          ]
             .filter(Boolean)
             .join(" ");
           return (
             <button
               key={slot}
               className={cls}
-              style={box(PAD_COLS[slot % 4], PAD_ROWS[Math.floor(slot / 4)], PAD_W, PAD_H)}
+              style={box(
+                PAD_COLS[slot % 4],
+                PAD_ROWS[Math.floor(slot / 4)],
+                PAD_W,
+                PAD_H,
+              )}
               onPointerDown={(e) => {
                 e.preventDefault();
                 tapPad(index);
@@ -212,13 +264,22 @@ function App() {
 
         <div className="banks" style={box(296, 1836, 315, 80)}>
           {BANKS.map((name, i) => (
-            <button key={name} className={bank === i ? "bank bank--active" : "bank"} onClick={() => setBank(i)}>
+            <button
+              key={name}
+              className={bank === i ? "bank bank--active" : "bank"}
+              onClick={() => setBank(i)}
+            >
               {name}
             </button>
           ))}
         </div>
 
-        <button className="export" style={box(735, 1836, 155, 80)} disabled={!canExport} onClick={exportProject}>
+        <button
+          className="export"
+          style={box(735, 1836, 155, 80)}
+          disabled={!canExport}
+          onClick={exportProject}
+        >
           {exporting ? "…" : "Export"}
         </button>
       </div>
