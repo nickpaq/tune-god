@@ -329,6 +329,9 @@ function App() {
         <div className="cover" style={box(288, 1826, 330, 100)} />
         <div className="cover" style={box(725, 1826, 175, 100)} />
         <div className="cover" style={box(18, 1826, 265, 100)} />
+        {/* The screenshot's baked-in Dynamic Island and home indicator. */}
+        <div className="cover" style={box(0, 0, W, 90)} />
+        <div className="cover" style={box(0, 1940, W, 59)} />
 
         <button
           className="menu-button"
