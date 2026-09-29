@@ -14,6 +14,8 @@ export interface Pad {
   /** Guessed (or manually chosen) sound category, used for auto-colouring. */
   category?: CategoryId;
   tune: boolean;
+  /** Set once the user toggles Tune by hand; "Tune all" then leaves this pad's choice alone. */
+  tuneLocked?: boolean;
   /** Manual trim on top of the computed shift. */
   semis: number;
   cents: number;

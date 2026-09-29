@@ -181,7 +181,7 @@ function App() {
       Object.fromEntries(
         Object.entries(prev).map(([i, p]) => [
           i,
-          { ...p, tune: p.detectedMidi != null, semis: 0, cents: 0 },
+          { ...p, tune: p.tuneLocked ? p.tune : p.detectedMidi != null, semis: 0, cents: 0 },
         ]),
       ),
     );
@@ -291,7 +291,9 @@ function App() {
                 { ...selectedPad, semis: 0, cents: 0 },
                 tunedTarget,
               )}
-              onChange={(patch) => patchPad(selectedPad.index, patch)}
+              onChange={(patch) =>
+                patchPad(selectedPad.index, "tune" in patch ? { ...patch, tuneLocked: true } : patch)
+              }
             />
           ) : hasProject ? (
             <div className="teal__message">
