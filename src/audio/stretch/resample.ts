@@ -14,11 +14,11 @@
 // 24-bit noise floor of the exported WAVs.
 
 /** Taps on each side of the read position (kernel length = 2 * HALF_TAPS). */
-const HALF_TAPS = 64;
-/** Kaiser shape: ~100 dB stopband, transition band under 10% of Nyquist. */
-const KAISER_BETA = 10;
-/** Kernel phases across one sample; rows are linearly interpolated, so error is ~1e-7. */
-const PHASES = 1024;
+const HALF_TAPS = 128;
+/** Kaiser shape: ~140 dB stopband, transition band about 8% of Nyquist. */
+const KAISER_BETA = 14;
+/** Kernel phases across one sample; rows are linearly interpolated, so error is far below 24-bit. */
+const PHASES = 4096;
 
 /** Zeroth-order modified Bessel function of the first kind (series expansion). */
 function besselI0(x: number): number {

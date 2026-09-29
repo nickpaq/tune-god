@@ -66,6 +66,14 @@ function validCategory(id: CategoryId | undefined): CategoryId {
   return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
 }
 
+/** Resampling can overshoot full scale by a hair on loud samples; scale down only then, so the WAV never clips. */
+function limitPeak(channelData: Float32Array[]): Float32Array[] {
+  let peak = 0;
+  for (const data of channelData) for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
+  if (peak <= 1) return channelData;
+  return channelData.map((data) => data.map((v) => v / peak));
+}
+
 /** A pad's default Tune state: the user's manual choice if locked, else on for bass/melodic with a detected pitch. */
 function tuneDefault(locked: boolean | undefined, current: boolean, category: CategoryId | undefined, detectedMidi: number | null | undefined, target: number | null): boolean {
   if (locked) return current;
@@ -84,6 +92,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
+  /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
+  const [exportProgress, setExportProgress] = useState("");
   const [normalize, setNormalize] = useState(saved.normalize ?? false);
   const [spread, setSpread] = useState(saved.spread ?? false);
   /** Pre-rendered normalized audio per pad index; only used for playback while Normalize is on. */
@@ -280,13 +290,17 @@ function App() {
         const offsets = balancedSpread(tunedPads.length, MAX_SPREAD_PERCENT);
         tunedPads.forEach((p, i) => pans.set(p.sampleId, 0.5 + offsets[i] / 200));
       }
-      for (const pad of Object.values(pads)) {
+      const allPads = Object.values(pads);
+      let done = 0;
+      for (const pad of allPads) {
+        setExportProgress(`${done++}/${allPads.length}`);
         const shift = shiftFor(pad, tunedTarget);
         const retimed = pad.tune && Math.abs(shift) >= 1e-6;
         if (!retimed && !normalize) continue;
-        const channelData = retimed
+        let channelData = retimed
           ? await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift))
           : pad.channelData;
+        if (retimed && !normalize) channelData = limitPeak(channelData);
         tuned.push({
           sampleId: pad.sampleId,
           sampleRate: pad.sampleRate,
@@ -306,6 +320,7 @@ function App() {
       console.error(err);
     } finally {
       setExporting(false);
+      setExportProgress("");
     }
   };
 
@@ -496,7 +511,7 @@ function App() {
           disabled={!canExport}
           onClick={exportProject}
         >
-          {exporting ? "…" : "Export"}
+          {exporting ? exportProgress || "…" : "Export"}
         </button>
       </div>
     </div>
