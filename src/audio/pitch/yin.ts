@@ -177,12 +177,47 @@ function pickPitch(mono: Float32Array, options: YinOptions): YinFrameResult | nu
 const ANALYSIS_SECONDS = 4;
 
 /**
- * Sub-bass fundamentals (808s sit around 25-45 Hz) need a much longer frame
- * than the default to fit even two periods, so they get a second, slower pass
- * when the normal one finds nothing.
+ * Sub-bass (808s sit around 25-45 Hz) is too low for YIN: a frame can barely
+ * fit two periods, so it locks onto a stray harmonic. Bass-heavy samples (and
+ * any that yield nothing) are therefore analysed on a copy transposed up 1-3
+ * octaves — the samples are decimated, so every period gets 2-8x shorter and
+ * fits comfortably — and the octaves are divided back out of the result. An
+ * exact octave shift leaves the cents offset unchanged, so what's measured up
+ * high applies to the original audio, which is never touched.
  */
-const LOW_PITCH_OPTIONS = { frameSize: 8192, hopSize: 4096, minFrequency: 20, maxFrequency: 400 };
-const LOW_PITCH_SECONDS = 1.5;
+const MIN_RELIABLE_HZ = 100;
+const MAX_OCTAVES_UP = 3;
+/** Share of a sample's energy below ~90 Hz above which it's treated as bass. */
+const BASS_ENERGY_RATIO = 0.6;
+
+/** Transposes up `octaves` by decimation (block-averaged, so aliasing is negligible for bass). */
+function transposeUp(mono: Float32Array, octaves: number): Float32Array {
+  const factor = 2 ** octaves;
+  const out = new Float32Array(Math.floor(mono.length / factor));
+  for (let i = 0; i < out.length; i++) {
+    let sum = 0;
+    for (let k = 0; k < factor; k++) sum += mono[i * factor + k];
+    out[i] = sum / factor;
+  }
+  return out;
+}
+
+/** True when most of the signal's energy sits below ~90 Hz (two cascaded one-pole low-passes). */
+function isBassHeavy(mono: Float32Array, sampleRate: number): boolean {
+  const a = 1 - Math.exp((-2 * Math.PI * 90) / sampleRate);
+  let l1 = 0;
+  let l2 = 0;
+  let low = 0;
+  let total = 0;
+  for (let i = 0; i < mono.length; i++) {
+    const v = mono[i];
+    l1 += a * (v - l1);
+    l2 += a * (l1 - l2);
+    low += l2 * l2;
+    total += v * v;
+  }
+  return total > 0 && low / total > BASS_ENERGY_RATIO;
+}
 
 /**
  * YIN's frame-level estimate is only good to ~10-15 cents (short frames, lag
@@ -218,10 +253,27 @@ function refineFrequency(mono: Float32Array, sampleRate: number, estimate: YinFr
   return sampleRate / (denom === 0 ? best : best + (s2 - s0) / denom);
 }
 
+function measure(mono: Float32Array, sampleRate: number, octavesUp: number): YinFrameResult | null {
+  const audio = octavesUp === 0 ? mono : transposeUp(mono, octavesUp);
+  const picked = pickPitch(audio, { sampleRate });
+  if (!picked) return null;
+  return { ...picked, frequency: refineFrequency(audio, sampleRate, picked) / 2 ** octavesUp };
+}
+
+/** Lifts a low sample up an octave at a time until YIN can track it, then reports the original pitch. */
+function measureBass(mono: Float32Array, sampleRate: number): YinFrameResult | null {
+  for (let octaves = 1; octaves <= MAX_OCTAVES_UP; octaves++) {
+    const audio = transposeUp(mono, octaves);
+    const picked = pickPitch(audio, { sampleRate });
+    if (picked && picked.frequency >= MIN_RELIABLE_HZ) {
+      return { ...picked, frequency: refineFrequency(audio, sampleRate, picked) / 2 ** octaves };
+    }
+  }
+  return null;
+}
+
 export function dominantPitch(mono: Float32Array, sampleRate: number): YinFrameResult | null {
   const head = mono.subarray(0, Math.min(mono.length, ANALYSIS_SECONDS * sampleRate));
-  const picked =
-    pickPitch(head, { sampleRate }) ?? pickPitch(head.subarray(0, LOW_PITCH_SECONDS * sampleRate), { sampleRate, ...LOW_PITCH_OPTIONS });
-  if (!picked) return null;
-  return { ...picked, frequency: refineFrequency(head, sampleRate, picked) };
+  if (isBassHeavy(head, sampleRate)) return measureBass(head, sampleRate) ?? measure(head, sampleRate, 0);
+  return measure(head, sampleRate, 0) ?? measureBass(head, sampleRate);
 }
