@@ -14,18 +14,22 @@ export interface TunedSample {
  * and sample IDs, so sampler.json's pad->sample mapping stays valid. Each
  * retimed pad's trim points are reset to the new file length and its pitch
  * knob zeroed (the tuning is baked into the audio now). Samples that were only
- * gain-adjusted keep their trim points.
+ * gain-adjusted keep their trim points. With `resetGain`, every replaced pad's
+ * gain knob is zeroed too (the level is baked into the audio).
  */
 export async function buildTunedKoala(
   project: ParsedKoalaProject,
   tuned: TunedSample[],
+  { resetGain = false }: { resetGain?: boolean } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
 
   for (const pad of samplerJson.pads ?? []) {
     const t = byId.get(pad.sampleId);
-    if (!t?.retimed) continue;
+    if (!t) continue;
+    if (resetGain) pad.gain = 0;
+    if (!t.retimed) continue;
     const frames = t.channelData[0].length;
     pad.start = 0;
     pad.zoomStart = 0;

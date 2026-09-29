@@ -63,6 +63,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [normalize, setNormalize] = useState(false);
   const loadToken = useRef(0);
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
@@ -145,8 +146,9 @@ function App() {
   };
 
   /**
-   * Bakes every tuned pad's shift into its audio (windowed-sinc resample), then
-   * peak-normalizes every sample and applies EXPORT_GAIN_DB, and downloads the rebuilt project.
+   * Bakes every tuned pad's shift into its audio (windowed-sinc resample) and downloads the
+   * rebuilt project. With the normalize switch on, every sample is also peak-normalized to
+   * EXPORT_GAIN_DB and its pad gain knob reset to zero.
    */
   const exportProject = async () => {
     const project = projectRef.current;
@@ -157,17 +159,18 @@ function App() {
       for (const pad of Object.values(pads)) {
         const shift = shiftFor(pad, tunedTarget);
         const retimed = pad.tune && Math.abs(shift) >= 1e-6;
+        if (!retimed && !normalize) continue;
         const channelData = retimed
           ? await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift))
           : pad.channelData;
         tuned.push({
           sampleId: pad.sampleId,
           sampleRate: pad.sampleRate,
-          channelData: normalizeWithGain(channelData, EXPORT_GAIN_DB),
+          channelData: normalize ? normalizeWithGain(channelData, EXPORT_GAIN_DB) : channelData,
           retimed,
         });
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned);
+      const { blob, filename } = await buildTunedKoala(project, tuned, { resetGain: normalize });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -176,7 +179,10 @@ function App() {
     }
   };
 
-  const canExport = Object.keys(pads).length > 0 && analyzing === 0 && !exporting;
+  const canExport =
+    (normalize ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune)) &&
+    analyzing === 0 &&
+    !exporting;
   const hasProject = Object.keys(pads).length > 0;
   const selectedPad = selected !== null ? pads[selected] : undefined;
 
@@ -292,6 +298,11 @@ function App() {
         <button className="stop" style={box(28, 1836, 245, 80)} onClick={stopAll}>
           Stop
         </button>
+
+        <label className="normalize" style={box(296, 1805, 315, 30)}>
+          <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
+          Normalize −6 dB
+        </label>
 
         <button
           className="export"
