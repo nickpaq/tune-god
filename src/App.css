@@ -27,13 +27,14 @@
 /* ---- pads ---- */
 .pad {
   padding: 0;
-  border: 0.3cqw solid var(--line);
+  border: 0.3cqw solid rgba(216, 206, 208, 0.45);
   border-radius: 1.8cqw;
-  background: var(--pad);
+  background: var(--pad-empty);
   box-shadow: 0.6cqw 0.6cqw 0 rgba(0, 0, 0, 0.35);
 }
 
 .pad--loaded {
+  border-color: var(--line);
   background: var(--pad-loaded);
 }
 
