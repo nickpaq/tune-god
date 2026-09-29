@@ -84,6 +84,8 @@ function App() {
   const [exporting, setExporting] = useState(false);
   const [normalize, setNormalize] = useState(saved.normalize ?? false);
   const [spread, setSpread] = useState(saved.spread ?? false);
+  /** Pre-rendered normalized audio per pad index; only used for playback while Normalize is on. */
+  const [normalizedData, setNormalizedData] = useState<Record<number, Float32Array[]>>({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
@@ -104,6 +106,7 @@ function App() {
       if (token !== loadToken.current) return;
       projectRef.current = project;
       setPads({});
+      setNormalizedData({});
       if (!restore) {
         setSelected(null);
         setKeyPc(null);
@@ -204,10 +207,19 @@ function App() {
       index,
       startPad(
         index,
-        pad.channelData,
+        (normalize && normalizedData[index]) || pad.channelData,
         pad.sampleRate,
         shiftFor(pad, tunedTarget),
         toneOn ? keyPc : null,
+      ),
+    );
+  };
+
+  /** Renders every pad at the export level so taps are audibly level-matched. */
+  const normalizeNow = () => {
+    setNormalizedData(
+      Object.fromEntries(
+        Object.values(pads).map((p) => [p.index, normalizeWithGain(p.channelData, EXPORT_GAIN_DB)]),
       ),
     );
   };
@@ -259,7 +271,8 @@ function App() {
       // Koala's pan runs 0..1 (0.5 = centre) for L100..R100, so N percent is N/200 off centre.
       const pans = new Map<number, number>();
       if (spread) {
-        const tunedPads = Object.values(pads).filter((p) => p.tune);
+        // Only melodic pads move; bass, drums and the rest stay centred.
+        const tunedPads = Object.values(pads).filter((p) => p.category === "melodic");
         const offsets = balancedSpread(tunedPads.length, MAX_SPREAD_PERCENT);
         tunedPads.forEach((p, i) => pans.set(p.sampleId, 0.5 + offsets[i] / 200));
       }
@@ -332,9 +345,12 @@ function App() {
               <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
               Normalize −6 dB
             </label>
+            <button className="menu__button" disabled={!normalize || !hasProject} onClick={normalizeNow}>
+              Normalize now
+            </button>
             <label>
               <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
-              Spread tuned pads
+              Spread melodic pads
             </label>
             <label>
               <input type="checkbox" checked={autoColor} onChange={(e) => toggleAutoColor(e.target.checked)} />
