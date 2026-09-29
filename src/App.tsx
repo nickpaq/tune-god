@@ -17,7 +17,7 @@ import { buildTunedKoala, downloadBlob } from "./audio/exportProject";
 import { normalizeWithGain } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
 import { categoryById, type CategoryId } from "./audio/classify";
-import { NOTE_NAMES, semitonesToRatio } from "./audio/theory";
+import { semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
 import "./App.css";
@@ -78,6 +78,7 @@ function App() {
   const [autoColor, setAutoColor] = useState(false);
   const [toneOn, setToneOn] = useState(false);
   const releasePad = useRef<Map<number, PadHandle>>(new Map());
+  const tunedTargetRef = useRef<number | null>(null);
   const loadToken = useRef(0);
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
@@ -92,6 +93,7 @@ function App() {
       setSelected(null);
       setKeyPc(null);
       setTunedTarget(null);
+      tunedTargetRef.current = null;
       setProjectName(project.originalName.replace(/\.koala$/i, ""));
       setBank(Math.min(3, Math.floor(project.pads[0].pad / 16)));
 
@@ -118,7 +120,14 @@ function App() {
             if (token !== loadToken.current) return;
             setPads((prev) => ({
               ...prev,
-              [ref.pad]: { ...prev[ref.pad], detectedMidi, category },
+              [ref.pad]: {
+                ...prev[ref.pad],
+                detectedMidi,
+                category,
+                tune: prev[ref.pad].tuneLocked
+                  ? prev[ref.pad].tune
+                  : tunedTargetRef.current !== null && detectedMidi != null,
+              },
             }));
             setAnalyzing((n) => n - 1);
           });
@@ -174,15 +183,17 @@ function App() {
     setAutoColor(on);
   };
 
-  const tuneAll = () => {
-    if (keyPc === null) return;
-    setTunedTarget(keyPc);
+  /**
+   * Picking a key retargets every pad. Pads whose Tune switch the user has set by hand keep it,
+   * and every pad keeps its semitone/cents trim, so manual corrections survive a key change.
+   */
+  const selectKey = (pc: number) => {
+    setKeyPc(pc);
+    setTunedTarget(pc);
+    tunedTargetRef.current = pc;
     setPads((prev) =>
       Object.fromEntries(
-        Object.entries(prev).map(([i, p]) => [
-          i,
-          { ...p, tune: p.tuneLocked ? p.tune : p.detectedMidi != null, semis: 0, cents: 0 },
-        ]),
+        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: p.detectedMidi != null }]),
       ),
     );
   };
@@ -315,17 +326,7 @@ function App() {
         </section>
 
         <section className="pink" style={box(LEFT, 806, CONTENT_W, 169)}>
-          <Keyboard selected={keyPc} onSelect={setKeyPc} />
-          <button
-            className="tune-all"
-            disabled={keyPc === null || !hasProject || analyzing > 0}
-            onClick={tuneAll}
-          >
-            Tune all
-            <small>
-              {keyPc === null ? "pick a key" : `to ${NOTE_NAMES[keyPc]}`}
-            </small>
-          </button>
+          <Keyboard selected={keyPc} onSelect={selectKey} />
         </section>
 
         {Array.from({ length: 16 }, (_, slot) => {

@@ -302,42 +302,6 @@
   background: #1b7fa8;
 }
 
-.tune-all {
-  width: 23cqw;
-  overflow: hidden;
-  border: 0.3cqw solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg);
-  padding: 0 1cqw;
-  font-size: 3.6cqw;
-  line-height: 1.1;
-  white-space: nowrap;
-  font-weight: 700;
-  text-transform: uppercase;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.tune-all small {
-  font-size: 3cqw;
-  font-weight: 400;
-  opacity: 0.8;
-  text-transform: none;
-}
-
-.tune-all:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.tune-all:not(:disabled) {
-  background: var(--cyan);
-  color: var(--on-cyan);
-  border-color: var(--cyan);
-}
-
 .tone {
   border: 0.3cqw solid var(--line);
   border-radius: var(--radius);
