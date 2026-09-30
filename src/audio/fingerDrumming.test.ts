@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { arrangeFingerDrumming, EMPTY_PAD_LABEL, type ArrangeSound } from "./fingerDrumming";
-import { FINGER_LAYOUTS, layoutById, layoutSlotAt } from "./fingerLayouts";
+import { FINGER_LAYOUTS, layoutById } from "./fingerLayouts";
 import { classifyByName, classifySample, type CategoryId } from "./classify";
 
 const horizontal = layoutById("horizontal");
@@ -168,12 +168,6 @@ describe("layouts", () => {
     for (const l of FINGER_LAYOUTS) expect(l.slots).toHaveLength(16);
   });
 
-  it("finds a pad's slot on banks A and B only", () => {
-    const l = layoutById("horizontal");
-    expect(layoutSlotAt(l, 12)?.label).toBe("Kick");
-    expect(layoutSlotAt(l, 16 + 13)?.label).toBe("Snare");
-    expect(layoutSlotAt(l, 32)).toBeUndefined();
-  });
 
 });
 

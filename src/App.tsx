@@ -13,7 +13,7 @@ import { buildTunedKoala, downloadBlob, type GhostPadExport, type TunedSample } 
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { isDrumCategory, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { isDrumCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
@@ -22,7 +22,7 @@ import { LayoutPicker } from "./components/LayoutPicker";
 import { ClassifierModal } from "./components/ClassifierModal";
 import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
-import { FINGER_LAYOUTS, layoutById, layoutSlotAt } from "./audio/fingerLayouts";
+import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { GHOST_LABEL, GHOST_LEVEL_DB, makeGhostAudio } from "./audio/ghost";
@@ -787,20 +787,13 @@ function App() {
   const arrangement = analyzing === 0 ? arrangementOf() : undefined;
 
   const palette = paletteById(paletteId);
-  /**
-   * With a layout applied, with auto-color on, a drum on bank A or B shows its slot's role colour and label, exactly as the
-   * layout preview does. This is only how the pad looks in Koala; its category (tuning, buses) is unchanged.
-   */
-  const drumSlotOf = (p: Pad) =>
-    autoColor && layout.on && !p.placeholder && isKitCategory(p.category) ? layoutSlotAt(layoutById(layout.id), p.index) : undefined;
-  /** Palette colour for a sound: by category, or its slot's role colour for drums on the layout's banks. */
+  /** Palette colour for a sound, by its own category. Where it sits (including on a layout's slots) never changes it. */
   const autoColorOf = (p: Pad): string => {
-    const slot = drumSlotOf(p);
-    const base = colorFor(palette, slot?.category ?? p.category ?? "other");
+    const base = colorFor(palette, p.category ?? "other");
     return p.ghost ? shade(base, 2) : base;
   };
-  /** The words on a pad: its layout slot's label for drums on the layout's banks, otherwise its role, keyword or category. */
-  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : drumSlotOf(p)?.label ?? padLabel(p));
+  /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
+  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : padLabel(p));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
   const placeholderList = Object.values(pads)

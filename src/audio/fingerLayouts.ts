@@ -87,8 +87,3 @@ export const DEFAULT_LAYOUT_ID = "horizontal";
 export function layoutById(id: string | null | undefined): FingerLayout {
   return FINGER_LAYOUTS.find((l) => l.id === id) ?? FINGER_LAYOUTS[0];
 }
-
-/** The layout slot a pad sits in, for pads on the drum banks (A and B); undefined elsewhere. */
-export function layoutSlotAt(layout: FingerLayout, padIndex: number): LayoutSlot | undefined {
-  return padIndex >= 0 && padIndex < 32 ? layout.slots[padIndex % 16] : undefined;
-}
