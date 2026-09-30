@@ -8,7 +8,7 @@ import {
   isKoalaFile,
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
-import { startPad, type PadHandle } from "./audio/player";
+import { setReferencePitch, startPad, type PadHandle } from "./audio/player";
 import { buildTunedKoala, downloadBlob, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
@@ -18,7 +18,7 @@ import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMov
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
-import { semitonesToRatio } from "./audio/theory";
+import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
 import "./App.css";
@@ -81,12 +81,14 @@ const MAX_SPREAD_PERCENT = 40;
  * Total semitone shift for a pad: the shortest move (never more than 6 up or
  * down) from its exact detected pitch onto the target note, plus the manual trim.
  */
-function shiftFor(pad: Pad, target: number | null): number {
+function shiftFor(pad: Pad, target: number | null, a4: number): number {
   if (!pad.tune) return 0;
   let base = 0;
   if (target !== null && pad.detectedMidi != null) {
     base = (((target - pad.detectedMidi) % 12) + 12) % 12;
     if (base > 6) base -= 12;
+    // The detected pitch is measured against A440; a different A4 reference moves the target note with it.
+    base += referenceOffsetSemitones(a4);
   }
   return base + pad.semis + pad.cents / 100;
 }
@@ -137,6 +139,8 @@ function App() {
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
+  const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
+  const [a4Text, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
   /** Ghost under the finger while a pad is being dragged, and the drop target under it ("kind:index"). */
   const [drag, setDrag] = useState<{ from: number; x: number; y: number } | null>(null);
   const [hover, setHover] = useState("");
@@ -254,8 +258,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ normalize, spread, autoColor, routeBuses, paletteId, toneOn, bank, selected, keyPc, tunedTarget });
-  }, [normalize, spread, autoColor, routeBuses, paletteId, toneOn, bank, selected, keyPc, tunedTarget]);
+    saveState({ normalize, spread, autoColor, routeBuses, paletteId, toneOn, a4, bank, selected, keyPc, tunedTarget });
+  }, [normalize, spread, autoColor, routeBuses, paletteId, toneOn, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -340,7 +344,7 @@ function App() {
         index,
         (normalize && normalizedData[pad.origIndex]) || pad.channelData,
         pad.sampleRate,
-        shiftFor(pad, tunedTarget),
+        shiftFor(pad, tunedTarget, a4),
         toneOn ? keyPc : null,
       ),
     );
@@ -444,9 +448,11 @@ function App() {
   useEffect(() => {
     for (const [index, handle] of releasePad.current) {
       const pad = pads[index];
-      if (pad) handle.setShift(shiftFor(pad, tunedTarget));
+      if (pad) handle.setShift(shiftFor(pad, tunedTarget, a4));
     }
-  }, [pads, tunedTarget]);
+  }, [pads, tunedTarget, a4]);
+
+  useEffect(() => setReferencePitch(a4), [a4]);
 
   const toggleAutoColor = (on: boolean) => {
     if (on && !window.confirm("Auto-color pads will replace the existing pad colors and color labels in your project when you export. Continue?")) return;
@@ -494,7 +500,7 @@ function App() {
       let done = 0;
       for (const pad of allPads) {
         setExportProgress(`${done++}/${allPads.length}`);
-        const shift = shiftFor(pad, tunedTarget);
+        const shift = shiftFor(pad, tunedTarget, a4);
         const retimed = pad.tune && Math.abs(shift) >= 1e-6;
         if (!retimed && !normalize) continue;
         const channelData = retimed
@@ -609,6 +615,34 @@ function App() {
               <input type="checkbox" checked={routeBuses} onChange={(e) => setRouteBuses(e.target.checked)} />
               Route pads to buses by sound type
             </label>
+            <label className="menu__a4">
+              A4 reference (Hz)
+              <input
+                type="number"
+                inputMode="decimal"
+                min={A4_REFERENCE_RANGE.min}
+                max={A4_REFERENCE_RANGE.max}
+                step={0.1}
+                value={a4Text}
+                onChange={(e) => {
+                  setA4Text(e.target.value);
+                  const hz = parseFloat(e.target.value);
+                  if (Number.isFinite(hz) && hz >= A4_REFERENCE_RANGE.min && hz <= A4_REFERENCE_RANGE.max) setA4(hz);
+                }}
+                onBlur={() => setA4Text(String(a4))}
+              />
+            </label>
+            {a4 !== 440 && (
+              <button
+                className="menu__button"
+                onClick={() => {
+                  setA4(440);
+                  setA4Text("440");
+                }}
+              >
+                Reset to A440
+              </button>
+            )}
             {autoColor && (
               <button
                 className="menu__button"
@@ -628,10 +662,7 @@ function App() {
             <PadPanel
               pad={selectedPad}
               autoColor={autoColor}
-              autoShift={shiftFor(
-                { ...selectedPad, semis: 0, cents: 0 },
-                tunedTarget,
-              )}
+              autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4)}
               onChange={(patch) => {
                 if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
                 else if (patch.category && !selectedPad.tuneLocked) {

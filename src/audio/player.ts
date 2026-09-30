@@ -3,6 +3,12 @@
 import { getAudioContext } from "./decode";
 import { midiToFrequency, semitonesToRatio } from "./theory";
 
+/** A4 reference (Hz) the reference tones are built on; the app sets it from the menu. */
+let a4Reference = 440;
+export function setReferencePitch(hz: number): void {
+  a4Reference = hz;
+}
+
 const bufferCache = new WeakMap<Float32Array[], AudioBuffer>();
 
 function bufferFor(ctx: AudioContext, channelData: Float32Array[], sampleRate: number): AudioBuffer {
@@ -83,7 +89,7 @@ export function startPad(
   if (tonePitchClass !== null) {
     osc = ctx.createOscillator();
     osc.type = "sine";
-    osc.frequency.value = midiToFrequency(60 + tonePitchClass);
+    osc.frequency.value = midiToFrequency(60 + tonePitchClass, a4Reference);
     const toneGain = ctx.createGain();
     // A sine of amplitude a has RMS a / sqrt(2), so this matches the sample's RMS.
     toneGain.gain.value = Math.min(MAX_TONE_GAIN, rms(channelData) * Math.SQRT2);
@@ -125,7 +131,7 @@ export function startSine(pitchClass: number): () => void {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = "sine";
-  osc.frequency.value = midiToFrequency(60 + pitchClass);
+  osc.frequency.value = midiToFrequency(60 + pitchClass, a4Reference);
   const now = ctx.currentTime;
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(0.3, now + 0.01);

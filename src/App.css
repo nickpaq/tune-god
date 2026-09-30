@@ -515,6 +515,17 @@
   height: 5cqw;
 }
 
+.menu .menu__a4 input {
+  width: 18cqw;
+  padding: 1.5cqw;
+  border: 0.3cqw solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: #fff;
+  font: inherit;
+  font-size: 16px; /* at least 16px so iOS doesn't zoom on focus */
+}
+
 .pad--colored {
   color: #000;
 }

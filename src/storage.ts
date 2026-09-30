@@ -25,6 +25,8 @@ export interface SavedState {
   routeBuses?: boolean;
   paletteId?: string;
   toneOn?: boolean;
+  /** A4 reference pitch in Hz (440 = standard). */
+  a4?: number;
   bank?: number;
   selected?: number | null;
   keyPc?: number | null;
