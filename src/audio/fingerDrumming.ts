@@ -56,12 +56,9 @@ const SUBSTITUTE_GROUP: Partial<Record<CategoryId, string>> = {
   vox: "vox",
 };
 
-/** Where a slot sits among same-category slots: lows before mids before highs, otherwise bottom row first (the pads under the thumbs). */
-function slotRank(label: string, position: number): number {
-  if (/^low\b/i.test(label)) return -3;
-  if (/^mid\b/i.test(label)) return -2;
-  if (/^high\b/i.test(label)) return -1;
-  return 100 - position;
+/** Where a slot sits among same-category slots: the bottom row first (the pads under the thumbs), left to right within a row. */
+function slotRank(position: number): number {
+  return (3 - Math.floor(position / 4)) * 4 + (position % 4);
 }
 
 interface Kit {
@@ -81,7 +78,7 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[], substitute: boolea
     const positions = layout.slots
       .map((s, i) => ({ s, i }))
       .filter(({ s }) => s.category === category)
-      .sort((a, b) => slotRank(a.s.label, a.i) - slotRank(b.s.label, b.i));
+      .sort((a, b) => slotRank(a.i) - slotRank(b.i));
     const candidates = drums.filter((d) => d.category === category).sort(byFrequency);
     positions.forEach(({ i }, n) => {
       const pick = candidates[n];

@@ -29,7 +29,7 @@ describe("arrangeFingerDrumming", () => {
     expect(missing).toHaveLength(15);
     expect(missing.every((p) => p.index < 16)).toBe(true);
     expect(a.placeholders.find((p) => p.index === 13)?.label).toBe("add Snare");
-    expect(a.placeholders.find((p) => p.index === 4)?.label).toBe("add High Perc");
+    expect(a.placeholders.find((p) => p.index === 4)?.label).toBe("add Perc");
   });
 
   it("uses a same-family drum when the exact type is absent, but never an unrelated one", () => {
@@ -45,13 +45,13 @@ describe("arrangeFingerDrumming", () => {
     expect(indexOf(b, second)).toBe(1);
   });
 
-  it("orders percussion low to high across the low, mid and high slots", () => {
+  it("puts lower percussion on the lower rows, left to right", () => {
     const high = sound("perc", { centroid: 3000 });
     const low = sound("perc", { centroid: 200 });
     const mid = sound("perc", { centroid: 900 });
     const a = arrangeFingerDrumming([high, low, mid], horizontal);
-    // Horizontal row 2 reads: High Perc, Mid Perc, Low Perc.
-    expect([high, mid, low].map((s) => indexOf(a, s))).toEqual([4, 5, 6]);
+    // Horizontal's perc slots, bottom row first: 10, 11, then 4.
+    expect([low, mid, high].map((s) => indexOf(a, s))).toEqual([10, 11, 4]);
   });
 
   it("builds a second kit only when the leftovers hold a kick, a snare and a hat", () => {

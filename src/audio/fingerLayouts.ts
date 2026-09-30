@@ -5,7 +5,7 @@ import { categoryLabel, type CategoryId } from "./classify";
 export interface LayoutSlot {
   /** The drum category this slot wants. */
   category: CategoryId;
-  /** What the preview and any "missing" pad call this slot, e.g. "Low Perc". */
+  /** What the preview and any "missing" pad call this slot, e.g. "Perc". */
   label: string;
 }
 
@@ -26,9 +26,6 @@ const CHAT = slot("closedHat");
 const OHAT = slot("openHat");
 const VOX = slot("vox");
 const PERC = slot("perc");
-const PERC_LOW = slot("perc", "Low Perc");
-const PERC_MID = slot("perc", "Mid Perc");
-const PERC_HIGH = slot("perc", "High Perc");
 
 /** Flips every row left to right, for the left-handed version of a layout. */
 export function mirrorSlots(slots: LayoutSlot[]): LayoutSlot[] {
@@ -37,8 +34,8 @@ export function mirrorSlots(slots: LayoutSlot[]): LayoutSlot[] {
 
 const VERTICAL: LayoutSlot[] = [
   OHAT, CHAT, VOX, OHAT,
-  PERC_HIGH, PERC_MID, PERC, CHAT,
-  PERC_LOW, CLAP, VOX, SNARE,
+  PERC, PERC, PERC, CHAT,
+  PERC, CLAP, VOX, SNARE,
   PERC, PERC, PERC, KICK,
 ];
 
@@ -49,7 +46,7 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
     description: "Kick, snare and both hats along the bottom row; percussion, claps and vox above.",
     slots: [
       OHAT, CHAT, VOX, PERC,
-      PERC_HIGH, PERC_MID, PERC_LOW, PERC,
+      PERC, PERC, PERC, PERC,
       CLAP, VOX, PERC, PERC,
       KICK, SNARE, CHAT, OHAT,
     ],
@@ -71,7 +68,7 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
     name: "Quest for Groove 4x4",
     description: "Kick pair between two open hats, snares flanked by claps, closed hats, percussion on top.",
     slots: [
-      PERC_LOW, PERC_MID, PERC_HIGH, OHAT,
+      PERC, PERC, PERC, OHAT,
       CHAT, OHAT, CHAT, CHAT,
       CLAP, SNARE, SNARE, CLAP,
       OHAT, KICK, KICK, OHAT,
@@ -83,7 +80,7 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
     description: "Kicks on the outside and snares above them, hats in the middle, percussion and vox higher.",
     slots: [
       OHAT, CHAT, VOX, PERC,
-      PERC_LOW, PERC_MID, PERC_HIGH, CLAP,
+      PERC, PERC, PERC, CLAP,
       SNARE, OHAT, OHAT, SNARE,
       KICK, CHAT, CHAT, KICK,
     ],
