@@ -652,3 +652,81 @@
   height: 7cqw;
   border-radius: 1cqw;
 }
+
+/* ---- finger drumming ---- */
+.menu__select {
+  width: 100%;
+  padding: 1.5cqw;
+  border: 0.3cqw solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: #fff;
+  font: inherit;
+  font-size: 16px; /* at least 16px so iOS doesn't zoom on focus */
+  text-transform: none;
+}
+
+.menu__select:disabled {
+  opacity: 0.4;
+}
+
+.layout-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5cqw;
+  padding: 2cqw;
+  border: 0.3cqw solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: #fff;
+  font: inherit;
+  text-align: left;
+}
+
+.layout-row__name {
+  font-size: 3.4cqw;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.layout-row__desc {
+  font-size: 2.6cqw;
+  opacity: 0.75;
+}
+
+.layout-row__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1cqw;
+}
+
+.layout-row__grid span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 9cqw;
+  padding: 0.5cqw;
+  border-radius: 1cqw;
+  font-size: 2.3cqw;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.pad__label {
+  display: block;
+  padding: 0 4%;
+  font-size: 2.8cqw;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.pad--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

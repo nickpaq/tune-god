@@ -1,5 +1,6 @@
 import { PrecisionSlider } from "./PrecisionSlider";
 import { CATEGORIES, type CategoryId } from "../audio/classify";
+import type { DrumRole } from "../audio/drumRoles";
 import { formatSignedCents, formatSignedSemitones } from "../audio/theory";
 
 export interface Pad {
@@ -15,6 +16,12 @@ export interface Pad {
   detectedMidi?: number | null;
   /** Guessed (or manually chosen) sound category, used for auto-colouring. */
   category?: CategoryId;
+  /** Finer drum type (open hat, tom, ...) for drums; used by the finger-drumming layout. */
+  drumRole?: DrumRole;
+  /** Spectral centroid in Hz, used to order sounds with no clear pitch. */
+  centroid?: number;
+  /** Set on the silent pads the finger-drumming layout adds; they have no project sample behind them. */
+  placeholder?: { kind: "missing" | "empty"; label: string };
   tune: boolean;
   /** Set once the user toggles Tune by hand; "Tune all" then leaves this pad's choice alone. */
   tuneLocked?: boolean;

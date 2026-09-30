@@ -32,6 +32,14 @@ export interface SavedState {
   keyPc?: number | null;
   tunedTarget?: number | null;
   pads?: Record<number, SavedPad>;
+  /** Finger-drumming layout chosen in the menu (kept across projects). */
+  layoutId?: string;
+  /** This project is currently arranged with that layout. */
+  layoutOn?: boolean;
+  /** Where every sound sat before the layout was applied (original slot -> slot), so unchecking can restore it. */
+  layoutPre?: Record<number, number>;
+  /** The silent pads the layout added, recreated when the project reopens. */
+  layoutPlaceholders?: { index: number; kind: "missing" | "empty"; label: string }[];
 }
 
 export function loadState(): SavedState {

@@ -1,6 +1,6 @@
 # Finger drumming pad layouts: research and options
 
-Status: researched and specified, not built. The agreed spec is in "Agreed spec" below; the layout options and implementation plan sections that precede it are the earlier research and are superseded where they disagree.
+Status: built (see `src/audio/fingerDrumming.ts`, `fingerLayouts.ts`, `drumRoles.ts`, `placeholderPads.ts`). The agreed spec is in "Agreed spec" below; the layout options and implementation plan sections that precede it are the earlier research and are superseded where they disagree.
 
 ## Goal and constraints
 
@@ -114,8 +114,17 @@ A separate `drumRole` field, leaving the 9 palette categories alone: kick, snare
 2. Menu section, warnings, Layouts preview modal, undo and restore.
 3. Export of placeholder pads (new sample and pad entries, silent WAVs), plus a test that remapped sequence notes land on the right pads.
 
+### Decisions made while building
+
+- If the project is nearly full, real sounds take over `missing` placeholder slots (last first) rather than being left out.
+- When a second kit exists, bank A uses only exact role matches so the leftovers stay available for bank B; otherwise bank A may fill a slot with a same-category drum, bottom row first.
+- All placeholders share one silent sample in the exported project.
+- The checkbox is disabled while pads are still being analysed; the layout is per project (a newly loaded project starts with it off), and the chosen layout is remembered.
+- Switching layouts while one is applied asks for confirmation and rearranges from the current pads; unchecking restores the pre-layout slots for every pad still in the project.
+
 ### Still to verify
 
-- The real Koala pad and sample schema, since the calibration project's pads are minimal.
+- The real Koala pad and sample schema: placeholder pads are cloned from an existing pad, but the export has only been checked against synthetic projects, not opened in Koala.
+- The exact Koala dark grey (`MISSING_PAD_COLOR` in `placeholderPads.ts` is an approximation).
 - That Koala's on-screen pad numbering matches the app's slot order.
 - That sequence remap holds with the extra pads (note numbers use the same base as pad numbers, true for the tested 0-based project).

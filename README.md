@@ -94,6 +94,6 @@ Icons in `public/pwa-*.png` and `public/apple-touch-icon.png` are auto-generated
 
 ## Planned
 
-- **Finger-drumming auto-layout:** an opt-in action that arranges pads by category for two-thumb playing. Research and layout options are in [docs/finger-drumming-layouts.md](./docs/finger-drumming-layouts.md).
+- **Finger-drumming layout:** an opt-in menu checkbox (with a layout dropdown and a Layouts preview) that arranges drums on banks A and B, everything else on C and D, and fills gaps with silent placeholder pads. Recorded patterns are remapped to follow their pads. Spec and research in [docs/finger-drumming-layouts.md](./docs/finger-drumming-layouts.md); run the tests with `npm test`.
 - **Bus labelling beyond the four defaults** and any per-bus settings are not handled.
 - `THIRD_PARTY_NOTICES.md` still describes an earlier version of the app (Rubber Band, essentia.js); it needs a review against the current dependencies.

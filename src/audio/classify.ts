@@ -95,7 +95,7 @@ function fft(re: Float64Array, im: Float64Array): void {
   }
 }
 
-interface Features {
+export interface Features {
   duration: number;
   /** Seconds from the peak until the level falls 20 dB. */
   decay: number;
@@ -109,7 +109,7 @@ interface Features {
 
 const FRAME = 4096;
 
-function extractFeatures(mono: Float32Array, sampleRate: number): Features | null {
+export function extractFeatures(mono: Float32Array, sampleRate: number): Features | null {
   let peak = 0;
   for (let i = 0; i < mono.length; i++) peak = Math.max(peak, Math.abs(mono[i]));
   if (peak < 1e-4) return null;

@@ -17,6 +17,10 @@ import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
+import { LayoutPicker } from "./components/LayoutPicker";
+import { arrangeFingerDrumming } from "./audio/fingerDrumming";
+import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
+import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
@@ -69,7 +73,22 @@ interface Snapshot {
   pads: Record<number, Pad>;
   keyPc: number | null;
   tunedTarget: number | null;
+  layout: LayoutState;
 }
+
+/** The finger-drumming layout: whether it is applied, which one, and where every sound sat before (original slot -> slot). */
+interface LayoutState {
+  on: boolean;
+  id: string;
+  pre: Record<number, number>;
+}
+
+const LAYOUT_ON_WARNING =
+  "Your pads will be rearranged into the finger drumming layout: drums on banks A and B, everything else on C and D, and silent placeholder pads filling any gaps. Recorded patterns are corrected to follow their pads, so they will still play back as expected. You can undo this. Continue?";
+const LAYOUT_SWITCH_WARNING =
+  "Switching layouts rearranges your pads again, including any moves you made since applying the current layout. Recorded patterns are corrected to follow their pads and will still play back as expected. Continue?";
+const LAYOUT_OFF_WARNING =
+  "Turning this off removes the placeholder pads and puts every sound back where it was before the layout was applied. You will lose the layout and any changes you made since. Continue?";
 /** Small padding: the loudest peak in any exported file, so a pad knob at 0 dB plays at this level. */
 const FILE_CEILING_DB = -1;
 /** Pad volume knob value for a dB level: plain linear amplitude (checked against a Koala project: -60 dB = 0.001, -6 dB = 0.501, 0 dB = 1, +6 dB = 1.995, -inf = 0). */
@@ -152,6 +171,8 @@ function App() {
   const [routeBuses, setRouteBuses] = useState(saved.routeBuses ?? false);
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
+  const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
   const [a4Text, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
@@ -171,8 +192,8 @@ function App() {
   const lastEdit = useRef({ key: "", time: 0 });
   const [historySize, setHistorySize] = useState({ undo: 0, redo: 0 });
   const syncHistory = () => setHistorySize({ undo: past.current.length, redo: future.current.length });
-  const latest = useRef<Snapshot>({ pads: {}, keyPc: null, tunedTarget: null });
-  latest.current = { pads, keyPc, tunedTarget };
+  const latest = useRef<Snapshot>({ pads: {}, keyPc: null, tunedTarget: null, layout });
+  latest.current = { pads, keyPc, tunedTarget, layout };
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
   const loadProject = useCallback(async (file: File, restore = false) => {
@@ -186,7 +207,12 @@ function App() {
       future.current = [];
       lastEdit.current = { key: "", time: 0 };
       setHistorySize({ undo: 0, redo: 0 });
-      setPads({});
+      // A project reopened with its layout on gets its silent placeholder pads back straight away.
+      const layoutOn = restore && !!saved.layoutOn;
+      setPads(
+        layoutOn ? Object.fromEntries((saved.layoutPlaceholders ?? []).map((ph) => [ph.index, makePlaceholderPad(ph)])) : {},
+      );
+      setLayout((l) => ({ on: layoutOn, id: layoutById(layoutOn ? saved.layoutId : l.id).id, pre: layoutOn ? (saved.layoutPre ?? {}) : {} }));
       setNormalizedData({});
       if (!restore) {
         setSelected(null);
@@ -223,8 +249,8 @@ function App() {
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
-          .catch(() => ({ midi: null, category: "other" as const }))
-          .then(({ midi: detectedMidi, category }) => {
+          .catch(() => ({ midi: null, category: "other" as const, role: undefined, centroid: undefined }))
+          .then(({ midi: detectedMidi, category, role, centroid }) => {
             if (token !== loadToken.current) return;
             setPads((prev) => {
               const remembered = restorePads.current[ref.pad];
@@ -234,6 +260,8 @@ function App() {
                 [at]: {
                   ...cur,
                   detectedMidi,
+                  drumRole: role,
+                  centroid,
                   ...(remembered
                     ? {
                         tune: remembered.tune,
@@ -262,7 +290,7 @@ function App() {
     } finally {
       if (token === loadToken.current) setLoading(false);
     }
-  }, []);
+  }, [saved]);
 
   // Reopen the last project, if there was one.
   useEffect(() => {
@@ -280,6 +308,7 @@ function App() {
     if (analyzing > 0 || loading || Object.keys(pads).length === 0) return;
     const out: Record<number, SavedPad> = {};
     for (const p of Object.values(pads)) {
+      if (p.placeholder) continue;
       out[p.origIndex] = {
         tune: p.tune,
         tuneLocked: p.tuneLocked,
@@ -294,8 +323,14 @@ function App() {
       if (!(ref.pad in out)) out[ref.pad] = { tune: false, semis: 0, cents: 0, deleted: true };
     }
     restorePads.current = out;
-    saveState({ pads: out });
-  }, [pads, analyzing, loading]);
+    saveState({
+      pads: out,
+      layoutId: layout.id,
+      layoutOn: layout.on,
+      layoutPre: layout.pre,
+      layoutPlaceholders: Object.values(pads).flatMap((p) => (p.placeholder ? [{ index: p.index, ...p.placeholder }] : [])),
+    });
+  }, [pads, analyzing, loading, layout]);
 
   /** Unloads the project and forgets it, so the app opens on the drop screen next time. Settings stay. */
   const clearProject = () => {
@@ -310,6 +345,7 @@ function App() {
     restorePads.current = {};
     setHistorySize({ undo: 0, redo: 0 });
     setPads({});
+    setLayout((l) => ({ ...l, on: false, pre: {} }));
     setNormalizedData({});
     setSelected(null);
     setKeyPc(null);
@@ -320,7 +356,7 @@ function App() {
     setLoading(false);
     setExpanded(false);
     setBank(0);
-    saveState({ pads: {} });
+    saveState({ pads: {}, layoutOn: false, layoutPre: {}, layoutPlaceholders: [] });
     void clearProjectFile();
     setMenuOpen(false);
   };
@@ -349,6 +385,7 @@ function App() {
 
   const restore = (snap: Snapshot) => {
     setPads(snap.pads);
+    setLayout((l) => ({ ...snap.layout, id: snap.layout.on ? snap.layout.id : l.id }));
     setKeyPc(snap.keyPc);
     setTunedTarget(snap.tunedTarget);
     tunedTargetRef.current = snap.tunedTarget;
@@ -370,6 +407,65 @@ function App() {
     restore(next);
   };
 
+  /** Every pad rearranged into `layoutId`, with placeholder pads in the gaps. Earlier placeholders are dropped first. */
+  const arrangeInto = (cur: Record<number, Pad>, layoutId: string): Record<number, Pad> => {
+    const real = Object.values(cur)
+      .filter((p) => !p.placeholder)
+      .sort((a, b) => a.index - b.index);
+    const { positions, placeholders } = arrangeFingerDrumming(
+      real.map((p) => ({ key: p.origIndex, category: p.category, role: p.drumRole, midi: p.detectedMidi, centroid: p.centroid })),
+      layoutById(layoutId),
+    );
+    const next: Record<number, Pad> = {};
+    for (const p of real) {
+      const index = positions.get(p.origIndex);
+      if (index !== undefined) next[index] = { ...p, index };
+    }
+    for (const ph of placeholders) next[ph.index] = makePlaceholderPad(ph);
+    return next;
+  };
+
+  /** Applies a layout as one undo step, remembering where the sounds were so turning it off can put them back. */
+  const applyLayout = (id: string) => {
+    const cur = latest.current;
+    const pre = cur.layout.on
+      ? cur.layout.pre
+      : Object.fromEntries(Object.values(cur.pads).filter((p) => !p.placeholder).map((p) => [p.origIndex, p.index]));
+    recordEdit();
+    setPads(arrangeInto(cur.pads, id));
+    setLayout({ on: true, id, pre });
+    setSelected(null);
+    setBank(0);
+  };
+
+  /** Removes the placeholder pads and returns every remaining sound to its pre-layout slot. */
+  const removeLayout = () => {
+    const cur = latest.current;
+    recordEdit();
+    const next: Record<number, Pad> = {};
+    for (const p of Object.values(cur.pads)) {
+      if (p.placeholder) continue;
+      const wanted = cur.layout.pre[p.origIndex] ?? p.index;
+      const index = next[wanted] ? (nextEmptyPad(next, 0) ?? wanted) : wanted;
+      next[index] = { ...p, index };
+    }
+    setPads(next);
+    setLayout((l) => ({ ...l, on: false, pre: {} }));
+    setSelected(null);
+    setBank(0);
+  };
+
+  const toggleLayout = (on: boolean) => {
+    if (on) {
+      if (window.confirm(LAYOUT_ON_WARNING)) applyLayout(layout.id);
+    } else if (window.confirm(LAYOUT_OFF_WARNING)) removeLayout();
+  };
+
+  const chooseLayout = (id: string) => {
+    if (!layout.on) setLayout((l) => ({ ...l, id }));
+    else if (id !== layout.id && window.confirm(LAYOUT_SWITCH_WARNING)) applyLayout(id);
+  };
+
   const patchPad = (index: number, patch: Partial<Pad>) => {
     recordEdit("semis" in patch || "cents" in patch ? `${index}:trim` : "");
     setPads((prev) => ({ ...prev, [index]: { ...prev[index], ...patch } }));
@@ -379,6 +475,7 @@ function App() {
     const pad = pads[index];
     if (!pad) return;
     setSelected(index);
+    if (pad.placeholder) return; // silent: nothing to play
     releasePad.current.get(index)?.release();
     releasePad.current.set(
       index,
@@ -400,7 +497,7 @@ function App() {
   const normalizeNow = async () => {
     setNormalizing(true);
     try {
-      const list = Object.values(pads);
+      const list = Object.values(pads).filter((p) => !p.placeholder);
       const { gainDb, knobDb } = await getRenderWorker().balance(
         list.map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category })),
         FILE_CEILING_DB,
@@ -533,11 +630,11 @@ function App() {
       const pans = new Map<number, number>();
       if (spread) {
         // Only melodic pads move; bass, drums and the rest stay centred.
-        const tunedPads = Object.values(pads).filter((p) => p.category === "melodic");
+        const tunedPads = Object.values(pads).filter((p) => p.category === "melodic" && !p.placeholder);
         const offsets = balancedSpread(tunedPads.length, MAX_SPREAD_PERCENT);
         tunedPads.forEach((p, i) => pans.set(p.sampleId, 0.5 + offsets[i] / 200));
       }
-      const allPads = Object.values(pads);
+      const allPads = Object.values(pads).filter((p) => !p.placeholder);
       // Every pad's final (tuned) audio, so loudness is measured on what Koala will actually play.
       const rendered: { pad: Pad; channelData: Float32Array[]; retimed: boolean }[] = [];
       let done = 0;
@@ -574,11 +671,11 @@ function App() {
       }
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
-        for (const p of Object.values(pads)) {
+        for (const p of allPads) {
           if (p.category) colors.set(p.sampleId, { color: colorFor(palette, p.category), label: categoryLabel(p.category) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, placeholders: placeholderList });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -593,15 +690,21 @@ function App() {
     const project = projectRef.current;
     if (!project) return undefined;
     const slots = project.pads.filter((p) => p.pad >= 0 && p.pad < 64);
-    const now = new Map(Object.values(pads).map((p) => [p.origIndex, p.index]));
+    const now = new Map(Object.values(pads).filter((p) => !p.placeholder).map((p) => [p.origIndex, p.index]));
     if (!slots.some((r) => now.get(r.pad) !== r.pad)) return undefined;
     return new Map(slots.map((r) => [r.pad, now.get(r.pad) ?? null]));
   };
   const arrangement = analyzing === 0 ? arrangementOf() : undefined;
 
   const palette = paletteById(paletteId);
+  const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : colorFor(palette, p.category ?? "other"));
+  /** The layout's silent pads, written into the exported project. */
+  const placeholderList = Object.values(pads)
+    .filter((p) => p.placeholder)
+    .map((p) => ({ index: p.index, label: p.placeholder!.label, color: placeholderColor(p) }));
   const canExport =
     (arrangement !== undefined ||
+      placeholderList.length > 0 ||
       (normalize || autoColor || routeBuses ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
     analyzing === 0 &&
     !exporting;
@@ -660,6 +763,37 @@ function App() {
               <input type="checkbox" checked={routeBuses} onChange={(e) => setRouteBuses(e.target.checked)} />
               Route pads to buses by sound type
             </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={layout.on}
+                disabled={!hasProject || analyzing > 0}
+                onChange={(e) => toggleLayout(e.target.checked)}
+              />
+              Finger drumming layout
+            </label>
+            <select
+              className="menu__select"
+              value={layout.id}
+              onChange={(e) => chooseLayout(e.target.value)}
+              disabled={analyzing > 0}
+              aria-label="Finger drumming layout"
+            >
+              {FINGER_LAYOUTS.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="menu__button"
+              onClick={() => {
+                setLayoutPickerOpen(true);
+                setMenuOpen(false);
+              }}
+            >
+              Layouts
+            </button>
             <label className="menu__a4">
               A4 reference (Hz)
               <input
@@ -706,7 +840,12 @@ function App() {
         )}
 
         <section className="teal" style={box(LEFT, 280, CONTENT_W, 510)}>
-          {selectedPad ? (
+          {selectedPad?.placeholder ? (
+            <div className="teal__message">
+              <strong>{selectedPad.placeholder.label}</strong>
+              <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
+            </div>
+          ) : selectedPad ? (
             <PadPanel
               pad={selectedPad}
               autoColor={autoColor}
@@ -751,6 +890,7 @@ function App() {
             "pad",
             pad && "pad--loaded",
             pad && autoColor && "pad--colored",
+            pad?.placeholder && "pad--placeholder",
             pad?.tune && "pad--tuned",
             selected === index && "pad--selected",
             drag?.from === index && "pad--dragging",
@@ -764,7 +904,9 @@ function App() {
               className={cls}
               style={{
                 ...box(PAD_COLS[slot % 4], PAD_ROWS[Math.floor(slot / 4)], PAD_W, PAD_H),
-                ...(pad && autoColor
+                ...(pad?.placeholder
+                  ? { background: placeholderColor(pad), color: "#fff" }
+                  : pad && autoColor
                   ? (() => {
                       const bg = colorFor(palette, pad.category ?? "other");
                       return { background: bg, color: textColorOn(bg) };
@@ -781,7 +923,9 @@ function App() {
                 endDrag();
               }}
               aria-label={`Pad ${slot + 1}`}
-            />
+            >
+              {pad?.placeholder && <span className="pad__label">{pad.placeholder.label}</span>}
+            </button>
           );
         })}
 
@@ -865,7 +1009,7 @@ function App() {
                           ]
                             .filter(Boolean)
                             .join(" ")}
-                          style={pad ? { background: colorFor(palette, pad.category ?? "other") } : undefined}
+                          style={pad ? { background: colorOfPad(pad) } : undefined}
                           data-drop="cell"
                           data-index={index}
                         />
@@ -892,6 +1036,15 @@ function App() {
           </>
         )}
 
+        {layoutPickerOpen && (
+          <LayoutPicker
+            palette={autoColor ? palette : paletteById(DEFAULT_PALETTE_ID)}
+            selectedId={layout.id}
+            onSelect={chooseLayout}
+            onClose={() => setLayoutPickerOpen(false)}
+          />
+        )}
+
         {paletteOpen && (
           <PalettePicker selectedId={paletteId} onSelect={setPaletteId} onClose={() => setPaletteOpen(false)} />
         )}
@@ -911,7 +1064,7 @@ function App() {
           style={{
             left: drag.x,
             top: drag.y,
-            background: colorFor(palette, pads[drag.from].category ?? "other"),
+            background: colorOfPad(pads[drag.from]),
           }}
         />
       )}

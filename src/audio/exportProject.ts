@@ -1,5 +1,13 @@
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
+import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
+
+/** A silent pad the finger-drumming layout adds: where it sits, what Koala shows on it, and its colour. */
+export interface PlaceholderPad {
+  index: number;
+  label: string;
+  color: string;
+}
 
 export interface TunedSample {
   sampleId: number;
@@ -28,7 +36,8 @@ export async function buildTunedKoala(
     arrangement,
     pans,
     colors,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }> } = {},
+    placeholders,
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; placeholders?: PlaceholderPad[] } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -60,6 +69,7 @@ export async function buildTunedKoala(
     project.zip.file(`sampler/${t.sampleId}.wav`, encodeWav({ sampleRate: t.sampleRate, channelData: t.channelData, bitDepth: 24 }));
   }
   if (arrangement) await applyArrangement(project, samplerJson, arrangement);
+  if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
   if (busNames) await renameBuses(project, busNames);
 
@@ -154,4 +164,45 @@ async function applyArrangement(project: ParsedKoalaProject, samplerJson: any, a
     if (to !== undefined) song.selectedPad = to === null ? base : to + base;
     project.zip.file("song.json", JSON.stringify(song));
   }
+}
+
+/**
+ * Adds the layout's silent pads. They all point at one shared silent sample (a few milliseconds of
+ * zeros), and each takes its settings from an existing pad so it carries every field Koala expects.
+ * A placeholder whose slot a real pad already holds is skipped.
+ */
+async function addPlaceholderPads(project: ParsedKoalaProject, samplerJson: any, placeholders: PlaceholderPad[]): Promise<void> {
+  const pads: any[] = (samplerJson.pads = Array.isArray(samplerJson.pads) ? samplerJson.pads : []);
+  const samples: any[] = (samplerJson.samples = Array.isArray(samplerJson.samples) ? samplerJson.samples : []);
+  const base = project.padBase;
+  const ids = [...samples.map((s) => s.id), ...pads.map((p) => p.sampleId)].filter((id) => typeof id === "number");
+  const sampleId = Math.max(0, ...ids) + 1;
+  const padTemplate = pads.find((p) => p.type === "sample");
+  const sampleTemplate = samples[0];
+
+  const silence = encodeWav({ sampleRate: PLACEHOLDER_SAMPLE_RATE, channelData: [new Float32Array(PLACEHOLDER_FRAMES)], bitDepth: 16 });
+  project.zip.file(`sampler/${sampleId}.wav`, await silence.arrayBuffer());
+  samples.push({
+    ...(sampleTemplate ? JSON.parse(JSON.stringify(sampleTemplate)) : {}),
+    id: sampleId,
+    metadata: { ...(sampleTemplate?.metadata ?? {}), originalPath: "silence.wav" },
+  });
+
+  const taken = new Set(pads.map((p) => Number(p.pad) - base));
+  for (const ph of placeholders) {
+    if (taken.has(ph.index)) continue;
+    const pad: any = padTemplate ? JSON.parse(JSON.stringify(padTemplate)) : {};
+    pad.pad = typeof padTemplate?.pad === "string" ? String(ph.index + base) : ph.index + base;
+    pad.type = "sample";
+    pad.sampleId = sampleId;
+    pad.label = ph.label;
+    pad.color = ph.color;
+    // Reset the settings that belong to the template's own sample.
+    if ("start" in pad) Object.assign(pad, { start: 0, zoomStart: 0, end: PLACEHOLDER_FRAMES, zoomEnd: PLACEHOLDER_FRAMES });
+    if ("pitch" in pad) pad.pitch = 0;
+    if ("vol" in pad) pad.vol = 1;
+    if ("pan" in pad) pad.pan = 0.5;
+    pads.push(pad);
+  }
+  pads.sort((a, b) => Number(a.pad) - Number(b.pad));
 }
