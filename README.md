@@ -1,41 +1,76 @@
-# tune-god
+# KoalaTune (tune-god)
 
-A local-first web app that helps musicians tune sample batches to match a "master" loop's key — entirely on-device, installable to an iOS home screen, no uploads.
+A local-first web app for [Koala Sampler](https://koalasampler.com) projects. Drop in a `.koala` file, pick a key on the on-screen piano, and the app tunes the right pads to it, balances their loudness, colours and labels them, routes them to buses, and lets you rearrange them. Then it exports a new `.koala` file ready to open in Koala. Everything runs on-device in the browser; nothing is uploaded. It installs to an iOS home screen as a PWA and works offline after the first load.
 
-## What it does
+## Features
 
-1. **Analyzes a master loop** — detects its key (root + major/minor), tempo (BPM), and its own tuning offset from A440. If the filename already names the key/BPM (e.g. `pad_C_min_120.wav`, `classics_Am.wav` — spaced, delimited, and lowercase forms all parse), that takes priority over detection, with a manual override on top.
-2. **Computes the target pitch**, in one of two modes:
-   - **Match master loop** (default) — the master's audio is left completely untouched. Every sample is tuned to the master's literal tonic, then detuned by the master's own offset from true pitch, so samples match the loop's actual (possibly imperfect) sound.
-   - **Correct everything to A=440** — the master loop is also retuned, precisely onto its detected tonic at an editable, standard-range A4 reference pitch (415–466 Hz), and samples are tuned to that same clean reference — so everything, master included, ends up at true pitch.
-3. **Analyzes a batch of samples** — detects each sample's root note and tempo, and guesses a per-sample mode from its filename/duration/pitch confidence (always overridable):
-   - **Loop** — tuned and time-stretched to the master's BPM via Rubber Band, preserving exact duration and formants.
-   - **One-shot** — tuned via a windowed-sinc resample (pitch-shift by changing playback speed, no Rubber Band). Duration drifts slightly with pitch and formants shift with it too, but transients stay crisp instead of getting smeared by a phase vocoder — the classic sampler-pitch-knob approach, better suited to plucked/percussive one-shots like pianos.
-   - **Drum** — left completely untouched.
-4. **Lets you preview, override, and export** — per-sample preview playback, a reference tone generator at the target root frequency, individual WAV downloads, or a ZIP of the whole batch.
-5. **Round-trips Koala projects** — drop a `.koala` file to use its first pad as the master and tune the rest; the rebuilt project swaps in the tuned pad audio (pitch knobs zeroed — tuning is baked into the audio), writes the master's BPM into the transport, and locks Koala's keyboard to the master's scale (Major/NaturalMinor) so the on-screen keys match the key everything was tuned to.
+### Loading and analysis
+- Drop a `.koala` project (or tap to choose one). Every pad's audio is read at its **native sample rate and bit depth** (16/24/32-bit PCM and float WAV), with no resampling on load. Stereo is preserved end to end.
+- Each pad is analysed on a background worker: a custom YIN pitch tracker finds the root note, and a classifier guesses the sound category.
+- The last project, your per-pad choices and your pad arrangement are remembered between visits.
 
-All decoding, analysis, and DSP run in Web Workers via WebAssembly and the Web Audio API — nothing is ever sent to a server.
+### Sound categories
+Nine categories, from filename keywords first and then simple acoustic features (length, decay, spectral balance, detected pitch): **Kick, Snare, Hat, Perc, Bass, Melodic, Vocal, FX, Other**. Each pad's category can be changed by hand in the pad panel. Categories drive tuning, colour, labels, loudness trims and bus routing.
 
-## How detection works
+### Tuning
+- Pick a key on the piano; bass and melodic pads with a detected pitch are tuned to it by default (drums, vocals, FX and other are left alone). You can toggle Tune per pad, and manual choices survive key changes.
+- Each pad has semitone and cent trim sliders (a custom precision slider, so iOS Safari behaves).
+- **Tone** plays a reference sine on the chosen key alongside a pad for ear-checking.
+- Tapping a pad plays it held and looping, retuning live as you move sliders. Live preview uses the browser's playback-rate change for instant response.
+- **Export uses a much higher quality repitch:** a 256-tap Kaiser-windowed sinc resampler (about 140 dB stopband, 4096 interpolated kernel phases, double-precision accumulation). Measured on pure tones the error is about -145 to -150 dB and the response is flat through 19 kHz. The repitch is a sampler-style resample, so duration and formants shift with pitch and transients stay crisp. `scripts/checkResample.ts` reproduces the measurements.
+- Resampled audio is only scaled down, and only if a peak would pass -0.1 dBFS, so exports never clip.
 
-Two different detectors, on purpose — "what key is this loop in" and "what note is this one-shot" are different problems:
+### Loudness balancing ("Balance loudness" + "Normalize now")
+- Every sample is measured with ITU-R BS.1770 K-weighting (the LUFS filter), taking its loudest 200 ms window so short one-shots and long loops compare fairly. `scripts/checkLoudness.ts` checks the meter against the standard's reference values.
+- Files are gain-matched to the same perceived loudness with a **-1 dBFS peak ceiling**. The common level is the highest one at which about 90% of samples fit under the ceiling; the few peakiest are held at the ceiling.
+- The **mix** goes on each pad's volume knob as a per-category trim (kick, snare, bass, vocal, other 0 dB; melodic -2; hat and perc -3; FX -4; editable in `src/audio/loudness.ts`). Koala's knob is linear amplitude (`vol = 10^(dB/20)`, verified against a real project), so a knob at 0 dB plays the normalized file at its full level.
+- **Normalize now** renders the same balance for playback, so pad taps are level-matched while you work. With the checkbox on but the button unpressed, balancing happens only at export.
 
-- **Master key** — essentia.js's `KeyExtractor` run as an **ensemble of four key profiles** (`edma`, `bgate`, `temperley`, `krumhansl`) with a strength-weighted vote. Each profile has different failure modes (edma alone is biased toward minor), so the vote is far more reliable on parallel major/minor confusion than any single profile. Reported confidence is scaled by how much of the ensemble agreed. Filename key labels, when present, still win over detection.
-- **Per-sample root pitch** — a custom YIN tracker, hardened against the classic YIN failure of locking onto a note's 3rd harmonic (an octave *plus a fifth* up — octave errors are harmless to pitch-class tuning, but the fifth would retune a sample 5–7 semitones wrong). Three layered defenses:
-  1. A frame only accepts an early CMND dip if it's nearly as deep as the global best, so a loud harmonic's shallow dip can't beat the true fundamental's deeper one.
-  2. Frames vote on a pitch class (confidence-weighted) and only the winning class feeds the final median, so a minority of harmonic-locked frames can't drag the result off-root.
-  3. A substantial vote a fourth above the winner is treated as the true root (of which the winner is the 3rd harmonic) and preferred.
+### Colour and labels
+- **Auto-color pads by sound type** writes a colour and a label (the category name) to every pad on export. 17 palettes with nine colours each; pick one from the palette browser.
+
+### Bus routing
+- **Route pads to buses by sound type** writes each pad's bus: Bus A drums (kick, snare, hat, perc), Bus B bass, Bus C melodic, Bus D vocals and FX, Main for Other. It also names the buses *Drums, Bass, Melodic, Vocals* in the project's `mixer.json`, keeping each bus's effects and levels. (Koala's bus numbers are A=0 to D=3 and Main=-1. Bus D = 3 is inferred from the pattern; A to C and Main were seen in real projects.)
+
+### Stereo spread
+- **Spread melodic pads** gives melodic pads a balanced random pan (pairs at equal and opposite distances up to 40% either side; an odd one stays centred). Bass, drums and the rest stay centred.
+
+### Rearranging pads
+- **Drag and drop:** press and drag a pad (about 12 px of movement; a short tap still plays). Dropping on an occupied pad swaps them; on an empty pad moves the sound. Category, tuning, trims and all pad settings move with the sound.
+- **All-pads view:** hover a dragged pad over the A/B/C/D bank buttons and all 64 pads open, coloured by category, so you can drop onto any bank. While it is open a **trash can** (top-left) deletes the sound and **Unused pad** (top-right) puts it on the next empty pad. Dropping straight on a bank letter uses that bank's first empty pad.
+- **Export remaps everything:** pads are renumbered, notes in recorded sequences follow their pads (notes on deleted pads are dropped), the selected pad is updated, and deleted sounds' audio is removed from the project.
+
+### Undo and redo
+- Circular undo/redo buttons at the bottom-left. Covers pad edits (tune, trims, category), key changes, pad moves, swaps and deletes. Slider drags count as one step; up to 100 steps; cleared when a new project loads.
+
+### Export
+- **Export** bakes tuning into the audio (24-bit WAV), writes volumes, colours, labels, pans, buses and the rearrangement, and downloads `<name>_tuned.koala`. Pads you don't retune or rebalance keep their original audio byte for byte. A progress counter shows on the button during long renders.
+
+### Interface
+- The page is locked so it never scrolls or rubber-bands; the layout is drawn over a screenshot-based phone frame and scales to any width.
+
+## How pitch detection works
+
+A custom YIN tracker, hardened against the classic failure of locking onto a note's 3rd harmonic (an octave plus a fifth up, which would retune a sample 5 to 7 semitones wrong):
+
+1. A frame only accepts an early CMND dip if it is nearly as deep as the global best, so a loud harmonic's shallow dip cannot beat the true fundamental's deeper one.
+2. Frames vote on a pitch class (confidence-weighted) and only the winning class feeds the final median.
+3. A substantial vote a fourth above the winner is treated as the true root and preferred.
 
 ## Stack
 
 - React + TypeScript + Vite, `vite-plugin-pwa` for offline installability.
-- [essentia.js](https://mtg.github.io/essentia.js/) (WASM) for key detection (`KeyExtractor`, four-profile ensemble — see above) and BPM (`RhythmExtractor2013`).
-- A custom YIN pitch tracker for per-sample fundamental/tuning detection (no model weights to ship — keeps the installed app small on iOS's tight storage quota), with the harmonic-locking defenses described above.
-- [Rubber Band Library](https://breakfastquay.com/rubberband/) (WASM, R3 "Finer" engine with formant preservation) for the master loop and Loop-mode samples' pitch-shifting/time-stretching; a windowed-sinc resampler (32-tap Hann-windowed, phase-tabled, cutoff scaled on upward shifts so nothing aliases) handles One-shot mode instead. Processed audio returns from the render worker via zero-copy transfer.
-- `jszip` for batch export, `comlink` for the worker RPC layer.
+- `jszip` for reading and writing `.koala` archives, `comlink` for the worker RPC layer.
+- Web Workers: analysis (pitch and category), and render (resampling and loudness measurement).
 
-See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for licensing details — Rubber Band is GPL-licensed.
+## Koala project format notes
+
+What this app relies on, found by inspecting real projects:
+
+- A `.koala` file is a zip: `sampler/sampler.json` (pads and samples), `sampler/<id>.wav`, `sequence.json`, `mixer.json`, `song.json`.
+- Pads have a `pad` number (0-based here; some exports may count from 1, handled via a base offset), `sampleId`, `vol` (linear amplitude), `pan` (0 to 1, 0.5 centre), `bus` (0 to 3 = A to D, -1 = Main), `color` and `label`.
+- Recorded notes in `sequence.json` refer to pads by `num`, the pad number.
+- Bus names, effect chains, mute, solo and volume live in `mixer.json` (`buses[]`, `master`).
 
 ## Development
 
@@ -43,17 +78,22 @@ See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for licensing details —
 npm install
 npm run dev      # start the dev server
 npm run build    # type-check + production build (also generates the PWA manifest/service worker)
+npx tsc -b       # type-check only
+npx oxlint       # lint
+npx tsx scripts/checkResample.ts    # resampler accuracy on pure tones
+npx tsx scripts/checkLoudness.ts    # loudness meter and balancer sanity checks
 ```
 
-Icons in `public/pwa-*.png` and `public/apple-touch-icon.png` are auto-generated placeholders (`scripts/generate-icons.mjs`) — swap in real artwork before shipping.
+Icons in `public/pwa-*.png` and `public/apple-touch-icon.png` are auto-generated placeholders (`scripts/generate-icons.mjs`).
 
 ## Using on iOS
 
 1. Open the deployed URL in Safari.
-2. Share sheet → **Add to Home Screen**.
-3. Launch from the home screen icon — after the first load, it works fully offline.
+2. Share sheet, then **Add to Home Screen**.
+3. Launch from the home screen icon. After the first load it works fully offline.
 
-## Not yet built
+## Planned
 
-- Automatic drum/percussive classification. For now, use the manual **Drum** toggle per sample to skip tuning.
-- Cross-reload persistence of a loaded batch (by design — everything lives in memory for the session and is meant to be processed and exported, not stored).
+- **Finger-drumming auto-layout:** an opt-in action that arranges pads by category for two-thumb playing. Research and layout options are in [docs/finger-drumming-layouts.md](./docs/finger-drumming-layouts.md).
+- **Bus labelling beyond the four defaults** and any per-bus settings are not handled.
+- `THIRD_PARTY_NOTICES.md` still describes an earlier version of the app (Rubber Band, essentia.js); it needs a review against the current dependencies.
