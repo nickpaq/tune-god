@@ -39,7 +39,7 @@ export const CATEGORIES: Category[] = [
   { id: "fx", label: "FX", short: "FX" },
   { id: "bass", label: "Bass", short: "Bass" },
   { id: "melodic", label: "Melodic", short: "Melodic" },
-  { id: "drumLoop", label: "Drum Loop", short: "Drum loop" },
+  { id: "drumLoop", label: "Drum Loop", short: "Drm. Loop" },
   { id: "percLoop", label: "Perc Loop", short: "Perc loop" },
   { id: "melodicLoop", label: "Melodic Loop", short: "Mel loop" },
   { id: "other", label: "Other", short: "Other" },
