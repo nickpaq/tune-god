@@ -9,9 +9,11 @@ describe("palettes", () => {
 
   it("gives categories in one tone shades of that tone, and distinct colours where the tone differs", () => {
     for (const p of PALETTES) {
-      expect(colorFor(p, "kick")).toBe(toneColor(p, "drums"));
+      expect(colorFor(p, "kick")).toBe(toneColor(p, "kick"));
       expect(colorFor(p, "closedHat")).toBe(toneColor(p, "hats"));
       expect(colorFor(p, "perc")).toBe(toneColor(p, "percVox"));
+      expect(colorFor(p, "snare")).toBe(toneColor(p, "snareClap"));
+      expect(colorFor(p, "snare")).not.toBe(colorFor(p, "kick"));
       // Siblings are told apart by shade, and every category gets a valid hex.
       expect(colorFor(p, "snare")).not.toBe(colorFor(p, "kick"));
       expect(colorFor(p, "clap")).not.toBe(colorFor(p, "snare"));

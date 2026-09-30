@@ -1,12 +1,12 @@
-import { CATEGORIES, CATEGORY_TONE, type CategoryId } from "../audio/classify";
-import { textColorOn, toneColor, type Palette } from "../audio/palettes";
+import { CATEGORIES, type CategoryId } from "../audio/classify";
+import { textColorOn, colorFor, type Palette } from "../audio/palettes";
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
 
 /**
  * Lists every sound in the project with a play button, a delete button and one checkbox per sound type.
- * Checking a type classifies the sound (only one can be checked); each checkbox sits on its type's base tone,
- * so kick, snare and clap share a background, both hats another, and vox and perc a third.
+ * Checking a type classifies the sound (only one can be checked); each checkbox sits on its type's pad colour,
+ * so snare and clap, both hats, and vox and perc show as neighbouring shades of one tone while kick stands apart.
  */
 export function ClassifierModal({
   pads,
@@ -35,7 +35,7 @@ export function ClassifierModal({
             ✕
           </button>
         </div>
-        <div className="palette-modal__key">Play a sound, then tick what it is. Sounds in the same family share a colour.</div>
+        <div className="palette-modal__key">Play a sound, then tick what it is. Related types are shades of one colour.</div>
         <div className="palette-modal__list">
           {pads.length === 0 && <div className="palette-modal__key">No sounds in this project.</div>}
           {pads.map((pad) => {
@@ -66,7 +66,7 @@ export function ClassifierModal({
                 </div>
                 <div className="sound-row__types">
                   {CATEGORIES.map((c) => {
-                    const bg = toneColor(palette, CATEGORY_TONE[c.id]);
+                    const bg = colorFor(palette, c.id);
                     return (
                       <label key={c.id} style={{ background: bg, color: textColorOn(bg), accentColor: textColorOn(bg) }}>
                         <input
