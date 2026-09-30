@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrangeFingerDrumming, EMPTY_PAD_LABEL, type ArrangeSound } from "./fingerDrumming";
+import { arrangeFingerDrumming, type ArrangeSound } from "./fingerDrumming";
 import { FINGER_LAYOUTS, layoutById } from "./fingerLayouts";
 import { classifyByName, classifySample, type CategoryId } from "./classify";
 
@@ -55,27 +55,15 @@ describe("arrangeFingerDrumming", () => {
     expect([low, mid, high].map((s) => indexOf(a, s))).toEqual([4, 5, 6]);
   });
 
-  it("builds a second kit only when the leftovers hold a kick, a snare and a hat", () => {
-    const first = [drum("kick"), drum("snare"), drum("closedHat")];
-    const withSecond = [...first, drum("kick"), drum("snare"), drum("closedHat")];
-    const a = arrangeFingerDrumming(withSecond, horizontal);
-    expect(a.placeholders.filter((p) => p.kind === "missing" && p.index >= 16 && p.index < 32).length).toBeGreaterThan(0);
-    expect([...a.positions.values()].filter((i) => i >= 16 && i < 32)).toHaveLength(3);
-
-    const noSecondHat = arrangeFingerDrumming([...first, drum("kick"), drum("snare")], horizontal);
-    expect(noSecondHat.placeholders.some((p) => p.kind === "missing" && p.index >= 16)).toBe(false);
-  });
-
-  it("leaves bank B unarranged without a second kit and starts melodic sounds on bank C", () => {
+  it("starts melodic sounds on bank B and leaves no second kit", () => {
     const bass = sound("bass", { midi: 36 });
     const lead = sound("melodic", { midi: 72 });
-    const a = arrangeFingerDrumming([lead, bass, drum("kick")], horizontal);
-    expect(indexOf(a, bass)).toBe(32);
-    expect(indexOf(a, lead)).toBe(33);
-    // Bank B is all "Empty pad", not "missing" placeholders.
-    const bankB = a.placeholders.filter((p) => p.index >= 16 && p.index < 32);
-    expect(bankB).toHaveLength(16);
-    expect(bankB.every((p) => p.kind === "empty" && p.label === EMPTY_PAD_LABEL)).toBe(true);
+    const extra = [drum("kick"), drum("snare"), drum("closedHat")];
+    const a = arrangeFingerDrumming([lead, bass, drum("kick"), drum("snare"), drum("closedHat"), ...extra], horizontal);
+    expect(indexOf(a, bass)).toBe(16);
+    expect(indexOf(a, lead)).toBe(17);
+    // Nothing on bank B is a "missing" placeholder: there is only one kit.
+    expect(a.placeholders.some((p) => p.kind === "missing" && p.index >= 16)).toBe(false);
   });
 
   it("sorts tonal sounds bass first, lowest to highest, then other, with FX in the kit", () => {
@@ -87,32 +75,22 @@ describe("arrangeFingerDrumming", () => {
     const bass = sound("bass", { midi: 40 });
     const a = arrangeFingerDrumming([other, fx, vocal, hiLead, loLead, bass], horizontal);
     const order = [bass, loLead, hiLead, other].map((s) => indexOf(a, s));
-    expect(order).toEqual([32, 33, 34, 35]);
+    expect(order).toEqual([16, 17, 18, 19]);
     // FX has slots in the layout, so it sits on bank A.
     expect(indexOf(a, fx)).toBeLessThan(16);
     // Vox is a drum type, so it takes one of the layout's vox slots instead.
     expect(indexOf(a, vocal)).toBeLessThan(16);
   });
 
-  it("puts leftover drums after everything else", () => {
-    const extraPerc = drum("perc");
+  it("backfills drums the layout had no slot for from the end of bank D", () => {
     const pad = sound("melodic", { midi: 60 });
     const kit = [drum("kick"), drum("snare"), drum("closedHat")];
-    // A fourth perc beyond what the layout has slots for is not possible here, so use a quest layout
-    // (three perc slots) and overfill them.
-    const toms = Array.from({ length: 4 }, () => drum("perc"));
-    const a = arrangeFingerDrumming([...kit, ...toms, pad, extraPerc], quest);
-    const leftover = indexOf(a, extraPerc)!;
-    expect(leftover).toBeGreaterThan(indexOf(a, pad)!);
-    expect(leftover).toBeLessThan(64);
-  });
-
-  it("overflows melodic sounds past bank D onto bank B's free pads", () => {
-    const tonal = Array.from({ length: 34 }, (_, i) => sound("melodic", { midi: 40 + i }));
-    const a = arrangeFingerDrumming([drum("kick"), ...tonal], horizontal);
-    const indexes = tonal.map((s) => indexOf(a, s)!);
-    expect(indexes.slice(0, 32)).toEqual(Array.from({ length: 32 }, (_, i) => 32 + i));
-    expect(indexes.slice(32)).toEqual([16, 17]);
+    // Quest for Groove has three perc slots, so a fourth and fifth perc are left over.
+    const toms = Array.from({ length: 5 }, () => drum("perc"));
+    const a = arrangeFingerDrumming([...kit, ...toms, pad], quest);
+    const extra = toms.map((s) => indexOf(a, s)!).filter((i) => i >= 16).sort((x, y) => x - y);
+    expect(extra).toEqual([62, 63]);
+    expect(indexOf(a, pad)).toBe(16);
   });
 
   it("lets real sounds replace 'missing' placeholders when the project is nearly full", () => {

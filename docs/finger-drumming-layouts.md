@@ -76,10 +76,10 @@ Supersedes the option tables above where they differ: bank A and B are drums onl
 
 ### Layout of the four banks
 
-1. **Bank A** is the selected layout (a 16-slot drum layout), filled from the user's drums. A slot with no matching sound gets a `missing <role>` placeholder.
-2. **Bank B is a second kit only if the drums left after bank A include at least one kick, one snare and one hat.** Then it uses the same layout, with `missing <role>` placeholders for gaps. Otherwise bank B is not arranged and has no placeholders.
-3. **Melodic sounds start at bank C**, sorted lowest to highest frequency (basses first), then vocals and FX, then other. Frequency is the detected pitch when there is one; otherwise spectral centroid (the analysis worker has to return it).
-4. **Overflow past bank D continues into bank B**, skipping occupied pads.
+1. **Bank A** is the selected layout (a 16-slot drum layout), filled from the user's drums. A slot with no matching sound gets a `missing <role>` placeholder. It is the only page shown while the layout is on.
+2. **There is no second kit.** Drums the layout has no slot for are backfilled from the end of bank D, and at export the user can delete them instead.
+3. **Melodic sounds start at bank B**, sorted lowest to highest frequency (basses first), then loops, then other. Frequency is the detected pitch when there is one; otherwise spectral centroid (the analysis worker has to return it).
+4. **If banks B to D fill up**, the overflow takes bank A's `missing` pads, last first.
 5. **Leftover drums go at the very end** of that order.
 6. **Every spot still free after that gets an "Empty pad" placeholder.**
 
