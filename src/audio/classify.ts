@@ -45,12 +45,12 @@ export const CATEGORIES: Category[] = [
 
 /**
  * The base tones of the colour scheme. Categories in the same tone are shades of one colour, so a palette
- * holds one colour per tone: snare and clap share one (kick has its own, so it stands apart); closed hat, open hat and cymbals another; vox and perc a third.
+ * holds one colour per tone: snare and clap share one (kick has its own, so it stands apart); closed hat, open hat and cymbals another; vox and perc a third; drum and perc loops share a fourth and melodic loops have their own.
  */
-export type ToneId = "kick" | "snareClap" | "hats" | "percVox" | "fx" | "bass" | "melodic" | "other";
+export type ToneId = "kick" | "snareClap" | "hats" | "percVox" | "fx" | "bass" | "melodic" | "other" | "drumPercLoop" | "melodicLoop";
 
 /** Order matters: a palette lists its colours in this same order. */
-export const TONES: ToneId[] = ["kick", "snareClap", "hats", "percVox", "fx", "bass", "melodic", "other"];
+export const TONES: ToneId[] = ["kick", "snareClap", "hats", "percVox", "fx", "bass", "melodic", "other", "drumPercLoop", "melodicLoop"];
 
 export const CATEGORY_TONE: Record<CategoryId, ToneId> = {
   kick: "kick",
@@ -63,9 +63,9 @@ export const CATEGORY_TONE: Record<CategoryId, ToneId> = {
   fx: "fx",
   bass: "bass",
   melodic: "melodic",
-  drumLoop: "snareClap",
-  percLoop: "percVox",
-  melodicLoop: "melodic",
+  drumLoop: "drumPercLoop",
+  percLoop: "drumPercLoop",
+  melodicLoop: "melodicLoop",
   other: "other",
 };
 

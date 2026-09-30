@@ -24,7 +24,7 @@ export function PalettePicker({
             ✕
           </button>
         </div>
-        <div className="palette-modal__key">Kick · Snare/Clap · Hats · Perc/Vox · FX · Bass · Melodic · Other</div>
+        <div className="palette-modal__key">Kick · Snare/Clap · Hats · Perc/Vox · FX · Bass · Melodic · Other · Drum/Perc loops · Melodic loop</div>
         <div className="palette-modal__list">
           {PALETTES.map((p) => (
             <button
