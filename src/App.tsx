@@ -21,6 +21,8 @@ import { LayoutPicker } from "./components/LayoutPicker";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
+import { effectiveRole } from "./audio/drumRoles";
+import { roleColors } from "./audio/roleColors";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
@@ -672,7 +674,7 @@ function App() {
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of allPads) {
-          if (p.category) colors.set(p.sampleId, { color: colorFor(palette, p.category), label: categoryLabel(p.category) });
+          if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: categoryLabel(p.category) });
         }
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, placeholders: placeholderList });
@@ -697,7 +699,13 @@ function App() {
   const arrangement = analyzing === 0 ? arrangementOf() : undefined;
 
   const palette = paletteById(paletteId);
-  const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : colorFor(palette, p.category ?? "other"));
+  const drumColors = roleColors(palette);
+  /** Palette colour for a sound: by category, except that with a layout applied each drum role gets its own colour. */
+  const autoColorOf = (p: Pad): string => {
+    const role = layout.on ? effectiveRole(p.category, p.drumRole) : undefined;
+    return role ? drumColors[role] : colorFor(palette, p.category ?? "other");
+  };
+  const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
   const placeholderList = Object.values(pads)
     .filter((p) => p.placeholder)
@@ -908,7 +916,7 @@ function App() {
                   ? { background: placeholderColor(pad), color: "#fff" }
                   : pad && autoColor
                   ? (() => {
-                      const bg = colorFor(palette, pad.category ?? "other");
+                      const bg = autoColorOf(pad);
                       return { background: bg, color: textColorOn(bg) };
                     })()
                   : null),

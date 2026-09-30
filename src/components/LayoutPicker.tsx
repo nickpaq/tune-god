@@ -1,6 +1,6 @@
 import { FINGER_LAYOUTS } from "../audio/fingerLayouts";
-import { ROLE_CATEGORY } from "../audio/drumRoles";
-import { colorFor, textColorOn, type Palette } from "../audio/palettes";
+import { textColorOn, type Palette } from "../audio/palettes";
+import { roleColors } from "../audio/roleColors";
 
 /**
  * Popup listing every finger-drumming layout with a preview of bank A. The preview always shows a
@@ -17,6 +17,7 @@ export function LayoutPicker({
   onSelect: (id: string) => void;
   onClose: () => void;
 }) {
+  const colors = roleColors(palette);
   return (
     <div className="palette-backdrop" onClick={onClose}>
       <div className="palette-modal" role="dialog" aria-label="Choose finger drumming layout" onClick={(e) => e.stopPropagation()}>
@@ -41,7 +42,7 @@ export function LayoutPicker({
               <span className="layout-row__desc">{layout.description}</span>
               <span className="layout-row__grid">
                 {layout.slots.map((slot, i) => {
-                  const bg = colorFor(palette, ROLE_CATEGORY[slot.role]);
+                  const bg = colors[slot.role];
                   return (
                     <span key={i} style={{ background: bg, color: textColorOn(bg) }}>
                       {slot.label}
