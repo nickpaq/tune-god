@@ -3,8 +3,10 @@ import { CATEGORIES, type CategoryId } from "../audio/classify";
 import { formatSignedCents, formatSignedSemitones } from "../audio/theory";
 
 export interface Pad {
-  /** 0-based grid slot across all four banks. */
+  /** 0-based grid slot across all four banks; changes when the pad is moved. */
   index: number;
+  /** The slot this sound had in the loaded project. Never changes, so it identifies the sound. */
+  origIndex: number;
   /** The sample's id inside the .koala project, used when writing tuned audio back. */
   sampleId: number;
   sampleRate: number;

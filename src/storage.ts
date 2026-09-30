@@ -12,6 +12,10 @@ export interface SavedPad {
   semis: number;
   cents: number;
   category?: CategoryId;
+  /** Where the sound sits now, if the user moved it. Pads are keyed by their original slot. */
+  position?: number;
+  /** The user deleted this sound (it is left out of the export). */
+  deleted?: boolean;
 }
 
 export interface SavedState {

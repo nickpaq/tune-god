@@ -18,6 +18,8 @@ export interface ParsedKoalaProject {
   samplerJson: any;
   originalName: string;
   pads: KoalaPadRef[];
+  /** 1 when the project counts pads from 1, else 0; pad numbers in the file are this much higher. */
+  padBase: number;
 }
 
 export function isKoalaFile(file: File): boolean {
@@ -56,7 +58,7 @@ export async function parseKoalaProject(file: File): Promise<ParsedKoalaProject>
 
   if (!pads.length) throw new Error("No sample pads found in this Koala project.");
 
-  return { zip, samplerJson, originalName: file.name, pads };
+  return { zip, samplerJson, originalName: file.name, pads, padBase };
 }
 
 /** Pulls a pad's audio out of the zip as a real File, ready to feed into the normal upload pipeline. */

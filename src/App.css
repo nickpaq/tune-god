@@ -51,6 +51,111 @@
   color: var(--cyan);
 }
 
+.pad {
+  touch-action: none;
+}
+
+.pad--dragging {
+  opacity: 0.35;
+}
+
+.pad--target {
+  outline: 0.9cqw solid var(--cyan);
+  outline-offset: -0.9cqw;
+}
+
+.bank--target {
+  outline: 0.9cqw solid var(--cyan);
+  outline-offset: -0.9cqw;
+}
+
+.drag-ghost {
+  position: fixed;
+  z-index: 40;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border: 2px solid #fff;
+  border-radius: 14px;
+  opacity: 0.9;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+/* ---- all-pads view (shown while dragging over the bank buttons) ---- */
+.allpads {
+  z-index: 15;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: min-content;
+  gap: 3cqw;
+  align-content: start;
+  padding: 3cqw;
+  border: 0.3cqw solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.allpads__label {
+  display: block;
+  margin-bottom: 1cqw;
+  font-size: 4cqw;
+  font-weight: 700;
+}
+
+.allpads__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.2cqw;
+}
+
+.allpads__cell {
+  aspect-ratio: 4 / 3;
+  border: 0.3cqw solid rgba(216, 206, 208, 0.45);
+  border-radius: 1.2cqw;
+  background: var(--pad-empty);
+}
+
+.allpads__cell--filled {
+  border-color: var(--line);
+}
+
+.allpads__cell--source {
+  opacity: 0.35;
+}
+
+.allpads__cell--target {
+  outline: 0.9cqw solid var(--cyan);
+  outline-offset: -0.9cqw;
+}
+
+.drop-target {
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  border: 0.3cqw solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-size: 5cqw;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.drop-target--unused {
+  font-size: 4.2cqw;
+  white-space: nowrap;
+}
+
+.drop-target--trash {
+  font-size: 9cqw;
+}
+
+.drop-target--hot {
+  background: var(--cyan);
+  color: var(--on-cyan);
+  border-color: var(--cyan);
+}
+
 .pad:active {
   filter: brightness(1.35);
 }

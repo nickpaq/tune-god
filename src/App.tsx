@@ -14,6 +14,7 @@ import { applyGainDb } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
 import { categoryLabel, isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
+import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
@@ -58,6 +59,10 @@ const BANKS_W = TONE_X - BAR_GAP - BANKS_X;
 const MAX_HISTORY = 100;
 /** Slider drags on the same control within this window count as one undo step. */
 const COALESCE_MS = 1000;
+/** A pad press that travels this far (CSS px) becomes a drag instead of a hit. */
+const DRAG_THRESHOLD_PX = 12;
+/** Hovering a bank button this long while dragging opens the all-pads view. */
+const DWELL_MS = 350;
 
 /** What undo/redo restores: the pad data plus the key it was tuned to. */
 interface Snapshot {
@@ -124,7 +129,7 @@ function App() {
   const [exportProgress, setExportProgress] = useState("");
   const [normalize, setNormalize] = useState(saved.normalize ?? false);
   const [spread, setSpread] = useState(saved.spread ?? false);
-  /** Pre-rendered normalized audio per pad index; only used for playback while Normalize is on. */
+  /** Pre-rendered normalized audio per pad (by original slot, so it follows a moved pad); only used for playback while Normalize is on. */
   const [normalizedData, setNormalizedData] = useState<Record<number, Float32Array[]>>({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
@@ -132,6 +137,12 @@ function App() {
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
+  /** Ghost under the finger while a pad is being dragged, and the drop target under it ("kind:index"). */
+  const [drag, setDrag] = useState<{ from: number; x: number; y: number } | null>(null);
+  const [hover, setHover] = useState("");
+  /** The all-pads view that opens when a drag dwells over the bank buttons. */
+  const [expanded, setExpanded] = useState(false);
+  const dragRef = useRef<{ from: number; x0: number; y0: number; active: boolean; hover: string; timer: number | null } | null>(null);
   const releasePad = useRef<Map<number, PadHandle>>(new Map());
   const tunedTargetRef = useRef<number | null>(saved.tunedTarget ?? null);
   /** Per-pad choices from the last visit, applied as each pad finishes analysis. */
@@ -171,13 +182,18 @@ function App() {
       }
       setProjectName(project.originalName.replace(/\.koala$/i, ""));
 
-      const slots = project.pads.filter((p) => p.pad >= 0 && p.pad < 64);
+      const slots = project.pads.filter(
+        (p) => p.pad >= 0 && p.pad < 64 && !(restore && restorePads.current[p.pad]?.deleted),
+      );
       setAnalyzing(slots.length);
       for (const ref of slots) {
         const decoded = await decodeNative(await koalaPadToFile(project, ref));
         if (token !== loadToken.current) return;
+        // Pads the user moved on a previous visit go back where they were left.
+        const at = restore ? restorePads.current[ref.pad]?.position ?? ref.pad : ref.pad;
         const pad: Pad = {
-          index: ref.pad,
+          index: at,
+          origIndex: ref.pad,
           sampleId: ref.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
@@ -185,7 +201,7 @@ function App() {
           semis: 0,
           cents: 0,
         };
-        setPads((prev) => ({ ...prev, [ref.pad]: pad }));
+        setPads((prev) => ({ ...prev, [at]: pad }));
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
@@ -194,13 +210,21 @@ function App() {
             if (token !== loadToken.current) return;
             setPads((prev) => {
               const remembered = restorePads.current[ref.pad];
-              const cur = prev[ref.pad];
+              const cur = prev[at];
               return {
                 ...prev,
-                [ref.pad]: {
+                [at]: {
                   ...cur,
                   detectedMidi,
-                  ...(remembered ? { ...remembered, category: validCategory(remembered.category) } : { category }),
+                  ...(remembered
+                    ? {
+                        tune: remembered.tune,
+                        tuneLocked: remembered.tuneLocked,
+                        semis: remembered.semis,
+                        cents: remembered.cents,
+                        category: validCategory(remembered.category),
+                      }
+                    : { category }),
                   tune: tuneDefault(
                     remembered?.tuneLocked || cur.tuneLocked,
                     remembered?.tuneLocked ? remembered.tune : cur.tune,
@@ -238,7 +262,18 @@ function App() {
     if (analyzing > 0 || loading || Object.keys(pads).length === 0) return;
     const out: Record<number, SavedPad> = {};
     for (const p of Object.values(pads)) {
-      out[p.index] = { tune: p.tune, tuneLocked: p.tuneLocked, semis: p.semis, cents: p.cents, category: p.category };
+      out[p.origIndex] = {
+        tune: p.tune,
+        tuneLocked: p.tuneLocked,
+        semis: p.semis,
+        cents: p.cents,
+        category: p.category,
+        position: p.index,
+      };
+    }
+    // Sounds the user deleted stay deleted when the project is reopened.
+    for (const ref of projectRef.current?.pads ?? []) {
+      if (!(ref.pad in out)) out[ref.pad] = { tune: false, semis: 0, cents: 0, deleted: true };
     }
     restorePads.current = out;
     saveState({ pads: out });
@@ -303,7 +338,7 @@ function App() {
       index,
       startPad(
         index,
-        (normalize && normalizedData[index]) || pad.channelData,
+        (normalize && normalizedData[pad.origIndex]) || pad.channelData,
         pad.sampleRate,
         shiftFor(pad, tunedTarget),
         toneOn ? keyPc : null,
@@ -324,13 +359,80 @@ function App() {
         FILE_CEILING_DB,
       );
       setNormalizedData(
-        Object.fromEntries(list.map((p, i) => [p.index, applyGainDb(p.channelData, gainDb[i] + knobDb[i])])),
+        Object.fromEntries(list.map((p, i) => [p.origIndex, applyGainDb(p.channelData, gainDb[i] + knobDb[i])])),
       );
     } catch (err) {
       console.error(err);
     } finally {
       setNormalizing(false);
     }
+  };
+
+  /** Which drop target ("kind:index") is under the point, if any. */
+  const targetAt = (x: number, y: number): string => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-drop]");
+    return el ? `${el.dataset.drop}:${el.dataset.index ?? ""}` : "";
+  };
+
+  const endDrag = () => {
+    if (dragRef.current?.timer) clearTimeout(dragRef.current.timer);
+    dragRef.current = null;
+    setDrag(null);
+    setExpanded(false);
+    setHover("");
+  };
+
+  /** Applies a drop: onto a pad or cell (move/swap), a bank button or "unused" (first free pad), or the trash. */
+  const dropOn = (from: number, target: string) => {
+    const [kind, rest] = target.split(":");
+    const cur = latest.current.pads;
+    let next = cur;
+    let dest: number | null = null;
+    if (kind === "pad" || kind === "cell") dest = Number(rest);
+    else if (kind === "bank") dest = emptyPadInBank(cur, Number(rest));
+    else if (kind === "unused") dest = nextEmptyPad(cur, bank);
+    if (kind === "trash") next = removePad(cur, from);
+    else if (dest !== null) next = movePad(cur, from, dest);
+    if (next === cur) return;
+    recordEdit();
+    setPads(next);
+    if (kind === "trash") {
+      setSelected((s) => (s === from ? null : s));
+    } else if (dest !== null) {
+      setSelected(dest);
+      setBank(Math.floor(dest / 16));
+    }
+  };
+
+  const onPadDown = (e: React.PointerEvent<HTMLButtonElement>, index: number) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { from: index, x0: e.clientX, y0: e.clientY, active: false, hover: "", timer: null };
+    pressPad(index);
+  };
+
+  const onPadMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (!d.active) {
+      if (!pads[d.from] || Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < DRAG_THRESHOLD_PX) return;
+      d.active = true;
+      liftPad(d.from);
+    }
+    setDrag({ from: d.from, x: e.clientX, y: e.clientY });
+    const target = targetAt(e.clientX, e.clientY);
+    if (target === d.hover) return;
+    d.hover = target;
+    setHover(target);
+    if (d.timer) clearTimeout(d.timer);
+    d.timer = target.startsWith("bank:") ? window.setTimeout(() => setExpanded(true), DWELL_MS) : null;
+  };
+
+  const onPadUp = (index: number) => {
+    const d = dragRef.current;
+    if (d?.active) dropOn(d.from, d.hover);
+    else liftPad(index);
+    endDrag();
   };
 
   const liftPad = (index: number) => {
@@ -427,7 +529,7 @@ function App() {
           if (p.category) colors.set(p.sampleId, { color: colorFor(palette, p.category), label: categoryLabel(p.category) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, pans, colors });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -437,9 +539,21 @@ function App() {
     }
   };
 
+  /** Original slot -> current slot (null = deleted), or undefined when nothing was moved or deleted. */
+  const arrangementOf = (): Map<number, number | null> | undefined => {
+    const project = projectRef.current;
+    if (!project) return undefined;
+    const slots = project.pads.filter((p) => p.pad >= 0 && p.pad < 64);
+    const now = new Map(Object.values(pads).map((p) => [p.origIndex, p.index]));
+    if (!slots.some((r) => now.get(r.pad) !== r.pad)) return undefined;
+    return new Map(slots.map((r) => [r.pad, now.get(r.pad) ?? null]));
+  };
+  const arrangement = analyzing === 0 ? arrangementOf() : undefined;
+
   const palette = paletteById(paletteId);
   const canExport =
-    (normalize || autoColor || routeBuses ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune)) &&
+    (arrangement !== undefined ||
+      (normalize || autoColor || routeBuses ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
     analyzing === 0 &&
     !exporting;
   const hasProject = Object.keys(pads).length > 0;
@@ -560,6 +674,8 @@ function App() {
             pad && autoColor && "pad--colored",
             pad?.tune && "pad--tuned",
             selected === index && "pad--selected",
+            drag?.from === index && "pad--dragging",
+            hover === `pad:${index}` && "pad--target",
           ]
             .filter(Boolean)
             .join(" ");
@@ -576,13 +692,15 @@ function App() {
                     })()
                   : null),
               }}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.currentTarget.setPointerCapture(e.pointerId);
-                pressPad(index);
+              data-drop="pad"
+              data-index={index}
+              onPointerDown={(e) => onPadDown(e, index)}
+              onPointerMove={onPadMove}
+              onPointerUp={() => onPadUp(index)}
+              onPointerCancel={() => {
+                liftPad(index);
+                endDrag();
               }}
-              onPointerUp={() => liftPad(index)}
-              onPointerCancel={() => liftPad(index)}
               aria-label={`Pad ${slot + 1}`}
             />
           );
@@ -601,7 +719,13 @@ function App() {
               .filter(Boolean)
               .join(" ");
             return (
-              <button key={name} className={cls} onClick={() => setBank(i)}>
+              <button
+                key={name}
+                className={`${cls}${hover === `bank:${i}` ? " bank--target" : ""}`}
+                data-drop="bank"
+                data-index={i}
+                onClick={() => setBank(i)}
+              >
                 {name}
               </button>
             );
@@ -641,6 +765,54 @@ function App() {
         </button>
 
 
+        {drag && expanded && (
+          <>
+            <div className="allpads" style={box(LEFT, 985, CONTENT_W, 835)}>
+              {BANKS.map((name, b) => (
+                <div key={name} className="allpads__bank">
+                  <span className="allpads__label">{name}</span>
+                  <div className="allpads__grid">
+                    {Array.from({ length: 16 }, (_, slot) => {
+                      const index = b * 16 + slot;
+                      const pad = pads[index];
+                      return (
+                        <div
+                          key={slot}
+                          className={[
+                            "allpads__cell",
+                            pad && "allpads__cell--filled",
+                            drag.from === index && "allpads__cell--source",
+                            hover === `cell:${index}` && "allpads__cell--target",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          style={pad ? { background: colorFor(palette, pad.category ?? "other") } : undefined}
+                          data-drop="cell"
+                          data-index={index}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div
+              className={`drop-target drop-target--trash${hover === "trash:" ? " drop-target--hot" : ""}`}
+              style={box(LEFT, 850, 250, 110)}
+              data-drop="trash"
+            >
+              🗑
+            </div>
+            <div
+              className={`drop-target drop-target--unused${hover === "unused:" ? " drop-target--hot" : ""}`}
+              style={box(RIGHT - 330, 850, 330, 110)}
+              data-drop="unused"
+            >
+              Unused pad
+            </div>
+          </>
+        )}
+
         {paletteOpen && (
           <PalettePicker selectedId={paletteId} onSelect={setPaletteId} onClose={() => setPaletteOpen(false)} />
         )}
@@ -654,6 +826,16 @@ function App() {
           {exporting ? exportProgress || "…" : "Export"}
         </button>
       </div>
+      {drag && pads[drag.from] && (
+        <div
+          className="drag-ghost"
+          style={{
+            left: drag.x,
+            top: drag.y,
+            background: colorFor(palette, pads[drag.from].category ?? "other"),
+          }}
+        />
+      )}
     </div>
   );
 }
