@@ -24,9 +24,10 @@ export async function buildTunedKoala(
   {
     vols,
     buses,
+    busNames,
     pans,
     colors,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }> } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }> } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -58,6 +59,7 @@ export async function buildTunedKoala(
     project.zip.file(`sampler/${t.sampleId}.wav`, encodeWav({ sampleRate: t.sampleRate, channelData: t.channelData, bitDepth: 24 }));
   }
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
+  if (busNames) await renameBuses(project, busNames);
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   const base = project.originalName.replace(/\.koala$/i, "");
@@ -73,4 +75,21 @@ export function downloadBlob(blob: Blob, filename: string): void {
   link.click();
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** A mixer strip as Koala writes it: five empty effect slots, unmuted, at 0 dB. */
+const emptyStrip = (name: string) => ({ chain: [null, null, null, null, null], mute: false, name, solo: false, volume: 0 });
+
+/**
+ * Sets the bus strip names in mixer.json, keeping each bus's effects and levels. A project that
+ * has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
+ */
+async function renameBuses(project: ParsedKoalaProject, names: string[]): Promise<void> {
+  const entry = project.zip.file("mixer.json");
+  const mixer = entry ? JSON.parse(await entry.async("string")) : { buses: [], master: emptyStrip("MAIN") };
+  mixer.buses = Array.isArray(mixer.buses) ? mixer.buses : [];
+  names.forEach((name, i) => {
+    mixer.buses[i] = { ...(mixer.buses[i] ?? emptyStrip(name)), name };
+  });
+  project.zip.file("mixer.json", JSON.stringify(mixer));
 }

@@ -14,7 +14,7 @@ import { applyGainDb } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
 import { categoryLabel, isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
-import { CATEGORY_BUS } from "./audio/routing";
+import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { semitonesToRatio } from "./audio/theory";
@@ -351,7 +351,7 @@ function App() {
           if (p.category) colors.set(p.sampleId, { color: colorFor(palette, p.category), label: categoryLabel(p.category) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, pans, colors });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, pans, colors });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
