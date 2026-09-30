@@ -60,22 +60,28 @@ function rms(channelData: Float32Array[]): number {
   return count ? Math.sqrt(sum / count) : 0;
 }
 
+/** How a pad sounds when tapped; see `startPad`. */
+export type PadMode = "loop" | "hold" | "oneShot";
+
 /**
  * Starts a pad looping for as long as it is held, cutting off any earlier hit of the same pad
  * (monophonic). With `withTone`, a sine on `tonePitchClass` plays at the sample's RMS level.
  * The shift is applied as a playback-rate change (a resample), which is exactly how the tuned
  * sample would sound once baked into the project. Returns a release function that holds
- * briefly, then fades both voices out. A `oneShot` pad plays its whole sample once, with no tone,
- * and ignores release; only a retrigger of the same pad cuts it.
+ * briefly, then fades both voices out. How it plays depends on `mode`: "loop" repeats
+ * while held; "hold" plays once from the start and is cut on release; "oneShot" plays the whole
+ * sample once, ignoring release (only a retrigger of the same pad cuts it). Only "loop" sounds the tone.
  */
+
 export function startPad(
   pad: number,
   channelData: Float32Array[],
   sampleRate: number,
   shiftSemitones: number,
   tonePitchClass: number | null,
-  oneShot = false,
+  mode: PadMode = "loop",
 ): PadHandle {
+  const oneShot = mode === "oneShot";
   const ctx = readyContext();
   activePads.get(pad)?.stop(0, CUT_FADE);
 
@@ -83,12 +89,12 @@ export function startPad(
   gain.connect(ctx.destination);
   const source = ctx.createBufferSource();
   source.buffer = bufferFor(ctx, channelData, sampleRate);
-  source.loop = !oneShot;
+  source.loop = mode === "loop";
   source.playbackRate.value = semitonesToRatio(shiftSemitones);
   source.connect(gain);
 
   let osc: OscillatorNode | null = null;
-  if (tonePitchClass !== null && !oneShot) {
+  if (tonePitchClass !== null && mode === "loop") {
     osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = midiToFrequency(60 + tonePitchClass, a4Reference);
@@ -99,7 +105,7 @@ export function startPad(
     osc.start();
   }
   source.start();
-  if (oneShot) {
+  if (mode !== "loop") {
     source.onended = () => {
       gain.disconnect();
       if (activePads.get(pad) === voice) activePads.delete(pad);

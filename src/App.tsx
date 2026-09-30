@@ -8,7 +8,7 @@ import {
   isKoalaFile,
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
-import { setReferencePitch, startPad, type PadHandle } from "./audio/player";
+import { setReferencePitch, startPad, type PadHandle, type PadMode } from "./audio/player";
 import { buildTunedKoala, downloadBlob, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
@@ -93,12 +93,18 @@ function shiftFor(pad: Pad, target: number | null, a4: number): number {
   return base + pad.semis + pad.cents / 100;
 }
 
+/** Untuned sounds and drums up to this long play whole when tapped; longer ones play only while held. */
+const ONE_SHOT_MAX_SECONDS = 2;
+
 /**
- * Pads that aren't tuned, and tuned drums, play their whole sample once when tapped. Only tuned
- * pitched sounds loop while held, which is what makes the tuning audible.
+ * Only tuned pitched sounds loop while held, which is what makes the tuning audible. Everything
+ * else plays once: a short sound plays to its end, a long one (a loop, FX, a vocal) stops on release.
  */
-function playsOneShot(pad: Pad): boolean {
-  return !pad.tune || pad.category === "kick" || pad.category === "snare" || pad.category === "hat" || pad.category === "perc";
+function padMode(pad: Pad): PadMode {
+  const drum = pad.category === "kick" || pad.category === "snare" || pad.category === "hat" || pad.category === "perc";
+  if (pad.tune && !drum) return "loop";
+  const seconds = (pad.channelData[0]?.length ?? 0) / pad.sampleRate;
+  return seconds <= ONE_SHOT_MAX_SECONDS ? "oneShot" : "hold";
 }
 
 /** Older saves may hold category ids that no longer exist. */
@@ -382,7 +388,7 @@ function App() {
         pad.sampleRate,
         shiftFor(pad, tunedTarget, a4),
         pad.tune && toneOn ? keyPc : null,
-        playsOneShot(pad),
+        padMode(pad),
       ),
     );
   };

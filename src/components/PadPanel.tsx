@@ -31,14 +31,14 @@ export function PadPanel({
   onChange,
 }: {
   pad: Pad;
-  /** Semitones the automatic tuning moved this pad (excludes manual slider trim). */
+  /** Semitones the automatic tuning moves this pad; the panel adds the manual trim for display. */
   autoShift: number;
   /** Shows the sound-category dropdown. */
   autoColor: boolean;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "category">>) => void;
 }) {
-  const finalShift = autoShift + pad.semis + pad.cents / 100;
-  const status = pad.tune ? `✓ Tuned ${autoShift >= 0 ? "+" : "−"}${Math.abs(autoShift).toFixed(2)} st` : "Not tuned";
+  const total = autoShift + pad.semis + pad.cents / 100;
+  const status = pad.tune ? `✓ Tuned ${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(2)} st` : "Not tuned";
 
   return (
     <div className="pad-panel">
@@ -46,13 +46,6 @@ export function PadPanel({
         <div>
           <div className="pad-panel__title">PAD {(pad.index % 16) + 1}</div>
           <div className="pad-panel__sub">{status}</div>
-          {pad.tune && (
-            <div className="pad-panel__sub" title="App retune + manual semitones + manual cents">
-              Final retune {finalShift >= 0 ? "+" : "−"}
-              {Math.abs(finalShift).toFixed(2)} st ({finalShift >= 0 ? "+" : "−"}
-              {Math.abs(Math.round(finalShift * 100))}c)
-            </div>
-          )}
         </div>
         <button
           className={`tune-toggle${pad.tune ? " tune-toggle--on" : ""}`}
