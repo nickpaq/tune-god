@@ -25,6 +25,8 @@ export interface Pad {
   centroid?: number;
   /** Set on the silent pads the finger-drumming layout adds; they have no project sample behind them. */
   placeholder?: { kind: "missing" | "empty"; label: string };
+  /** A long or looped/stretched sound: already prepared, so Tune stays off unless the user turns it on. */
+  loop?: boolean;
   tune: boolean;
   /** Set once the user toggles Tune by hand; "Tune all" then leaves this pad's choice alone. */
   tuneLocked?: boolean;
