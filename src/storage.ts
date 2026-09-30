@@ -39,6 +39,8 @@ export interface SavedState {
   /** Where every sound sat before the layout was applied (original slot -> slot), so unchecking can restore it. */
   layoutPre?: Record<number, number>;
   /** The silent pads the layout added, recreated when the project reopens. */
+  /** The ghost snare and soft kick pads the layout added, recreated from their source sounds when the project reopens. */
+  layoutGhosts?: { index: number; kind: "ghostSnare" | "softKick"; sourceOrigIndex: number }[];
   layoutPlaceholders?: { index: number; kind: "missing" | "empty"; label: string }[];
 }
 

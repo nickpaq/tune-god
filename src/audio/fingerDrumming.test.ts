@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { arrangeFingerDrumming, EMPTY_PAD_LABEL, type ArrangeSound } from "./fingerDrumming";
-import { FINGER_LAYOUTS, layoutById, layoutSlotAt, mirrorSlots } from "./fingerLayouts";
+import { FINGER_LAYOUTS, layoutById, layoutSlotAt } from "./fingerLayouts";
 import { classifyByName, classifySample, type CategoryId } from "./classify";
 
 const horizontal = layoutById("horizontal");
@@ -26,7 +26,8 @@ describe("arrangeFingerDrumming", () => {
   it("fills every slot a kit can't cover with a 'missing' placeholder", () => {
     const a = arrangeFingerDrumming([drum("kick")], horizontal);
     const missing = a.placeholders.filter((p) => p.kind === "missing");
-    expect(missing).toHaveLength(15);
+    // 16 slots, minus the kick and the soft kick that copies it.
+    expect(missing).toHaveLength(14);
     expect(missing.every((p) => p.index < 16)).toBe(true);
     expect(a.placeholders.find((p) => p.index === 13)?.label).toBe("add Snare");
     expect(a.placeholders.find((p) => p.index === 4)?.label).toBe("add Perc");
@@ -45,13 +46,13 @@ describe("arrangeFingerDrumming", () => {
     expect(indexOf(b, second)).toBe(15);
   });
 
-  it("puts lower percussion on the lower rows, left to right", () => {
+  it("puts percussion low to high, left to right", () => {
     const high = sound("perc", { centroid: 3000 });
     const low = sound("perc", { centroid: 200 });
     const mid = sound("perc", { centroid: 900 });
     const a = arrangeFingerDrumming([high, low, mid], horizontal);
-    // Horizontal's perc slots, bottom row first: 9, 10, then 4.
-    expect([low, mid, high].map((s) => indexOf(a, s))).toEqual([9, 10, 4]);
+    // Horizontal's four perc slots are one row: low pitch at the left.
+    expect([low, mid, high].map((s) => indexOf(a, s))).toEqual([4, 5, 6]);
   });
 
   it("builds a second kit only when the leftovers hold a kick, a snare and a hat", () => {
@@ -117,7 +118,7 @@ describe("arrangeFingerDrumming", () => {
   it("lets real sounds replace 'missing' placeholders when the project is nearly full", () => {
     const tonal = Array.from({ length: 60 }, (_, i) => sound("melodic", { midi: 30 + i }));
     const a = arrangeFingerDrumming([drum("kick"), ...tonal], horizontal);
-    const all = [...a.positions.values(), ...a.placeholders.map((p) => p.index)];
+    const all = [...a.positions.values(), ...a.ghosts.map((g) => g.index), ...a.placeholders.map((p) => p.index)];
     expect(new Set(all).size).toBe(64);
     expect(a.positions.size).toBe(61);
     // Every real sound got a pad, which required taking over bank A's missing slots.
@@ -128,9 +129,37 @@ describe("arrangeFingerDrumming", () => {
     for (const layout of FINGER_LAYOUTS) {
       const sounds = [drum("kick"), drum("snare"), drum("openHat"), sound("bass", { midi: 40 }), sound("fx")];
       const a = arrangeFingerDrumming(sounds, layout);
-      const all = [...a.positions.values(), ...a.placeholders.map((p) => p.index)];
+      const all = [...a.positions.values(), ...a.ghosts.map((g) => g.index), ...a.placeholders.map((p) => p.index)];
       expect(all.sort((x, y) => x - y)).toEqual(Array.from({ length: 64 }, (_, i) => i));
     }
+  });
+});
+
+describe("ghost slots", () => {
+  it("copies the kit's own snare and kick into the ghost snare and soft kick slots", () => {
+    const kick = drum("kick");
+    const snare = drum("snare");
+    const a = arrangeFingerDrumming([kick, snare], horizontal);
+    expect(a.ghosts).toEqual([
+      { index: 8, kind: "softKick", sourceKey: kick.key },
+      { index: 9, kind: "ghostSnare", sourceKey: snare.key },
+    ]);
+    // Copies are not placeholders, and nothing else took their pads.
+    expect(a.placeholders.some((p) => p.index === 8 || p.index === 9)).toBe(false);
+  });
+
+  it("marks a ghost slot 'add <type>' when the kit has no sound to copy", () => {
+    const a = arrangeFingerDrumming([drum("kick")], horizontal);
+    expect(a.ghosts.map((g) => g.kind)).toEqual(["softKick"]);
+    expect(a.placeholders.find((p) => p.index === 9)?.label).toBe("add Snare");
+  });
+
+  it("copies the first snare the layout fills (bottom row first) in Quest for Groove", () => {
+    const first = drum("snare");
+    const second = drum("snare");
+    const a = arrangeFingerDrumming([first, second, drum("kick")], quest);
+    expect(a.ghosts).toHaveLength(2);
+    expect(a.ghosts.every((g) => g.kind === "ghostSnare" && g.sourceKey === first.key)).toBe(true);
   });
 });
 
@@ -146,12 +175,6 @@ describe("layouts", () => {
     expect(layoutSlotAt(l, 32)).toBeUndefined();
   });
 
-  it("mirrors rows left to right", () => {
-    const l = layoutById("vertical");
-    const m = mirrorSlots(l.slots);
-    expect(m[0]).toBe(l.slots[3]);
-    expect(m[12]).toBe(l.slots[15]);
-  });
 });
 
 describe("classification by name", () => {

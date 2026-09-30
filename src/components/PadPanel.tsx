@@ -1,6 +1,7 @@
 import { PrecisionSlider } from "./PrecisionSlider";
 import { CATEGORIES, type CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
+import type { GhostKind } from "../audio/ghost";
 import { formatSignedCents, formatSignedSemitones } from "../audio/theory";
 
 export interface Pad {
@@ -24,6 +25,8 @@ export interface Pad {
   centroid?: number;
   /** Set on the silent pads the finger-drumming layout adds; they have no project sample behind them. */
   placeholder?: { kind: "missing" | "empty"; label: string };
+  /** Set on a ghost snare or soft kick: a quieter, duller copy of another sound, made when a finger-drumming layout is applied. */
+  ghost?: { kind: GhostKind; sourceOrigIndex: number };
   /** A long or looped/stretched sound: already prepared, so Tune stays off unless the user turns it on. */
   loop?: boolean;
   tune: boolean;

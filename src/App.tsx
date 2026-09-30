@@ -9,12 +9,12 @@ import {
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
 import { setReferencePitch, startPad, type PadHandle, type PadMode } from "./audio/player";
-import { buildTunedKoala, downloadBlob, type TunedSample } from "./audio/exportProject";
+import { buildTunedKoala, downloadBlob, type GhostPadExport, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
 import { isDrumCategory, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
-import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
+import { colorFor, paletteById, shade, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
@@ -24,6 +24,8 @@ import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, layoutById, layoutSlotAt } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
+import { makeGhostPad } from "./audio/ghostPads";
+import { GHOST_LABEL, GHOST_LEVEL_DB, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
@@ -115,6 +117,9 @@ function shiftFor(pad: Pad, target: number | null, a4: number): number {
   }
   return base + pad.semis + pad.cents / 100;
 }
+
+/** A sound from the project itself: not a silent placeholder and not a ghost copy the layout made. */
+const isReal = (p: Pad) => !p.placeholder && !p.ghost;
 
 /** Untuned sounds and drums up to this long play whole when tapped; longer ones play only while held. */
 const ONE_SHOT_MAX_SECONDS = 2;
@@ -317,6 +322,17 @@ function App() {
             setAnalyzing((n) => n - 1);
           });
       }
+      // A project reopened with its layout on gets its ghost snares and soft kicks remade from their source sounds.
+      if (layoutOn && saved.layoutGhosts?.length) {
+        setPads((prev) => {
+          const next = { ...prev };
+          for (const g of saved.layoutGhosts ?? []) {
+            const source = Object.values(prev).find((p) => isReal(p) && p.origIndex === g.sourceOrigIndex);
+            if (source && !next[g.index]) next[g.index] = makeGhostPad(g.index, g.kind, source);
+          }
+          return next;
+        });
+      }
       if (!restore && tooLong.length > 0) setLongSamples(tooLong);
     } catch (err) {
       // Not a usable project: stay on the drop screen rather than showing an error.
@@ -342,7 +358,7 @@ function App() {
     if (analyzing > 0 || loading || Object.keys(pads).length === 0) return;
     const out: Record<number, SavedPad> = {};
     for (const p of Object.values(pads)) {
-      if (p.placeholder) continue;
+      if (!isReal(p)) continue;
       out[p.origIndex] = {
         tune: p.tune,
         tuneLocked: p.tuneLocked,
@@ -362,6 +378,7 @@ function App() {
       layoutId: layout.id,
       layoutOn: layout.on,
       layoutPre: layout.pre,
+      layoutGhosts: Object.values(pads).flatMap((p) => (p.ghost ? [{ index: p.index, kind: p.ghost.kind, sourceOrigIndex: p.ghost.sourceOrigIndex }] : [])),
       layoutPlaceholders: Object.values(pads).flatMap((p) => (p.placeholder ? [{ index: p.index, ...p.placeholder }] : [])),
     });
   }, [pads, analyzing, loading, layout]);
@@ -392,7 +409,7 @@ function App() {
     setLoading(false);
     setExpanded(false);
     setBank(0);
-    saveState({ pads: {}, layoutOn: false, layoutPre: {}, layoutPlaceholders: [] });
+    saveState({ pads: {}, layoutOn: false, layoutPre: {}, layoutGhosts: [], layoutPlaceholders: [] });
     void clearProjectFile();
     setMenuOpen(false);
   };
@@ -446,9 +463,9 @@ function App() {
   /** Every pad rearranged into `layoutId`, with placeholder pads in the gaps. Earlier placeholders are dropped first. */
   const arrangeInto = (cur: Record<number, Pad>, layoutId: string): Record<number, Pad> => {
     const real = Object.values(cur)
-      .filter((p) => !p.placeholder)
+      .filter(isReal)
       .sort((a, b) => a.index - b.index);
-    const { positions, placeholders } = arrangeFingerDrumming(
+    const { positions, placeholders, ghosts } = arrangeFingerDrumming(
       real.map((p) => ({ key: p.origIndex, category: p.category, midi: p.detectedMidi, centroid: p.centroid })),
       layoutById(layoutId),
     );
@@ -458,6 +475,10 @@ function App() {
       if (index !== undefined) next[index] = { ...p, index };
     }
     for (const ph of placeholders) next[ph.index] = makePlaceholderPad(ph);
+    for (const g of ghosts) {
+      const source = real.find((p) => p.origIndex === g.sourceKey);
+      if (source) next[g.index] = makeGhostPad(g.index, g.kind, source);
+    }
     return next;
   };
 
@@ -466,7 +487,7 @@ function App() {
     const cur = latest.current;
     const pre = cur.layout.on
       ? cur.layout.pre
-      : Object.fromEntries(Object.values(cur.pads).filter((p) => !p.placeholder).map((p) => [p.origIndex, p.index]));
+      : Object.fromEntries(Object.values(cur.pads).filter(isReal).map((p) => [p.origIndex, p.index]));
     recordEdit();
     setPads(arrangeInto(cur.pads, id));
     setLayout({ on: true, id, pre });
@@ -480,7 +501,7 @@ function App() {
     recordEdit();
     const next: Record<number, Pad> = {};
     for (const p of Object.values(cur.pads)) {
-      if (p.placeholder) continue;
+      if (!isReal(p)) continue;
       const wanted = cur.layout.pre[p.origIndex] ?? p.index;
       const index = next[wanted] ? (nextEmptyPad(next, 0) ?? wanted) : wanted;
       next[index] = { ...p, index };
@@ -548,7 +569,7 @@ function App() {
   const normalizeNow = async () => {
     setNormalizing(true);
     try {
-      const list = Object.values(pads).filter((p) => !p.placeholder);
+      const list = Object.values(pads).filter(isReal);
       const { gainDb, knobDb } = await getRenderWorker().balance(
         list.map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category })),
         FILE_CEILING_DB,
@@ -681,11 +702,11 @@ function App() {
       const pans = new Map<number, number>();
       if (spread) {
         // Only melodic pads move; bass, drums and the rest stay centred.
-        const tunedPads = Object.values(pads).filter((p) => p.category === "melodic" && !p.placeholder);
+        const tunedPads = Object.values(pads).filter((p) => p.category === "melodic" && isReal(p));
         const offsets = balancedSpread(tunedPads.length, MAX_SPREAD_PERCENT);
         tunedPads.forEach((p, i) => pans.set(p.sampleId, 0.5 + offsets[i] / 200));
       }
-      const allPads = Object.values(pads).filter((p) => !p.placeholder);
+      const allPads = Object.values(pads).filter(isReal);
       // Every pad's final (tuned) audio, so loudness is measured on what Koala will actually play.
       // Only retimed pads hold new audio; the rest point at the pad's own data. Each pad is measured as
       // it is rendered, so the whole project is never shipped to the worker or copied at once.
@@ -716,6 +737,23 @@ function App() {
           gainDb: gains?.gainDb[i],
         });
       });
+      // Ghost snares and soft kicks are made from their source's final audio (tuned and loudness-balanced), then quieted and dulled.
+      const ghostExports: GhostPadExport[] = [];
+      for (const gp of Object.values(pads).filter((p) => p.ghost)) {
+        const source = allPads.find((p) => p.origIndex === gp.ghost!.sourceOrigIndex);
+        if (!source) continue;
+        const at = rendered.findIndex((r) => r.pad === source);
+        let audio = at >= 0 ? rendered[at].channelData : source.channelData;
+        if (gains && at >= 0) audio = applyGainDb(audio, gains.gainDb[at]);
+        ghostExports.push({
+          index: gp.index,
+          label: GHOST_LABEL[gp.ghost!.kind],
+          color: autoColor ? autoColorOf(gp) : undefined,
+          sourceSampleId: source.sampleId,
+          sampleRate: source.sampleRate,
+          channelData: makeGhostAudio(audio, source.sampleRate, gp.ghost!.kind),
+        });
+      }
       rendered.length = 0;
       const buses = new Map<number, number>();
       if (routeBuses) {
@@ -727,7 +765,7 @@ function App() {
           if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: labelOf(p) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, placeholders: placeholderList });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, placeholders: placeholderList, ghosts: ghostExports });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -742,7 +780,7 @@ function App() {
     const project = projectRef.current;
     if (!project) return undefined;
     const slots = project.pads.filter((p) => p.pad >= 0 && p.pad < 64);
-    const now = new Map(Object.values(pads).filter((p) => !p.placeholder).map((p) => [p.origIndex, p.index]));
+    const now = new Map(Object.values(pads).filter(isReal).map((p) => [p.origIndex, p.index]));
     if (!slots.some((r) => now.get(r.pad) !== r.pad)) return undefined;
     return new Map(slots.map((r) => [r.pad, now.get(r.pad) ?? null]));
   };
@@ -758,10 +796,11 @@ function App() {
   /** Palette colour for a sound: by category, or its slot's role colour for drums on the layout's banks. */
   const autoColorOf = (p: Pad): string => {
     const slot = drumSlotOf(p);
-    return colorFor(palette, slot?.category ?? p.category ?? "other");
+    const base = colorFor(palette, slot?.category ?? p.category ?? "other");
+    return p.ghost ? shade(base, 2) : base;
   };
   /** The words on a pad: its layout slot's label for drums on the layout's banks, otherwise its role, keyword or category. */
-  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : drumSlotOf(p)?.label ?? padLabel(p));
+  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : drumSlotOf(p)?.label ?? padLabel(p));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
   const placeholderList = Object.values(pads)
@@ -770,6 +809,7 @@ function App() {
   const canExport =
     (arrangement !== undefined ||
       placeholderList.length > 0 ||
+      Object.values(pads).some((p) => p.ghost) ||
       (normalize || autoColor || routeBuses ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
     analyzing === 0 &&
     !exporting;
@@ -918,7 +958,14 @@ function App() {
         )}
 
         <section className="teal" style={box(LEFT, 280, CONTENT_W, 510)}>
-          {selectedPad?.placeholder ? (
+          {selectedPad?.ghost ? (
+            <div className="teal__message">
+              <strong>{GHOST_LABEL[selectedPad.ghost.kind]}</strong>
+              <span>
+                A copy of another pad, {Math.abs(GHOST_LEVEL_DB[selectedPad.ghost.kind])} dB quieter with a gentle high cut. Made by the layout.
+              </span>
+            </div>
+          ) : selectedPad?.placeholder ? (
             <div className="teal__message">
               <strong>{selectedPad.placeholder.label}</strong>
               <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
@@ -998,7 +1045,7 @@ function App() {
               }}
               aria-label={`Pad ${slot + 1}`}
             >
-              {pad && (pad.placeholder || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
+              {pad && (pad.placeholder || pad.ghost || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
             </button>
           );
         })}
@@ -1122,7 +1169,7 @@ function App() {
         {classifierOpen && (
           <ClassifierModal
             pads={Object.values(pads)
-              .filter((p) => !p.placeholder)
+              .filter(isReal)
               .sort((a, b) => a.index - b.index)}
             palette={palette}
             audioOf={audioOf}

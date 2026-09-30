@@ -10,6 +10,19 @@ export interface PlaceholderPad {
   color: string;
 }
 
+/** A ghost snare or soft kick the layout adds: a quieter copy of another pad, written as its own sample. */
+export interface GhostPadExport {
+  index: number;
+  label: string;
+  /** Replaces the pad's colour; omitted keeps the source pad's own. */
+  color?: string;
+  /** The pad (by sample id) this is a copy of; its settings are cloned. */
+  sourceSampleId: number;
+  sampleRate: number;
+  /** The finished audio, already quieter and duller than the source. */
+  channelData: Float32Array[];
+}
+
 export interface TunedSample {
   sampleId: number;
   sampleRate: number;
@@ -40,7 +53,8 @@ export async function buildTunedKoala(
     pans,
     colors,
     placeholders,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; placeholders?: PlaceholderPad[] } = {},
+    ghosts,
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[] } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -75,6 +89,7 @@ export async function buildTunedKoala(
   }
   if (arrangement) await applyArrangement(project, samplerJson, arrangement);
   if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
+  if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
   if (busNames) await renameBuses(project, busNames);
 
@@ -242,6 +257,44 @@ async function addPlaceholderPads(project: ParsedKoalaProject, samplerJson: any,
     if ("vol" in pad) pad.vol = 1;
     if ("pan" in pad) pad.pan = 0.5;
     pads.push(pad);
+  }
+  pads.sort((a, b) => Number(a.pad) - Number(b.pad));
+}
+
+/**
+ * Adds the layout's ghost snares and soft kicks. Each gets its own 24-bit WAV and its own sample entry,
+ * and its pad is a clone of the source pad (bus, pan, everything Koala expects) with the trim points reset
+ * and the volume knob at 0 dB, since the level is baked into the audio. A ghost whose slot is already taken, or whose source pad is gone, is skipped.
+ */
+async function addGhostPads(project: ParsedKoalaProject, samplerJson: any, ghosts: GhostPadExport[]): Promise<void> {
+  const pads: any[] = (samplerJson.pads = Array.isArray(samplerJson.pads) ? samplerJson.pads : []);
+  const samples: any[] = (samplerJson.samples = Array.isArray(samplerJson.samples) ? samplerJson.samples : []);
+  const base = project.padBase;
+  const ids = [...samples.map((s) => s.id), ...pads.map((p) => p.sampleId)].filter((id) => typeof id === "number");
+  let nextId = Math.max(0, ...ids) + 1;
+  const taken = new Set(pads.map((p) => Number(p.pad) - base));
+  for (const g of ghosts) {
+    const source = pads.find((p) => p.type === "sample" && p.sampleId === g.sourceSampleId);
+    if (!source || taken.has(g.index)) continue;
+    const sampleId = nextId++;
+    const frames = g.channelData[0].length;
+    project.zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: g.sampleRate, channelData: g.channelData, bitDepth: 24 }).arrayBuffer());
+    const sourceSample = samples.find((s) => s.id === g.sourceSampleId);
+    samples.push({
+      ...(sourceSample ? JSON.parse(JSON.stringify(sourceSample)) : {}),
+      id: sampleId,
+      metadata: { ...(sourceSample?.metadata ?? {}), originalPath: `${g.label}.wav` },
+    });
+    const pad = JSON.parse(JSON.stringify(source));
+    pad.pad = typeof source.pad === "string" ? String(g.index + base) : g.index + base;
+    pad.sampleId = sampleId;
+    pad.label = g.label;
+    if (g.color) pad.color = g.color;
+    if ("start" in pad) Object.assign(pad, { start: 0, zoomStart: 0, end: frames, zoomEnd: frames });
+    if ("pitch" in pad) pad.pitch = 0;
+    if ("vol" in pad) pad.vol = 1;
+    pads.push(pad);
+    taken.add(g.index);
   }
   pads.sort((a, b) => Number(a.pad) - Number(b.pad));
 }

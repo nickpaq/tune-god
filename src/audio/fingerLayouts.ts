@@ -5,6 +5,8 @@ import { categoryLabel, type CategoryId } from "./classify";
 export interface LayoutSlot {
   /** The drum category this slot wants. */
   category: CategoryId;
+  /** Set on a ghost snare or soft kick slot: the category of the real sound this slot holds a quieter copy of. */
+  ghostOf?: "snare" | "kick";
   /** What the preview and any "missing" pad call this slot, e.g. "Perc". */
   label: string;
 }
@@ -17,10 +19,12 @@ export interface FingerLayout {
   slots: LayoutSlot[];
 }
 
-const slot = (category: CategoryId, label = categoryLabel(category)): LayoutSlot => ({ category, label });
+const slot = (category: CategoryId, label = categoryLabel(category), ghostOf?: "snare" | "kick"): LayoutSlot => ({ category, label, ghostOf });
 
 const KICK = slot("kick");
 const SNARE = slot("snare");
+const GHOST = slot("snare", "Ghost Snare", "snare");
+const SOFT = slot("kick", "Soft Kick", "kick");
 const CLAP = slot("clap");
 const CHAT = slot("closedHat");
 const OHAT = slot("openHat");
@@ -29,62 +33,51 @@ const FX = slot("fx");
 const VOX = slot("vox");
 const PERC = slot("perc");
 
-/** Flips every row left to right, for the left-handed version of a layout. */
-export function mirrorSlots(slots: LayoutSlot[]): LayoutSlot[] {
-  return slots.map((_, i) => slots[Math.floor(i / 4) * 4 + (3 - (i % 4))]);
-}
-
-const VERTICAL: LayoutSlot[] = [
-  CYM, FX, VOX, OHAT,
-  PERC, PERC, PERC, CHAT,
-  PERC, PERC, CLAP, SNARE,
-  PERC, PERC, PERC, KICK,
-];
-
+// Research: docs/finger-drumming-layouts.md. Kick, snare and both hats on the bottom row is the MPC default;
+// a ghost snare or soft kick sits beside (or above) the hit it is a quieter copy of.
 export const FINGER_LAYOUTS: FingerLayout[] = [
   {
     id: "horizontal",
-    name: "Horizontal kit",
-    description: "Kick, snare and both hats along the bottom row; percussion, claps, cymbals, vox and FX above.",
+    name: "Horizontal kit (MPC default)",
+    description: "Kick, snare and both hats along the bottom row; soft kick and ghost snare above them, then percussion, cymbals, vox and FX.",
     slots: [
       CYM, CYM, FX, VOX,
       PERC, PERC, PERC, PERC,
-      CLAP, PERC, PERC, FX,
+      SOFT, GHOST, CLAP, FX,
       KICK, SNARE, CHAT, OHAT,
     ],
   },
   {
-    id: "vertical",
-    name: "Vertical (right hand)",
-    description: "Core drums stacked in the right column, leaving the left side for percussion, cymbal, vox and FX.",
-    slots: VERTICAL,
-  },
-  {
-    id: "vertical-left",
-    name: "Vertical (left hand)",
-    description: "The vertical layout mirrored, with the core drums in the left column.",
-    slots: mirrorSlots(VERTICAL),
-  },
-  {
     id: "quest-for-groove",
     name: "Quest for Groove 4x4",
-    description: "Kick pair between two cymbals, snares flanked by claps, hats and a cymbal, percussion and FX on top.",
+    description: "Kick pair between two cymbals, snares flanked by ghost snares, hats and a cymbal, percussion on top.",
     slots: [
-      PERC, PERC, PERC, FX,
+      PERC, PERC, PERC, CYM,
       CHAT, OHAT, CHAT, CYM,
-      CLAP, SNARE, SNARE, CLAP,
+      GHOST, SNARE, SNARE, GHOST,
       CYM, KICK, KICK, CYM,
     ],
   },
   {
     id: "mirrored",
-    name: "Mirrored kit",
-    description: "Kicks on the outside and snares above them, hats in the middle, percussion, cymbal, vox and FX higher.",
+    name: "Mirrored kit (Xpress Pads)",
+    description: "Kicks on the outside and snares above them, hats in the middle, percussion, cymbals, vox and FX higher.",
     slots: [
-      CYM, FX, VOX, PERC,
+      CYM, CYM, FX, VOX,
       PERC, PERC, PERC, CLAP,
-      SNARE, OHAT, OHAT, SNARE,
-      KICK, CHAT, CHAT, KICK,
+      SNARE, OHAT, OHAT, GHOST,
+      KICK, CHAT, CHAT, SOFT,
+    ],
+  },
+  {
+    id: "controller-split",
+    name: "Controller split (two hands)",
+    description: "Left two columns are the core kit for one hand; the right two are percussion, cymbals and extras for the other.",
+    slots: [
+      CLAP, OHAT, CYM, CYM,
+      GHOST, CHAT, PERC, PERC,
+      SNARE, CHAT, PERC, PERC,
+      KICK, SOFT, FX, VOX,
     ],
   },
 ];

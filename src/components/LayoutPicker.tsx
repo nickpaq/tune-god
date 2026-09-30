@@ -1,5 +1,5 @@
 import { FINGER_LAYOUTS } from "../audio/fingerLayouts";
-import { colorFor, textColorOn, type Palette } from "../audio/palettes";
+import { colorFor, shade, textColorOn, type Palette } from "../audio/palettes";
 
 /**
  * Popup listing every finger-drumming layout with a preview of bank A. The preview always shows a
@@ -40,7 +40,7 @@ export function LayoutPicker({
               <span className="layout-row__desc">{layout.description}</span>
               <span className="layout-row__grid">
                 {layout.slots.map((slot, i) => {
-                  const bg = colorFor(palette, slot.category);
+                  const bg = slot.ghostOf ? shade(colorFor(palette, slot.category), 2) : colorFor(palette, slot.category);
                   return (
                     <span key={i} style={{ background: bg, color: textColorOn(bg) }}>
                       {slot.label}

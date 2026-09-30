@@ -7,7 +7,8 @@
 //   Banks C, D   everything that isn't a drum, lowest to highest (bass, melodic, loops, FX, other),
 //            then any drums still left over; overflow past D continues on B's free pads
 //   Every pad still free at the end becomes an "Empty pad" placeholder.
-import { categoryIndex, isKitCategory, type CategoryId } from "./classify";
+import { categoryIndex, categoryLabel, isKitCategory, type CategoryId } from "./classify";
+import type { GhostKind } from "./ghost";
 import type { FingerLayout } from "./fingerLayouts";
 import { PAD_COUNT, PADS_PER_BANK } from "./padMoves";
 
@@ -27,7 +28,16 @@ export interface ArrangePlaceholder {
   label: string;
 }
 
+/** A quieter copy of a real sound, made for a ghost snare or soft kick slot. */
+export interface ArrangeGhost {
+  index: number;
+  kind: GhostKind;
+  /** The sound (by key) the copy is made from. */
+  sourceKey: number;
+}
+
 export interface FingerArrangement {
+  ghosts: ArrangeGhost[];
   /** Sound key -> new pad index. */
   positions: Map<number, number>;
   placeholders: ArrangePlaceholder[];
@@ -76,10 +86,10 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[], substitute: boolea
   const slots: (ArrangeSound | null)[] = Array(PADS_PER_BANK).fill(null);
   const used = new Set<number>();
 
-  for (const category of new Set(layout.slots.map((s) => s.category))) {
+  for (const category of new Set(layout.slots.filter((s) => !s.ghostOf).map((s) => s.category))) {
     const positions = layout.slots
       .map((s, i) => ({ s, i }))
-      .filter(({ s }) => s.category === category)
+      .filter(({ s }) => s.category === category && !s.ghostOf)
       .sort((a, b) => slotRank(a.i) - slotRank(b.i));
     const candidates = drums.filter((d) => d.category === category).sort(byFrequency);
     positions.forEach(({ i }, n) => {
@@ -92,7 +102,7 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[], substitute: boolea
 
   if (substitute) {
     for (let i = layout.slots.length - 1; i >= 0; i--) {
-      if (slots[i]) continue;
+      if (slots[i] || layout.slots[i].ghostOf) continue;
       const pick = drums.find((d) => !used.has(d.key) && SUBSTITUTE_GROUP[d.category!] === SUBSTITUTE_GROUP[layout.slots[i].category]);
       if (!pick) continue;
       slots[i] = pick;
@@ -122,12 +132,26 @@ export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayo
 
   const positions = new Map<number, number>();
   const placeholders = new Map<number, ArrangePlaceholder>();
-  const place = (kit: Kit, bank: number) =>
+  const ghosts: ArrangeGhost[] = [];
+  const place = (kit: Kit, bank: number) => {
     kit.slots.forEach((s, i) => {
       const index = bank * PADS_PER_BANK + i;
+      if (layout.slots[i].ghostOf) return;
       if (s) positions.set(s.key, index);
       else placeholders.set(index, { index, kind: "missing", label: `add ${layout.slots[i].label}` });
     });
+    // A ghost slot holds a quieter copy of the kit's own snare or kick (the first one the layout fills, bottom row first).
+    layout.slots.forEach((slot, i) => {
+      if (!slot.ghostOf) return;
+      const index = bank * PADS_PER_BANK + i;
+      const source = layout.slots
+        .map((s, j) => ({ s, j }))
+        .filter(({ s, j }) => !s.ghostOf && s.category === slot.ghostOf && kit.slots[j])
+        .sort((a, b) => slotRank(a.j) - slotRank(b.j))[0];
+      if (source) ghosts.push({ index, kind: slot.ghostOf === "snare" ? "ghostSnare" : "softKick", sourceKey: kit.slots[source.j]!.key });
+      else placeholders.set(index, { index, kind: "missing", label: `add ${categoryLabel(slot.ghostOf!)}` });
+    });
+  };
   place(kitA, 0);
   if (kitB) place(kitB, 1);
 
@@ -150,10 +174,10 @@ export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayo
     placeholders.delete(index);
   });
 
-  const taken = new Set([...positions.values(), ...placeholders.keys()]);
+  const taken = new Set([...positions.values(), ...placeholders.keys(), ...ghosts.map((g) => g.index)]);
   for (let index = 0; index < PAD_COUNT; index++) {
     if (!taken.has(index)) placeholders.set(index, { index, kind: "empty", label: EMPTY_PAD_LABEL });
   }
 
-  return { positions, placeholders: [...placeholders.values()].sort((a, b) => a.index - b.index) };
+  return { positions, ghosts, placeholders: [...placeholders.values()].sort((a, b) => a.index - b.index) };
 }
