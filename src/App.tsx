@@ -801,8 +801,7 @@ function App() {
   const arrangement = analyzing === 0 ? arrangementOf(pads) : undefined;
 
   const palette = paletteById(paletteId);
-  /** With the finger-drumming layout on there is one page: bank A. Other sounds are reached through the swap list. */
-  const shownBank = layout.on ? 0 : bank;
+    const shownBank = bank;
   /** Palette colour for a sound, by its own category. Where it sits (including on a layout's slots) never changes it. */
   const autoColorOf = (p: Pad): string => {
     const base = colorFor(palette, p.category ?? "other");
@@ -846,7 +845,7 @@ function App() {
     <SwapList
       slotLabel={selectedPad.ghost ? `${GHOST_LABEL[selectedPad.ghost.kind]} (made on export unless filled)` : `PAD ${(selectedPad.index % 16) + 1}`}
       candidates={sortForSlot(
-        Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index !== selectedPad.index),
+        Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index >= 16 && p.index !== selectedPad.index),
         layoutById(layout.id).slots[selectedPad.index % 16]?.category ?? selectedPad.category,
       )}
       colorOf={colorOfPad}
@@ -1005,7 +1004,7 @@ function App() {
           ) : selectedPad ? (
             layout.on ? (
               <div className="teal__stack">
-                {!selectedPad.placeholder && !selectedPad.ghost && <ViewToggle view={padView} onChange={setPadView} />}
+                <ViewToggle view={padView} onChange={setPadView} />
                 {padView === "swap" || selectedPad.placeholder || selectedPad.ghost ? swapList : panel}
               </div>
             ) : (
@@ -1081,7 +1080,7 @@ function App() {
         })}
 
         <div className="banks" style={box(BANKS_X, BAR_Y, BANKS_W, BAR_H)}>
-          {BANKS.slice(0, layout.on ? 1 : BANKS.length).map((name, i) => {
+          {BANKS.map((name, i) => {
             const hasSamples = Object.keys(pads).some(
               (index) => Math.floor(Number(index) / 16) === i,
             );

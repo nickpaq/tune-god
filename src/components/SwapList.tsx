@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { textColorOn } from "../audio/palettes";
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
@@ -6,6 +7,8 @@ import { useSoundPreview } from "./useSoundPreview";
  * Hot-swap list for the finger-drumming page: every other drum in the project, each row in its own colour,
  * with a play button and a swap button that trades places with the slot the user tapped.
  */
+const PAGE_SIZE = 4;
+
 export function SwapList({
   slotLabel,
   candidates,
@@ -21,6 +24,11 @@ export function SwapList({
   onSwap: (pad: Pad) => void;
 }) {
   const preview = useSoundPreview();
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(candidates.length / PAGE_SIZE));
+  const at = Math.min(page, pages - 1);
+  useEffect(() => setPage(0), [slotLabel]);
+  const shown = candidates.slice(at * PAGE_SIZE, (at + 1) * PAGE_SIZE);
   return (
     <div className="swap-list">
       <div className="swap-list__head">
@@ -28,7 +36,7 @@ export function SwapList({
       </div>
       <div className="swap-list__rows">
         {candidates.length === 0 && <div className="swap-list__empty">No other drums in this project.</div>}
-        {candidates.map((pad) => {
+        {shown.map((pad) => {
           const bg = colorOf(pad);
           const fg = textColorOn(bg);
           return (
@@ -55,6 +63,19 @@ export function SwapList({
           );
         })}
       </div>
+      {pages > 1 && (
+        <div className="swap-list__pager">
+          <button onClick={() => setPage(at - 1)} disabled={at === 0} aria-label="Previous page">
+            ◀
+          </button>
+          <span>
+            {at + 1} / {pages}
+          </span>
+          <button onClick={() => setPage(at + 1)} disabled={at >= pages - 1} aria-label="Next page">
+            ▶
+          </button>
+        </div>
+      )}
     </div>
   );
 }
