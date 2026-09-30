@@ -701,11 +701,11 @@ function App() {
   const palette = paletteById(paletteId);
   const drumColors = roleColors(palette);
   /**
-   * With a layout applied, a drum on bank A or B shows its slot's role colour and label, exactly as the
+   * With a layout applied, with auto-color on, a drum on bank A or B shows its slot's role colour and label, exactly as the
    * layout preview does. This is only how the pad looks in Koala; its category (tuning, buses) is unchanged.
    */
   const drumSlotOf = (p: Pad) =>
-    layout.on && !p.placeholder && isDrumCategory(p.category) ? layoutSlotAt(layoutById(layout.id), p.index) : undefined;
+    autoColor && layout.on && !p.placeholder && isDrumCategory(p.category) ? layoutSlotAt(layoutById(layout.id), p.index) : undefined;
   /** Palette colour for a sound: by category, or its slot's role colour for drums on the layout's banks. */
   const autoColorOf = (p: Pad): string => {
     const slot = drumSlotOf(p);
