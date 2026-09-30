@@ -800,6 +800,7 @@
   font-weight: 700;
   line-height: 1.1;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .sound-row__types input {
