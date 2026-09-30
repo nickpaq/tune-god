@@ -89,3 +89,18 @@ export async function loadProjectFile(): Promise<File | null> {
     return null;
   }
 }
+
+export async function clearProjectFile(): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete("file");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    /* ignore */
+  }
+}

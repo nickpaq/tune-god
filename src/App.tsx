@@ -17,7 +17,7 @@ import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
-import { loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
+import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import background from "./assets/koala-empty.jpg";
@@ -290,6 +290,34 @@ function App() {
     restorePads.current = out;
     saveState({ pads: out });
   }, [pads, analyzing, loading]);
+
+  /** Unloads the project and forgets it, so the app opens on the drop screen next time. Settings stay. */
+  const clearProject = () => {
+    if (!window.confirm("Clear the loaded project? Your tuning edits for it will be lost.")) return;
+    loadToken.current++; // abandons any load or analysis still in flight
+    for (const handle of releasePad.current.values()) handle.release();
+    releasePad.current.clear();
+    projectRef.current = null;
+    past.current = [];
+    future.current = [];
+    lastEdit.current = { key: "", time: 0 };
+    restorePads.current = {};
+    setHistorySize({ undo: 0, redo: 0 });
+    setPads({});
+    setNormalizedData({});
+    setSelected(null);
+    setKeyPc(null);
+    setTunedTarget(null);
+    tunedTargetRef.current = null;
+    setProjectName(null);
+    setAnalyzing(0);
+    setLoading(false);
+    setExpanded(false);
+    setBank(0);
+    saveState({ pads: {} });
+    void clearProjectFile();
+    setMenuOpen(false);
+  };
 
   const pickFile = (files: FileList | File[] | null | undefined) => {
     const file = Array.from(files ?? []).find(isKoalaFile);
@@ -601,7 +629,9 @@ function App() {
           aria-label="Export options"
           aria-expanded={menuOpen}
         >
-          ☰
+          <svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+          </svg>
         </button>
         {menuOpen && (
           <div className="menu" style={{ top: `${(268 / H) * 100}%`, right: `${((W - RIGHT) / W) * 100}%` }}>
@@ -652,6 +682,9 @@ function App() {
                 Reset to A440
               </button>
             )}
+            <button className="menu__button" disabled={!hasProject && !loading} onClick={clearProject}>
+              Clear project
+            </button>
             {autoColor && (
               <button
                 className="menu__button"

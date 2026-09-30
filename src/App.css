@@ -476,12 +476,9 @@
 }
 
 .menu-button {
-  border: 0.3cqw solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg);
-  padding: 0;
-  font-size: 6cqw;
-  line-height: 1;
+  border: none;
+  background: var(--bg); /* hides whatever the background screenshot draws here */
+  padding: 1cqw;
   color: #fff;
 }
 
