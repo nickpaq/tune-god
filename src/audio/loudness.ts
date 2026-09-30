@@ -18,6 +18,7 @@ export const CATEGORY_TRIM_DB: Record<CategoryId, number> = {
   clap: 0,
   closedHat: -3,
   openHat: -3,
+  cymbal: -3,
   perc: -3,
   bass: 0,
   melodic: -2,

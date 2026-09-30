@@ -39,10 +39,10 @@ describe("arrangeFingerDrumming", () => {
     expect(indexOf(a, hat)).toBe(14);
     expect(a.placeholders.find((p) => p.index === 15)?.label).toBe("add Open Hat");
 
-    // A second closed hat fills the layout's other closed hat slot (top row) before it would stand in for the open one.
+    // Horizontal has one closed hat slot, so a second closed hat stands in for the open one.
     const second = drum("closedHat");
     const b = arrangeFingerDrumming([hat, second], horizontal);
-    expect(indexOf(b, second)).toBe(1);
+    expect(indexOf(b, second)).toBe(15);
   });
 
   it("puts lower percussion on the lower rows, left to right", () => {
@@ -50,13 +50,12 @@ describe("arrangeFingerDrumming", () => {
     const low = sound("perc", { centroid: 200 });
     const mid = sound("perc", { centroid: 900 });
     const a = arrangeFingerDrumming([high, low, mid], horizontal);
-    // Horizontal's perc slots, bottom row first: 10, 11, then 4.
-    expect([low, mid, high].map((s) => indexOf(a, s))).toEqual([10, 11, 4]);
+    // Horizontal's perc slots, bottom row first: 9, 10, then 4.
+    expect([low, mid, high].map((s) => indexOf(a, s))).toEqual([9, 10, 4]);
   });
 
   it("builds a second kit only when the leftovers hold a kick, a snare and a hat", () => {
-    // The horizontal layout has two closed hat slots, so a hat is only left over from the third one.
-    const first = [drum("kick"), drum("snare"), drum("closedHat"), drum("closedHat")];
+    const first = [drum("kick"), drum("snare"), drum("closedHat")];
     const withSecond = [...first, drum("kick"), drum("snare"), drum("closedHat")];
     const a = arrangeFingerDrumming(withSecond, horizontal);
     expect(a.placeholders.filter((p) => p.kind === "missing" && p.index >= 16 && p.index < 32).length).toBeGreaterThan(0);
@@ -78,7 +77,7 @@ describe("arrangeFingerDrumming", () => {
     expect(bankB.every((p) => p.kind === "empty" && p.label === EMPTY_PAD_LABEL)).toBe(true);
   });
 
-  it("sorts tonal sounds bass first, lowest to highest, then FX, then other", () => {
+  it("sorts tonal sounds bass first, lowest to highest, then other, with FX in the kit", () => {
     const vocal = sound("vox", { centroid: 500 });
     const fx = sound("fx", { centroid: 300 });
     const other = sound("other", { centroid: 100 });
@@ -86,8 +85,10 @@ describe("arrangeFingerDrumming", () => {
     const loLead = sound("melodic", { midi: 60 });
     const bass = sound("bass", { midi: 40 });
     const a = arrangeFingerDrumming([other, fx, vocal, hiLead, loLead, bass], horizontal);
-    const order = [bass, loLead, hiLead, fx, other].map((s) => indexOf(a, s));
-    expect(order).toEqual([32, 33, 34, 35, 36]);
+    const order = [bass, loLead, hiLead, other].map((s) => indexOf(a, s));
+    expect(order).toEqual([32, 33, 34, 35]);
+    // FX has slots in the layout, so it sits on bank A.
+    expect(indexOf(a, fx)).toBeLessThan(16);
     // Vox is a drum type, so it takes one of the layout's vox slots instead.
     expect(indexOf(a, vocal)).toBeLessThan(16);
   });
@@ -156,8 +157,8 @@ describe("layouts", () => {
 describe("classification by name", () => {
   it("reads hat types from the name", () => {
     expect(classifyByName("Open_Hat_01.wav")).toBe("openHat");
-    expect(classifyByName("ride.wav")).toBe("openHat");
-    expect(classifyByName("crash 2.wav")).toBe("openHat");
+    expect(classifyByName("ride.wav")).toBe("cymbal");
+    expect(classifyByName("crash 2.wav")).toBe("cymbal");
     expect(classifyByName("closed hat.wav")).toBe("closedHat");
     expect(classifyByName("hihat 3.wav")).toBe("hat");
   });

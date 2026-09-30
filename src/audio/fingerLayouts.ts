@@ -24,6 +24,8 @@ const SNARE = slot("snare");
 const CLAP = slot("clap");
 const CHAT = slot("closedHat");
 const OHAT = slot("openHat");
+const CYM = slot("cymbal");
+const FX = slot("fx");
 const VOX = slot("vox");
 const PERC = slot("perc");
 
@@ -33,9 +35,9 @@ export function mirrorSlots(slots: LayoutSlot[]): LayoutSlot[] {
 }
 
 const VERTICAL: LayoutSlot[] = [
-  OHAT, CHAT, VOX, OHAT,
+  CYM, FX, VOX, OHAT,
   PERC, PERC, PERC, CHAT,
-  PERC, CLAP, VOX, SNARE,
+  PERC, PERC, CLAP, SNARE,
   PERC, PERC, PERC, KICK,
 ];
 
@@ -43,18 +45,18 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
   {
     id: "horizontal",
     name: "Horizontal kit",
-    description: "Kick, snare and both hats along the bottom row; percussion, claps and vox above.",
+    description: "Kick, snare and both hats along the bottom row; percussion, claps, cymbals, vox and FX above.",
     slots: [
-      OHAT, CHAT, VOX, PERC,
+      CYM, CYM, FX, VOX,
       PERC, PERC, PERC, PERC,
-      CLAP, VOX, PERC, PERC,
+      CLAP, PERC, PERC, FX,
       KICK, SNARE, CHAT, OHAT,
     ],
   },
   {
     id: "vertical",
     name: "Vertical (right hand)",
-    description: "Core drums stacked in the right column, leaving the left side for percussion and extras.",
+    description: "Core drums stacked in the right column, leaving the left side for percussion, cymbal, vox and FX.",
     slots: VERTICAL,
   },
   {
@@ -66,20 +68,20 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
   {
     id: "quest-for-groove",
     name: "Quest for Groove 4x4",
-    description: "Kick pair between two open hats, snares flanked by claps, closed hats, percussion on top.",
+    description: "Kick pair between two cymbals, snares flanked by claps, hats and a cymbal, percussion and FX on top.",
     slots: [
-      PERC, PERC, PERC, OHAT,
-      CHAT, OHAT, CHAT, CHAT,
+      PERC, PERC, PERC, FX,
+      CHAT, OHAT, CHAT, CYM,
       CLAP, SNARE, SNARE, CLAP,
-      OHAT, KICK, KICK, OHAT,
+      CYM, KICK, KICK, CYM,
     ],
   },
   {
     id: "mirrored",
     name: "Mirrored kit",
-    description: "Kicks on the outside and snares above them, hats in the middle, percussion and vox higher.",
+    description: "Kicks on the outside and snares above them, hats in the middle, percussion, cymbal, vox and FX higher.",
     slots: [
-      OHAT, CHAT, VOX, PERC,
+      CYM, FX, VOX, PERC,
       PERC, PERC, PERC, CLAP,
       SNARE, OHAT, OHAT, SNARE,
       KICK, CHAT, CHAT, KICK,

@@ -8,6 +8,7 @@ export type CategoryId =
   | "clap"
   | "closedHat"
   | "openHat"
+  | "cymbal"
   | "perc"
   | "vox"
   | "fx"
@@ -32,6 +33,7 @@ export const CATEGORIES: Category[] = [
   { id: "clap", label: "Clap", short: "Clap" },
   { id: "closedHat", label: "Closed Hat", short: "Closed" },
   { id: "openHat", label: "Open Hat", short: "Open" },
+  { id: "cymbal", label: "Cymbal", short: "Cymbal" },
   { id: "vox", label: "Vox", short: "Vox" },
   { id: "perc", label: "Perc", short: "Perc" },
   { id: "fx", label: "FX", short: "FX" },
@@ -58,6 +60,7 @@ export const CATEGORY_TONE: Record<CategoryId, ToneId> = {
   clap: "snareClap",
   closedHat: "hats",
   openHat: "hats",
+  cymbal: "hats",
   vox: "percVox",
   perc: "percVox",
   fx: "fx",
@@ -83,7 +86,7 @@ export function categoryLabel(id: CategoryId): string {
 }
 
 /** Drum categories: what a finger-drumming layout is made of (and what the classifier's drum columns cover). */
-const DRUM_CATEGORIES: CategoryId[] = ["kick", "snare", "clap", "closedHat", "openHat", "vox", "perc"];
+const DRUM_CATEGORIES: CategoryId[] = ["kick", "snare", "clap", "closedHat", "openHat", "cymbal", "vox", "perc"];
 
 export function isDrumCategory(category: CategoryId | undefined): boolean {
   return category !== undefined && DRUM_CATEGORIES.includes(category);
@@ -96,6 +99,11 @@ export function migrateCategory(id: string | undefined): CategoryId {
   return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
 }
 
+/** What a finger-drumming layout is made of: the drum categories plus FX hits. */
+export function isKitCategory(category: CategoryId | undefined): boolean {
+  return isDrumCategory(category) || category === "fx";
+}
+
 // Order matters: the first matching rule wins, so specific words come before generic ones.
 // "hat" is resolved by decay time when the name doesn't say open or closed.
 // Anything with no telltale word falls through to "other". A name containing "loop" turns the category it
@@ -105,7 +113,8 @@ const NAME_RULES: [CategoryId | "hat", RegExp][] = [
   ["kick", /\b(kick|kik|bd|bassdrum|bass drum)\b/],
   ["clap", /\b(clap|claps|handclap)\b/],
   ["snare", /\b(snare|rim|rimshot|sidestick|side stick|snap|sd)\b/],
-  ["openHat", /\b(open ?hat|open ?hh|ohat|ohh|crash|cymbal|china|splash|ride)\b/],
+  ["openHat", /\b(open ?hat|open ?hh|ohat|ohh|ohh)\b/],
+  ["cymbal", /\b(crash|cymbal|china|splash|ride)\b/],
   ["closedHat", /\b(closed ?hat|closed ?hh|chat|chh|pedal)\b/],
   ["hat", /\b(hi ?hat|hh|hat|hats)\b/],
   ["vox", /\b(vocal|vocals|vox|voice|choir|acapella|chant|breath|adlib|ad-lib)\b/],
@@ -122,6 +131,7 @@ const LOOP_OF: Partial<Record<CategoryId, CategoryId>> = {
   clap: "drumLoop",
   closedHat: "drumLoop",
   openHat: "drumLoop",
+  cymbal: "drumLoop",
   perc: "percLoop",
   bass: "melodicLoop",
   melodic: "melodicLoop",
@@ -129,6 +139,12 @@ const LOOP_OF: Partial<Record<CategoryId, CategoryId>> = {
 
 /** Decay (seconds to fall 20 dB) at which a hat with no open/closed keyword counts as open. */
 const OPEN_HAT_DECAY = 0.3;
+/** Decay at which an unnamed hat rings so long it is a cymbal. */
+const CYMBAL_DECAY = 1.0;
+
+function hatByDecay(decay: number): CategoryId {
+  return decay >= CYMBAL_DECAY ? "cymbal" : decay >= OPEN_HAT_DECAY ? "openHat" : "closedHat";
+}
 
 /** Category implied by a file name ("hat" when it is a hat of unknown openness), or null when it has no telltale word. */
 export function classifyByName(fileName: string): CategoryId | "hat" | null {
@@ -283,7 +299,7 @@ export function classifySample(
   if (byName && byName !== "hat") return byName;
 
   const f = extractFeatures(mono, sampleRate);
-  if (byName === "hat") return f && f.decay >= OPEN_HAT_DECAY ? "openHat" : "closedHat";
+  if (byName === "hat") return f ? hatByDecay(f.decay) : "closedHat";
   if (!f) return "other";
   const pitched = detectedMidi != null;
 
@@ -295,7 +311,7 @@ export function classifySample(
   }
 
   if (f.duration < 1.5) {
-    if (f.centroid > 6500 && f.high > 0.5) return f.decay >= OPEN_HAT_DECAY ? "openHat" : "closedHat";
+    if (f.centroid > 6500 && f.high > 0.5) return hatByDecay(f.decay);
     if (f.low > 0.45 && f.centroid < 500) return "kick";
     if (f.flatness > 0.15 && f.centroid > 1500) return "snare";
   }

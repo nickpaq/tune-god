@@ -17,6 +17,7 @@ describe("palettes", () => {
       // Siblings are told apart by shade, and every category gets a valid hex.
       expect(colorFor(p, "snare")).not.toBe(colorFor(p, "kick"));
       expect(colorFor(p, "clap")).not.toBe(colorFor(p, "snare"));
+      expect(colorFor(p, "cymbal")).not.toBe(colorFor(p, "openHat"));
       expect(colorFor(p, "openHat")).not.toBe(colorFor(p, "closedHat"));
       expect(colorFor(p, "vox")).not.toBe(colorFor(p, "perc"));
       for (const c of CATEGORIES) expect(colorFor(p, c.id)).toMatch(/^#[0-9A-F]{6}$/i);

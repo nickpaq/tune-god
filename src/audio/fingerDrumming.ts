@@ -1,13 +1,13 @@
 // Pure arranger for the finger-drumming layout: decides where every sound goes across the four
 // banks and which placeholder pads fill the gaps. No React and no audio, so it is easy to test.
 //
-//   Bank A   the chosen layout, filled from the user's drums ("add <category>" where a slot has none)
+//   Bank A   the chosen layout, filled from the user's drums and FX ("add <category>" where a slot has none)
 //   Bank B   a second kit from the leftover drums, but only when they include a kick, a snare and a hat;
 //            otherwise B is left unarranged
 //   Banks C, D   everything that isn't a drum, lowest to highest (bass, melodic, loops, FX, other),
 //            then any drums still left over; overflow past D continues on B's free pads
 //   Every pad still free at the end becomes an "Empty pad" placeholder.
-import { categoryIndex, isDrumCategory, type CategoryId } from "./classify";
+import { categoryIndex, isKitCategory, type CategoryId } from "./classify";
 import type { FingerLayout } from "./fingerLayouts";
 import { PAD_COUNT, PADS_PER_BANK } from "./padMoves";
 
@@ -36,7 +36,7 @@ export interface FingerArrangement {
 export const EMPTY_PAD_LABEL = "Empty pad";
 
 /** Lowest-to-highest order of the non-drum categories. */
-const TONAL_ORDER: CategoryId[] = ["bass", "melodic", "melodicLoop", "percLoop", "drumLoop", "fx", "other"];
+const TONAL_ORDER: CategoryId[] = ["bass", "melodic", "melodicLoop", "percLoop", "drumLoop", "other"];
 
 function frequency(s: ArrangeSound): number {
   if (s.midi != null) return 440 * 2 ** ((s.midi - 69) / 12);
@@ -52,6 +52,8 @@ const SUBSTITUTE_GROUP: Partial<Record<CategoryId, string>> = {
   clap: "snare",
   closedHat: "hat",
   openHat: "hat",
+  cymbal: "hat",
+  fx: "fx",
   perc: "perc",
   vox: "vox",
 };
@@ -105,8 +107,8 @@ const hasCore = (drums: ArrangeSound[]) =>
   [["kick"], ["snare"], ["closedHat", "openHat"]].every((group) => drums.some((d) => group.includes(d.category!)));
 
 export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayout): FingerArrangement {
-  const drums = sounds.filter((s) => isDrumCategory(s.category));
-  const tonal = sounds.filter((s) => !isDrumCategory(s.category));
+  const drums = sounds.filter((s) => isKitCategory(s.category));
+  const tonal = sounds.filter((s) => !isKitCategory(s.category));
 
   // A second kit is judged on what bank A's exact matches leave over. If there is one, bank A keeps only
   // its exact matches so those leftovers stay available for bank B; otherwise bank A may borrow them.

@@ -13,7 +13,7 @@ import { buildTunedKoala, downloadBlob, type TunedSample } from "./audio/exportP
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { isDrumCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { isDrumCategory, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
@@ -754,7 +754,7 @@ function App() {
    * layout preview does. This is only how the pad looks in Koala; its category (tuning, buses) is unchanged.
    */
   const drumSlotOf = (p: Pad) =>
-    autoColor && layout.on && !p.placeholder && isDrumCategory(p.category) ? layoutSlotAt(layoutById(layout.id), p.index) : undefined;
+    autoColor && layout.on && !p.placeholder && isKitCategory(p.category) ? layoutSlotAt(layoutById(layout.id), p.index) : undefined;
   /** Palette colour for a sound: by category, or its slot's role colour for drums on the layout's banks. */
   const autoColorOf = (p: Pad): string => {
     const slot = drumSlotOf(p);

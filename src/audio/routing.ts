@@ -15,6 +15,7 @@ export const CATEGORY_BUS: Record<CategoryId, number> = {
   clap: 0,
   closedHat: 0,
   openHat: 0,
+  cymbal: 0,
   perc: 0,
   bass: 1,
   melodic: 2,
