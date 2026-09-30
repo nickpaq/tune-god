@@ -1,6 +1,5 @@
 import { PrecisionSlider } from "./PrecisionSlider";
 import { CATEGORIES, type CategoryId } from "../audio/classify";
-import type { DrumRole } from "../audio/drumRoles";
 import type { Detail } from "../audio/padLabels";
 import { formatSignedCents, formatSignedSemitones } from "../audio/theory";
 
@@ -9,6 +8,8 @@ export interface Pad {
   index: number;
   /** The slot this sound had in the loaded project. Never changes, so it identifies the sound. */
   origIndex: number;
+  /** The sample's file name in the project, shown in the classifier. */
+  name: string;
   /** The sample's id inside the .koala project, used when writing tuned audio back. */
   sampleId: number;
   sampleRate: number;
@@ -17,8 +18,6 @@ export interface Pad {
   detectedMidi?: number | null;
   /** Guessed (or manually chosen) sound category, used for auto-colouring. */
   category?: CategoryId;
-  /** Finer drum type (open hat, tom, ...) for drums; used by the finger-drumming layout. */
-  drumRole?: DrumRole;
   /** Finer label for non-drum sounds (Piano, Riser, ...) from the file name; display only. */
   detail?: Detail;
   /** Spectral centroid in Hz, used to order sounds with no clear pitch. */

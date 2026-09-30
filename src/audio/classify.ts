@@ -2,25 +2,72 @@
 // Filename keywords win when present; otherwise a few cheap acoustic features (length, decay,
 // spectral balance, whether a pitch was found) drive simple rules. No ML model or library.
 
-export type CategoryId = "kick" | "snare" | "hat" | "perc" | "bass" | "melodic" | "vocal" | "fx" | "other";
+export type CategoryId =
+  | "kick"
+  | "snare"
+  | "clap"
+  | "closedHat"
+  | "openHat"
+  | "perc"
+  | "vox"
+  | "fx"
+  | "bass"
+  | "melodic"
+  | "drumLoop"
+  | "percLoop"
+  | "melodicLoop"
+  | "other";
 
 export interface Category {
   id: CategoryId;
   label: string;
+  /** Short form for tight spots such as the classifier's column headings. */
+  short: string;
 }
 
-/** Order matters: a palette lists its colours in this same order. */
+/** Drums first, then everything else. */
 export const CATEGORIES: Category[] = [
-  { id: "kick", label: "Kick" },
-  { id: "snare", label: "Snare" },
-  { id: "hat", label: "Hat" },
-  { id: "perc", label: "Perc" },
-  { id: "bass", label: "Bass" },
-  { id: "melodic", label: "Melodic" },
-  { id: "vocal", label: "Vocal" },
-  { id: "fx", label: "FX" },
-  { id: "other", label: "Other" },
+  { id: "kick", label: "Kick", short: "Kick" },
+  { id: "snare", label: "Snare", short: "Snare" },
+  { id: "clap", label: "Clap", short: "Clap" },
+  { id: "closedHat", label: "Closed Hat", short: "Closed" },
+  { id: "openHat", label: "Open Hat", short: "Open" },
+  { id: "vox", label: "Vox", short: "Vox" },
+  { id: "perc", label: "Perc", short: "Perc" },
+  { id: "fx", label: "FX", short: "FX" },
+  { id: "bass", label: "Bass", short: "Bass" },
+  { id: "melodic", label: "Melodic", short: "Melodic" },
+  { id: "drumLoop", label: "Drum Loop", short: "Drum loop" },
+  { id: "percLoop", label: "Perc Loop", short: "Perc loop" },
+  { id: "melodicLoop", label: "Melodic Loop", short: "Mel loop" },
+  { id: "other", label: "Other", short: "Other" },
 ];
+
+/**
+ * The base tones of the colour scheme. Categories in the same tone are shades of one colour, so a palette
+ * holds one colour per tone: kick, snare and clap share one; closed hat, open hat and cymbals another; vox and perc a third.
+ */
+export type ToneId = "drums" | "hats" | "percVox" | "fx" | "bass" | "melodic" | "other";
+
+/** Order matters: a palette lists its colours in this same order. */
+export const TONES: ToneId[] = ["drums", "hats", "percVox", "fx", "bass", "melodic", "other"];
+
+export const CATEGORY_TONE: Record<CategoryId, ToneId> = {
+  kick: "drums",
+  snare: "drums",
+  clap: "drums",
+  closedHat: "hats",
+  openHat: "hats",
+  vox: "percVox",
+  perc: "percVox",
+  fx: "fx",
+  bass: "bass",
+  melodic: "melodic",
+  drumLoop: "drums",
+  percLoop: "percVox",
+  melodicLoop: "melodic",
+  other: "other",
+};
 
 export function categoryIndex(id: CategoryId): number {
   return Math.max(0, CATEGORIES.findIndex((c) => c.id === id));
@@ -35,27 +82,65 @@ export function categoryLabel(id: CategoryId): string {
   return CATEGORIES[categoryIndex(id)].label;
 }
 
+/** Drum categories: what a finger-drumming layout is made of (and what the classifier's drum columns cover). */
+const DRUM_CATEGORIES: CategoryId[] = ["kick", "snare", "clap", "closedHat", "openHat", "vox", "perc"];
+
+export function isDrumCategory(category: CategoryId | undefined): boolean {
+  return category !== undefined && DRUM_CATEGORIES.includes(category);
+}
+
+/** Older saves and projects may hold category ids that no longer exist ("hat", "vocal"); unknown ones become "other". */
+export function migrateCategory(id: string | undefined): CategoryId {
+  if (id === "hat") return "closedHat";
+  if (id === "vocal") return "vox";
+  return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
+}
+
 // Order matters: the first matching rule wins, so specific words come before generic ones.
-// Loops and breaks, and anything with no telltale word, fall through to "other".
-const NAME_RULES: [CategoryId, RegExp][] = [
+// "hat" is resolved by decay time when the name doesn't say open or closed.
+// Anything with no telltale word falls through to "other". A name containing "loop" turns the category it
+// would otherwise get into its loop version (see LOOP_OF); breaks count as drum loops.
+const NAME_RULES: [CategoryId | "hat", RegExp][] = [
+  ["drumLoop", /\b(break|breakbeat|amen|drum loops?|drums loops?|beat loops?)\b/],
   ["kick", /\b(kick|kik|bd|bassdrum|bass drum)\b/],
-  ["snare", /\b(snare|clap|rim|rimshot|snap|sd)\b/],
-  ["hat", /\b(hi ?hat|hh|hat|hats|cymbal|crash|ride|shaker|open ?hat|closed ?hat)\b/],
-  ["vocal", /\b(vocal|vocals|vox|voice|choir|acapella|chant|adlib|ad-lib)\b/],
+  ["clap", /\b(clap|claps|handclap)\b/],
+  ["snare", /\b(snare|rim|rimshot|sidestick|side stick|snap|sd)\b/],
+  ["openHat", /\b(open ?hat|open ?hh|ohat|ohh|crash|cymbal|china|splash|ride)\b/],
+  ["closedHat", /\b(closed ?hat|closed ?hh|chat|chh|pedal)\b/],
+  ["hat", /\b(hi ?hat|hh|hat|hats)\b/],
+  ["vox", /\b(vocal|vocals|vox|voice|choir|acapella|chant|breath|adlib|ad-lib)\b/],
   ["fx", /\b(fx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone)\b/],
-  ["perc", /\b(tom|toms|perc|percussion|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|drum)\b/],
-  ["other", /\b(loop|break|breakbeat|amen)\b/],
+  ["perc", /\b(tom|toms|perc|percussion|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro|drum)\b/],
   ["bass", /\b(808|bass|sub|reese)\b/],
   ["melodic", /\b(piano|keys|key|bell|bells|pluck|guitar|harp|mallet|marimba|kalimba|rhodes|epiano|stab|vibraphone|glock|glockenspiel|celesta|chime|pad|synth|lead|chord|chords|strings|string|organ|arp|saw|brass|horn|flute)\b/],
 ];
 
-/** Category implied by a file name, or null when it has no telltale word. */
-export function classifyByName(fileName: string): CategoryId | null {
+/** The loop category a sound becomes when its name says "loop": drums become drum loops, perc perc loops, bass and melodic melodic loops. */
+const LOOP_OF: Partial<Record<CategoryId, CategoryId>> = {
+  kick: "drumLoop",
+  snare: "drumLoop",
+  clap: "drumLoop",
+  closedHat: "drumLoop",
+  openHat: "drumLoop",
+  perc: "percLoop",
+  bass: "melodicLoop",
+  melodic: "melodicLoop",
+};
+
+/** Decay (seconds to fall 20 dB) at which a hat with no open/closed keyword counts as open. */
+const OPEN_HAT_DECAY = 0.3;
+
+/** Category implied by a file name ("hat" when it is a hat of unknown openness), or null when it has no telltale word. */
+export function classifyByName(fileName: string): CategoryId | "hat" | null {
   const name = fileName
     .replace(/\.[a-z0-9]+$/i, "")
     .replace(/[_\-.()[\]]+/g, " ")
     .toLowerCase();
-  for (const [id, re] of NAME_RULES) if (re.test(name)) return id;
+  const isLoop = /\b(loop|loops)\b/.test(name);
+  for (const [id, re] of NAME_RULES) {
+    if (!re.test(name)) continue;
+    return isLoop && id !== "hat" ? (LOOP_OF[id] ?? id) : isLoop ? "drumLoop" : id;
+  }
   return null;
 }
 
@@ -195,13 +280,14 @@ export function classifySample(
   detectedMidi: number | null | undefined,
 ): CategoryId {
   const byName = classifyByName(fileName);
-  if (byName) return byName;
+  if (byName && byName !== "hat") return byName;
 
   const f = extractFeatures(mono, sampleRate);
+  if (byName === "hat") return f && f.decay >= OPEN_HAT_DECAY ? "openHat" : "closedHat";
   if (!f) return "other";
   const pitched = detectedMidi != null;
 
-  if (f.duration >= 4) return pitched ? "melodic" : "other";
+  if (f.duration >= 4) return pitched ? "melodicLoop" : "drumLoop";
   if (f.low > 0.7 && f.duration < 0.6 && f.decay < 0.5) return "kick";
 
   if (pitched) {
@@ -209,7 +295,7 @@ export function classifySample(
   }
 
   if (f.duration < 1.5) {
-    if (f.centroid > 6500 && f.high > 0.5) return "hat";
+    if (f.centroid > 6500 && f.high > 0.5) return f.decay >= OPEN_HAT_DECAY ? "openHat" : "closedHat";
     if (f.low > 0.45 && f.centroid < 500) return "kick";
     if (f.flatness > 0.15 && f.centroid > 1500) return "snare";
   }

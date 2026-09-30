@@ -1,10 +1,11 @@
-// Finger-drumming layouts: each is a 4x4 bank of drum roles, listed top row first (the bottom row
+// Finger-drumming layouts: each is a 4x4 bank of drum categories, listed top row first (the bottom row
 // sits under the thumbs). Only drums live in a layout; bass and melodic sounds go on later banks.
-import { ROLE_LABEL, type DrumRole } from "./drumRoles";
+import { categoryLabel, type CategoryId } from "./classify";
 
 export interface LayoutSlot {
-  role: DrumRole;
-  /** What the preview and any "missing" pad call this slot, e.g. "Low Tom". */
+  /** The drum category this slot wants. */
+  category: CategoryId;
+  /** What the preview and any "missing" pad call this slot, e.g. "Low Perc". */
   label: string;
 }
 
@@ -16,20 +17,18 @@ export interface FingerLayout {
   slots: LayoutSlot[];
 }
 
-const slot = (role: DrumRole, label = ROLE_LABEL[role]): LayoutSlot => ({ role, label });
+const slot = (category: CategoryId, label = categoryLabel(category)): LayoutSlot => ({ category, label });
 
 const KICK = slot("kick");
 const SNARE = slot("snare");
 const CLAP = slot("clap");
-const RIM = slot("rim");
 const CHAT = slot("closedHat");
 const OHAT = slot("openHat");
-const RIDE = slot("ride");
-const CRASH = slot("crash");
+const VOX = slot("vox");
 const PERC = slot("perc");
-const TOM_LOW = slot("tom", "Low Tom");
-const TOM_MID = slot("tom", "Mid Tom");
-const TOM_HIGH = slot("tom", "High Tom");
+const PERC_LOW = slot("perc", "Low Perc");
+const PERC_MID = slot("perc", "Mid Perc");
+const PERC_HIGH = slot("perc", "High Perc");
 
 /** Flips every row left to right, for the left-handed version of a layout. */
 export function mirrorSlots(slots: LayoutSlot[]): LayoutSlot[] {
@@ -37,9 +36,9 @@ export function mirrorSlots(slots: LayoutSlot[]): LayoutSlot[] {
 }
 
 const VERTICAL: LayoutSlot[] = [
-  CRASH, RIDE, PERC, OHAT,
-  TOM_HIGH, TOM_MID, PERC, CHAT,
-  TOM_LOW, CLAP, RIM, SNARE,
+  OHAT, CHAT, VOX, OHAT,
+  PERC_HIGH, PERC_MID, PERC, CHAT,
+  PERC_LOW, CLAP, VOX, SNARE,
   PERC, PERC, PERC, KICK,
 ];
 
@@ -47,18 +46,18 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
   {
     id: "horizontal",
     name: "Horizontal kit",
-    description: "Kick, snare and both hats along the bottom row; toms, claps and cymbals above.",
+    description: "Kick, snare and both hats along the bottom row; percussion, claps and vox above.",
     slots: [
-      CRASH, RIDE, PERC, PERC,
-      TOM_HIGH, TOM_MID, TOM_LOW, PERC,
-      CLAP, RIM, PERC, PERC,
+      OHAT, CHAT, VOX, PERC,
+      PERC_HIGH, PERC_MID, PERC_LOW, PERC,
+      CLAP, VOX, PERC, PERC,
       KICK, SNARE, CHAT, OHAT,
     ],
   },
   {
     id: "vertical",
     name: "Vertical (right hand)",
-    description: "Core drums stacked in the right column, leaving the left side for toms and extras.",
+    description: "Core drums stacked in the right column, leaving the left side for percussion and extras.",
     slots: VERTICAL,
   },
   {
@@ -70,21 +69,21 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
   {
     id: "quest-for-groove",
     name: "Quest for Groove 4x4",
-    description: "Kick pair between two cymbals, snares flanked by side sticks, hats and ride, toms on top.",
+    description: "Kick pair between two open hats, snares flanked by claps, closed hats, percussion on top.",
     slots: [
-      TOM_LOW, TOM_MID, TOM_HIGH, CRASH,
-      CHAT, OHAT, CHAT, RIDE,
-      RIM, SNARE, SNARE, RIM,
-      CRASH, KICK, KICK, CRASH,
+      PERC_LOW, PERC_MID, PERC_HIGH, OHAT,
+      CHAT, OHAT, CHAT, CHAT,
+      CLAP, SNARE, SNARE, CLAP,
+      OHAT, KICK, KICK, OHAT,
     ],
   },
   {
     id: "mirrored",
     name: "Mirrored kit",
-    description: "Kicks on the outside and snares above them, hats in the middle, toms and cymbals higher.",
+    description: "Kicks on the outside and snares above them, hats in the middle, percussion and vox higher.",
     slots: [
-      CRASH, RIDE, PERC, PERC,
-      TOM_LOW, TOM_MID, TOM_HIGH, CLAP,
+      OHAT, CHAT, VOX, PERC,
+      PERC_LOW, PERC_MID, PERC_HIGH, CLAP,
       SNARE, OHAT, OHAT, SNARE,
       KICK, CHAT, CHAT, KICK,
     ],

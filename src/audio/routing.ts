@@ -8,15 +8,20 @@ export const BUS_MAIN = -1;
 /** Names written to the four buses' mixer strips (mixer.json `buses[i].name`), matching CATEGORY_BUS. */
 export const BUS_NAMES = ["Drums", "Bass", "Melodic", "Vocals"];
 
-/** Where each category goes: drums together, bass and melodic apart, vocals and FX together. */
+/** Where each category goes: drums together, bass and melodic apart, vox and FX together. */
 export const CATEGORY_BUS: Record<CategoryId, number> = {
   kick: 0,
   snare: 0,
-  hat: 0,
+  clap: 0,
+  closedHat: 0,
+  openHat: 0,
   perc: 0,
   bass: 1,
   melodic: 2,
-  vocal: 3,
+  drumLoop: 0,
+  percLoop: 0,
+  melodicLoop: 2,
+  vox: 3,
   fx: 3,
   other: BUS_MAIN,
 };

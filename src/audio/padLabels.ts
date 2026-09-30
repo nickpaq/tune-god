@@ -1,8 +1,7 @@
-// Display labels for pads. The nine categories stay the only thing tuning, buses and loudness look at; this only
-// decides the words shown on a pad in the app and written to it in Koala. Drums use their finer role (Open Hat, Tom),
-// other sounds use a filename keyword when there is one (Piano, Riser, Vox), and everything else falls back to the category.
-import { categoryLabel, type CategoryId } from "./classify";
-import { effectiveRole, ROLE_LABEL, type DrumRole } from "./drumRoles";
+// Display labels for pads. The categories stay the only thing tuning, buses and loudness look at; this only
+// decides the words shown on a pad in the app and written to it in Koala. Drums use their category (Open Hat, Clap),
+// other sounds use a filename keyword when there is one (Piano, Riser), and everything else falls back to the category.
+import { categoryLabel, isDrumCategory, type CategoryId } from "./classify";
 
 /** A finer label for a non-drum sound, tied to the category it was worked out for. */
 export interface Detail {
@@ -35,12 +34,6 @@ const DETAIL_RULES: Partial<Record<CategoryId, [string, RegExp][]>> = {
     ["Pad", /\bpad\b/],
     ["Synth", /\b(synth|saw)\b/],
   ],
-  vocal: [
-    ["Choir", /\b(choir|chant)\b/],
-    ["Ad-lib", /\b(adlib|ad lib)\b/],
-    ["Acapella", /\bacapella\b/],
-    ["Vox", /\b(vox|vocal|vocals|voice)\b/],
-  ],
   fx: [
     ["Riser", /\b(riser|uplifter|swell)\b/],
     ["Downlifter", /\bdownlifter\b/],
@@ -53,10 +46,6 @@ const DETAIL_RULES: Partial<Record<CategoryId, [string, RegExp][]>> = {
     ["Noise", /\bnoise\b/],
     ["Texture", /\b(texture|ambience|ambient|atmos|drone)\b/],
   ],
-  other: [
-    ["Break", /\b(break|breakbeat|amen)\b/],
-    ["Loop", /\bloop\b/],
-  ],
 };
 
 function normalize(fileName: string): string {
@@ -66,18 +55,16 @@ function normalize(fileName: string): string {
     .toLowerCase();
 }
 
-/** Keyword label for a sound of this category, or undefined when its file name has none (drums use roles instead). */
+/** Keyword label for a sound of this category, or undefined when its file name has none (drums are labelled by category instead). */
 export function classifyDetail(fileName: string, category: CategoryId): Detail | undefined {
   const name = normalize(fileName);
   for (const [text, re] of DETAIL_RULES[category] ?? []) if (re.test(name)) return { category, text };
   return undefined;
 }
 
-/** What a pad is called. A stored detail or role only counts while it still agrees with the pad's category. */
-export function padLabel(pad: { category?: CategoryId; drumRole?: DrumRole; detail?: Detail }): string {
+/** What a pad is called. A stored detail only counts while it still agrees with the pad's category. */
+export function padLabel(pad: { category?: CategoryId; detail?: Detail }): string {
   const category = pad.category ?? "other";
-  const role = effectiveRole(category, pad.drumRole);
-  if (role) return ROLE_LABEL[role];
-  if (pad.detail && pad.detail.category === category) return pad.detail.text;
+  if (!isDrumCategory(category) && pad.detail && pad.detail.category === category) return pad.detail.text;
   return categoryLabel(category);
 }

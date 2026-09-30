@@ -1,14 +1,13 @@
 // Pure arranger for the finger-drumming layout: decides where every sound goes across the four
 // banks and which placeholder pads fill the gaps. No React and no audio, so it is easy to test.
 //
-//   Bank A   the chosen layout, filled from the user's drums ("add <role>" where a slot has none)
+//   Bank A   the chosen layout, filled from the user's drums ("add <category>" where a slot has none)
 //   Bank B   a second kit from the leftover drums, but only when they include a kick, a snare and a hat;
 //            otherwise B is left unarranged
-//   Banks C, D   everything that isn't a drum, lowest to highest (bass, melodic, vocal, FX, other),
+//   Banks C, D   everything that isn't a drum, lowest to highest (bass, melodic, loops, FX, other),
 //            then any drums still left over; overflow past D continues on B's free pads
 //   Every pad still free at the end becomes an "Empty pad" placeholder.
-import { categoryIndex, type CategoryId } from "./classify";
-import { effectiveRole, isDrumCategory, ROLE_CATEGORY, type DrumRole } from "./drumRoles";
+import { categoryIndex, isDrumCategory, type CategoryId } from "./classify";
 import type { FingerLayout } from "./fingerLayouts";
 import { PAD_COUNT, PADS_PER_BANK } from "./padMoves";
 
@@ -16,7 +15,6 @@ export interface ArrangeSound {
   /** Identifies the sound (its original slot). */
   key: number;
   category: CategoryId | undefined;
-  role?: DrumRole;
   /** Detected pitch (fractional MIDI), when it has one. */
   midi?: number | null;
   /** Spectral centroid in Hz, used to order sounds with no clear pitch. */
@@ -38,7 +36,7 @@ export interface FingerArrangement {
 export const EMPTY_PAD_LABEL = "Empty pad";
 
 /** Lowest-to-highest order of the non-drum categories. */
-const TONAL_ORDER: CategoryId[] = ["bass", "melodic", "vocal", "fx", "other"];
+const TONAL_ORDER: CategoryId[] = ["bass", "melodic", "melodicLoop", "percLoop", "drumLoop", "fx", "other"];
 
 function frequency(s: ArrangeSound): number {
   if (s.midi != null) return 440 * 2 ** ((s.midi - 69) / 12);
@@ -47,12 +45,23 @@ function frequency(s: ArrangeSound): number {
 
 const byFrequency = (a: ArrangeSound, b: ArrangeSound) => frequency(a) - frequency(b);
 
-/** Where a slot sits among same-role slots: lows before mids before highs, otherwise left to right. */
+/** Drums a slot may borrow when no sound matches it exactly: a clap can stand in for a snare, an open hat for a closed one. */
+const SUBSTITUTE_GROUP: Partial<Record<CategoryId, string>> = {
+  kick: "kick",
+  snare: "snare",
+  clap: "snare",
+  closedHat: "hat",
+  openHat: "hat",
+  perc: "perc",
+  vox: "vox",
+};
+
+/** Where a slot sits among same-category slots: lows before mids before highs, otherwise bottom row first (the pads under the thumbs). */
 function slotRank(label: string, position: number): number {
   if (/^low\b/i.test(label)) return -3;
   if (/^mid\b/i.test(label)) return -2;
   if (/^high\b/i.test(label)) return -1;
-  return position;
+  return 100 - position;
 }
 
 interface Kit {
@@ -61,20 +70,19 @@ interface Kit {
 }
 
 /**
- * Fills one bank of the layout with an exact role match per slot. With `substitute`, slots still empty
+ * Fills one bank of the layout with an exact category match per slot. With `substitute`, slots still empty
  * then take a leftover drum of the same category, bottom row first (the slots under the thumbs).
  */
 function fillKit(layout: FingerLayout, drums: ArrangeSound[], substitute: boolean): Kit {
   const slots: (ArrangeSound | null)[] = Array(PADS_PER_BANK).fill(null);
   const used = new Set<number>();
-  const roleOf = (d: ArrangeSound) => effectiveRole(d.category, d.role);
 
-  for (const role of new Set(layout.slots.map((s) => s.role))) {
+  for (const category of new Set(layout.slots.map((s) => s.category))) {
     const positions = layout.slots
       .map((s, i) => ({ s, i }))
-      .filter(({ s }) => s.role === role)
+      .filter(({ s }) => s.category === category)
       .sort((a, b) => slotRank(a.s.label, a.i) - slotRank(b.s.label, b.i));
-    const candidates = drums.filter((d) => roleOf(d) === role).sort(byFrequency);
+    const candidates = drums.filter((d) => d.category === category).sort(byFrequency);
     positions.forEach(({ i }, n) => {
       const pick = candidates[n];
       if (!pick) return;
@@ -86,7 +94,7 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[], substitute: boolea
   if (substitute) {
     for (let i = layout.slots.length - 1; i >= 0; i--) {
       if (slots[i]) continue;
-      const pick = drums.find((d) => !used.has(d.key) && d.category === ROLE_CATEGORY[layout.slots[i].role]);
+      const pick = drums.find((d) => !used.has(d.key) && SUBSTITUTE_GROUP[d.category!] === SUBSTITUTE_GROUP[layout.slots[i].category]);
       if (!pick) continue;
       slots[i] = pick;
       used.add(pick.key);
@@ -97,7 +105,7 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[], substitute: boolea
 }
 
 const hasCore = (drums: ArrangeSound[]) =>
-  (["kick", "snare", "hat"] as const).every((c) => drums.some((d) => d.category === c));
+  [["kick"], ["snare"], ["closedHat", "openHat"]].every((group) => drums.some((d) => group.includes(d.category!)));
 
 export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayout): FingerArrangement {
   const drums = sounds.filter((s) => isDrumCategory(s.category));

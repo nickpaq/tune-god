@@ -15,11 +15,16 @@ const ABSOLUTE_GATE_LUFS = -70;
 export const CATEGORY_TRIM_DB: Record<CategoryId, number> = {
   kick: 0,
   snare: 0,
-  hat: -3,
+  clap: 0,
+  closedHat: -3,
+  openHat: -3,
   perc: -3,
   bass: 0,
   melodic: -2,
-  vocal: 0,
+  drumLoop: -2,
+  percLoop: -3,
+  melodicLoop: -2,
+  vox: 0,
   fx: -4,
   other: 0,
 };

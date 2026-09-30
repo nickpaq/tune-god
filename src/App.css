@@ -733,3 +733,77 @@
   align-items: center;
   justify-content: center;
 }
+
+/* ---- classifier and long-sample list ---- */
+.sound-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5cqw;
+  padding: 2cqw;
+  border: 0.3cqw solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.sound-row__head {
+  display: flex;
+  align-items: center;
+  gap: 2cqw;
+  font-size: 3cqw;
+  font-weight: 700;
+}
+
+.sound-row__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sound-row__pad {
+  opacity: 0.6;
+}
+
+.sound-row__duration {
+  flex: none;
+  font-size: 2.8cqw;
+  opacity: 0.8;
+}
+
+.sound-row__icon {
+  flex: none;
+  width: 9cqw;
+  height: 9cqw;
+  padding: 0;
+  border: 0.3cqw solid var(--line);
+  border-radius: var(--radius);
+  background: var(--pad-empty);
+  color: #fff;
+  font-size: 3.6cqw;
+}
+
+.sound-row__types {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11cqw, 1fr));
+  gap: 1cqw;
+}
+
+.sound-row__types label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5cqw;
+  padding: 1cqw 0.5cqw;
+  border-radius: 1cqw;
+  font-size: 2.2cqw;
+  font-weight: 700;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.sound-row__types input {
+  width: 4.5cqw;
+  height: 4.5cqw;
+  margin: 0;
+}

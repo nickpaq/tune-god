@@ -21,6 +21,7 @@ export function makePlaceholderPad(p: ArrangePlaceholder): Pad {
   return {
     index: p.index,
     origIndex: PLACEHOLDER_ORIG_BASE + p.index,
+    name: p.label,
     sampleId: 0,
     sampleRate: PLACEHOLDER_SAMPLE_RATE,
     channelData: [new Float32Array(PLACEHOLDER_FRAMES)],

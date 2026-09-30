@@ -13,17 +13,17 @@ import { buildTunedKoala, downloadBlob, type TunedSample } from "./audio/exportP
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
+import { isDrumCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { LayoutPicker } from "./components/LayoutPicker";
+import { ClassifierModal } from "./components/ClassifierModal";
+import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, layoutById, layoutSlotAt } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
-import { isDrumCategory } from "./audio/drumRoles";
-import { roleColors } from "./audio/roleColors";
 import { padLabel } from "./audio/padLabels";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
@@ -124,15 +124,14 @@ const ONE_SHOT_MAX_SECONDS = 2;
  * else plays once: a short sound plays to its end, a long one (a loop, FX, a vocal) stops on release.
  */
 function padMode(pad: Pad): PadMode {
-  const drum = pad.category === "kick" || pad.category === "snare" || pad.category === "hat" || pad.category === "perc";
-  if (pad.tune && !drum) return "loop";
+  if (pad.tune && !isDrumCategory(pad.category)) return "loop";
   const seconds = (pad.channelData[0]?.length ?? 0) / pad.sampleRate;
   return seconds <= ONE_SHOT_MAX_SECONDS ? "oneShot" : "hold";
 }
 
-/** Older saves may hold category ids that no longer exist. */
-function validCategory(id: CategoryId | undefined): CategoryId {
-  return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
+/** A remembered category, brought up to date. The old single "hat" did not say open or closed, so the fresh guess decides. */
+function rememberedCategory(id: string | undefined, guess: CategoryId): CategoryId {
+  return id === "hat" && (guess === "openHat" || guess === "closedHat") ? guess : migrateCategory(id);
 }
 
 /** Without normalize, scales down (never up) only if a resampled peak passes FILE_CEILING_DB. */
@@ -144,6 +143,9 @@ function limitPeak(channelData: Float32Array[]): Float32Array[] {
   const gain = ceiling / peak;
   return channelData.map((data) => data.map((v) => v * gain));
 }
+
+/** A sample longer than this is flagged on import: samples this long make export very slow. */
+const MAX_SAMPLE_SECONDS = 60;
 
 /** Longer than this, a sound is treated as a loop rather than a one-shot, and is not tuned by default. */
 const LOOP_MIN_SECONDS = 4;
@@ -186,6 +188,9 @@ function App() {
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
+  const [classifierOpen, setClassifierOpen] = useState(false);
+  /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
+  const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
@@ -228,6 +233,7 @@ function App() {
       );
       setLayout((l) => ({ on: layoutOn, id: layoutById(layoutOn ? saved.layoutId : l.id).id, pre: layoutOn ? (saved.layoutPre ?? {}) : {} }));
       setNormalizedData({});
+      setLongSamples([]);
       if (!restore) {
         setSelected(null);
         setKeyPc(null);
@@ -244,6 +250,7 @@ function App() {
         (p) => p.pad >= 0 && p.pad < 64 && !(restore && restorePads.current[p.pad]?.deleted),
       );
       setAnalyzing(slots.length);
+      const tooLong: number[] = [];
       for (const ref of slots) {
         const decoded = await decodeNative(await koalaPadToFile(project, ref));
         if (token !== loadToken.current) return;
@@ -252,6 +259,7 @@ function App() {
         const pad: Pad = {
           index: at,
           origIndex: ref.pad,
+          name: ref.fileName,
           sampleId: ref.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
@@ -265,21 +273,25 @@ function App() {
           cents: 0,
         };
         setPads((prev) => ({ ...prev, [at]: pad }));
+        if (decoded.channelData[0].length / decoded.sampleRate > MAX_SAMPLE_SECONDS) tooLong.push(ref.pad);
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
-          .catch(() => ({ midi: null, category: "other" as const, role: undefined, detail: undefined, centroid: undefined }))
-          .then(({ midi: detectedMidi, category, role, detail, centroid }) => {
+          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined }))
+          .then(({ midi: detectedMidi, category, detail, centroid }) => {
             if (token !== loadToken.current) return;
             setPads((prev) => {
               const remembered = restorePads.current[ref.pad];
-              const cur = prev[at];
+              // The pad may have been moved or deleted while it was analysing.
+              const slot = Object.keys(prev).find((k) => prev[Number(k)].origIndex === ref.pad);
+              if (slot === undefined) return prev;
+              const cur = prev[Number(slot)];
+              const cat = remembered ? rememberedCategory(remembered.category, category) : category;
               return {
                 ...prev,
-                [at]: {
+                [cur.index]: {
                   ...cur,
                   detectedMidi,
-                  drumRole: role,
                   detail,
                   centroid,
                   ...(remembered
@@ -288,13 +300,13 @@ function App() {
                         tuneLocked: remembered.tuneLocked,
                         semis: remembered.semis,
                         cents: remembered.cents,
-                        category: validCategory(remembered.category),
+                        category: cat,
                       }
                     : { category }),
                   tune: tuneDefault(
                     remembered?.tuneLocked || cur.tuneLocked,
                     remembered?.tuneLocked ? remembered.tune : cur.tune,
-                    remembered ? validCategory(remembered.category) : category,
+                    cat,
                     detectedMidi,
                     tunedTargetRef.current,
                     cur.loop,
@@ -305,6 +317,7 @@ function App() {
             setAnalyzing((n) => n - 1);
           });
       }
+      if (!restore && tooLong.length > 0) setLongSamples(tooLong);
     } catch (err) {
       // Not a usable project: stay on the drop screen rather than showing an error.
       console.error(err);
@@ -368,6 +381,8 @@ function App() {
     setPads({});
     setLayout((l) => ({ ...l, on: false, pre: {} }));
     setNormalizedData({});
+    setLongSamples([]);
+    setClassifierOpen(false);
     setSelected(null);
     setKeyPc(null);
     setTunedTarget(null);
@@ -434,7 +449,7 @@ function App() {
       .filter((p) => !p.placeholder)
       .sort((a, b) => a.index - b.index);
     const { positions, placeholders } = arrangeFingerDrumming(
-      real.map((p) => ({ key: p.origIndex, category: p.category, role: p.drumRole, midi: p.detectedMidi, centroid: p.centroid })),
+      real.map((p) => ({ key: p.origIndex, category: p.category, midi: p.detectedMidi, centroid: p.centroid })),
       layoutById(layoutId),
     );
     const next: Record<number, Pad> = {};
@@ -492,6 +507,21 @@ function App() {
     setPads((prev) => ({ ...prev, [index]: { ...prev[index], ...patch } }));
   };
 
+  /** Changes a sound's type. Tune follows the new type unless the user set it by hand. */
+  const classifyPad = (pad: Pad, category: CategoryId) => {
+    if (pad.category === category) return;
+    patchPad(pad.index, pad.tuneLocked ? { category } : { category, tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget, pad.loop) });
+  };
+
+  const deletePad = (pad: Pad) => {
+    recordEdit();
+    setPads((prev) => removePad(prev, pad.index));
+    setSelected((s) => (s === pad.index ? null : s));
+  };
+
+  /** What plays for a pad: its raw audio, or the normalized version once Normalize now has run. */
+  const audioOf = (pad: Pad) => (normalize && normalizedData[pad.origIndex]) || pad.channelData;
+
   const pressPad = (index: number) => {
     const pad = pads[index];
     if (!pad) return;
@@ -502,7 +532,7 @@ function App() {
       index,
       startPad(
         index,
-        (normalize && normalizedData[pad.origIndex]) || pad.channelData,
+        audioOf(pad),
         pad.sampleRate,
         shiftFor(pad, tunedTarget, a4),
         pad.tune && toneOn ? keyPc : null,
@@ -719,7 +749,6 @@ function App() {
   const arrangement = analyzing === 0 ? arrangementOf() : undefined;
 
   const palette = paletteById(paletteId);
-  const drumColors = roleColors(palette);
   /**
    * With a layout applied, with auto-color on, a drum on bank A or B shows its slot's role colour and label, exactly as the
    * layout preview does. This is only how the pad looks in Koala; its category (tuning, buses) is unchanged.
@@ -729,7 +758,7 @@ function App() {
   /** Palette colour for a sound: by category, or its slot's role colour for drums on the layout's banks. */
   const autoColorOf = (p: Pad): string => {
     const slot = drumSlotOf(p);
-    return slot ? drumColors[slot.role] : colorFor(palette, p.category ?? "other");
+    return colorFor(palette, slot?.category ?? p.category ?? "other");
   };
   /** The words on a pad: its layout slot's label for drums on the layout's banks, otherwise its role, keyword or category. */
   const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : drumSlotOf(p)?.label ?? padLabel(p));
@@ -745,6 +774,9 @@ function App() {
     analyzing === 0 &&
     !exporting;
   const hasProject = Object.keys(pads).length > 0;
+  const longPads = Object.values(pads)
+    .filter((p) => longSamples.includes(p.origIndex))
+    .sort((a, b) => a.index - b.index);
   const selectedPad = selected !== null ? pads[selected] : undefined;
 
   return (
@@ -830,6 +862,16 @@ function App() {
             >
               Layouts
             </button>
+            <button
+              className="menu__button"
+              disabled={!hasProject || analyzing > 0}
+              onClick={() => {
+                setClassifierOpen(true);
+                setMenuOpen(false);
+              }}
+            >
+              Sound classifier
+            </button>
             <label className="menu__a4">
               A4 reference (Hz)
               <input
@@ -888,12 +930,8 @@ function App() {
               autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4)}
               onChange={(patch) => {
                 if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
-                else if (patch.category && !selectedPad.tuneLocked) {
-                  patchPad(selectedPad.index, {
-                    ...patch,
-                    tune: tuneDefault(false, false, patch.category, selectedPad.detectedMidi, tunedTarget, selectedPad.loop),
-                  });
-                } else patchPad(selectedPad.index, patch);
+                else if (patch.category) classifyPad(selectedPad, patch.category);
+                else patchPad(selectedPad.index, patch);
               }}
             />
           ) : hasProject ? (
@@ -1078,6 +1116,28 @@ function App() {
             selectedId={layout.id}
             onSelect={chooseLayout}
             onClose={() => setLayoutPickerOpen(false)}
+          />
+        )}
+
+        {classifierOpen && (
+          <ClassifierModal
+            pads={Object.values(pads)
+              .filter((p) => !p.placeholder)
+              .sort((a, b) => a.index - b.index)}
+            palette={palette}
+            audioOf={audioOf}
+            onClassify={classifyPad}
+            onDelete={deletePad}
+            onClose={() => setClassifierOpen(false)}
+          />
+        )}
+
+        {longPads.length > 0 && (
+          <LongSamplesModal
+            pads={longPads}
+            maxSeconds={MAX_SAMPLE_SECONDS}
+            onDelete={deletePad}
+            onClose={() => setLongSamples([])}
           />
         )}
 

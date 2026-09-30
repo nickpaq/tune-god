@@ -1,10 +1,9 @@
 import { FINGER_LAYOUTS } from "../audio/fingerLayouts";
-import { textColorOn, type Palette } from "../audio/palettes";
-import { roleColors } from "../audio/roleColors";
+import { colorFor, textColorOn, type Palette } from "../audio/palettes";
 
 /**
  * Popup listing every finger-drumming layout with a preview of bank A. The preview always shows a
- * full kit (every slot filled), coloured by the current palette, with each slot's role as its label.
+ * full kit (every slot filled), coloured by the current palette, with each slot's sound type as its label.
  */
 export function LayoutPicker({
   palette,
@@ -17,7 +16,6 @@ export function LayoutPicker({
   onSelect: (id: string) => void;
   onClose: () => void;
 }) {
-  const colors = roleColors(palette);
   return (
     <div className="palette-backdrop" onClick={onClose}>
       <div className="palette-modal" role="dialog" aria-label="Choose finger drumming layout" onClick={(e) => e.stopPropagation()}>
@@ -42,7 +40,7 @@ export function LayoutPicker({
               <span className="layout-row__desc">{layout.description}</span>
               <span className="layout-row__grid">
                 {layout.slots.map((slot, i) => {
-                  const bg = colors[slot.role];
+                  const bg = colorFor(palette, slot.category);
                   return (
                     <span key={i} style={{ background: bg, color: textColorOn(bg) }}>
                       {slot.label}

@@ -13,17 +13,20 @@ describe("classifyDetail", () => {
 });
 
 describe("padLabel", () => {
-  it("uses the drum role for drums", () => {
-    expect(padLabel({ category: "hat", drumRole: "openHat" })).toBe("Open Hat");
-    expect(padLabel({ category: "perc", drumRole: "tom" })).toBe("Tom");
+  it("uses the category for drums", () => {
+    expect(padLabel({ category: "openHat" })).toBe("Open Hat");
+    expect(padLabel({ category: "clap" })).toBe("Clap");
   });
   it("uses the detail only while it matches the category", () => {
     const detail = { category: "melodic" as const, text: "Piano" };
     expect(padLabel({ category: "melodic", detail })).toBe("Piano");
     expect(padLabel({ category: "bass", detail })).toBe("Bass");
   });
+  it("names loops", () => {
+    expect(padLabel({ category: "drumLoop" })).toBe("Drum Loop");
+  });
   it("falls back to the category label", () => {
-    expect(padLabel({ category: "vocal" })).toBe("Vocal");
+    expect(padLabel({ category: "vox" })).toBe("Vox");
     expect(padLabel({})).toBe("Other");
   });
 });

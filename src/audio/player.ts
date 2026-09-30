@@ -80,6 +80,8 @@ export function startPad(
   shiftSemitones: number,
   tonePitchClass: number | null,
   mode: PadMode = "loop",
+  /** Called when a non-looping sound plays to its end on its own (not when it is released or cut off). */
+  onEnd?: () => void,
 ): PadHandle {
   const oneShot = mode === "oneShot";
   const ctx = readyContext();
@@ -109,6 +111,7 @@ export function startPad(
     source.onended = () => {
       gain.disconnect();
       if (activePads.get(pad) === voice) activePads.delete(pad);
+      onEnd?.();
     };
   }
 

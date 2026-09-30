@@ -1,7 +1,6 @@
-import { CATEGORIES } from "../audio/classify";
 import { PALETTES } from "../audio/palettes";
 
-/** Centered popup listing every palette as a row of six swatches; tap one to choose it. */
+/** Centered popup listing every palette as a row of swatches, one per base tone; tap one to choose it. */
 export function PalettePicker({
   selectedId,
   onSelect,
@@ -25,7 +24,7 @@ export function PalettePicker({
             ✕
           </button>
         </div>
-        <div className="palette-modal__key">{CATEGORIES.map((c) => c.label).join(" · ")}</div>
+        <div className="palette-modal__key">Kick/Snare/Clap · Hats · Perc/Vox · FX · Bass · Melodic · Other</div>
         <div className="palette-modal__list">
           {PALETTES.map((p) => (
             <button
