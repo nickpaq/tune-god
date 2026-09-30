@@ -44,7 +44,7 @@ const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
 /** Small padding: the loudest peak in any exported file, so a pad knob at 0 dB plays at this level. */
 const FILE_CEILING_DB = -1;
-/** Pad volume knob value for a dB level. ASSUMPTION: linear amplitude; verify against a real project. */
+/** Pad volume knob value for a dB level: plain linear amplitude (checked against a Koala project: -60 dB = 0.001, -6 dB = 0.501, 0 dB = 1, +6 dB = 1.995, -inf = 0). */
 const volFromDb = (db: number) => 10 ** (db / 20);
 /** Widest spread pan, in percent either side of centre. */
 const MAX_SPREAD_PERCENT = 40;
