@@ -65,7 +65,8 @@ function rms(channelData: Float32Array[]): number {
  * (monophonic). With `withTone`, a sine on `tonePitchClass` plays at the sample's RMS level.
  * The shift is applied as a playback-rate change (a resample), which is exactly how the tuned
  * sample would sound once baked into the project. Returns a release function that holds
- * briefly, then fades both voices out.
+ * briefly, then fades both voices out. A `oneShot` pad plays its whole sample once, with no tone,
+ * and ignores release; only a retrigger of the same pad cuts it.
  */
 export function startPad(
   pad: number,
@@ -73,6 +74,7 @@ export function startPad(
   sampleRate: number,
   shiftSemitones: number,
   tonePitchClass: number | null,
+  oneShot = false,
 ): PadHandle {
   const ctx = readyContext();
   activePads.get(pad)?.stop(0, CUT_FADE);
@@ -81,12 +83,12 @@ export function startPad(
   gain.connect(ctx.destination);
   const source = ctx.createBufferSource();
   source.buffer = bufferFor(ctx, channelData, sampleRate);
-  source.loop = true;
+  source.loop = !oneShot;
   source.playbackRate.value = semitonesToRatio(shiftSemitones);
   source.connect(gain);
 
   let osc: OscillatorNode | null = null;
-  if (tonePitchClass !== null) {
+  if (tonePitchClass !== null && !oneShot) {
     osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = midiToFrequency(60 + tonePitchClass, a4Reference);
@@ -97,6 +99,12 @@ export function startPad(
     osc.start();
   }
   source.start();
+  if (oneShot) {
+    source.onended = () => {
+      gain.disconnect();
+      if (activePads.get(pad) === voice) activePads.delete(pad);
+    };
+  }
 
   let stopped = false;
   const voice: ActivePad = {
@@ -119,7 +127,9 @@ export function startPad(
   };
   activePads.set(pad, voice);
   return {
-    release: () => voice.stop(RELEASE_HOLD, RELEASE_FADE),
+    release: () => {
+      if (!oneShot) voice.stop(RELEASE_HOLD, RELEASE_FADE);
+    },
     setShift: (semitones) =>
       source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
   };

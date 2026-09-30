@@ -93,6 +93,14 @@ function shiftFor(pad: Pad, target: number | null, a4: number): number {
   return base + pad.semis + pad.cents / 100;
 }
 
+/**
+ * Pads that aren't tuned, and tuned drums, play their whole sample once when tapped. Only tuned
+ * pitched sounds loop while held, which is what makes the tuning audible.
+ */
+function playsOneShot(pad: Pad): boolean {
+  return !pad.tune || pad.category === "kick" || pad.category === "snare" || pad.category === "hat" || pad.category === "perc";
+}
+
 /** Older saves may hold category ids that no longer exist. */
 function validCategory(id: CategoryId | undefined): CategoryId {
   return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
@@ -345,7 +353,8 @@ function App() {
         (normalize && normalizedData[pad.origIndex]) || pad.channelData,
         pad.sampleRate,
         shiftFor(pad, tunedTarget, a4),
-        toneOn ? keyPc : null,
+        pad.tune && toneOn ? keyPc : null,
+        playsOneShot(pad),
       ),
     );
   };
