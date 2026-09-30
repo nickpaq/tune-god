@@ -33,7 +33,7 @@ The "3-finger style" (kick thumb, snare index, hat middle) does not transfer to 
 - The top row is a stretch; top-centre is hardest.
 - Each thumb owns two columns: left thumb columns 1-2, right thumb columns 3-4.
 - Put the most-hit sounds on the bottom rows; less-played one-shots can go on top.
-- In the app slot 1 is top-left and slot 16 bottom-right. Whether Koala's on-screen numbering matches is unverified.
+- In the app slot 1 is top-left and slot 16 bottom-right. Koala's own numbering matches (verified against a project it saved).
 
 ## Layout options
 
