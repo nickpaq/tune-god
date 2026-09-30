@@ -20,7 +20,7 @@ describe("placeholder pads in the export", () => {
     // Move every real pad to bank C and fill the rest of bank A with placeholders.
     const arrangement = new Map(project.pads.map((p, i) => [p.pad, 32 + i] as [number, number | null]));
     const placeholders = [
-      { index: 0, label: "missing Kick", color: MISSING_PAD_COLOR },
+      { index: 0, label: "add Kick", color: MISSING_PAD_COLOR },
       { index: 1, label: "Empty pad", color: EMPTY_PAD_COLOR },
     ];
     const { blob } = await buildTunedKoala(project, [], { arrangement, placeholders });
@@ -30,7 +30,7 @@ describe("placeholder pads in the export", () => {
     expect(json.pads).toHaveLength(realCount + 2);
     const added = json.pads.filter((p: any) => p.label);
     expect(added.map((p: any) => [p.pad, p.label, p.color])).toEqual([
-      [0, "missing Kick", MISSING_PAD_COLOR],
+      [0, "add Kick", MISSING_PAD_COLOR],
       [1, "Empty pad", EMPTY_PAD_COLOR],
     ]);
     // Real pads moved to bank C, placeholders sit in front, and the pad list stays in slot order.
@@ -84,11 +84,11 @@ describe("a real Koala project", () => {
     const arrangement = new Map<number, number | null>([[0, 32], [15, 33], [63, 34]]);
     const { blob } = await buildTunedKoala(project, [], {
       arrangement,
-      placeholders: [{ index: 12, label: "missing Kick", color: MISSING_PAD_COLOR }],
+      placeholders: [{ index: 12, label: "add Kick", color: MISSING_PAD_COLOR }],
     });
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
     const json = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
-    const added = json.pads.find((p: any) => p.label === "missing Kick");
+    const added = json.pads.find((p: any) => p.label === "add Kick");
     const original = json.pads.find((p: any) => p.label === "top left bank A");
     expect(added.pad).toBe("12");
     expect(original.pad).toBe("32");

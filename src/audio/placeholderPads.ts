@@ -1,4 +1,4 @@
-// The silent pads a finger-drumming layout adds: "missing <role>" marks a gap inside a kit, and
+// The silent pads a finger-drumming layout adds: "add <role>" marks a gap inside a kit, and
 // "Empty pad" fills every other free spot. Both are real pads in the exported project, each with a
 // tiny silent WAV.
 import type { Pad } from "../components/PadPanel";

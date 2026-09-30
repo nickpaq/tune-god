@@ -1,7 +1,7 @@
 // Pure arranger for the finger-drumming layout: decides where every sound goes across the four
 // banks and which placeholder pads fill the gaps. No React and no audio, so it is easy to test.
 //
-//   Bank A   the chosen layout, filled from the user's drums ("missing <role>" where a slot has none)
+//   Bank A   the chosen layout, filled from the user's drums ("add <role>" where a slot has none)
 //   Bank B   a second kit from the leftover drums, but only when they include a kick, a snare and a hat;
 //            otherwise B is left unarranged
 //   Banks C, D   everything that isn't a drum, lowest to highest (bass, melodic, vocal, FX, other),
@@ -119,7 +119,7 @@ export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayo
     kit.slots.forEach((s, i) => {
       const index = bank * PADS_PER_BANK + i;
       if (s) positions.set(s.key, index);
-      else placeholders.set(index, { index, kind: "missing", label: `missing ${layout.slots[i].label}` });
+      else placeholders.set(index, { index, kind: "missing", label: `add ${layout.slots[i].label}` });
     });
   place(kitA, 0);
   if (kitB) place(kitB, 1);

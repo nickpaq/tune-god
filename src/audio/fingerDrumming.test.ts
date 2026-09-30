@@ -30,8 +30,8 @@ describe("arrangeFingerDrumming", () => {
     const missing = a.placeholders.filter((p) => p.kind === "missing");
     expect(missing).toHaveLength(15);
     expect(missing.every((p) => p.index < 16)).toBe(true);
-    expect(a.placeholders.find((p) => p.index === 13)?.label).toBe("missing Snare");
-    expect(a.placeholders.find((p) => p.index === 4)?.label).toBe("missing High Tom");
+    expect(a.placeholders.find((p) => p.index === 13)?.label).toBe("add Snare");
+    expect(a.placeholders.find((p) => p.index === 4)?.label).toBe("add High Tom");
   });
 
   it("uses a same-category drum when the exact role is absent, but never another category", () => {
@@ -39,7 +39,7 @@ describe("arrangeFingerDrumming", () => {
     const a = arrangeFingerDrumming([hat], horizontal);
     // Only one hat: it takes its own slot; the open hat slot stays missing rather than borrowing a kick.
     expect(indexOf(a, hat)).toBe(14);
-    expect(a.placeholders.find((p) => p.index === 15)?.label).toBe("missing Open Hat");
+    expect(a.placeholders.find((p) => p.index === 15)?.label).toBe("add Open Hat");
 
     const second = drum("hat", "closedHat");
     const b = arrangeFingerDrumming([hat, second], horizontal);
