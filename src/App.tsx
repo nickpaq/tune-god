@@ -43,6 +43,28 @@ const PAD_COLS = [0, 1, 2, 3].map((c) => LEFT + c * (PAD_W + PAD_GAP));
 const PAD_ROWS = [991, 1198, 1406, 1613];
 const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
+// Bottom row: undo/redo circles at the left, banks in the middle, Tone and Export (same size) at the right.
+const BAR_Y = 1836;
+const BAR_H = 80;
+const BAR_GAP = 17;
+const UNDO_X = LEFT;
+const REDO_X = UNDO_X + BAR_H + BAR_GAP;
+const BTN_W = 158;
+const EXPORT_X = RIGHT - BTN_W;
+const TONE_X = EXPORT_X - BAR_GAP - BTN_W;
+const BANKS_X = REDO_X + BAR_H + BAR_GAP;
+const BANKS_W = TONE_X - BAR_GAP - BANKS_X;
+/** How many edits undo can step back through. */
+const MAX_HISTORY = 100;
+/** Slider drags on the same control within this window count as one undo step. */
+const COALESCE_MS = 1000;
+
+/** What undo/redo restores: the pad data plus the key it was tuned to. */
+interface Snapshot {
+  pads: Record<number, Pad>;
+  keyPc: number | null;
+  tunedTarget: number | null;
+}
 /** Small padding: the loudest peak in any exported file, so a pad knob at 0 dB plays at this level. */
 const FILE_CEILING_DB = -1;
 /** Pad volume knob value for a dB level: plain linear amplitude (checked against a Koala project: -60 dB = 0.001, -6 dB = 0.501, 0 dB = 1, +6 dB = 1.995, -inf = 0). */
@@ -115,6 +137,13 @@ function App() {
   /** Per-pad choices from the last visit, applied as each pad finishes analysis. */
   const restorePads = useRef<Record<number, SavedPad>>(saved.pads ?? {});
   const loadToken = useRef(0);
+  const past = useRef<Snapshot[]>([]);
+  const future = useRef<Snapshot[]>([]);
+  const lastEdit = useRef({ key: "", time: 0 });
+  const [historySize, setHistorySize] = useState({ undo: 0, redo: 0 });
+  const syncHistory = () => setHistorySize({ undo: past.current.length, redo: future.current.length });
+  const latest = useRef<Snapshot>({ pads: {}, keyPc: null, tunedTarget: null });
+  latest.current = { pads, keyPc, tunedTarget };
   const projectRef = useRef<ParsedKoalaProject | null>(null);
 
   const loadProject = useCallback(async (file: File, restore = false) => {
@@ -124,6 +153,10 @@ function App() {
       const project = await parseKoalaProject(file);
       if (token !== loadToken.current) return;
       projectRef.current = project;
+      past.current = [];
+      future.current = [];
+      lastEdit.current = { key: "", time: 0 };
+      setHistorySize({ undo: 0, redo: 0 });
       setPads({});
       setNormalizedData({});
       if (!restore) {
@@ -216,8 +249,50 @@ function App() {
     if (file) void loadProject(file);
   };
 
-  const patchPad = (index: number, patch: Partial<Pad>) =>
+  /**
+   * Call just before a user edit: saves the current state as an undo step. Edits sharing a `key`
+   * within COALESCE_MS (a slider drag) collapse into one step. Not recorded while pads are still
+   * loading, so undo can never roll back the analysis results.
+   */
+  const recordEdit = (key = "") => {
+    if (analyzing > 0) return;
+    const now = Date.now();
+    const same = key !== "" && lastEdit.current.key === key && now - lastEdit.current.time < COALESCE_MS;
+    lastEdit.current = { key, time: now };
+    if (same) return;
+    past.current.push(latest.current);
+    if (past.current.length > MAX_HISTORY) past.current.shift();
+    future.current = [];
+    syncHistory();
+  };
+
+  const restore = (snap: Snapshot) => {
+    setPads(snap.pads);
+    setKeyPc(snap.keyPc);
+    setTunedTarget(snap.tunedTarget);
+    tunedTargetRef.current = snap.tunedTarget;
+    lastEdit.current = { key: "", time: 0 };
+    syncHistory();
+  };
+
+  const undo = () => {
+    const prev = past.current.pop();
+    if (!prev || analyzing > 0) return;
+    future.current.push(latest.current);
+    restore(prev);
+  };
+
+  const redo = () => {
+    const next = future.current.pop();
+    if (!next || analyzing > 0) return;
+    past.current.push(latest.current);
+    restore(next);
+  };
+
+  const patchPad = (index: number, patch: Partial<Pad>) => {
+    recordEdit("semis" in patch || "cents" in patch ? `${index}:trim` : "");
     setPads((prev) => ({ ...prev, [index]: { ...prev[index], ...patch } }));
+  };
 
   const pressPad = (index: number) => {
     const pad = pads[index];
@@ -281,6 +356,7 @@ function App() {
    * and every pad keeps its semitone/cents trim, so manual corrections survive a key change.
    */
   const selectKey = (pc: number) => {
+    recordEdit();
     setKeyPc(pc);
     setTunedTarget(pc);
     tunedTargetRef.current = pc;
@@ -384,7 +460,7 @@ function App() {
         <div className="cover" style={box(446, 1598, 230, 220)} />
         <div className="cover" style={box(288, 1826, 330, 100)} />
         <div className="cover" style={box(725, 1826, 175, 100)} />
-        <div className="cover" style={box(18, 1826, 265, 100)} />
+        <div className="cover" style={box(0, 1826, W, 100)} />
         {/* The screenshot's baked-in Dynamic Island and home indicator. */}
         <div className="cover" style={box(0, 0, W, 90)} />
         <div className="cover" style={box(0, 1940, W, 59)} />
@@ -512,7 +588,7 @@ function App() {
           );
         })}
 
-        <div className="banks" style={box(296, 1836, 315, 80)}>
+        <div className="banks" style={box(BANKS_X, BAR_Y, BANKS_W, BAR_H)}>
           {BANKS.map((name, i) => {
             const hasSamples = Object.keys(pads).some(
               (index) => Math.floor(Number(index) / 16) === i,
@@ -533,8 +609,31 @@ function App() {
         </div>
 
         <button
+          className="history-button"
+          style={box(UNDO_X, BAR_Y, BAR_H, BAR_H)}
+          disabled={historySize.undo === 0 || analyzing > 0}
+          onClick={undo}
+          aria-label="Undo"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 0 12" transform="translate(0 -3)" />
+          </svg>
+        </button>
+        <button
+          className="history-button"
+          style={box(REDO_X, BAR_Y, BAR_H, BAR_H)}
+          disabled={historySize.redo === 0 || analyzing > 0}
+          onClick={redo}
+          aria-label="Redo"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m15 7 5 5-5 5M20 12H10a6 6 0 0 0 0 12" transform="translate(0 -3)" />
+          </svg>
+        </button>
+
+        <button
           className={`tone${toneOn ? " tone--on" : ""}`}
-          style={box(LEFT, 1836, 245, 80)}
+          style={box(TONE_X, BAR_Y, BTN_W, BAR_H)}
           aria-pressed={toneOn}
           onClick={() => setToneOn((on) => !on)}
         >
@@ -548,7 +647,7 @@ function App() {
 
         <button
           className="export"
-          style={box(RIGHT - 155, 1836, 155, 80)}
+          style={box(EXPORT_X, BAR_Y, BTN_W, BAR_H)}
           disabled={!canExport}
           onClick={exportProject}
         >

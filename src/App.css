@@ -339,6 +339,37 @@
   cursor: not-allowed;
 }
 
+.history-button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0.3cqw solid var(--line);
+  border-radius: 50%;
+  background: var(--bg);
+  color: #fff;
+}
+
+.history-button svg {
+  width: 55%;
+  height: 55%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.history-button:not(:disabled) {
+  background: var(--cyan);
+  color: var(--on-cyan);
+  border-color: var(--cyan);
+}
+
+.history-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .menu-button {
   border: 0.3cqw solid var(--line);
   border-radius: var(--radius);
