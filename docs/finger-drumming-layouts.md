@@ -122,9 +122,12 @@ A separate `drumRole` field, leaving the 9 palette categories alone: kick, snare
 - The checkbox is disabled while pads are still being analysed; the layout is per project (a newly loaded project starts with it off), and the chosen layout is remembered.
 - Switching layouts while one is applied asks for confirmation and rearranges from the current pads; unchecking restores the pre-layout slots for every pad still in the project.
 
+### Verified
+
+- Koala numbers pads from 0, row by row from the top left (pad 0 is top left of bank A, 15 bottom right of A, 63 bottom right of D), matching the app's slots. Checked against a project saved by Koala (`docs/fixtures/pad-numbering.koala`). Pad numbers are stored as strings there, and an empty sequence has `notes: null`; both are handled.
+
 ### Still to verify
 
-- The real Koala pad and sample schema: placeholder pads are cloned from an existing pad, but the export has only been checked against synthetic projects, not opened in Koala.
+- Opening an exported project in Koala. Placeholder pads now match the structure of a project Koala saved itself (`docs/fixtures/pad-numbering.koala`), but no exported file has been opened in the app yet.
 - The exact Koala dark grey (`MISSING_PAD_COLOR` in `placeholderPads.ts` is an approximation).
-- That Koala's on-screen pad numbering matches the app's slot order.
 - That sequence remap holds with the extra pads (note numbers use the same base as pad numbers, true for the tested 0-based project).
