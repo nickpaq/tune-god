@@ -118,19 +118,38 @@ export interface Balance {
  * (nearly) every sample still fits under the ceiling; the few peakiest are held at the ceiling
  * instead of dragging the rest down. Silent samples get 0 dB and a 0 dB knob.
  */
-export function balanceMix(inputs: BalanceInput[], ceilingDb: number): Balance {
-  const loud = inputs.map((p) => measureLoudness(p.channelData, p.sampleRate));
-  const peakDb = inputs.map((p) => 20 * Math.log10(Math.max(peakOf(p.channelData), 1e-12)));
+export interface BalanceStats {
+  loud: number | null;
+  peakDb: number;
+  category?: CategoryId;
+}
+
+/** Per-sample numbers balanceFromStats needs, so audio can be measured one sample at a time and dropped. */
+export function balanceStats(input: BalanceInput): BalanceStats {
+  return {
+    loud: measureLoudness(input.channelData, input.sampleRate),
+    peakDb: 20 * Math.log10(Math.max(peakOf(input.channelData), 1e-12)),
+    category: input.category,
+  };
+}
+
+export function balanceFromStats(stats: BalanceStats[], ceilingDb: number): Balance {
+  const loud = stats.map((s) => s.loud);
+  const peakDb = stats.map((s) => s.peakDb);
   // Highest common loudness each sample allows before its own peak would pass the ceiling.
   const limits: number[] = [];
   loud.forEach((l, i) => {
     if (l !== null) limits.push(ceilingDb - peakDb[i] + l);
   });
-  if (!limits.length) return { gainDb: inputs.map(() => 0), knobDb: inputs.map(() => 0) };
+  if (!limits.length) return { gainDb: stats.map(() => 0), knobDb: stats.map(() => 0) };
   limits.sort((a, b) => a - b);
   const target = limits[Math.min(limits.length - 1, Math.floor(limits.length * PEAK_LIMITED_FRACTION))];
   return {
-    gainDb: inputs.map((_, i) => (loud[i] === null ? 0 : Math.min(target - (loud[i] as number), ceilingDb - peakDb[i]))),
-    knobDb: inputs.map((p, i) => (loud[i] === null ? 0 : CATEGORY_TRIM_DB[p.category ?? "other"])),
+    gainDb: stats.map((_, i) => (loud[i] === null ? 0 : Math.min(target - (loud[i] as number), ceilingDb - peakDb[i]))),
+    knobDb: stats.map((s, i) => (loud[i] === null ? 0 : CATEGORY_TRIM_DB[s.category ?? "other"])),
   };
+}
+
+export function balanceMix(inputs: BalanceInput[], ceilingDb: number): Balance {
+  return balanceFromStats(inputs.map(balanceStats), ceilingDb);
 }

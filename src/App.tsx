@@ -11,6 +11,7 @@ import {
 import { setReferencePitch, startPad, type PadHandle, type PadMode } from "./audio/player";
 import { buildTunedKoala, downloadBlob, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
+import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
 import { isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
@@ -640,7 +641,10 @@ function App() {
       }
       const allPads = Object.values(pads).filter((p) => !p.placeholder);
       // Every pad's final (tuned) audio, so loudness is measured on what Koala will actually play.
+      // Only retimed pads hold new audio; the rest point at the pad's own data. Each pad is measured as
+      // it is rendered, so the whole project is never shipped to the worker or copied at once.
       const rendered: { pad: Pad; channelData: Float32Array[]; retimed: boolean }[] = [];
+      const stats: BalanceStats[] = [];
       let done = 0;
       for (const pad of allPads) {
         setExportProgress(`${done++}/${allPads.length}`);
@@ -650,25 +654,23 @@ function App() {
         const channelData = retimed
           ? limitPeak(await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift)))
           : pad.channelData;
+        if (normalize) stats.push(await getRenderWorker().measure({ channelData, sampleRate: pad.sampleRate, category: pad.category }));
         rendered.push({ pad, channelData, retimed });
       }
       // Files are loudness-normalized (quiet up, loud down); the mix goes on the pad knobs.
       const vols = new Map<number, number>();
-      const gains = normalize
-        ? await getRenderWorker().balance(
-            rendered.map((r) => ({ channelData: r.channelData, sampleRate: r.pad.sampleRate, category: r.pad.category })),
-            FILE_CEILING_DB,
-          )
-        : null;
+      const gains = normalize ? balanceFromStats(stats, FILE_CEILING_DB) : null;
       rendered.forEach((r, i) => {
         if (gains) vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
         tuned.push({
           sampleId: r.pad.sampleId,
           sampleRate: r.pad.sampleRate,
-          channelData: gains ? applyGainDb(r.channelData, gains.gainDb[i]) : r.channelData,
+          channelData: r.channelData,
           retimed: r.retimed,
+          gainDb: gains?.gainDb[i],
         });
       });
+      rendered.length = 0;
       const buses = new Map<number, number>();
       if (routeBuses) {
         for (const p of allPads) buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
