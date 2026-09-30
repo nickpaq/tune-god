@@ -2,7 +2,7 @@
 // Filename keywords win when present; otherwise a few cheap acoustic features (length, decay,
 // spectral balance, whether a pitch was found) drive simple rules. No ML model or library.
 
-export type CategoryId = "kick" | "snare" | "hat" | "bass" | "melodic" | "other";
+export type CategoryId = "kick" | "snare" | "hat" | "perc" | "bass" | "melodic" | "vocal" | "fx" | "other";
 
 export interface Category {
   id: CategoryId;
@@ -14,8 +14,11 @@ export const CATEGORIES: Category[] = [
   { id: "kick", label: "Kick" },
   { id: "snare", label: "Snare" },
   { id: "hat", label: "Hat" },
+  { id: "perc", label: "Perc" },
   { id: "bass", label: "Bass" },
   { id: "melodic", label: "Melodic" },
+  { id: "vocal", label: "Vocal" },
+  { id: "fx", label: "FX" },
   { id: "other", label: "Other" },
 ];
 
@@ -33,12 +36,15 @@ export function categoryLabel(id: CategoryId): string {
 }
 
 // Order matters: the first matching rule wins, so specific words come before generic ones.
-// Vocals, FX, loops and other percussion all fall through to "other".
+// Loops and breaks, and anything with no telltale word, fall through to "other".
 const NAME_RULES: [CategoryId, RegExp][] = [
   ["kick", /\b(kick|kik|bd|bassdrum|bass drum)\b/],
   ["snare", /\b(snare|clap|rim|rimshot|snap|sd)\b/],
   ["hat", /\b(hi ?hat|hh|hat|hats|cymbal|crash|ride|shaker|open ?hat|closed ?hat)\b/],
-  ["other", /\b(vocal|vocals|vox|voice|choir|acapella|chant|adlib|ad-lib|fx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|loop|break|breakbeat|amen|ambience|ambient|atmos|drone|tom|toms|perc|percussion|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|drum)\b/],
+  ["vocal", /\b(vocal|vocals|vox|voice|choir|acapella|chant|adlib|ad-lib)\b/],
+  ["fx", /\b(fx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone)\b/],
+  ["perc", /\b(tom|toms|perc|percussion|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|drum)\b/],
+  ["other", /\b(loop|break|breakbeat|amen)\b/],
   ["bass", /\b(808|bass|sub|reese)\b/],
   ["melodic", /\b(piano|keys|key|bell|bells|pluck|guitar|harp|mallet|marimba|kalimba|rhodes|epiano|stab|vibraphone|glock|glockenspiel|celesta|chime|pad|synth|lead|chord|chords|strings|string|organ|arp|saw|brass|horn|flute)\b/],
 ];

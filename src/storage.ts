@@ -18,6 +18,7 @@ export interface SavedState {
   normalize?: boolean;
   spread?: boolean;
   autoColor?: boolean;
+  routeBuses?: boolean;
   paletteId?: string;
   toneOn?: boolean;
   bank?: number;

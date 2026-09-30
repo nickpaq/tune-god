@@ -15,7 +15,7 @@ export interface TunedSample {
  * retimed pad's trim points are reset to the new file length and its pitch
  * knob zeroed (the tuning is baked into the audio now). Samples that were only
  * gain-adjusted keep their trim points. `vols` maps sampleId to the pad's
- * volume knob (`vol`, linear: 1 = 0 dB), written to every pad using that sample, replaced or not. `colors` maps sampleId to the hex colour and label that replace the pad's own. `pans` maps sampleId to a Koala pan value
+ * volume knob (`vol`, linear: 1 = 0 dB), written to every pad using that sample, replaced or not. `buses` maps sampleId to a bus index (see BUS_MAIN and friends in routing.ts). `colors` maps sampleId to the hex colour and label that replace the pad's own. `pans` maps sampleId to a Koala pan value
  * (0..1, 0.5 = centre) written to every pad using that sample.
  */
 export async function buildTunedKoala(
@@ -23,9 +23,10 @@ export async function buildTunedKoala(
   tuned: TunedSample[],
   {
     vols,
+    buses,
     pans,
     colors,
-  }: { vols?: Map<number, number>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }> } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }> } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -35,6 +36,8 @@ export async function buildTunedKoala(
     if (pan !== undefined) pad.pan = pan;
     const vol = vols?.get(pad.sampleId);
     if (vol !== undefined) pad.vol = vol;
+    const bus = buses?.get(pad.sampleId);
+    if (bus !== undefined) pad.bus = bus;
     const tint = colors?.get(pad.sampleId);
     if (tint) {
       pad.color = tint.color;

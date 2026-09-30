@@ -14,6 +14,7 @@ import { applyGainDb } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
 import { categoryLabel, isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
+import { CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { semitonesToRatio } from "./audio/theory";
@@ -105,6 +106,7 @@ function App() {
   const [normalizedData, setNormalizedData] = useState<Record<number, Float32Array[]>>({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
+  const [routeBuses, setRouteBuses] = useState(saved.routeBuses ?? false);
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
@@ -195,8 +197,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ normalize, spread, autoColor, paletteId, toneOn, bank, selected, keyPc, tunedTarget });
-  }, [normalize, spread, autoColor, paletteId, toneOn, bank, selected, keyPc, tunedTarget]);
+    saveState({ normalize, spread, autoColor, routeBuses, paletteId, toneOn, bank, selected, keyPc, tunedTarget });
+  }, [normalize, spread, autoColor, routeBuses, paletteId, toneOn, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -339,13 +341,17 @@ function App() {
           retimed: r.retimed,
         });
       });
+      const buses = new Map<number, number>();
+      if (routeBuses) {
+        for (const p of allPads) buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
+      }
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of Object.values(pads)) {
           if (p.category) colors.set(p.sampleId, { color: colorFor(palette, p.category), label: categoryLabel(p.category) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, pans, colors });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, pans, colors });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -357,7 +363,7 @@ function App() {
 
   const palette = paletteById(paletteId);
   const canExport =
-    (normalize || autoColor ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune)) &&
+    (normalize || autoColor || routeBuses ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune)) &&
     analyzing === 0 &&
     !exporting;
   const hasProject = Object.keys(pads).length > 0;
@@ -408,6 +414,10 @@ function App() {
             <label>
               <input type="checkbox" checked={autoColor} onChange={(e) => toggleAutoColor(e.target.checked)} />
               Auto-color pads by sound type
+            </label>
+            <label>
+              <input type="checkbox" checked={routeBuses} onChange={(e) => setRouteBuses(e.target.checked)} />
+              Route pads to buses by sound type
             </label>
             {autoColor && (
               <button

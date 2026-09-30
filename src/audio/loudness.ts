@@ -16,8 +16,11 @@ export const CATEGORY_TRIM_DB: Record<CategoryId, number> = {
   kick: 0,
   snare: 0,
   hat: -3,
+  perc: -3,
   bass: 0,
   melodic: -2,
+  vocal: 0,
+  fx: -4,
   other: 0,
 };
 
