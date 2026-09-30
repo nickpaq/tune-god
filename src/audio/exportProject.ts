@@ -1,3 +1,4 @@
+import { applyGainDb } from "./gain";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
@@ -15,6 +16,8 @@ export interface TunedSample {
   channelData: Float32Array[];
   /** True when the audio length changed (pitch-shifted), so trim points and the pitch knob must be reset. */
   retimed: boolean;
+  /** Gain baked into the file while it is encoded, so no gained copy of the audio is ever held. */
+  gainDb?: number;
 }
 
 /**
@@ -66,14 +69,16 @@ export async function buildTunedKoala(
   }
 
   for (const t of tuned) {
-    project.zip.file(`sampler/${t.sampleId}.wav`, encodeWav({ sampleRate: t.sampleRate, channelData: t.channelData, bitDepth: 24 }));
+    const channelData = t.gainDb ? applyGainDb(t.channelData, t.gainDb) : t.channelData;
+    project.zip.file(`sampler/${t.sampleId}.wav`, encodeWav({ sampleRate: t.sampleRate, channelData, bitDepth: 24 }));
+    t.channelData = []; // the WAV holds it now; let the floats go
   }
   if (arrangement) await applyArrangement(project, samplerJson, arrangement);
   if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
   if (busNames) await renameBuses(project, busNames);
 
-  const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
   const base = project.originalName.replace(/\.koala$/i, "");
   return { blob, filename: `${base}_tuned.koala` };
 }

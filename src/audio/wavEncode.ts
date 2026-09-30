@@ -7,15 +7,15 @@ export interface WavEncodeOptions {
   bitDepth?: 16 | 24;
 }
 
-function floatTo16BitPCM(view: DataView, offset: number, input: Float32Array): void {
-  for (let i = 0; i < input.length; i++, offset += 2) {
+function floatTo16BitPCM(view: DataView, offset: number, input: Float32Array, stride: number): void {
+  for (let i = 0; i < input.length; i++, offset += stride) {
     const clamped = Math.max(-1, Math.min(1, input[i]));
     view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
   }
 }
 
-function floatTo24BitPCM(view: DataView, offset: number, input: Float32Array): void {
-  for (let i = 0; i < input.length; i++, offset += 3) {
+function floatTo24BitPCM(view: DataView, offset: number, input: Float32Array, stride: number): void {
+  for (let i = 0; i < input.length; i++, offset += stride) {
     const clamped = Math.max(-1, Math.min(1, input[i]));
     const value = Math.round(clamped < 0 ? clamped * 0x800000 : clamped * 0x7fffff);
     view.setUint8(offset, value & 0xff);
@@ -28,24 +28,11 @@ function writeString(view: DataView, offset: number, str: string): void {
   for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
 }
 
-/** Interleaves N mono channel arrays into a single Float32Array. */
-function interleave(channelData: Float32Array[]): Float32Array {
-  const channels = channelData.length;
-  const length = channelData[0].length;
-  const result = new Float32Array(length * channels);
-  for (let i = 0; i < length; i++) {
-    for (let ch = 0; ch < channels; ch++) {
-      result[i * channels + ch] = channelData[ch][i];
-    }
-  }
-  return result;
-}
-
 export function encodeWav({ sampleRate, channelData, bitDepth = 16 }: WavEncodeOptions): Blob {
   const numChannels = channelData.length;
-  const interleaved = interleave(channelData);
+  const frames = channelData[0]?.length ?? 0;
   const bytesPerSample = bitDepth / 8;
-  const dataSize = interleaved.length * bytesPerSample;
+  const dataSize = frames * numChannels * bytesPerSample;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
 
@@ -63,11 +50,12 @@ export function encodeWav({ sampleRate, channelData, bitDepth = 16 }: WavEncodeO
   writeString(view, 36, "data");
   view.setUint32(40, dataSize, true);
 
-  if (bitDepth === 16) {
-    floatTo16BitPCM(view, 44, interleaved);
-  } else {
-    floatTo24BitPCM(view, 44, interleaved);
-  }
+  // Written channel by channel straight into the buffer; no interleaved Float32 copy.
+  const stride = numChannels * bytesPerSample;
+  channelData.forEach((data, ch) => {
+    const write = bitDepth === 16 ? floatTo16BitPCM : floatTo24BitPCM;
+    write(view, 44 + ch * bytesPerSample, data, stride);
+  });
 
   return new Blob([buffer], { type: "audio/wav" });
 }
