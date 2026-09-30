@@ -42,10 +42,8 @@ const PAD_COLS = [0, 1, 2, 3].map((c) => LEFT + c * (PAD_W + PAD_GAP));
 const PAD_ROWS = [991, 1198, 1406, 1613];
 const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
-/** Headroom kept on the loudest pad's fader so simultaneous pads don't clip the master. */
-const MIX_HEADROOM_DB = 6;
-/** Rendered files are only ever scaled down, and only when a peak would pass this. */
-const FILE_CEILING_DB = -0.1;
+/** Small padding: the loudest peak in any exported file, so a pad knob at 0 dB plays at this level. */
+const FILE_CEILING_DB = -1;
 /** Pad volume knob value for a dB level. ASSUMPTION: linear amplitude; verify against a real project. */
 const volFromDb = (db: number) => 10 ** (db / 20);
 /** Widest spread pan, in percent either side of centre. */
@@ -70,7 +68,7 @@ function validCategory(id: CategoryId | undefined): CategoryId {
   return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
 }
 
-/** Scales down (never up) so the peak stays under FILE_CEILING_DB; resampling can overshoot full scale on loud samples. */
+/** Without normalize, scales down (never up) only if a resampled peak passes FILE_CEILING_DB. */
 function limitPeak(channelData: Float32Array[]): Float32Array[] {
   const ceiling = 10 ** (FILE_CEILING_DB / 20);
   let peak = 0;
@@ -237,18 +235,19 @@ function App() {
   };
 
   /**
-   * Previews the mix Koala will play: each pad at its balanced fader level. Measured on the
-   * untuned audio, so it can differ from the export by a fraction of a dB where tuning changes a pad.
+   * Previews what Koala will play: each pad's loudness-normalized audio at its mix knob level.
+   * Measured on the untuned audio, so it can differ from the export by a fraction of a dB where tuning changes a pad.
    */
   const normalizeNow = async () => {
     setNormalizing(true);
     try {
       const list = Object.values(pads);
-      const levels = await getRenderWorker().balance(
+      const { gainDb, knobDb } = await getRenderWorker().balance(
         list.map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category })),
+        FILE_CEILING_DB,
       );
       setNormalizedData(
-        Object.fromEntries(list.map((p, i) => [p.index, applyGainDb(p.channelData, levels[i] - MIX_HEADROOM_DB)])),
+        Object.fromEntries(list.map((p, i) => [p.index, applyGainDb(p.channelData, gainDb[i] + knobDb[i])])),
       );
     } catch (err) {
       console.error(err);
@@ -292,7 +291,7 @@ function App() {
 
   /**
    * Bakes every tuned pad's shift into its audio (windowed-sinc resample) and downloads the
-   * rebuilt project. With the normalize switch on, every pad's volume knob is also set to a
+   * rebuilt project. With the normalize switch on, every sample is loudness-normalized and every pad volume knob set to a
    * loudness-balanced level (see audio/loudness.ts); the audio files themselves are not gain-changed.
    */
   const exportProject = async () => {
@@ -323,18 +322,23 @@ function App() {
           : pad.channelData;
         rendered.push({ pad, channelData, retimed });
       }
-      // The mix lives on the pad faders; the audio files are left at their natural level.
+      // Files are loudness-normalized (quiet up, loud down); the mix goes on the pad knobs.
       const vols = new Map<number, number>();
-      if (normalize) {
-        const levels = await getRenderWorker().balance(
-          rendered.map((r) => ({ channelData: r.channelData, sampleRate: r.pad.sampleRate, category: r.pad.category })),
-        );
-        rendered.forEach((r, i) => vols.set(r.pad.sampleId, volFromDb(levels[i] - MIX_HEADROOM_DB)));
-      }
-      for (const r of rendered) {
-        if (!r.retimed) continue;
-        tuned.push({ sampleId: r.pad.sampleId, sampleRate: r.pad.sampleRate, channelData: r.channelData, retimed: true });
-      }
+      const gains = normalize
+        ? await getRenderWorker().balance(
+            rendered.map((r) => ({ channelData: r.channelData, sampleRate: r.pad.sampleRate, category: r.pad.category })),
+            FILE_CEILING_DB,
+          )
+        : null;
+      rendered.forEach((r, i) => {
+        if (gains) vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
+        tuned.push({
+          sampleId: r.pad.sampleId,
+          sampleRate: r.pad.sampleRate,
+          channelData: gains ? applyGainDb(r.channelData, gains.gainDb[i]) : r.channelData,
+          retimed: r.retimed,
+        });
+      });
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of Object.values(pads)) {

@@ -22,8 +22,8 @@ const inputs = [
   { channelData: [hat], sampleRate: SR, category: "hat" as const },
   { channelData: [pad], sampleRate: SR, category: "melodic" as const },
 ];
-const gains = balanceMix(inputs);
+const { gainDb: gains, knobDb } = balanceMix(inputs, -1);
 inputs.forEach((inp, i) => {
   const out = inp.channelData.map((c) => c.map((v) => v * 10 ** (gains[i] / 20)));
-  console.log(inp.category, "gain", gains[i].toFixed(1), "dB, loudness", measureLoudness(out, SR)?.toFixed(1), "LUFS, peak", (20 * Math.log10(peakOf(out))).toFixed(1), "dBFS");
+  console.log(inp.category, "gain", gains[i].toFixed(1), "dB, knob", knobDb[i], "dB, loudness", measureLoudness(out, SR)?.toFixed(1), "LUFS, peak", (20 * Math.log10(peakOf(out))).toFixed(1), "dBFS");
 });
