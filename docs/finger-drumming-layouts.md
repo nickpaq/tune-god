@@ -1,6 +1,6 @@
 # Finger drumming pad layouts: research and options
 
-Status: researched and planned, not built. The same notes exist as a Claude Doc from the session that wrote them.
+Status: researched and specified, not built. The agreed spec is in "Agreed spec" below; the layout options and implementation plan sections that precede it are the earlier research and are superseded where they disagree.
 
 ## Goal and constraints
 
@@ -70,17 +70,52 @@ Bass and melodic on bank B, vocals and FX on C, other on D. Cleanest drums, but 
 
 Left thumb drums, right thumb tones. Downside: kick and snare share one thumb.
 
-## Implementation plan
+## Agreed spec
 
-1. `src/audio/fingerLayouts.ts`: each layout is a list of category slots for bank A plus the overflow rule for banks B to D.
-2. Compute the arrangement (current index to new index) from each pad's category and apply it with the existing `movePad` logic as one undo step.
-3. Menu button "Arrange for finger drumming" with a layout picker and a mirror toggle (one-shot action, not a saved setting). Mirror flips columns.
-4. Export needs no changes (renumbering and sequence remap exist).
+Supersedes the option tables above where they differ: bank A and B are drums only, and bass and melodic sounds live on banks C and D.
 
-## Open questions
+### Layout of the four banks
 
-- Which option, and mirror on or off by default?
-- When a category has more sounds than slots, spill to bank B or to the nearest free bank A slot?
-- Guess closed versus open hats from decay time, since names often lack the word?
-- Verify Koala's on-screen pad numbering against the app's slot order.
-- Sequence remap assumes note numbers use the same base as pad numbers (true for the tested 0-based project).
+1. **Bank A** is the selected layout (a 16-slot drum layout), filled from the user's drums. A slot with no matching sound gets a `missing <role>` placeholder.
+2. **Bank B is a second kit only if the drums left after bank A include at least one kick, one snare and one hat.** Then it uses the same layout, with `missing <role>` placeholders for gaps. Otherwise bank B is not arranged and has no placeholders.
+3. **Melodic sounds start at bank C**, sorted lowest to highest frequency (basses first), then vocals and FX, then other. Frequency is the detected pitch when there is one; otherwise spectral centroid (the analysis worker has to return it).
+4. **Overflow past bank D continues into bank B**, skipping occupied pads.
+5. **Leftover drums go at the very end** of that order.
+6. **Every spot still free after that gets an "Empty pad" placeholder.**
+
+### Placeholders
+
+- Both kinds are real pads in the exported project, each with a silent WAV, so they need a new sample entry and a pad entry when exporting.
+- **Missing x**: label `missing <role>`, Koala's dark grey.
+- **Empty pad**: label `Empty pad`, the app background colour `#2d111d`, so it reads as translucent. Audio is a silent WAV of 2 ms.
+- Neither is ever coloured by the palette.
+
+### Drum roles
+
+A separate `drumRole` field, leaving the 9 palette categories alone: kick, snare, clap/sidestick, closed hat, open hat, ride, crash, low/mid/high tom, perc. Filename rules first, then decay time (open versus closed hat) and pitch (tom order). A slot takes an exact role match first, then a leftover sound of the same category, never a different category.
+
+### Menu and previews
+
+- A "Finger drumming layout" section in the menu: an opt-in checkbox, a layout dropdown and a "Layouts" button.
+- "Layouts" opens a modal like the palette picker. Each layout shows its name and a 4x4 preview of bank A only, shown as a full kit with every slot filled and labelled with its role.
+- Preview colours use the selected palette, or Koala if none is selected.
+
+### Behaviour
+
+- **Checking the box** shows a warning first: pads will be rearranged, recorded patterns are corrected and still play back as expected. After confirming, the layout applies live as one undo step.
+- **Unchecking the box** shows a warning first: the layout and any changes made since will be lost. After confirming, all placeholder pads are removed and the arrangement from before the box was checked is restored.
+- Manual drags after applying a layout stay until the layout is changed or the box is unchecked.
+- The layout re-runs when pad analysis finishes, since categories arrive late.
+- The checkbox and chosen layout are saved with the other settings.
+
+### Build order
+
+1. `src/audio/drumRoles.ts`, `src/audio/fingerLayouts.ts` and the pure arranger, with tests: full kit, partial kit, second-kit threshold on each side, overflow, leftover drums last, more than 64 pads.
+2. Menu section, warnings, Layouts preview modal, undo and restore.
+3. Export of placeholder pads (new sample and pad entries, silent WAVs), plus a test that remapped sequence notes land on the right pads.
+
+### Still to verify
+
+- The real Koala pad and sample schema, since the calibration project's pads are minimal.
+- That Koala's on-screen pad numbering matches the app's slot order.
+- That sequence remap holds with the extra pads (note numbers use the same base as pad numbers, true for the tested 0-based project).
