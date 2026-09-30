@@ -145,9 +145,19 @@ function limitPeak(channelData: Float32Array[]): Float32Array[] {
   return channelData.map((data) => data.map((v) => v * gain));
 }
 
-/** A pad's default Tune state: the user's manual choice if locked, else on for bass/melodic with a detected pitch. */
-function tuneDefault(locked: boolean | undefined, current: boolean, category: CategoryId | undefined, detectedMidi: number | null | undefined, target: number | null): boolean {
+/** Longer than this, a sound is treated as a loop rather than a one-shot, and is not tuned by default. */
+const LOOP_MIN_SECONDS = 4;
+
+/** Loops and anything Koala already loops or stretches have been prepared by the user; only short one-shots get tuned. */
+function isLoopPad(entry: any, frames: number, sampleRate: number): boolean {
+  const on = (v: unknown) => v === true || v === "true";
+  return on(entry?.looping) || on(entry?.stretching) || on(entry?.hasLoopPoint) || frames / sampleRate > LOOP_MIN_SECONDS;
+}
+
+/** A pad's default Tune state: the user's manual choice if locked, else on for short bass/melodic one-shots with a detected pitch. */
+function tuneDefault(locked: boolean | undefined, current: boolean, category: CategoryId | undefined, detectedMidi: number | null | undefined, target: number | null, loop?: boolean): boolean {
   if (locked) return current;
+  if (loop) return false;
   return target !== null && detectedMidi != null && isTunedCategory(category);
 }
 
@@ -245,6 +255,11 @@ function App() {
           sampleId: ref.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
+          loop: isLoopPad(
+            project.samplerJson.pads?.find((p: any) => p.type === "sample" && p.sampleId === ref.sampleId),
+            decoded.channelData[0].length,
+            decoded.sampleRate,
+          ),
           tune: false,
           semis: 0,
           cents: 0,
@@ -282,6 +297,7 @@ function App() {
                     remembered ? validCategory(remembered.category) : category,
                     detectedMidi,
                     tunedTargetRef.current,
+                    cur.loop,
                   ),
                 },
               };
@@ -615,7 +631,7 @@ function App() {
     tunedTargetRef.current = pc;
     setPads((prev) =>
       Object.fromEntries(
-        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: tuneDefault(false, false, p.category, p.detectedMidi, pc) }]),
+        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: tuneDefault(false, false, p.category, p.detectedMidi, pc, p.loop) }]),
       ),
     );
   };
@@ -875,7 +891,7 @@ function App() {
                 else if (patch.category && !selectedPad.tuneLocked) {
                   patchPad(selectedPad.index, {
                     ...patch,
-                    tune: tuneDefault(false, false, patch.category, selectedPad.detectedMidi, tunedTarget),
+                    tune: tuneDefault(false, false, patch.category, selectedPad.detectedMidi, tunedTarget, selectedPad.loop),
                   });
                 } else patchPad(selectedPad.index, patch);
               }}
