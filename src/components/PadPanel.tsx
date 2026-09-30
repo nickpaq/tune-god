@@ -66,7 +66,7 @@ export function PadPanel({
           onClick={() => onChange({ tune: !pad.tune })}
           aria-pressed={pad.tune}
         >
-          {pad.tune ? "🎹 Tune" : "🥁 Don't tune"}
+          {pad.tune ? "Tune: on" : "Tune: off"}
         </button>
       </div>
 

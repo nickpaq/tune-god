@@ -13,12 +13,14 @@ import { buildTunedKoala, downloadBlob, type GhostPadExport, type TunedSample } 
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { isDrumCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { isDrumCategory, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { LayoutPicker } from "./components/LayoutPicker";
+import { ViewToggle, type PadView } from "./components/ViewToggle";
+import { SwapList } from "./components/SwapList";
 import { ClassifierModal } from "./components/ClassifierModal";
 import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
@@ -194,6 +196,8 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   const [classifierOpen, setClassifierOpen] = useState(false);
+  /** On the finger-drumming page, whether the top box shows the drum swap list or the tuning controls. */
+  const [padView, setPadView] = useState<PadView>("swap");
   /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
@@ -547,6 +551,7 @@ function App() {
     const pad = pads[index];
     if (!pad) return;
     setSelected(index);
+    setPadView(pad.tune ? "tune" : "swap");
     if (pad.placeholder) return; // silent: nothing to play
     releasePad.current.get(index)?.release();
     releasePad.current.set(
@@ -787,6 +792,8 @@ function App() {
   const arrangement = analyzing === 0 ? arrangementOf() : undefined;
 
   const palette = paletteById(paletteId);
+  /** With the finger-drumming layout on there is one page: bank A. Other sounds are reached through the swap list. */
+  const shownBank = layout.on ? 0 : bank;
   /** Palette colour for a sound, by its own category. Where it sits (including on a layout's slots) never changes it. */
   const autoColorOf = (p: Pad): string => {
     const base = colorFor(palette, p.category ?? "other");
@@ -811,6 +818,33 @@ function App() {
     .filter((p) => longSamples.includes(p.origIndex))
     .sort((a, b) => a.index - b.index);
   const selectedPad = selected !== null ? pads[selected] : undefined;
+
+  const panel = selectedPad && !selectedPad.placeholder && !selectedPad.ghost && (
+    <PadPanel
+      pad={selectedPad}
+      autoColor={autoColor}
+      autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4)}
+      onChange={(patch) => {
+        if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
+        else if (patch.category) classifyPad(selectedPad, patch.category);
+        else patchPad(selectedPad.index, patch);
+      }}
+    />
+  );
+  const swapList = selectedPad && (
+    <SwapList
+      slotLabel={`PAD ${(selectedPad.index % 16) + 1}`}
+      candidates={Object.values(pads)
+        .filter((p) => isReal(p) && isKitCategory(p.category) && p.index !== selectedPad.index)
+        .sort((a, b) => a.index - b.index)}
+      colorOf={colorOfPad}
+      audioOf={audioOf}
+      onSwap={(other) => {
+        recordEdit();
+        setPads((prev) => movePad(prev, selectedPad.index, other.index));
+      }}
+    />
+  );
 
   return (
     <div
@@ -958,22 +992,20 @@ function App() {
                 A copy of another pad, {Math.abs(GHOST_LEVEL_DB[selectedPad.ghost.kind])} dB quieter with a gentle high cut. Made by the layout.
               </span>
             </div>
-          ) : selectedPad?.placeholder ? (
+          ) : selectedPad?.placeholder && !layout.on ? (
             <div className="teal__message">
               <strong>{selectedPad.placeholder.label}</strong>
               <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
             </div>
           ) : selectedPad ? (
-            <PadPanel
-              pad={selectedPad}
-              autoColor={autoColor}
-              autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4)}
-              onChange={(patch) => {
-                if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
-                else if (patch.category) classifyPad(selectedPad, patch.category);
-                else patchPad(selectedPad.index, patch);
-              }}
-            />
+            layout.on ? (
+              <div className="teal__stack">
+                {!selectedPad.placeholder && <ViewToggle view={padView} onChange={setPadView} />}
+                {padView === "swap" || selectedPad.placeholder ? swapList : panel}
+              </div>
+            ) : (
+              panel
+            )
           ) : hasProject ? (
             <div className="teal__message">
               <strong>{projectName}</strong>
@@ -998,7 +1030,7 @@ function App() {
         </section>
 
         {Array.from({ length: 16 }, (_, slot) => {
-          const index = bank * 16 + slot;
+          const index = shownBank * 16 + slot;
           const pad = pads[index];
           const cls = [
             "pad",
@@ -1044,13 +1076,13 @@ function App() {
         })}
 
         <div className="banks" style={box(BANKS_X, BAR_Y, BANKS_W, BAR_H)}>
-          {BANKS.map((name, i) => {
+          {BANKS.slice(0, layout.on ? 1 : BANKS.length).map((name, i) => {
             const hasSamples = Object.keys(pads).some(
               (index) => Math.floor(Number(index) / 16) === i,
             );
             const cls = [
               "bank",
-              bank === i && "bank--active",
+              shownBank === i && "bank--active",
               !hasSamples && "bank--empty",
             ]
               .filter(Boolean)

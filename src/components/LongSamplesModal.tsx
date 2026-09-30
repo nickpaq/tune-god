@@ -40,7 +40,7 @@ export function LongSamplesModal({
               <div className="sound-row__head">
                 <button
                   className="sound-row__icon"
-                  onClick={() => preview.toggle(pad.origIndex, pad.channelData, pad.sampleRate)}
+                  onPointerDown={() => preview.toggle(pad.origIndex, pad.channelData, pad.sampleRate)}
                   aria-label={`${preview.playing === pad.origIndex ? "Stop" : "Play"} ${pad.name}`}
                 >
                   {preview.playing === pad.origIndex ? "■" : "▶"}
