@@ -20,6 +20,7 @@ import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { LayoutPicker } from "./components/LayoutPicker";
 import { ViewToggle, type PadView } from "./components/ViewToggle";
+import { sortForSlot } from "./audio/swapOrder";
 import { SwapList } from "./components/SwapList";
 import { ClassifierModal } from "./components/ClassifierModal";
 import { LongSamplesModal } from "./components/LongSamplesModal";
@@ -834,9 +835,10 @@ function App() {
   const swapList = selectedPad && (
     <SwapList
       slotLabel={`PAD ${(selectedPad.index % 16) + 1}`}
-      candidates={Object.values(pads)
-        .filter((p) => isReal(p) && isKitCategory(p.category) && p.index !== selectedPad.index)
-        .sort((a, b) => a.index - b.index)}
+      candidates={sortForSlot(
+        Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index !== selectedPad.index),
+        layoutById(layout.id).slots[selectedPad.index % 16]?.category ?? selectedPad.category,
+      )}
       colorOf={colorOfPad}
       audioOf={audioOf}
       onSwap={(other) => {
