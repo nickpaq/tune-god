@@ -10,7 +10,12 @@ A local-first web app for [Koala Sampler](https://koalasampler.com) projects. Dr
 - The last project, your per-pad choices and your pad arrangement are remembered between visits.
 
 ### Sound categories
-Nine categories, from filename keywords first and then simple acoustic features (length, decay, spectral balance, detected pitch): **Kick, Snare, Hat, Perc, Bass, Melodic, Vocal, FX, Other**. Each pad's category can be changed by hand in the pad panel. Categories drive tuning, colour, labels, loudness trims and bus routing.
+Fourteen categories, from filename keywords first and then simple acoustic features (length, decay, spectral balance, detected pitch): **Kick, Snare, Clap, Closed Hat, Open Hat, Vox, Perc, FX, Bass, Melodic, Drum Loop, Perc Loop, Melodic Loop, Other**. Cymbals count as open hats; toms, shakers and tambourines count as Perc; chants and breaths are Vox. A hat with no open/closed keyword in its name is called open when it rings longer than 0.3 s. A name containing "loop" turns its category into the loop version ("perc loop" is a Perc Loop); breaks and amens are Drum Loops; unnamed samples over 4 s are Melodic Loops if pitched and Drum Loops otherwise. Loops are never tuned by default. Categories drive tuning, colour, labels, loudness trims and bus routing.
+
+Change a pad's category in the pad panel, or use the **Sound classifier** (menu, below the finger drumming presets): it lists every sound in the project with a play button (raw audio, or the normalized audio once Normalize now has run, with a short fade so stopping never clicks), a delete button, and one checkbox per category. Each checkbox is coloured like its pad, so related types (snare and clap, both hats, vox and perc) show as neighbouring shades of one tone.
+
+### Long samples
+A sample longer than 60 s makes export very slow, so importing a project that contains any shows a warning listing them, with play and delete buttons for each (or keep them all). The limit is `MAX_SAMPLE_SECONDS` in `src/App.tsx`.
 
 ### Tuning
 - Pick a key on the piano; bass and melodic pads with a detected pitch are tuned to it by default (drums, vocals, FX and other are left alone). You can toggle Tune per pad, and manual choices survive key changes.
@@ -23,14 +28,14 @@ Nine categories, from filename keywords first and then simple acoustic features 
 ### Loudness balancing ("Balance loudness" + "Normalize now")
 - Every sample is measured with ITU-R BS.1770 K-weighting (the LUFS filter), taking its loudest 200 ms window so short one-shots and long loops compare fairly. `scripts/checkLoudness.ts` checks the meter against the standard's reference values.
 - Files are gain-matched to the same perceived loudness with a **-1 dBFS peak ceiling**. The common level is the highest one at which about 90% of samples fit under the ceiling; the few peakiest are held at the ceiling.
-- The **mix** goes on each pad's volume knob as a per-category trim (kick, snare, bass, vocal, other 0 dB; melodic -2; hat and perc -3; FX -4; editable in `src/audio/loudness.ts`). Koala's knob is linear amplitude (`vol = 10^(dB/20)`, verified against a real project), so a knob at 0 dB plays the normalized file at its full level.
+- The **mix** goes on each pad's volume knob as a per-category trim (kick, snare, clap, bass, vox, other 0 dB; melodic and loops -2 to -3; hats and perc -3; FX -4; editable in `src/audio/loudness.ts`). Koala's knob is linear amplitude (`vol = 10^(dB/20)`, verified against a real project), so a knob at 0 dB plays the normalized file at its full level.
 - **Normalize now** renders the same balance for playback, so pad taps are level-matched while you work. With the checkbox on but the button unpressed, balancing happens only at export.
 
 ### Colour and labels
-- **Auto-color pads by sound type** writes a colour and a label to every pad on export, and the same label shows on the pads in the app. Labels are finer than the nine categories (which still drive tuning, buses and loudness): drums show their role (Open Hat, Tom, Clap), drums on a finger-drumming layout's banks show their slot label, other sounds show a filename keyword (Piano, Pluck, Riser, Vox, 808) and fall back to the category name. See `src/audio/padLabels.ts`. 17 palettes with nine colours each; pick one from the palette browser.
+- **Auto-color pads by sound type** writes a colour and a label to every pad on export, and the same label shows on the pads in the app. Drums show their category (Open Hat, Clap), drums on a finger-drumming layout's banks show their slot label, other sounds show a filename keyword (Piano, Pluck, Riser, Vox, 808) and fall back to the category name. See `src/audio/padLabels.ts`. 17 palettes; each holds ten base tones (kick, snare/clap, hats, perc/vox, FX, bass, melodic, other, drum and perc loops, melodic loop) and categories in one tone are shades of it, so snare and clap read as a family while kick stands apart. Pick one from the palette browser.
 
 ### Bus routing
-- **Route pads to buses by sound type** writes each pad's bus: Bus A drums (kick, snare, hat, perc), Bus B bass, Bus C melodic, Bus D vocals and FX, Main for Other. It also names the buses *Drums, Bass, Melodic, Vocals* in the project's `mixer.json`, keeping each bus's effects and levels. (Koala's bus numbers are A=0 to D=3 and Main=-1. Bus D = 3 is inferred from the pattern; A to C and Main were seen in real projects.)
+- **Route pads to buses by sound type** writes each pad's bus: Bus A drums (kick, snare, clap, hats, perc, drum and perc loops), Bus B bass, Bus C melodic (and melodic loops), Bus D vox and FX, Main for Other. It also names the buses *Drums, Bass, Melodic, Vocals* in the project's `mixer.json`, keeping each bus's effects and levels. (Koala's bus numbers are A=0 to D=3 and Main=-1. Bus D = 3 is inferred from the pattern; A to C and Main were seen in real projects.)
 
 ### Stereo spread
 - **Spread melodic pads** gives melodic pads a balanced random pan (pairs at equal and opposite distances up to 40% either side; an odd one stays centred). Bass, drums and the rest stay centred.
