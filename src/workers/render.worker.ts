@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import * as Comlink from "comlink";
 import { resamplePitchShift } from "../audio/stretch/resample";
-import { balanceGains, type BalanceInput } from "../audio/loudness";
+import { balanceMix, type BalanceInput } from "../audio/loudness";
 
 const api = {
   /** Windowed-sinc resample: pitch and duration change together, exactly like turning a sampler's pitch knob. */
@@ -12,9 +12,9 @@ const api = {
       out.map((c) => c.buffer as ArrayBuffer),
     );
   },
-  /** Loudness-balancing gain in dB per input; runs off the main thread because K-weighting long loops is slow. */
-  balance(inputs: BalanceInput[], ceilingDb: number): number[] {
-    return balanceGains(inputs, ceilingDb);
+  /** Fader level in dB (<= 0) per input; runs off the main thread because K-weighting long loops is slow. */
+  balance(inputs: BalanceInput[]): number[] {
+    return balanceMix(inputs);
   },
 };
 

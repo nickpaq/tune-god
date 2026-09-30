@@ -14,18 +14,18 @@ export interface TunedSample {
  * and sample IDs, so sampler.json's pad->sample mapping stays valid. Each
  * retimed pad's trim points are reset to the new file length and its pitch
  * knob zeroed (the tuning is baked into the audio now). Samples that were only
- * gain-adjusted keep their trim points. With `resetGain`, every replaced pad's
- * volume knob (`vol`, 1 = 0 dB) is reset to unity too (the level is baked into the audio). `colors` maps sampleId to the hex colour and label that replace the pad's own. `pans` maps sampleId to a Koala pan value
+ * gain-adjusted keep their trim points. `vols` maps sampleId to the pad's
+ * volume knob (`vol`, linear: 1 = 0 dB), written to every pad using that sample, replaced or not. `colors` maps sampleId to the hex colour and label that replace the pad's own. `pans` maps sampleId to a Koala pan value
  * (0..1, 0.5 = centre) written to every pad using that sample.
  */
 export async function buildTunedKoala(
   project: ParsedKoalaProject,
   tuned: TunedSample[],
   {
-    resetGain = false,
+    vols,
     pans,
     colors,
-  }: { resetGain?: boolean; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }> } = {},
+  }: { vols?: Map<number, number>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }> } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -33,6 +33,8 @@ export async function buildTunedKoala(
   for (const pad of samplerJson.pads ?? []) {
     const pan = pans?.get(pad.sampleId);
     if (pan !== undefined) pad.pan = pan;
+    const vol = vols?.get(pad.sampleId);
+    if (vol !== undefined) pad.vol = vol;
     const tint = colors?.get(pad.sampleId);
     if (tint) {
       pad.color = tint.color;
@@ -40,7 +42,6 @@ export async function buildTunedKoala(
     }
     const t = byId.get(pad.sampleId);
     if (!t) continue;
-    if (resetGain) pad.vol = 1;
     if (!t.retimed) continue;
     const frames = t.channelData[0].length;
     pad.start = 0;

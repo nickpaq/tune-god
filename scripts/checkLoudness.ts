@@ -1,5 +1,5 @@
 // Sanity-checks the loudness meter and balancer on synthetic signals. Run: npx tsx scripts/checkLoudness.ts
-import { measureLoudness, balanceGains, peakOf } from "../src/audio/loudness";
+import { measureLoudness, balanceMix, peakOf } from "../src/audio/loudness";
 
 const SR = 48000;
 const sine = (f: number, amp: number, secs: number) =>
@@ -22,7 +22,7 @@ const inputs = [
   { channelData: [hat], sampleRate: SR, category: "hat" as const },
   { channelData: [pad], sampleRate: SR, category: "melodic" as const },
 ];
-const gains = balanceGains(inputs, -6);
+const gains = balanceMix(inputs);
 inputs.forEach((inp, i) => {
   const out = inp.channelData.map((c) => c.map((v) => v * 10 ** (gains[i] / 20)));
   console.log(inp.category, "gain", gains[i].toFixed(1), "dB, loudness", measureLoudness(out, SR)?.toFixed(1), "LUFS, peak", (20 * Math.log10(peakOf(out))).toFixed(1), "dBFS");

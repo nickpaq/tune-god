@@ -1,7 +1,8 @@
 // Perceptual loudness balancing. Each sample is measured with ITU-R BS.1770 K-weighting (the
 // same filter EBU R128 / LUFS meters use), taking the loudest 200 ms window so short one-shots
 // and long loops are compared fairly. The whole set is then gain-matched to a common loudness,
-// with a per-category trim (hats sit lower in a mix than kicks) and a peak ceiling so nothing clips.
+// with a per-category trim (hats sit lower in a mix than kicks). The result is expressed as pad
+// fader levels (never boosts), so the audio files themselves can stay untouched.
 import type { CategoryId } from "./classify";
 
 /** Ear-like integration time: shorter hits read quieter, sustained sounds read at full level. */
@@ -20,8 +21,8 @@ export const CATEGORY_TRIM_DB: Record<CategoryId, number> = {
   other: 0,
 };
 
-/** Fraction of pads allowed to hit the peak ceiling before the common target drops further. */
-const PEAK_LIMITED_FRACTION = 0.1;
+/** Fraction of pads that may sit below the common target because their fader is already at 0 dB. */
+const FADER_LIMITED_FRACTION = 0.1;
 
 type Biquad = { b0: number; b1: number; b2: number; a1: number; a2: number };
 
@@ -102,26 +103,20 @@ export interface BalanceInput {
 }
 
 /**
- * Gain in dB for each input so all sit at the same perceived loudness (plus category trims),
- * with every peak at or below `ceilingDb`. The common target is the highest level at which
- * (nearly) every sample still fits under the ceiling; the few most peaky ones are then simply
- * held at the ceiling. Silent samples get 0 dB.
+ * Fader level in dB (0 or below) for each input so all sit at the same perceived loudness plus
+ * their category trim. Faders can only cut, so the target is set by the quietest samples: the
+ * one needing the most boost sits at 0 dB and everything else is pulled down to match. The few
+ * quietest (FADER_LIMITED_FRACTION) are allowed to stay slightly under target rather than
+ * dragging the whole set down. Silent samples get 0 dB.
  */
-export function balanceGains(inputs: BalanceInput[], ceilingDb: number): number[] {
-  const loud = inputs.map((p) => measureLoudness(p.channelData, p.sampleRate));
-  const trim = inputs.map((p) => CATEGORY_TRIM_DB[p.category ?? "other"]);
-  const peakDb = inputs.map((p) => 20 * Math.log10(Math.max(peakOf(p.channelData), 1e-12)));
-  // Highest common target each sample allows before its own peak would pass the ceiling.
-  const limits: number[] = [];
-  inputs.forEach((_, i) => {
-    if (loud[i] !== null) limits.push(ceilingDb - peakDb[i] + (loud[i] as number) - trim[i]);
+export function balanceMix(inputs: BalanceInput[]): number[] {
+  // Gain each sample would need to reach a common loudness (arbitrary reference of 0 LUFS).
+  const wanted = inputs.map((p) => {
+    const loud = measureLoudness(p.channelData, p.sampleRate);
+    return loud === null ? null : CATEGORY_TRIM_DB[p.category ?? "other"] - loud;
   });
-  if (!limits.length) return inputs.map(() => 0);
-  limits.sort((a, b) => a - b);
-  const target = limits[Math.min(limits.length - 1, Math.floor(limits.length * PEAK_LIMITED_FRACTION))];
-  return inputs.map((_, i) => {
-    if (loud[i] === null) return 0;
-    const wanted = target + trim[i] - (loud[i] as number);
-    return Math.min(wanted, ceilingDb - peakDb[i]);
-  });
+  const known = wanted.filter((w): w is number => w !== null).sort((a, b) => b - a);
+  if (!known.length) return inputs.map(() => 0);
+  const reference = known[Math.min(known.length - 1, Math.floor(known.length * FADER_LIMITED_FRACTION))];
+  return wanted.map((w) => (w === null ? 0 : Math.min(0, w - reference)));
 }

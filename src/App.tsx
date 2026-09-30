@@ -42,8 +42,12 @@ const PAD_COLS = [0, 1, 2, 3].map((c) => LEFT + c * (PAD_W + PAD_GAP));
 const PAD_ROWS = [991, 1198, 1406, 1613];
 const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
-/** Loudest peak allowed after loudness balancing; the balance is set so nothing exceeds this. */
-const PEAK_CEILING_DB = -6;
+/** Headroom kept on the loudest pad's fader so simultaneous pads don't clip the master. */
+const MIX_HEADROOM_DB = 6;
+/** Rendered files are only ever scaled down, and only when a peak would pass this. */
+const FILE_CEILING_DB = -0.1;
+/** Pad volume knob value for a dB level. ASSUMPTION: linear amplitude; verify against a real project. */
+const volFromDb = (db: number) => 10 ** (db / 20);
 /** Widest spread pan, in percent either side of centre. */
 const MAX_SPREAD_PERCENT = 40;
 
@@ -66,12 +70,14 @@ function validCategory(id: CategoryId | undefined): CategoryId {
   return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
 }
 
-/** Resampling can overshoot full scale by a hair on loud samples; scale down only then, so the WAV never clips. */
+/** Scales down (never up) so the peak stays under FILE_CEILING_DB; resampling can overshoot full scale on loud samples. */
 function limitPeak(channelData: Float32Array[]): Float32Array[] {
+  const ceiling = 10 ** (FILE_CEILING_DB / 20);
   let peak = 0;
   for (const data of channelData) for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
-  if (peak <= 1) return channelData;
-  return channelData.map((data) => data.map((v) => v / peak));
+  if (peak <= ceiling) return channelData;
+  const gain = ceiling / peak;
+  return channelData.map((data) => data.map((v) => v * gain));
 }
 
 /** A pad's default Tune state: the user's manual choice if locked, else on for bass/melodic with a detected pitch. */
@@ -231,18 +237,19 @@ function App() {
   };
 
   /**
-   * Loudness-balances every pad so taps are audibly level-matched. Measured on the untuned audio,
-   * so it can differ from the export's gains by a fraction of a dB where tuning changes a pad.
+   * Previews the mix Koala will play: each pad at its balanced fader level. Measured on the
+   * untuned audio, so it can differ from the export by a fraction of a dB where tuning changes a pad.
    */
   const normalizeNow = async () => {
     setNormalizing(true);
     try {
       const list = Object.values(pads);
-      const gains = await getRenderWorker().balance(
+      const levels = await getRenderWorker().balance(
         list.map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category })),
-        PEAK_CEILING_DB,
       );
-      setNormalizedData(Object.fromEntries(list.map((p, i) => [p.index, applyGainDb(p.channelData, gains[i])])));
+      setNormalizedData(
+        Object.fromEntries(list.map((p, i) => [p.index, applyGainDb(p.channelData, levels[i] - MIX_HEADROOM_DB)])),
+      );
     } catch (err) {
       console.error(err);
     } finally {
@@ -285,8 +292,8 @@ function App() {
 
   /**
    * Bakes every tuned pad's shift into its audio (windowed-sinc resample) and downloads the
-   * rebuilt project. With the normalize switch on, every sample is also loudness-balanced
-   * (see audio/loudness.ts) and its pad gain knob reset to zero.
+   * rebuilt project. With the normalize switch on, every pad's volume knob is also set to a
+   * loudness-balanced level (see audio/loudness.ts); the audio files themselves are not gain-changed.
    */
   const exportProject = async () => {
     const project = projectRef.current;
@@ -303,6 +310,7 @@ function App() {
         tunedPads.forEach((p, i) => pans.set(p.sampleId, 0.5 + offsets[i] / 200));
       }
       const allPads = Object.values(pads);
+      // Every pad's final (tuned) audio, so loudness is measured on what Koala will actually play.
       const rendered: { pad: Pad; channelData: Float32Array[]; retimed: boolean }[] = [];
       let done = 0;
       for (const pad of allPads) {
@@ -310,34 +318,30 @@ function App() {
         const shift = shiftFor(pad, tunedTarget);
         const retimed = pad.tune && Math.abs(shift) >= 1e-6;
         if (!retimed && !normalize) continue;
-        let channelData = retimed
-          ? await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift))
+        const channelData = retimed
+          ? limitPeak(await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift)))
           : pad.channelData;
-        if (retimed && !normalize) channelData = limitPeak(channelData);
         rendered.push({ pad, channelData, retimed });
       }
-      // Balance on the final, tuned audio so the gains match what is actually exported.
-      const gains = normalize
-        ? await getRenderWorker().balance(
-            rendered.map((r) => ({ channelData: r.channelData, sampleRate: r.pad.sampleRate, category: r.pad.category })),
-            PEAK_CEILING_DB,
-          )
-        : [];
-      rendered.forEach((r, i) => {
-        tuned.push({
-          sampleId: r.pad.sampleId,
-          sampleRate: r.pad.sampleRate,
-          channelData: normalize ? applyGainDb(r.channelData, gains[i]) : r.channelData,
-          retimed: r.retimed,
-        });
-      });
+      // The mix lives on the pad faders; the audio files are left at their natural level.
+      const vols = new Map<number, number>();
+      if (normalize) {
+        const levels = await getRenderWorker().balance(
+          rendered.map((r) => ({ channelData: r.channelData, sampleRate: r.pad.sampleRate, category: r.pad.category })),
+        );
+        rendered.forEach((r, i) => vols.set(r.pad.sampleId, volFromDb(levels[i] - MIX_HEADROOM_DB)));
+      }
+      for (const r of rendered) {
+        if (!r.retimed) continue;
+        tuned.push({ sampleId: r.pad.sampleId, sampleRate: r.pad.sampleRate, channelData: r.channelData, retimed: true });
+      }
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of Object.values(pads)) {
           if (p.category) colors.set(p.sampleId, { color: colorFor(palette, p.category), label: categoryLabel(p.category) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { resetGain: normalize, pans, colors });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, pans, colors });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
