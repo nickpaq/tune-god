@@ -27,7 +27,7 @@ Nine categories, from filename keywords first and then simple acoustic features 
 - **Normalize now** renders the same balance for playback, so pad taps are level-matched while you work. With the checkbox on but the button unpressed, balancing happens only at export.
 
 ### Colour and labels
-- **Auto-color pads by sound type** writes a colour and a label (the category name) to every pad on export. 17 palettes with nine colours each; pick one from the palette browser.
+- **Auto-color pads by sound type** writes a colour and a label to every pad on export, and the same label shows on the pads in the app. Labels are finer than the nine categories (which still drive tuning, buses and loudness): drums show their role (Open Hat, Tom, Clap), drums on a finger-drumming layout's banks show their slot label, other sounds show a filename keyword (Piano, Pluck, Riser, Vox, 808) and fall back to the category name. See `src/audio/padLabels.ts`. 17 palettes with nine colours each; pick one from the palette browser.
 
 ### Bus routing
 - **Route pads to buses by sound type** writes each pad's bus: Bus A drums (kick, snare, hat, perc), Bus B bass, Bus C melodic, Bus D vocals and FX, Main for Other. It also names the buses *Drums, Bass, Melodic, Vocals* in the project's `mixer.json`, keeping each bus's effects and levels. (Koala's bus numbers are A=0 to D=3 and Main=-1. Bus D = 3 is inferred from the pattern; A to C and Main were seen in real projects.)

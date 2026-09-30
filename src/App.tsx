@@ -12,7 +12,7 @@ import { setReferencePitch, startPad, type PadHandle, type PadMode } from "./aud
 import { buildTunedKoala, downloadBlob, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
 import { balancedSpread } from "./audio/spread";
-import { categoryLabel, isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
+import { isTunedCategory, CATEGORIES, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
@@ -23,6 +23,7 @@ import { FINGER_LAYOUTS, layoutById, layoutSlotAt } from "./audio/fingerLayouts"
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { isDrumCategory } from "./audio/drumRoles";
 import { roleColors } from "./audio/roleColors";
+import { padLabel } from "./audio/padLabels";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
@@ -251,8 +252,8 @@ function App() {
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
-          .catch(() => ({ midi: null, category: "other" as const, role: undefined, centroid: undefined }))
-          .then(({ midi: detectedMidi, category, role, centroid }) => {
+          .catch(() => ({ midi: null, category: "other" as const, role: undefined, detail: undefined, centroid: undefined }))
+          .then(({ midi: detectedMidi, category, role, detail, centroid }) => {
             if (token !== loadToken.current) return;
             setPads((prev) => {
               const remembered = restorePads.current[ref.pad];
@@ -263,6 +264,7 @@ function App() {
                   ...cur,
                   detectedMidi,
                   drumRole: role,
+                  detail,
                   centroid,
                   ...(remembered
                     ? {
@@ -674,7 +676,7 @@ function App() {
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of allPads) {
-          if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: drumSlotOf(p)?.label ?? categoryLabel(p.category) });
+          if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: labelOf(p) });
         }
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, placeholders: placeholderList });
@@ -711,6 +713,8 @@ function App() {
     const slot = drumSlotOf(p);
     return slot ? drumColors[slot.role] : colorFor(palette, p.category ?? "other");
   };
+  /** The words on a pad: its layout slot's label for drums on the layout's banks, otherwise its role, keyword or category. */
+  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : drumSlotOf(p)?.label ?? padLabel(p));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
   const placeholderList = Object.values(pads)
@@ -938,7 +942,7 @@ function App() {
               }}
               aria-label={`Pad ${slot + 1}`}
             >
-              {pad?.placeholder && <span className="pad__label">{pad.placeholder.label}</span>}
+              {pad && (pad.placeholder || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
             </button>
           );
         })}

@@ -1,6 +1,7 @@
 import { PrecisionSlider } from "./PrecisionSlider";
 import { CATEGORIES, type CategoryId } from "../audio/classify";
 import type { DrumRole } from "../audio/drumRoles";
+import type { Detail } from "../audio/padLabels";
 import { formatSignedCents, formatSignedSemitones } from "../audio/theory";
 
 export interface Pad {
@@ -18,6 +19,8 @@ export interface Pad {
   category?: CategoryId;
   /** Finer drum type (open hat, tom, ...) for drums; used by the finger-drumming layout. */
   drumRole?: DrumRole;
+  /** Finer label for non-drum sounds (Piano, Riser, ...) from the file name; display only. */
+  detail?: Detail;
   /** Spectral centroid in Hz, used to order sounds with no clear pitch. */
   centroid?: number;
   /** Set on the silent pads the finger-drumming layout adds; they have no project sample behind them. */
