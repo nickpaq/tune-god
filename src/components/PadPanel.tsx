@@ -38,7 +38,7 @@ export function PadPanel({
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "category">>) => void;
 }) {
   const total = autoShift + pad.semis + pad.cents / 100;
-  const status = pad.tune ? `✓ Tuned ${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(2)} st` : "Not tuned";
+  const status = pad.tune ? `✓ Tuned ${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(2)}` : "Not tuned";
 
   return (
     <div className="pad-panel">
