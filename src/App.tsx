@@ -19,9 +19,9 @@ import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { LayoutPicker } from "./components/LayoutPicker";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
-import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
+import { FINGER_LAYOUTS, layoutById, layoutSlotAt } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
-import { effectiveRole } from "./audio/drumRoles";
+import { isDrumCategory } from "./audio/drumRoles";
 import { roleColors } from "./audio/roleColors";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
@@ -674,7 +674,7 @@ function App() {
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of allPads) {
-          if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: categoryLabel(p.category) });
+          if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: drumSlotOf(p)?.label ?? categoryLabel(p.category) });
         }
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, placeholders: placeholderList });
@@ -700,10 +700,16 @@ function App() {
 
   const palette = paletteById(paletteId);
   const drumColors = roleColors(palette);
-  /** Palette colour for a sound: by category, except that with a layout applied each drum role gets its own colour. */
+  /**
+   * With a layout applied, a drum on bank A or B shows its slot's role colour and label, exactly as the
+   * layout preview does. This is only how the pad looks in Koala; its category (tuning, buses) is unchanged.
+   */
+  const drumSlotOf = (p: Pad) =>
+    layout.on && !p.placeholder && isDrumCategory(p.category) ? layoutSlotAt(layoutById(layout.id), p.index) : undefined;
+  /** Palette colour for a sound: by category, or its slot's role colour for drums on the layout's banks. */
   const autoColorOf = (p: Pad): string => {
-    const role = layout.on ? effectiveRole(p.category, p.drumRole) : undefined;
-    return role ? drumColors[role] : colorFor(palette, p.category ?? "other");
+    const slot = drumSlotOf(p);
+    return slot ? drumColors[slot.role] : colorFor(palette, p.category ?? "other");
   };
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
