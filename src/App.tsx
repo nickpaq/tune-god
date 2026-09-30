@@ -21,6 +21,8 @@ import { PalettePicker } from "./components/PalettePicker";
 import { LayoutPicker } from "./components/LayoutPicker";
 import { ViewToggle, type PadView } from "./components/ViewToggle";
 import { sortForSlot } from "./audio/swapOrder";
+import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
+import { extraDrumCount, fillGhostSlot, withoutExtraDrums, type ExtraDrums } from "./audio/extraDrums";
 import { SwapList } from "./components/SwapList";
 import { ClassifierModal } from "./components/ClassifierModal";
 import { LongSamplesModal } from "./components/LongSamplesModal";
@@ -28,7 +30,7 @@ import { arrangeFingerDrumming } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
-import { GHOST_LABEL, GHOST_LEVEL_DB, makeGhostAudio } from "./audio/ghost";
+import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
@@ -93,7 +95,7 @@ interface LayoutState {
 }
 
 const LAYOUT_ON_WARNING =
-  "Your pads will be rearranged into the finger drumming layout: drums on banks A and B, everything else on C and D, and silent placeholder pads filling any gaps. Recorded patterns are corrected to follow their pads, so they will still play back as expected. You can undo this. Continue?";
+  "Your pads will be rearranged into the finger drumming layout: the kit on page A, everything else from page B on, and silent placeholder pads filling any gaps. Recorded patterns are corrected to follow their pads, so they will still play back as expected. You can undo this. Continue?";
 const LAYOUT_SWITCH_WARNING =
   "Switching layouts rearranges your pads again, including any moves you made since applying the current layout. Recorded patterns are corrected to follow their pads and will still play back as expected. Continue?";
 const LAYOUT_OFF_WARNING =
@@ -197,6 +199,8 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   const [classifierOpen, setClassifierOpen] = useState(false);
+  /** Set while the export is waiting for the answer about drums the layout has no slot for. */
+  const [extraPrompt, setExtraPrompt] = useState(false);
   /** On the finger-drumming page, whether the top box shows the drum swap list or the tuning controls. */
   const [padView, setPadView] = useState<PadView>("swap");
   /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
@@ -698,7 +702,11 @@ function App() {
    * rebuilt project. With the normalize switch on, every sample is loudness-normalized and every pad volume knob set to a
    * loudness-balanced level (see audio/loudness.ts); the audio files themselves are not gain-changed.
    */
-  const exportProject = async () => {
+  const padsNow = pads;
+  const exportProject = async (mode: ExtraDrums = "keep") => {
+    const pads = mode === "delete" ? withoutExtraDrums(padsNow) : padsNow;
+    const arrangement = arrangementOf(pads);
+    const placeholderList = placeholdersOf(pads);
     const project = projectRef.current;
     if (!project) return;
     setExporting(true);
@@ -782,7 +790,7 @@ function App() {
   };
 
   /** Original slot -> current slot (null = deleted), or undefined when nothing was moved or deleted. */
-  const arrangementOf = (): Map<number, number | null> | undefined => {
+  const arrangementOf = (pads: Record<number, Pad>): Map<number, number | null> | undefined => {
     const project = projectRef.current;
     if (!project) return undefined;
     const slots = project.pads.filter((p) => p.pad >= 0 && p.pad < 64);
@@ -790,7 +798,7 @@ function App() {
     if (!slots.some((r) => now.get(r.pad) !== r.pad)) return undefined;
     return new Map(slots.map((r) => [r.pad, now.get(r.pad) ?? null]));
   };
-  const arrangement = analyzing === 0 ? arrangementOf() : undefined;
+  const arrangement = analyzing === 0 ? arrangementOf(pads) : undefined;
 
   const palette = paletteById(paletteId);
   /** With the finger-drumming layout on there is one page: bank A. Other sounds are reached through the swap list. */
@@ -804,9 +812,11 @@ function App() {
   const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : padLabel(p));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
-  const placeholderList = Object.values(pads)
-    .filter((p) => p.placeholder)
-    .map((p) => ({ index: p.index, label: p.placeholder!.label, color: placeholderColor(p) }));
+  const placeholdersOf = (from: Record<number, Pad>) =>
+    Object.values(from)
+      .filter((p) => p.placeholder)
+      .map((p) => ({ index: p.index, label: p.placeholder!.label, color: placeholderColor(p) }));
+  const placeholderList = placeholdersOf(pads);
   const canExport =
     (arrangement !== undefined ||
       placeholderList.length > 0 ||
@@ -834,7 +844,7 @@ function App() {
   );
   const swapList = selectedPad && (
     <SwapList
-      slotLabel={`PAD ${(selectedPad.index % 16) + 1}`}
+      slotLabel={selectedPad.ghost ? `${GHOST_LABEL[selectedPad.ghost.kind]} (made on export unless filled)` : `PAD ${(selectedPad.index % 16) + 1}`}
       candidates={sortForSlot(
         Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index !== selectedPad.index),
         layoutById(layout.id).slots[selectedPad.index % 16]?.category ?? selectedPad.category,
@@ -843,7 +853,7 @@ function App() {
       audioOf={audioOf}
       onSwap={(other) => {
         recordEdit();
-        setPads((prev) => movePad(prev, selectedPad.index, other.index));
+        setPads((prev) => (selectedPad.ghost ? fillGhostSlot(prev, selectedPad.index, other.index) : movePad(prev, selectedPad.index, other.index)));
       }}
     />
   );
@@ -987,14 +997,7 @@ function App() {
         )}
 
         <section className="teal" style={box(LEFT, 280, CONTENT_W, 510)}>
-          {selectedPad?.ghost ? (
-            <div className="teal__message">
-              <strong>{GHOST_LABEL[selectedPad.ghost.kind]}</strong>
-              <span>
-                A copy of another pad, {Math.abs(GHOST_LEVEL_DB[selectedPad.ghost.kind])} dB quieter with a gentle high cut. Made by the layout.
-              </span>
-            </div>
-          ) : selectedPad?.placeholder && !layout.on ? (
+          {selectedPad?.placeholder && !layout.on ? (
             <div className="teal__message">
               <strong>{selectedPad.placeholder.label}</strong>
               <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
@@ -1002,8 +1005,8 @@ function App() {
           ) : selectedPad ? (
             layout.on ? (
               <div className="teal__stack">
-                {!selectedPad.placeholder && <ViewToggle view={padView} onChange={setPadView} />}
-                {padView === "swap" || selectedPad.placeholder ? swapList : panel}
+                {!selectedPad.placeholder && !selectedPad.ghost && <ViewToggle view={padView} onChange={setPadView} />}
+                {padView === "swap" || selectedPad.placeholder || selectedPad.ghost ? swapList : panel}
               </div>
             ) : (
               panel
@@ -1215,6 +1218,17 @@ function App() {
           />
         )}
 
+        {extraPrompt && (
+          <ExtraDrumsModal
+            count={extraDrumCount(pads)}
+            onChoose={(mode) => {
+              setExtraPrompt(false);
+              void exportProject(mode);
+            }}
+            onCancel={() => setExtraPrompt(false)}
+          />
+        )}
+
         {paletteOpen && (
           <PalettePicker selectedId={paletteId} onSelect={setPaletteId} onClose={() => setPaletteOpen(false)} />
         )}
@@ -1223,7 +1237,7 @@ function App() {
           className="export"
           style={box(EXPORT_X, BAR_Y, BTN_W, BAR_H)}
           disabled={!canExport}
-          onClick={exportProject}
+          onClick={() => (layout.on && extraDrumCount(pads) > 0 ? setExtraPrompt(true) : exportProject())}
         >
           {exporting ? exportProgress || "…" : "Export"}
         </button>

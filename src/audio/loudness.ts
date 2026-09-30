@@ -13,21 +13,24 @@ const ABSOLUTE_GATE_LUFS = -70;
 
 /** Pad-knob level (dB, never above 0) that turns equal loudness into a mix that sits like a real one. */
 export const CATEGORY_TRIM_DB: Record<CategoryId, number> = {
+  // After loudness matching, the low end and backbeat sit on top and the top end tucks under them.
   kick: 0,
-  snare: 0,
-  clap: 0,
-  closedHat: -3,
-  openHat: -3,
-  cymbal: -3,
-  perc: -3,
-  bass: 0,
-  melodic: -2,
-  drumLoop: -2,
-  percLoop: -3,
-  melodicLoop: -2,
-  vox: 0,
-  fx: -4,
-  other: 0,
+  snare: -1,
+  clap: -2,
+  // K-weighting boosts highs, so hats and cymbals read loud for their level; they sit well under the snare.
+  closedHat: -6,
+  openHat: -6,
+  cymbal: -7,
+  perc: -4,
+  bass: -1,
+  melodic: -4,
+  vox: -3,
+  fx: -6,
+  // Loops are already a mix of several parts, so they sit under the one-shots they play with.
+  drumLoop: -3,
+  percLoop: -5,
+  melodicLoop: -5,
+  other: -3,
 };
 
 /** Fraction of pads that may sit below the common loudness because their peak already reaches the ceiling. */

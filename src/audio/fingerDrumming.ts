@@ -1,11 +1,11 @@
 // Pure arranger for the finger-drumming layout: decides where every sound goes across the four
 // banks and which placeholder pads fill the gaps. No React and no audio, so it is easy to test.
 //
-//   Bank A   the chosen layout, filled from the user's drums and FX ("add <category>" where a slot has none)
-//   Bank B   a second kit from the leftover drums, but only when they include a kick, a snare and a hat;
-//            otherwise B is left unarranged
-//   Banks C, D   everything that isn't a drum, lowest to highest (bass, melodic, loops, FX, other),
-//            then any drums still left over; overflow past D continues on B's free pads
+//   Bank A   the chosen layout, filled from the user's drums and FX ("add <category>" where a slot has none).
+//            A ghost snare or soft kick slot holds a copy for now; the export only makes it if the slot stays unfilled.
+//   Banks B-D   everything that isn't a drum, lowest to highest (bass, melodic, loops, other) from the start of
+//            bank B; the drums the layout had no slot for are backfilled from the end of bank D.
+//            If the project is nearly full, the two meet and the overflow takes bank A's "missing" pads.
 //   Every pad still free at the end becomes an "Empty pad" placeholder.
 import { categoryIndex, categoryLabel, isKitCategory, type CategoryId } from "./classify";
 import type { GhostKind } from "./ghost";
@@ -79,10 +79,10 @@ interface Kit {
 }
 
 /**
- * Fills one bank of the layout with an exact category match per slot. With `substitute`, slots still empty
- * then take a leftover drum of the same category, bottom row first (the slots under the thumbs).
+ * Fills bank A with an exact category match per slot; slots still empty then take a leftover drum of the same
+ * family, bottom row first (the slots under the thumbs).
  */
-function fillKit(layout: FingerLayout, drums: ArrangeSound[], substitute: boolean): Kit {
+function fillKit(layout: FingerLayout, drums: ArrangeSound[]): Kit {
   const slots: (ArrangeSound | null)[] = Array(PADS_PER_BANK).fill(null);
   const used = new Set<number>();
 
@@ -100,79 +100,63 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[], substitute: boolea
     });
   }
 
-  if (substitute) {
-    for (let i = layout.slots.length - 1; i >= 0; i--) {
-      if (slots[i] || layout.slots[i].ghostOf) continue;
-      const pick = drums.find((d) => !used.has(d.key) && SUBSTITUTE_GROUP[d.category!] === SUBSTITUTE_GROUP[layout.slots[i].category]);
-      if (!pick) continue;
-      slots[i] = pick;
-      used.add(pick.key);
-    }
+  for (let i = layout.slots.length - 1; i >= 0; i--) {
+    if (slots[i] || layout.slots[i].ghostOf) continue;
+    const pick = drums.find((d) => !used.has(d.key) && SUBSTITUTE_GROUP[d.category!] === SUBSTITUTE_GROUP[layout.slots[i].category]);
+    if (!pick) continue;
+    slots[i] = pick;
+    used.add(pick.key);
   }
 
   return { slots, leftover: drums.filter((d) => !used.has(d.key)) };
 }
 
-const hasCore = (drums: ArrangeSound[]) =>
-  [["kick"], ["snare"], ["closedHat", "openHat"]].every((group) => drums.some((d) => group.includes(d.category!)));
-
 export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayout): FingerArrangement {
   const drums = sounds.filter((s) => isKitCategory(s.category));
   const tonal = sounds.filter((s) => !isKitCategory(s.category));
-
-  // A second kit is judged on what bank A's exact matches leave over. If there is one, bank A keeps only
-  // its exact matches so those leftovers stay available for bank B; otherwise bank A may borrow them.
-  const exactA = fillKit(layout, drums, false);
-  const secondKit = hasCore(exactA.leftover);
-  const kitA = secondKit ? exactA : fillKit(layout, drums, true);
-  const kitB = secondKit ? fillKit(layout, exactA.leftover, true) : null;
-  const leftoverDrums = (kitB ? kitB.leftover : kitA.leftover)
+  const kit = fillKit(layout, drums);
+  const leftoverDrums = kit.leftover
     .slice()
     .sort((a, b) => categoryIndex(a.category ?? "other") - categoryIndex(b.category ?? "other") || byFrequency(a, b));
 
   const positions = new Map<number, number>();
   const placeholders = new Map<number, ArrangePlaceholder>();
   const ghosts: ArrangeGhost[] = [];
-  const place = (kit: Kit, bank: number) => {
-    kit.slots.forEach((s, i) => {
-      const index = bank * PADS_PER_BANK + i;
-      if (layout.slots[i].ghostOf) return;
-      if (s) positions.set(s.key, index);
-      else placeholders.set(index, { index, kind: "missing", label: `add ${layout.slots[i].label}` });
-    });
-    // A ghost slot holds a quieter copy of the kit's own snare or kick (the first one the layout fills, bottom row first).
-    layout.slots.forEach((slot, i) => {
-      if (!slot.ghostOf) return;
-      const index = bank * PADS_PER_BANK + i;
-      const source = layout.slots
-        .map((s, j) => ({ s, j }))
-        .filter(({ s, j }) => !s.ghostOf && s.category === slot.ghostOf && kit.slots[j])
-        .sort((a, b) => slotRank(a.j) - slotRank(b.j))[0];
-      if (source) ghosts.push({ index, kind: slot.ghostOf === "snare" ? "ghostSnare" : "softKick", sourceKey: kit.slots[source.j]!.key });
-      else placeholders.set(index, { index, kind: "missing", label: `add ${categoryLabel(slot.ghostOf!)}` });
-    });
-  };
-  place(kitA, 0);
-  if (kitB) place(kitB, 1);
-
-  const ordered = [
-    ...TONAL_ORDER.flatMap((c) => tonal.filter((s) => (s.category ?? "other") === c).sort(byFrequency)),
-    ...leftoverDrums,
-  ];
-
-  // Banks C and D first, then B's free pads, then (only if the project is nearly full) the "missing" pads,
-  // last first, so real sounds always win over placeholders.
-  const free: number[] = [];
-  for (let i = 2 * PADS_PER_BANK; i < PAD_COUNT; i++) free.push(i);
-  if (!kitB) for (let i = PADS_PER_BANK; i < 2 * PADS_PER_BANK; i++) free.push(i);
-  free.push(...[...placeholders.keys()].sort((a, b) => b - a));
-
-  ordered.forEach((s, n) => {
-    const index = free[n];
-    if (index === undefined) return;
-    positions.set(s.key, index);
-    placeholders.delete(index);
+  kit.slots.forEach((s, i) => {
+    if (layout.slots[i].ghostOf) return;
+    if (s) positions.set(s.key, i);
+    else placeholders.set(i, { index: i, kind: "missing", label: `add ${layout.slots[i].label}` });
   });
+  // A ghost slot holds a quieter copy of the kit's own snare or kick (the first one the layout fills, bottom row first).
+  layout.slots.forEach((slot, i) => {
+    if (!slot.ghostOf) return;
+    const source = layout.slots
+      .map((s, j) => ({ s, j }))
+      .filter(({ s, j }) => !s.ghostOf && s.category === slot.ghostOf && kit.slots[j])
+      .sort((a, b) => slotRank(a.j) - slotRank(b.j))[0];
+    if (source) ghosts.push({ index: i, kind: slot.ghostOf === "snare" ? "ghostSnare" : "softKick", sourceKey: kit.slots[source.j]!.key });
+    else placeholders.set(i, { index: i, kind: "missing", label: `add ${categoryLabel(slot.ghostOf!)}` });
+  });
+
+  const ordered = TONAL_ORDER.flatMap((c) => tonal.filter((s) => (s.category ?? "other") === c).sort(byFrequency));
+  const back: number[] = [];
+  for (let i = PAD_COUNT - 1; i >= PADS_PER_BANK; i--) back.push(i);
+  if (ordered.length + leftoverDrums.length <= back.length) {
+    // Room for everyone: melodic sounds from the start of bank B, extra drums from the end of bank D.
+    ordered.forEach((s, n) => positions.set(s.key, PADS_PER_BANK + n));
+    leftoverDrums.forEach((s, n) => positions.set(s.key, back[n]));
+  } else {
+    // Nearly full: one run through banks B to D, then bank A's "missing" pads (last first), so real sounds win over placeholders.
+    const free: number[] = [];
+    for (let i = PADS_PER_BANK; i < PAD_COUNT; i++) free.push(i);
+    free.push(...[...placeholders.keys()].sort((a, b) => b - a));
+    [...ordered, ...leftoverDrums].forEach((s, n) => {
+      const index = free[n];
+      if (index === undefined) return;
+      positions.set(s.key, index);
+      placeholders.delete(index);
+    });
+  }
 
   const taken = new Set([...positions.values(), ...placeholders.keys(), ...ghosts.map((g) => g.index)]);
   for (let index = 0; index < PAD_COUNT; index++) {

@@ -6,9 +6,9 @@ import type { CategoryId } from "./classify";
 export const BUS_MAIN = -1;
 
 /** Names written to the four buses' mixer strips (mixer.json `buses[i].name`), matching CATEGORY_BUS. */
-export const BUS_NAMES = ["Drums", "Bass", "Melodic", "Vocals"];
+export const BUS_NAMES = ["Drums", "Bass", "Melodic", "Vox & FX"];
 
-/** Where each category goes: drums together, bass and melodic apart, vox and FX together. */
+/** Where each category goes: the kit and drum/perc loops together, bass and melodic (with its loops) apart, vox and FX together; unclassified sounds stay on main. */
 export const CATEGORY_BUS: Record<CategoryId, number> = {
   kick: 0,
   snare: 0,
