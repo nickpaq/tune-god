@@ -107,11 +107,44 @@ async function renameBuses(project: ParsedKoalaProject, names: string[]): Promis
 }
 
 /**
+ * Pads that aren't samples (AUv3 plugin pads) aren't shown in the app, so the arrangement knows
+ * nothing about them. Once the sounds are placed, each one moves to the first free pad in the melodic
+ * banks (C, D), or further along if those are full. Any failure leaves that pad where it was. Moves are
+ * added to `arrangement` so recorded notes follow the pad.
+ */
+function movePluginPads(kept: any[], base: number, arrangement: Map<number, number | null>): void {
+  const plugins = kept.filter((p) => p.type !== "sample");
+  if (!plugins.length) return;
+  const occupied = new Set(kept.filter((p) => p.type === "sample").map((p) => Number(p.pad) - base));
+  const free = (from: number, to: number) => {
+    for (let i = from; i < to; i++) if (!occupied.has(i)) return i;
+    return null;
+  };
+  for (const pad of plugins) {
+    const orig = Number(pad.pad) - base;
+    try {
+      if (!Number.isFinite(orig)) continue;
+      const inMelodic = orig >= 32 && orig < 64;
+      // Stays put when already in C/D and not covered by a sound.
+      const to = inMelodic && !occupied.has(orig) ? orig : (free(32, 64) ?? (occupied.has(orig) ? free(0, 64) : orig));
+      if (to === null || to === undefined) continue;
+      occupied.add(to);
+      if (to === orig) continue;
+      pad.pad = typeof pad.pad === "number" ? to + base : String(to + base);
+      arrangement.set(orig, to);
+    } catch {
+      occupied.add(orig);
+    }
+  }
+}
+
+/**
  * Applies the user's pad moves and deletions. Pad entries are renumbered (a pad's settings live in
  * its entry, so they move with it), notes in recorded sequences follow their pad (notes on a
  * deleted pad are dropped), and audio no remaining pad uses is removed from the archive.
  */
 async function applyArrangement(project: ParsedKoalaProject, samplerJson: any, arrangement: Map<number, number | null>): Promise<void> {
+  arrangement = new Map(arrangement);
   const base = project.padBase;
   const kept: any[] = [];
   const deletedIds = new Set<number>();
@@ -129,6 +162,7 @@ async function applyArrangement(project: ParsedKoalaProject, samplerJson: any, a
     pad.pad = typeof pad.pad === "number" ? to + base : String(to + base);
     kept.push(pad);
   }
+  movePluginPads(kept, base, arrangement);
   kept.sort((a, b) => Number(a.pad) - Number(b.pad));
   samplerJson.pads = kept;
 
