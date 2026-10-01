@@ -27,7 +27,7 @@ A sample longer than 60 s makes export very slow, so importing a project that co
 
 ### Loudness balancing ("Balance loudness" + "Normalize now")
 - Every sample is measured with ITU-R BS.1770 K-weighting (the LUFS filter), taking its loudest 200 ms window so short one-shots and long loops compare fairly. `scripts/checkLoudness.ts` checks the meter against the standard's reference values.
-- Files are gain-matched to the same perceived loudness with a **-1 dBFS peak ceiling**. The common level is the highest one at which about 90% of samples fit under the ceiling; the few peakiest are held at the ceiling.
+- Files are gain-matched to the same perceived loudness with a **-1 dBFS peak ceiling**. The common level is the highest one at which about 90% of samples fit under the ceiling; the few peakiest are held at the ceiling. A peak (knob trim included) is also held to within 8 dB of that common level, so short transients like snares and kicks can't peak far above everything else.
 - The **mix** goes on each pad's volume knob as a per-category trim (kick 0 dB, snare and bass -1, clap -2, vox, drum loops and other -3, perc -4, melodic -4, hats -6, cymbals -7, FX -6, perc and melodic loops -5; editable in `src/audio/loudness.ts`). Koala's knob is linear amplitude (`vol = 10^(dB/20)`, verified against a real project), so a knob at 0 dB plays the normalized file at its full level.
 - **Normalize now** renders the same balance for playback, so pad taps are level-matched while you work. With the checkbox on but the button unpressed, balancing happens only at export.
 

@@ -36,6 +36,13 @@ export const CATEGORY_TRIM_DB: Record<CategoryId, number> = {
 /** Fraction of pads that may sit below the common loudness because their peak already reaches the ceiling. */
 const PEAK_LIMITED_FRACTION = 0.1;
 
+/**
+ * Most a sample's peak (knob trim included) may stand above the common loudness, in dB. Loudness is
+ * measured over 200 ms, so a short transient like a snare reads quiet and would otherwise be lifted until
+ * it hit the ceiling, peaking ~12 dB over everything sustained. This holds such peaks to a normal drum crest.
+ */
+const MAX_CREST_DB = 8;
+
 type Biquad = { b0: number; b1: number; b2: number; a1: number; a2: number };
 
 /** BS.1770 stage 1 (head-related high shelf) and stage 2 (RLB high-pass) for any sample rate. */
@@ -153,9 +160,14 @@ export function balanceFromStats(stats: BalanceStats[], ceilingDb: number): Bala
   if (!limits.length) return { gainDb: stats.map(() => 0), knobDb: stats.map(() => 0) };
   limits.sort((a, b) => a - b);
   const target = limits[Math.min(limits.length - 1, Math.floor(limits.length * PEAK_LIMITED_FRACTION))];
+  const knobDb = stats.map((s, i) => (loud[i] === null ? 0 : CATEGORY_TRIM_DB[s.category ?? "other"]));
   return {
-    gainDb: stats.map((_, i) => (loud[i] === null ? 0 : Math.min(target - (loud[i] as number), ceilingDb - peakDb[i]))),
-    knobDb: stats.map((s, i) => (loud[i] === null ? 0 : CATEGORY_TRIM_DB[s.category ?? "other"])),
+    gainDb: stats.map((_, i) =>
+      loud[i] === null
+        ? 0
+        : Math.min(target - (loud[i] as number), ceilingDb - peakDb[i], target + MAX_CREST_DB - knobDb[i] - peakDb[i]),
+    ),
+    knobDb,
   };
 }
 
