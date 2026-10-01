@@ -30,6 +30,8 @@ export interface TunedSample {
   channelData: Float32Array[];
   /** True when the audio length changed (pitch-shifted), so trim points and the pitch knob must be reset. */
   retimed: boolean;
+  /** Frames cut from the front when the project was loaded; the written file starts at the pad's old start point, so its trim points reset (and a loop point moves back by this much). */
+  trimmedFrom?: number;
   /** Gain baked into the file while it is encoded, so no gained copy of the audio is ever held. */
   gainDb?: number;
 }
@@ -82,8 +84,14 @@ export async function buildTunedKoala(
     }
     const t = byId.get(pad.sampleId);
     if (!t) continue;
-    if (!t.retimed) continue;
+    if (!t.retimed && t.trimmedFrom === undefined) continue;
     const frames = t.channelData[0].length;
+    // A loop point is a frame in the old file, so it moves back with the cut.
+    if (typeof pad.loopPoint === "number" && pad.loopPoint >= 0 && t.trimmedFrom !== undefined && !t.retimed) pad.loopPoint = Math.max(0, pad.loopPoint - t.trimmedFrom);
+    if (!t.retimed) {
+      Object.assign(pad, { start: 0, zoomStart: 0, end: frames, zoomEnd: frames });
+      continue;
+    }
     pad.start = 0;
     pad.zoomStart = 0;
     pad.end = frames;

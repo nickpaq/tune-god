@@ -15,6 +15,8 @@ export interface Pad {
   sampleId: number;
   sampleRate: number;
   channelData: Float32Array[];
+  /** Frames cut from the front of the file on load (Koala's start point); set only when the audio was truncated. */
+  trimmedFrom?: number;
   /** Fractional MIDI of the detected root; null = no clear pitch, undefined = still analyzing. */
   detectedMidi?: number | null;
   /** Guessed (or manually chosen) sound category, used for auto-colouring. */

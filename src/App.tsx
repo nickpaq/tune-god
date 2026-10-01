@@ -261,6 +261,9 @@ function App() {
       for (const ref of slots) {
         const decoded = await decodeNative(await koalaPadToFile(project, ref));
         if (token !== loadToken.current) return;
+        // Koala plays only between the pad's start and end points, so the preview and analysis get just that part.
+        const range = trimRangeOf(project, ref.sampleId, decoded.channelData[0].length);
+        if (range) decoded.channelData = decoded.channelData.map((ch) => ch.slice(range.start, range.end));
         // Pads the user moved on a previous visit go back where they were left.
         const at = restore ? restorePads.current[ref.pad]?.position ?? ref.pad : ref.pad;
         const pad: Pad = {
@@ -270,6 +273,7 @@ function App() {
           sampleId: ref.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
+          trimmedFrom: range?.start,
           tune: false,
           semis: 0,
           cents: 0,
@@ -767,11 +771,9 @@ function App() {
         const shift = shiftFor(pad, tunedTarget, a4);
         const retimed = pad.tune && Math.abs(shift) >= 1e-6;
         if (!retimed && !normalize) continue;
-        // Koala's start/end points are cut first, so the repitched file keeps them (and a stretched loop stays in time).
-        const range = retimed ? trimRangeOf(project, pad.sampleId, pad.channelData[0].length) : null;
-        const source = range ? pad.channelData.map((ch) => ch.slice(range.start, range.end)) : pad.channelData;
+        // The pad's audio was already cut to Koala's start/end points on load, so a stretched loop stays in time.
         const channelData = retimed
-          ? limitPeak(await getRenderWorker().resamplePitch(source, semitonesToRatio(shift)))
+          ? limitPeak(await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift)))
           : pad.channelData;
         if (normalize) stats.push(await getRenderWorker().measure({ channelData, sampleRate: pad.sampleRate, category: pad.category }));
         rendered.push({ pad, channelData, retimed });
@@ -786,6 +788,7 @@ function App() {
           sampleRate: r.pad.sampleRate,
           channelData: r.channelData,
           retimed: r.retimed,
+          trimmedFrom: r.pad.trimmedFrom,
           gainDb: gains?.gainDb[i],
         });
       });
