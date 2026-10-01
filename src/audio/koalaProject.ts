@@ -68,3 +68,17 @@ export async function koalaPadToFile(project: ParsedKoalaProject, pad: KoalaPadR
   const blob = await entry.async("blob");
   return new File([blob], pad.fileName, { type: "audio/wav" });
 }
+
+/**
+ * The trim points (in frames) Koala has on a sample's pad, or null when they are missing, invalid
+ * or already cover the whole file. Used to cut the audio down to what the pad actually plays
+ * before it is repitched, so the trim points survive in the new file.
+ */
+export function trimRangeOf(project: ParsedKoalaProject, sampleId: number, totalFrames: number): { start: number; end: number } | null {
+  const pad = (project.samplerJson.pads ?? []).find((p: any) => p.type === "sample" && p.sampleId === sampleId);
+  const start = Math.max(0, Math.round(Number(pad?.start)));
+  const end = Math.min(totalFrames, Math.round(Number(pad?.end)));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end - start < 1) return null;
+  if (start === 0 && end === totalFrames) return null;
+  return { start, end };
+}

@@ -7,6 +7,7 @@ import {
   parseKoalaProject,
   koalaPadToFile,
   isKoalaFile,
+  trimRangeOf,
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
 import { setReferencePitch, startPad, type PadHandle, type PadMode } from "./audio/player";
@@ -766,8 +767,11 @@ function App() {
         const shift = shiftFor(pad, tunedTarget, a4);
         const retimed = pad.tune && Math.abs(shift) >= 1e-6;
         if (!retimed && !normalize) continue;
+        // Koala's start/end points are cut first, so the repitched file keeps them (and a stretched loop stays in time).
+        const range = retimed ? trimRangeOf(project, pad.sampleId, pad.channelData[0].length) : null;
+        const source = range ? pad.channelData.map((ch) => ch.slice(range.start, range.end)) : pad.channelData;
         const channelData = retimed
-          ? limitPeak(await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift)))
+          ? limitPeak(await getRenderWorker().resamplePitch(source, semitonesToRatio(shift)))
           : pad.channelData;
         if (normalize) stats.push(await getRenderWorker().measure({ channelData, sampleRate: pad.sampleRate, category: pad.category }));
         rendered.push({ pad, channelData, retimed });
