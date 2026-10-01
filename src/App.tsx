@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
@@ -185,6 +186,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
   const [routeBuses, setRouteBuses] = useState(saved.routeBuses ?? false);
+  const [autoPlayback, setAutoPlayback] = useState(saved.autoPlayback ?? false);
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
@@ -343,8 +345,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ normalize, spread, autoColor, routeBuses, paletteId, toneOn, a4, bank, selected, keyPc, tunedTarget });
-  }, [normalize, spread, autoColor, routeBuses, paletteId, toneOn, a4, bank, selected, keyPc, tunedTarget]);
+    saveState({ normalize, spread, autoColor, routeBuses, autoPlayback, paletteId, toneOn, a4, bank, selected, keyPc, tunedTarget });
+  }, [normalize, spread, autoColor, routeBuses, autoPlayback, paletteId, toneOn, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -767,13 +769,20 @@ function App() {
       if (routeBuses) {
         for (const p of allPads) buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
       }
+      const playback = new Map<number, PadPlayback>();
+      if (autoPlayback) {
+        for (const p of allPads) {
+          const settings = p.category ? playbackFor(p.category) : undefined;
+          if (settings) playback.set(p.sampleId, settings);
+        }
+      }
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of allPads) {
           if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: labelOf(p) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, placeholders: placeholderList, ghosts: ghostExports });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -814,7 +823,7 @@ function App() {
     (arrangement !== undefined ||
       placeholderList.length > 0 ||
       Object.values(pads).some((p) => p.ghost) ||
-      (normalize || autoColor || routeBuses ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
+      (normalize || autoColor || routeBuses || autoPlayback ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
     analyzing === 0 &&
     !exporting;
   const hasProject = Object.keys(pads).length > 0;
@@ -902,6 +911,10 @@ function App() {
             <label>
               <input type="checkbox" checked={routeBuses} onChange={(e) => setRouteBuses(e.target.checked)} />
               Route pads to buses by sound type
+            </label>
+            <label>
+              <input type="checkbox" checked={autoPlayback} onChange={(e) => setAutoPlayback(e.target.checked)} />
+              Set mute groups, one-shot and release by sound type
             </label>
             <label>
               <input

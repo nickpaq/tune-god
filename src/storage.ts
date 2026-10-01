@@ -23,6 +23,7 @@ export interface SavedState {
   spread?: boolean;
   autoColor?: boolean;
   routeBuses?: boolean;
+  autoPlayback?: boolean;
   paletteId?: string;
   toneOn?: boolean;
   /** A4 reference pitch in Hz (440 = standard). */

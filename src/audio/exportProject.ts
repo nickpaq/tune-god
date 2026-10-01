@@ -1,4 +1,5 @@
 import { applyGainDb } from "./gain";
+import type { PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
@@ -52,9 +53,10 @@ export async function buildTunedKoala(
     arrangement,
     pans,
     colors,
+    playback,
     placeholders,
     ghosts,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[] } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[] } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -66,6 +68,13 @@ export async function buildTunedKoala(
     if (vol !== undefined) pad.vol = vol;
     const bus = buses?.get(pad.sampleId);
     if (bus !== undefined) pad.bus = bus;
+    const play = playback?.get(pad.sampleId);
+    if (play) {
+      if (play.chokeGroup !== undefined) pad.chokeGroup = play.chokeGroup;
+      // Koala writes some booleans as strings; keep whichever style the pad already uses.
+      if (play.oneShot !== undefined) pad.oneshot = typeof pad.oneshot === "boolean" ? play.oneShot : String(play.oneShot);
+      if (play.release !== undefined) pad.release = play.release;
+    }
     const tint = colors?.get(pad.sampleId);
     if (tint) {
       pad.color = tint.color;
