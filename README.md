@@ -38,7 +38,7 @@ A sample longer than 60 s makes export very slow, so importing a project that co
 - **Route pads to buses by sound type** writes each pad's bus: Bus A drums (kick, snare, clap, hats, perc, drum and perc loops), Bus B bass, Bus C melodic (and melodic loops), Bus D vox and FX, Main for Other. It also names the buses *Drums, Bass, Melodic, Vox & FX* in the project's `mixer.json`, keeping each bus's effects and levels. (Koala's bus numbers are A=0 to D=3 and Main=-1. Bus D = 3 is inferred from the pattern; A to C and Main were seen in real projects.)
 
 ### Playback settings
-- **Set mute groups, one-shot and release by sound type** writes Koala's per-pad `chokeGroup`, `oneshot` and `release` on export: hats (open and closed) go to mute group 5 and one-shot on, bass to mute group 6 with one-shot off and a 0.3 s release, other drums (kick, snare, clap, cymbal, perc, vox) to one-shot on, melodic sounds to one-shot off with the same 0.3 s release. Loops, FX and Other are left as they were. Edit `src/audio/padSettings.ts` to change it.
+- **Settings by sound type** writes Koala's per-pad `chokeGroup`, `oneshot` and `release` on export: hats (open and closed) go to mute group 5 and one-shot on, bass to mute group 6 with one-shot off and a 0.3 s release, other drums (kick, snare, clap, cymbal, perc, vox) to one-shot on, melodic sounds to one-shot off with the same 0.3 s release. Loops, FX and Other are left as they were. Edit `src/audio/padSettings.ts` to change it.
 
 ### Stereo spread
 - **Spread melodic pads** gives melodic pads a balanced random pan (pairs at equal and opposite distances up to 40% either side; an odd one stays centred). Bass, drums and the rest stay centred.

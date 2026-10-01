@@ -914,7 +914,7 @@ function App() {
             </label>
             <label>
               <input type="checkbox" checked={autoPlayback} onChange={(e) => setAutoPlayback(e.target.checked)} />
-              Set mute groups, one-shot and release by sound type
+              Settings by sound type
             </label>
             <label>
               <input
