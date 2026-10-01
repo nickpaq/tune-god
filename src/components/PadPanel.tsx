@@ -27,8 +27,6 @@ export interface Pad {
   placeholder?: { kind: "missing" | "empty"; label: string };
   /** Set on a ghost snare or soft kick: a quieter, duller copy of another sound, made when a finger-drumming layout is applied. */
   ghost?: { kind: GhostKind; sourceOrigIndex: number };
-  /** A long or looped/stretched sound: already prepared, so Tune stays off unless the user turns it on. */
-  loop?: boolean;
   tune: boolean;
   /** Set once the user toggles Tune by hand; "Tune all" then leaves this pad's choice alone. */
   tuneLocked?: boolean;

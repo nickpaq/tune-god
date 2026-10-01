@@ -76,9 +76,9 @@ export function categoryIndex(id: CategoryId): number {
   return Math.max(0, CATEGORIES.findIndex((c) => c.id === id));
 }
 
-/** Only pitched categories are tuned by default; drums and everything else are left alone. */
+/** Bass, melodic and melodic loops are tuned by default; drums and everything else are left alone. */
 export function isTunedCategory(id: CategoryId | undefined): boolean {
-  return id === "bass" || id === "melodic";
+  return id === "bass" || id === "melodic" || id === "melodicLoop";
 }
 
 export function categoryLabel(id: CategoryId): string {

@@ -15,7 +15,7 @@ import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
 import { isDrumCategory, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
-import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
+import { emptyPadInBank, movePad, nextEmptyPad, removePad, replaceMisfit } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { LayoutPicker } from "./components/LayoutPicker";
@@ -157,19 +157,9 @@ function limitPeak(channelData: Float32Array[]): Float32Array[] {
 /** A sample longer than this is flagged on import: samples this long make export very slow. */
 const MAX_SAMPLE_SECONDS = 60;
 
-/** Longer than this, a sound is treated as a loop rather than a one-shot, and is not tuned by default. */
-const LOOP_MIN_SECONDS = 4;
-
-/** Loops and anything Koala already loops or stretches have been prepared by the user; only short one-shots get tuned. */
-function isLoopPad(entry: any, frames: number, sampleRate: number): boolean {
-  const on = (v: unknown) => v === true || v === "true";
-  return on(entry?.looping) || on(entry?.stretching) || on(entry?.hasLoopPoint) || frames / sampleRate > LOOP_MIN_SECONDS;
-}
-
-/** A pad's default Tune state: the user's manual choice if locked, else on for short bass/melodic one-shots with a detected pitch. */
-function tuneDefault(locked: boolean | undefined, current: boolean, category: CategoryId | undefined, detectedMidi: number | null | undefined, target: number | null, loop?: boolean): boolean {
+/** A pad's default Tune state: the user's manual choice if locked, else decided by its category: on for Bass and Melodic with a detected pitch. */
+function tuneDefault(locked: boolean | undefined, current: boolean, category: CategoryId | undefined, detectedMidi: number | null | undefined, target: number | null): boolean {
   if (locked) return current;
-  if (loop) return false;
   return target !== null && detectedMidi != null && isTunedCategory(category);
 }
 
@@ -277,11 +267,6 @@ function App() {
           sampleId: ref.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
-          loop: isLoopPad(
-            project.samplerJson.pads?.find((p: any) => p.type === "sample" && p.sampleId === ref.sampleId),
-            decoded.channelData[0].length,
-            decoded.sampleRate,
-          ),
           tune: false,
           semis: 0,
           cents: 0,
@@ -323,7 +308,6 @@ function App() {
                     cat,
                     detectedMidi,
                     tunedTargetRef.current,
-                    cur.loop,
                   ),
                 },
               };
@@ -540,7 +524,17 @@ function App() {
   /** Changes a sound's type. Tune follows the new type unless the user set it by hand. */
   const classifyPad = (pad: Pad, category: CategoryId) => {
     if (pad.category === category) return;
-    patchPad(pad.index, pad.tuneLocked ? { category } : { category, tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget, pad.loop) });
+    const slot = layout.on && pad.index < 16 && !pad.placeholder && !pad.ghost ? layoutById(layout.id).slots[pad.index] : undefined;
+    if (slot && slot.category !== category) {
+      // The sound no longer belongs in its finger-drumming slot: a sound of the slot's type takes its place.
+      recordEdit();
+      setPads((prev) => {
+        const retyped = { ...prev, [pad.index]: { ...prev[pad.index], category, ...(pad.tuneLocked ? {} : { tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) }) } };
+        return replaceMisfit(retyped, pad.index, slot.category, slot.label);
+      });
+      return;
+    }
+    patchPad(pad.index, pad.tuneLocked ? { category } : { category, tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) });
   };
 
   const deletePad = (pad: Pad) => {
@@ -692,7 +686,7 @@ function App() {
     tunedTargetRef.current = pc;
     setPads((prev) =>
       Object.fromEntries(
-        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: tuneDefault(false, false, p.category, p.detectedMidi, pc, p.loop) }]),
+        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: tuneDefault(false, false, p.category, p.detectedMidi, pc) }]),
       ),
     );
   };
