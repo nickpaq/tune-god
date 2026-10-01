@@ -14,7 +14,7 @@ import { buildTunedKoala, downloadBlob, type GhostPadExport, type TunedSample } 
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { isDrumCategory, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad, replaceMisfit } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
@@ -127,17 +127,12 @@ function shiftFor(pad: Pad, target: number | null, a4: number): number {
 /** A sound from the project itself: not a silent placeholder and not a ghost copy the layout made. */
 const isReal = (p: Pad) => !p.placeholder && !p.ghost;
 
-/** Untuned sounds and drums up to this long play whole when tapped; longer ones play only while held. */
-const ONE_SHOT_MAX_SECONDS = 2;
-
 /**
- * Only tuned pitched sounds loop while held, which is what makes the tuning audible. Everything
- * else plays once: a short sound plays to its end, a long one (a loop, FX, a vocal) stops on release.
+ * Preview only (the project's own play settings are untouched). Every pad plays while held and fades
+ * out smoothly on release; bass, melodic and melodic loops also loop for as long as they are held.
  */
 function padMode(pad: Pad): PadMode {
-  if (pad.tune && !isDrumCategory(pad.category)) return "loop";
-  const seconds = (pad.channelData[0]?.length ?? 0) / pad.sampleRate;
-  return seconds <= ONE_SHOT_MAX_SECONDS ? "oneShot" : "hold";
+  return isTunedCategory(pad.category) ? "loop" : "hold";
 }
 
 /** A remembered category, brought up to date. The old single "hat" did not say open or closed, so the fresh guess decides. */
@@ -208,6 +203,8 @@ function App() {
   const [expanded, setExpanded] = useState(false);
   const dragRef = useRef<{ from: number; x0: number; y0: number; active: boolean; hover: string; timer: number | null } | null>(null);
   const releasePad = useRef<Map<number, PadHandle>>(new Map());
+  /** The sample dropped on HOLD; it loops until any pad is pressed. */
+  const holdVoice = useRef<PadHandle | null>(null);
   const tunedTargetRef = useRef<number | null>(saved.tunedTarget ?? null);
   /** Per-pad choices from the last visit, applied as each pad finishes analysis. */
   const restorePads = useRef<Record<number, SavedPad>>(saved.pads ?? {});
@@ -554,6 +551,8 @@ function App() {
     setSelected(index);
     setPadView(pad.tune ? "tune" : "swap");
     if (pad.placeholder) return; // silent: nothing to play
+    holdVoice.current?.release();
+    holdVoice.current = null;
     releasePad.current.get(index)?.release();
     releasePad.current.set(
       index,
@@ -652,9 +651,18 @@ function App() {
 
   const onPadUp = (index: number) => {
     const d = dragRef.current;
-    if (d?.active) dropOn(d.from, d.hover);
+    if (d?.active && d.hover === "hold:") holdPad(d.from);
+    else if (d?.active) dropOn(d.from, d.hover);
     else liftPad(index);
     endDrag();
+  };
+
+  /** Plays a pad's sample on a loop, untoned, until any pad is pressed. */
+  const holdPad = (index: number) => {
+    const pad = pads[index];
+    if (!pad || pad.placeholder) return;
+    holdVoice.current?.release();
+    holdVoice.current = startPad(-2, audioOf(pad), pad.sampleRate, shiftFor(pad, tunedTarget, a4), null, "loop");
   };
 
   const liftPad = (index: number) => {
@@ -1038,6 +1046,11 @@ function App() {
 
         <section className="pink" style={box(LEFT, 806, CONTENT_W, 169)}>
           <Keyboard selected={keyPc} onSelect={selectKey} />
+          {drag && (
+            <div className={`hold-zone${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
+              HOLD
+            </div>
+          )}
         </section>
 
         {Array.from({ length: 16 }, (_, slot) => {
@@ -1078,6 +1091,9 @@ function App() {
               onPointerCancel={() => {
                 liftPad(index);
                 endDrag();
+              }}
+              onLostPointerCapture={() => {
+                if (dragRef.current) onPadUp(index);
               }}
               aria-label={`Pad ${slot + 1}`}
             >

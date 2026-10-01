@@ -371,6 +371,37 @@
   padding: 1.5cqw 2cqw;
 }
 
+.pink {
+  position: relative;
+}
+
+.hold-zone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 0.3cqw solid var(--line);
+  font-size: 6cqw;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  z-index: 5;
+  animation: hold-fade 0.2s ease-out;
+}
+
+.hold-zone--target {
+  background: var(--cyan);
+  color: var(--on-cyan);
+}
+
+@keyframes hold-fade {
+  from {
+    opacity: 0;
+  }
+}
+
 .keyboard {
   position: relative;
   flex: 1;

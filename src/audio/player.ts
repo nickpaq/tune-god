@@ -33,6 +33,8 @@ const RELEASE_HOLD = 0.03;
 const RELEASE_FADE = 0.15;
 /** Quick fade used when a retrigger cuts off the previous hit of the same pad. */
 const CUT_FADE = 0.008;
+/** The reference tone always fades out over exactly this long after release. */
+const TONE_FADE = 0.15;
 const MAX_TONE_GAIN = 0.5;
 
 export interface PadHandle {
@@ -60,19 +62,17 @@ function rms(channelData: Float32Array[]): number {
   return count ? Math.sqrt(sum / count) : 0;
 }
 
-/** How a pad sounds when tapped; see `startPad`. */
-export type PadMode = "loop" | "hold" | "oneShot";
+/** How a pad previews: "loop" repeats while held (melodic sounds); "hold" plays once and is cut on release. */
+export type PadMode = "loop" | "hold";
 
 /**
- * Starts a pad looping for as long as it is held, cutting off any earlier hit of the same pad
- * (monophonic). With `withTone`, a sine on `tonePitchClass` plays at the sample's RMS level.
- * The shift is applied as a playback-rate change (a resample), which is exactly how the tuned
- * sample would sound once baked into the project. Returns a release function that holds
- * briefly, then fades both voices out. How it plays depends on `mode`: "loop" repeats
- * while held; "hold" plays once from the start and is cut on release; "oneShot" plays the whole
- * sample once, ignoring release (only a retrigger of the same pad cuts it). Only "loop" sounds the tone.
+ * Starts a pad for as long as it is held, cutting off any earlier hit of the same pad (monophonic).
+ * Preview only: nothing here touches the project's own play settings. The shift is applied as a
+ * playback-rate change (a resample), exactly how the tuned sample would sound once baked in.
+ * With a tone pitch class, a sine plays at the sample's RMS level on its own gain, so it always
+ * decays at the fixed TONE_FADE rate however long or short the sample is. Release holds briefly,
+ * then fades both voices out smoothly.
  */
-
 export function startPad(
   pad: number,
   channelData: Float32Array[],
@@ -83,7 +83,6 @@ export function startPad(
   /** Called when a non-looping sound plays to its end on its own (not when it is released or cut off). */
   onEnd?: () => void,
 ): PadHandle {
-  const oneShot = mode === "oneShot";
   const ctx = readyContext();
   activePads.get(pad)?.stop(0, CUT_FADE);
 
@@ -96,26 +95,31 @@ export function startPad(
   source.connect(gain);
 
   let osc: OscillatorNode | null = null;
-  if (tonePitchClass !== null && mode === "loop") {
+  let toneGain: GainNode | null = null;
+  if (tonePitchClass !== null) {
     osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = midiToFrequency(60 + tonePitchClass, a4Reference);
-    const toneGain = ctx.createGain();
+    toneGain = ctx.createGain();
     // A sine of amplitude a has RMS a / sqrt(2), so this matches the sample's RMS.
     toneGain.gain.value = Math.min(MAX_TONE_GAIN, rms(channelData) * Math.SQRT2);
     osc.connect(toneGain).connect(gain);
     osc.start();
   }
   source.start();
-  if (mode !== "loop") {
-    source.onended = () => {
-      gain.disconnect();
-      if (activePads.get(pad) === voice) activePads.delete(pad);
-      onEnd?.();
-    };
-  }
 
   let stopped = false;
+  const finish = () => {
+    gain.disconnect();
+    osc?.stop();
+    if (activePads.get(pad) === voice) activePads.delete(pad);
+  };
+  source.onended = () => {
+    // A sample ending on its own leaves only the tone (if any), which keeps sounding until release.
+    if (!osc) finish();
+    onEnd?.();
+  };
+
   const voice: ActivePad = {
     gain,
     stop: (hold, fade) => {
@@ -126,19 +130,25 @@ export function startPad(
       gain.gain.setValueAtTime(gain.gain.value, t);
       gain.gain.setValueAtTime(gain.gain.value, t + hold);
       gain.gain.linearRampToValueAtTime(0, t + hold + fade);
-      source.stop(t + hold + fade + 0.02);
-      osc?.stop(t + hold + fade + 0.02);
-      source.onended = () => {
-        gain.disconnect();
-        if (activePads.get(pad) === voice) activePads.delete(pad);
-      };
+      if (toneGain) {
+        // The tone's decay is its own and fixed, so it is identical on every pad.
+        toneGain.gain.cancelScheduledValues(t);
+        toneGain.gain.setValueAtTime(toneGain.gain.value, t);
+        toneGain.gain.setValueAtTime(toneGain.gain.value, t + hold);
+        toneGain.gain.linearRampToValueAtTime(0, t + hold + TONE_FADE);
+      }
+      const end = t + hold + Math.max(fade, TONE_FADE) + 0.02;
+      try { source.stop(end); } catch { /* already ended */ }
+      osc?.stop(end);
+      if (osc) {
+        source.onended = null;
+        osc.onended = finish;
+      } else source.onended = finish;
     },
   };
   activePads.set(pad, voice);
   return {
-    release: () => {
-      if (!oneShot) voice.stop(RELEASE_HOLD, RELEASE_FADE);
-    },
+    release: () => voice.stop(RELEASE_HOLD, RELEASE_FADE),
     setShift: (semitones) =>
       source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
   };
