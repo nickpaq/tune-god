@@ -1032,6 +1032,10 @@ function App() {
             </div>
           ) : (
             <label className="dropzone">
+              <svg className="dropzone__ants" aria-hidden="true">
+                <rect className="dropzone__ants-base" />
+                <rect className="dropzone__ants-dash" />
+              </svg>
               <input
                 type="file"
                 accept=".koala"
