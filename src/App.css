@@ -253,13 +253,14 @@
 
 .dropzone__ants-dash {
   stroke: #fff;
-  stroke-dasharray: 2cqw 2cqw;
+  /* pathLength normalizes the outline to 280 units: 70 whole dash+gap periods, so the seam never leaves a cut-off dash. */
+  stroke-dasharray: 2 2;
   animation: marching-ants 0.8s linear infinite;
 }
 
 @keyframes marching-ants {
   to {
-    stroke-dashoffset: -4cqw;
+    stroke-dashoffset: -4;
   }
 }
 

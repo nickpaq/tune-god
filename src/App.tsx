@@ -1033,8 +1033,8 @@ function App() {
           ) : (
             <label className="dropzone">
               <svg className="dropzone__ants" aria-hidden="true">
-                <rect className="dropzone__ants-base" />
-                <rect className="dropzone__ants-dash" />
+                <rect className="dropzone__ants-base" pathLength="280" />
+                <rect className="dropzone__ants-dash" pathLength="280" />
               </svg>
               <input
                 type="file"
