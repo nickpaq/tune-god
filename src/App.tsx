@@ -201,7 +201,10 @@ function App() {
   const [hover, setHover] = useState("");
   /** The all-pads view that opens when a drag dwells over the bank buttons. */
   const [expanded, setExpanded] = useState(false);
-  const dragRef = useRef<{ from: number; x0: number; y0: number; active: boolean; hover: string; timer: number | null } | null>(null);
+  /** One record per finger/pointer holding a pad, so a second touch never disturbs the first. */
+  const drags = useRef<Map<number, { from: number; x0: number; y0: number; active: boolean; hover: string; timer: number | null }>>(new Map());
+  /** Always the latest pointer-release handler, for the window listeners that guarantee every release is seen. */
+  const finishPointer = useRef<(pointerId: number, cancelled: boolean) => void>(() => {});
   const releasePad = useRef<Map<number, PadHandle>>(new Map());
   /** The sample dropped on HOLD; it loops until any pad is pressed. */
   const holdVoice = useRef<PadHandle | null>(null);
@@ -595,9 +598,8 @@ function App() {
     return el ? `${el.dataset.drop}:${el.dataset.index ?? ""}` : "";
   };
 
-  const endDrag = () => {
-    if (dragRef.current?.timer) clearTimeout(dragRef.current.timer);
-    dragRef.current = null;
+  const endDrag = (d?: { timer: number | null }) => {
+    if (d?.timer) clearTimeout(d.timer);
     setDrag(null);
     setExpanded(false);
     setHover("");
@@ -627,13 +629,17 @@ function App() {
 
   const onPadDown = (e: React.PointerEvent<HTMLButtonElement>, index: number) => {
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { from: index, x0: e.clientX, y0: e.clientY, active: false, hover: "", timer: null };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* the window listeners below still see the release */
+    }
+    drags.current.set(e.pointerId, { from: index, x0: e.clientX, y0: e.clientY, active: false, hover: "", timer: null });
     pressPad(index);
   };
 
   const onPadMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    const d = dragRef.current;
+    const d = drags.current.get(e.pointerId);
     if (!d) return;
     if (!d.active) {
       if (!pads[d.from] || Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < DRAG_THRESHOLD_PX) return;
@@ -649,13 +655,37 @@ function App() {
     d.timer = target.startsWith("bank:") ? window.setTimeout(() => setExpanded(true), DWELL_MS) : null;
   };
 
-  const onPadUp = (index: number) => {
-    const d = dragRef.current;
-    if (d?.active && d.hover === "hold:") holdPad(d.from);
-    else if (d?.active) dropOn(d.from, d.hover);
-    else liftPad(index);
-    endDrag();
+  /** Ends one pointer's hold. The pad always stops, unless that pointer dragged it onto HOLD. */
+  finishPointer.current = (pointerId, cancelled) => {
+    const d = drags.current.get(pointerId);
+    if (!d) return;
+    drags.current.delete(pointerId);
+    liftPad(d.from);
+    if (d.active && !cancelled) {
+      if (d.hover === "hold:") holdPad(d.from);
+      else dropOn(d.from, d.hover);
+    }
+    endDrag(d);
   };
+
+  // Releases are caught on the window, so a lost capture, a re-render, or another pad being tapped can't strand a sound.
+  useEffect(() => {
+    const up = (e: PointerEvent) => finishPointer.current(e.pointerId, e.type === "pointercancel");
+    const releaseAll = () => {
+      for (const id of [...drags.current.keys()]) finishPointer.current(id, true);
+    };
+    const hidden = () => document.hidden && releaseAll();
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    window.addEventListener("blur", releaseAll);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      window.removeEventListener("blur", releaseAll);
+      document.removeEventListener("visibilitychange", hidden);
+    };
+  }, []);
 
   /** Plays a pad's sample on a loop, untoned, until any pad is pressed. */
   const holdPad = (index: number) => {
@@ -1091,14 +1121,7 @@ function App() {
               data-index={index}
               onPointerDown={(e) => onPadDown(e, index)}
               onPointerMove={onPadMove}
-              onPointerUp={() => onPadUp(index)}
-              onPointerCancel={() => {
-                liftPad(index);
-                endDrag();
-              }}
-              onLostPointerCapture={() => {
-                if (dragRef.current) onPadUp(index);
-              }}
+              onContextMenu={(e) => e.preventDefault()}
               aria-label={`Pad ${slot + 1}`}
             >
               {pad && (pad.placeholder || pad.ghost || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
