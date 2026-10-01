@@ -43,6 +43,10 @@ const PEAK_LIMITED_FRACTION = 0.1;
  */
 const MAX_CREST_DB = 8;
 
+/** Extra dB a category sits above the common loudness, and extra peak room to get there (hip-hop: the kick leads). */
+const LOUDNESS_BONUS_DB: Partial<Record<CategoryId, number>> = { kick: 3 };
+const CREST_BONUS_DB: Partial<Record<CategoryId, number>> = { kick: 5 };
+
 type Biquad = { b0: number; b1: number; b2: number; a1: number; a2: number };
 
 /** BS.1770 stage 1 (head-related high shelf) and stage 2 (RLB high-pass) for any sample rate. */
@@ -165,7 +169,11 @@ export function balanceFromStats(stats: BalanceStats[], ceilingDb: number): Bala
     gainDb: stats.map((_, i) =>
       loud[i] === null
         ? 0
-        : Math.min(target - (loud[i] as number), ceilingDb - peakDb[i], target + MAX_CREST_DB - knobDb[i] - peakDb[i]),
+        : Math.min(
+            target + (LOUDNESS_BONUS_DB[stats[i].category!] ?? 0) - (loud[i] as number),
+            ceilingDb - peakDb[i],
+            target + MAX_CREST_DB + (CREST_BONUS_DB[stats[i].category!] ?? 0) - knobDb[i] - peakDb[i],
+          ),
     ),
     knobDb,
   };
