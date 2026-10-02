@@ -56,7 +56,7 @@ export function ClassifierDrawer({
   const chosen = pad?.category;
   return (
     <div className="drawer drawer--types" role="region" aria-label="Sound type">
-      <div className="drawer__hint">{pad ? `Pad ${(pad.index % 16) + 1} · ${pad.name}` : "Tap a pad to choose its sound type"}</div>
+      {!pad && <div className="drawer__hint">Tap a pad to choose its sound type</div>}
       <div className={`faceplates${chosen ? " faceplates--chosen" : ""}`}>
         {PLATES.map((row, r) => (
           <div key={r} className="faceplates__row">

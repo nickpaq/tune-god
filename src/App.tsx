@@ -15,7 +15,7 @@ import { buildTunedKoala, downloadBlob, type GhostPadExport, type TunedSample } 
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { CATEGORIES, categoryIndex, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad, replaceMisfit } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
@@ -1140,7 +1140,10 @@ function App() {
                   aria-label={`Pad ${slot + 1}`}
                 >
                   {pad && (pad.placeholder || pad.ghost || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
-                  <span className="pad__number">{slot + 1}</span>
+                  <span className="pad__number">
+                    {slot + 1}
+                    {pad && isReal(pad) && pad.category ? ` ${CATEGORIES[categoryIndex(pad.category)].short}` : ""}
+                  </span>
                 </button>
               );
             })}

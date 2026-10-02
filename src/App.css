@@ -623,6 +623,9 @@
   line-height: 1;
   color: var(--ink3);
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
 
