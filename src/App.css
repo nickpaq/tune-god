@@ -867,7 +867,7 @@
   white-space: nowrap;
 }
 
-/* ---- sound type faceplates: dark recessed plates of neutral keys, each with a small light in its type's colour ---- */
+/* ---- sound type faceplates: black panels of coloured rocker tabs, like an organ's ---- */
 .faceplates {
   flex: 1;
   min-height: 0;
@@ -883,80 +883,65 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   grid-auto-rows: 1fr;
-  gap: 1.2cqw;
+  /* the tabs sit almost edge to edge, as on the organ */
+  gap: 1.2cqw 0.6cqw;
   padding: 1.2cqw;
   border-radius: calc(var(--r-key) + 1.2cqw);
-  background: linear-gradient(#3a3832, #2e2c28);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.35);
+  background: linear-gradient(#232220, #161514);
+  /* a thin brushed-gold trim around each panel */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 0 0.35cqw #bfae7f, 0 0 0 0.5cqw rgba(0, 0, 0, 0.35), 0 1px 0 0.5cqw rgba(255, 255, 255, 0.3);
 }
 
 .faceplate:last-child {
   flex: 1 1 2.4cqw;
 }
 
-/* A moulded key cap: lit from above, a hard contact edge below and a soft shadow onto the plate. */
+/*
+ * An organ's rocker tab: translucent coloured plastic, lit a little through its top face, with a glossy highlight along
+ * the top edge and a darker lip along the bottom where it pivots, throwing a hard shadow onto the black panel.
+ */
 .type-button {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  gap: 1cqw;
   min-width: 0;
   min-height: 0;
-  padding: 0 0.4cqw;
+  padding: 0 0.4cqw 1.6cqw;
   border: 0;
-  border-radius: var(--r-key);
-  background: var(--cap);
-  color: var(--ink);
-  font-size: 2.3cqw;
+  border-radius: 0.8cqw;
+  background: linear-gradient(rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.06) 32%, rgba(255, 255, 255, 0) 70%), var(--c);
+  font-size: 2.2cqw;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
-  box-shadow: var(--cap-shadow), 0 2px 3px rgba(0, 0, 0, 0.25);
-  transition: background 0.2s, box-shadow 0.2s, transform 0.08s;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -0.7cqw 0 rgba(0, 0, 0, 0.14),
+    0 0.6cqw 0 rgba(0, 0, 0, 0.55),
+    0 1cqw 1.4cqw rgba(0, 0, 0, 0.5);
+  transition: filter 0.2s, box-shadow 0.15s, transform 0.08s, opacity 0.2s;
 }
 
 .type-button:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0.5px 0 #7c7664, 0 1px 1px rgba(0, 0, 0, 0.5);
+  transform: translateY(0.4cqw);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -0.3cqw 0 rgba(0, 0, 0, 0.2), 0 0.2cqw 0 rgba(0, 0, 0, 0.55);
 }
 
 .type-button:disabled {
   cursor: default;
-  color: var(--ink3);
 }
 
-/* The type's light: a small lens in its palette colour, set into the cap above the label. */
-.type-button__led {
-  width: 4.6cqw;
-  height: 1.1cqw;
-  border-radius: 0.55cqw;
-  background: var(--c);
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 0 1cqw color-mix(in srgb, var(--c) 55%, transparent);
-  transition: opacity 0.2s, box-shadow 0.2s;
-}
-
-.type-button:disabled .type-button__led,
-.faceplates--chosen .type-button:not(.type-button--on) .type-button__led {
-  opacity: 0.35;
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.3);
-}
-
-/* The chosen type is latched down and backlit in its colour. */
+/* The chosen tab is rocked down and lit from behind: brighter, glowing onto the panel, with a lit line along its top. */
 .type-button--on {
-  transform: translateY(1px);
-  background: linear-gradient(color-mix(in srgb, var(--c) 28%, #fffdf5), color-mix(in srgb, var(--c) 42%, #e6e0cc));
+  transform: translateY(0.4cqw);
+  filter: brightness(1.12) saturate(1.08);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 0 1.6cqw color-mix(in srgb, var(--c) 45%, transparent),
-    0 0.5px 0 #7c7664,
-    0 0 2.4cqw color-mix(in srgb, var(--c) 50%, transparent);
-}
-
-.type-button--on .type-button__led {
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.4), 0 0 1.6cqw 0.2cqw var(--c);
+    inset 0 0.5cqw 0 rgba(255, 255, 255, 0.85),
+    inset 0 0 2.4cqw rgba(255, 255, 255, 0.35),
+    0 0.2cqw 0 rgba(0, 0, 0, 0.55),
+    0 0 3cqw 0.4cqw color-mix(in srgb, var(--c) 75%, transparent);
 }
 
 .drawer__foot {

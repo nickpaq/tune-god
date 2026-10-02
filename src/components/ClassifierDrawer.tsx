@@ -1,13 +1,13 @@
 import { CATEGORIES, type CategoryId } from "../audio/classify";
-import { colorFor, type Palette } from "../audio/palettes";
+import { colorFor, textColorOn, type Palette } from "../audio/palettes";
 import type { Pad } from "./PadPanel";
 import { PLATES } from "./typePlates";
 
 const SHORT = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.short])) as Record<CategoryId, string>;
 
 /**
- * Drawer that slides down over the screen and classifies the selected pad. Every light is on until a type is chosen;
- * then the chosen key latches down, backlit in its colour, and the other lights dim.
+ * Drawer that slides down over the screen and classifies the selected pad. The types are coloured rocker tabs on a
+ * black panel, like an organ's; the chosen one latches down and lights up, and the others dim a little.
  */
 export function ClassifierDrawer({
   open,
@@ -38,23 +38,25 @@ export function ClassifierDrawer({
         <span>Sound type</span>
         <span>{pad ? `Pad ${(pad.index % 16) + 1}` : "Tap a pad"}</span>
       </div>
-      <div className={`faceplates${chosen ? " faceplates--chosen" : ""}`}>
+      <div className="faceplates">
         {PLATES.map((plate) => (
           <div key={plate.name} className="faceplate" aria-label={plate.name}>
-            {plate.ids.map((id) => (
-              <button
-                key={id}
-                className={`type-button${chosen === id ? " type-button--on" : ""}`}
-                style={{ ["--c" as string]: colorFor(palette, id) }}
-                disabled={!pad}
-                aria-pressed={chosen === id}
-                aria-label={CATEGORIES.find((c) => c.id === id)?.label}
-                onClick={() => pad && onClassify(pad, id)}
-              >
-                <span className="type-button__led" aria-hidden="true" />
-                {SHORT[id]}
-              </button>
-            ))}
+            {plate.ids.map((id) => {
+              const c = colorFor(palette, id);
+              return (
+                <button
+                  key={id}
+                  className={`type-button${chosen === id ? " type-button--on" : ""}`}
+                  style={{ ["--c" as string]: c, color: textColorOn(c) }}
+                  disabled={!pad}
+                  aria-pressed={chosen === id}
+                  aria-label={CATEGORIES.find((cat) => cat.id === id)?.label}
+                  onClick={() => pad && onClassify(pad, id)}
+                >
+                  {SHORT[id]}
+                </button>
+              );
+            })}
           </div>
         ))}
       </div>

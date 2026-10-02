@@ -5,6 +5,8 @@ export interface Palette {
   name: string;
   /** One hex per base tone, in TONES order: kick, snare and clap, hats, perc and vox, fx, bass, melodic, other, drum and perc loops, melodic loop. */
   colors: string[];
+  /** Hand-picked colours for every sound type, used in place of shading the base tones. */
+  categories?: Record<CategoryId, string>;
 }
 
 /*
@@ -125,9 +127,42 @@ function build(spec: PaletteSpec): Palette {
   };
 }
 
-export const PALETTES: Palette[] = SPECS.map(build);
+/** How many shades a category sits from its tone's base colour (0 = the base itself). */
+const SHADE: Partial<Record<CategoryId, number>> = { clap: 1, openHat: 1, cymbal: 2, vox: 1, percLoop: 1 };
+/**
+ * Organ: the rocker tabs of a 1970s home organ, translucent plastic in smooth runs on a black panel. Drums run from red
+ * through orange into yellow (kick, snare and clap along the red end, hats along the yellow end), loops are the greens,
+ * and the melodic sounds, bass and the rest run from pink through orchid and indigo to slate. Picked by hand from a
+ * photo of the panel and lifted a little, since the photo is underexposed.
+ */
+const ORGAN: Record<CategoryId, string> = {
+  kick: "#DE3B1A",
+  snare: "#E3541C",
+  clap: "#E86E20",
+  closedHat: "#EEBA12",
+  openHat: "#E9A20E",
+  cymbal: "#F3D25A",
+  vox: "#F0A66E",
+  perc: "#E7860F",
+  drumLoop: "#2E9A4B",
+  percLoop: "#4DB36E",
+  melodic: "#E2919A",
+  melodicLoop: "#C88BA2",
+  bass: "#57517A",
+  fx: "#9A7390",
+  other: "#44444E",
+};
 
-export const DEFAULT_PALETTE_ID = "koala";
+const organ: Palette = {
+  id: "organ",
+  name: "Organ",
+  colors: TONES.map((t) => ORGAN[(Object.keys(CATEGORY_TONE) as CategoryId[]).find((c) => CATEGORY_TONE[c] === t && !SHADE[c])!]),
+  categories: ORGAN,
+};
+
+export const PALETTES: Palette[] = [organ, ...SPECS.map(build)];
+
+export const DEFAULT_PALETTE_ID = "organ";
 
 export function paletteById(id: string | null | undefined): Palette {
   return PALETTES.find((p) => p.id === id) ?? PALETTES[0];
@@ -138,8 +173,6 @@ export function toneColor(palette: Palette, tone: ToneId): string {
   return palette.colors[TONES.indexOf(tone)] ?? palette.colors[palette.colors.length - 1];
 }
 
-/** How many shades a category sits from its tone's base colour (0 = the base itself). */
-const SHADE: Partial<Record<CategoryId, number>> = { clap: 1, openHat: 1, cymbal: 2, vox: 1, percLoop: 1 };
 /** OKLCH lightness moved per shade. */
 const SHADE_STEP = 0.085;
 
@@ -152,6 +185,7 @@ export function shade(hex: string, steps: number): string {
 
 /** A category's pad colour: its tone's base colour, shaded so related sounds (snare and clap) read as family. */
 export function colorFor(palette: Palette, category: CategoryId): string {
+  if (palette.categories) return palette.categories[category];
   return shade(toneColor(palette, CATEGORY_TONE[category]), SHADE[category] ?? 0);
 }
 
