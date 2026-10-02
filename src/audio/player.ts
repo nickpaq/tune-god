@@ -35,7 +35,7 @@ const RELEASE_FADE = 0.15;
 const CUT_FADE = 0.008;
 /** The reference tone always fades out over exactly this long after release. */
 const TONE_FADE = 0.15;
-const MAX_TONE_GAIN = 0.5;
+const MAX_TONE_GAIN = 0.7;
 
 export interface PadHandle {
   /** Holds briefly, then fades the pad (and tone) out. */
@@ -51,13 +51,25 @@ interface ActivePad {
 
 const activePads = new Map<number, ActivePad>();
 
-/** RMS over all channels; used to level-match the reference tone to the sample. */
+/** Frames quieter than this (relative to the sample's peak) are silence or tail, not the sound itself. */
+const GATE_DB = -40;
+
+/**
+ * RMS over all channels of the part of the sample you actually hear; used to level-match the reference tone.
+ * Silence and quiet tails are left out, since averaging them in would drag a short hit's level (and the tone) down.
+ */
 function rms(channelData: Float32Array[]): number {
+  let peak = 0;
+  for (const data of channelData) for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
+  const gate = peak * 10 ** (GATE_DB / 20);
   let sum = 0;
   let count = 0;
   for (const data of channelData) {
-    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-    count += data.length;
+    for (let i = 0; i < data.length; i++) {
+      if (Math.abs(data[i]) < gate) continue;
+      sum += data[i] * data[i];
+      count++;
+    }
   }
   return count ? Math.sqrt(sum / count) : 0;
 }
