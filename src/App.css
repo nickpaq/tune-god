@@ -688,9 +688,25 @@
   pointer-events: none;
 }
 
+/* Ink that is not fully opaque: the lit plastic shows through the print, and a hair of highlight on the lower edge of each stroke makes it read as printed. */
 .pad__number > span {
-  color: #5a5546;
+  color: rgba(70, 64, 48, 0.62);
   mix-blend-mode: multiply;
+  text-shadow: 0 0.4px 0 rgba(255, 255, 255, 0.45), 0 0 0.6px rgba(70, 64, 48, 0.5);
+}
+
+/* The pad's light falls across the lettering too, on top of the ink, so the print takes on the glow instead of sitting over it. */
+.pad--loaded .pad__number::after {
+  content: "";
+  position: absolute;
+  left: -3cqw;
+  right: -3cqw;
+  top: -2.4cqw;
+  bottom: -2cqw;
+  background: radial-gradient(ellipse 70% 100% at 50% 0, color-mix(in srgb, var(--c) 70%, #fff), transparent 85%);
+  mix-blend-mode: screen;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .pad--dragging {
