@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CATEGORIES, CATEGORY_TONE, TONES } from "./classify";
-import { PALETTES, colorFor, toneColor } from "./palettes";
+import { PALETTES, colorFor, hexToOklch, oklchToHex, toneColor } from "./palettes";
 
 describe("palettes", () => {
   it("hold one colour per base tone", () => {
@@ -21,6 +21,25 @@ describe("palettes", () => {
       expect(colorFor(p, "openHat")).not.toBe(colorFor(p, "closedHat"));
       expect(colorFor(p, "vox")).not.toBe(colorFor(p, "perc"));
       for (const c of CATEGORIES) expect(colorFor(p, c.id)).toMatch(/^#[0-9A-F]{6}$/i);
+    }
+  });
+
+  it("keeps every type's colour visibly distinct from every other type's in the colour palettes", () => {
+    const lab = (hex: string) => {
+      const [l, c, h] = hexToOklch(hex);
+      return [l, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180)];
+    };
+    for (const p of PALETTES.filter((p) => p.id !== "grayscale")) {
+      const colors = CATEGORIES.map((c) => lab(colorFor(p, c.id)));
+      for (let i = 0; i < colors.length; i++)
+        for (let j = i + 1; j < colors.length; j++) expect(Math.hypot(...colors[i].map((v, k) => v - colors[j][k]))).toBeGreaterThan(0.025);
+    }
+  });
+
+  it("round-trips OKLCH", () => {
+    for (const hex of ["#FF0000", "#00AAAC", "#7A7A7A", "#E8D66D"]) {
+      const [l, c, h] = hexToOklch(hex);
+      expect(oklchToHex(l, c, h)).toBe(hex);
     }
   });
 

@@ -1,6 +1,15 @@
-import { PALETTES } from "../audio/palettes";
+import { CATEGORIES } from "../audio/classify";
+import { PALETTES, colorFor } from "../audio/palettes";
+import { PLATES } from "./typePlates";
 
-/** Centered popup listing every palette as a row of swatches, one per base tone; tap one to choose it. */
+/** Every sound type in the order the sound type drawer lays them out: five columns, drums on the top two rows. */
+const TYPES = PLATES.flatMap((plate) => plate.ids);
+const LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.label]));
+
+/**
+ * Centered popup listing every palette. Each one is previewed as the sound type drawer's 5 x 3 grid, so you see each
+ * colour where it will land; tap one to choose it.
+ */
 export function PalettePicker({
   selectedId,
   onSelect,
@@ -24,12 +33,12 @@ export function PalettePicker({
             ✕
           </button>
         </div>
-        <div className="palette-modal__key">Kick · Snare/Clap · Hats · Perc/Vox · FX · Bass · Melodic · Other · Drum/Perc loops · Melodic loop</div>
         <div className="palette-modal__list">
           {PALETTES.map((p) => (
             <button
               key={p.id}
               className={`palette-row${p.id === selectedId ? " palette-row--selected" : ""}`}
+              aria-pressed={p.id === selectedId}
               onClick={() => {
                 onSelect(p.id);
                 onClose();
@@ -37,8 +46,8 @@ export function PalettePicker({
             >
               <span className="palette-row__name">{p.name}</span>
               <span className="palette-row__swatches">
-                {p.colors.map((c, i) => (
-                  <span key={i} style={{ background: c }} />
+                {TYPES.map((id) => (
+                  <span key={id} title={LABEL[id]} style={{ background: colorFor(p, id) }} />
                 ))}
               </span>
             </button>

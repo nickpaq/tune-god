@@ -1019,17 +1019,15 @@ function App() {
             <button className="menu__button" disabled={!hasProject && !loading} onClick={clearProject}>
               Clear project
             </button>
-            {autoColor && (
-              <button
-                className="menu__button"
-                onClick={() => {
-                  setPaletteOpen(true);
-                  setMenuOpen(false);
-                }}
-              >
-                Color palette: {palette.name}
-              </button>
-            )}
+            <button
+              className="menu__button"
+              onClick={() => {
+                setPaletteOpen(true);
+                setMenuOpen(false);
+              }}
+            >
+              Color palette: {palette.name}
+            </button>
           </div>
         )}
 
@@ -1266,7 +1264,7 @@ function App() {
 
         {layoutPickerOpen && (
           <LayoutPicker
-            palette={autoColor ? palette : paletteById(DEFAULT_PALETTE_ID)}
+            palette={palette}
             selectedId={layout.id}
             onSelect={chooseLayout}
             onClose={() => setLayoutPickerOpen(false)}
