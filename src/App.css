@@ -536,11 +536,18 @@
 }
 
 /* ---- pads and the drawers that cover them ---- */
-/* The pads reach almost to the edges of the chassis (1.6cqw short of them) and are square; the screen takes the leftover height. */
+/*
+ * The pad plate runs edge to edge in blue-grey. The pads sit 1.6cqw in from the edges and are square; the screen takes the
+ * leftover height. isolation keeps the pad glows inside the plate so they can blend with it and with each other.
+ */
 .padzone {
   position: relative;
   flex: none;
-  margin-inline: -3.9cqw;
+  isolation: isolate;
+  margin-inline: -5.5cqw;
+  padding: 3.4cqw 1.6cqw 0;
+  background: linear-gradient(#a3adb4, #8f9aa2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 3px 4px -2px rgba(0, 0, 0, 0.3), 0 -1px 0 #6c767d, 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .pads {
@@ -548,20 +555,21 @@
   grid-template-columns: repeat(4, 1fr);
   column-gap: 2.2cqw;
   row-gap: 6cqw;
-  padding-bottom: 5cqw;
+  padding-bottom: 4.4cqw;
 }
 
 .pad {
   --wt: #38383c;
   --wb: #4a4a50;
+  --glow: 0 8px 10px color-mix(in srgb, var(--wb) 45%, transparent);
   position: relative;
   aspect-ratio: 1;
   padding: 0;
   border: 0;
   border-radius: 2.2cqw;
-  /* matte rubber: coarse grain over a soft, unglossy shading */
+  /* matte rubber, domed: lit toward the top, falling away to the edges and the bottom */
   background-color: #7b7b7e;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), radial-gradient(120% 100% at 30% 10%, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.12));
+  background-image: radial-gradient(130% 115% at 50% 22%, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0) 52%, rgba(0, 0, 0, 0.18));
   touch-action: none;
   transition: transform 0.06s;
   box-shadow:
@@ -574,13 +582,34 @@
     0 6.3px 0 color-mix(in srgb, var(--wt) 22%, var(--wb)),
     0 7.2px 0 color-mix(in srgb, var(--wt) 11%, var(--wb)),
     0 8.1px 0 color-mix(in srgb, var(--wt) 0%, var(--wb)),
-    0 8px 10px color-mix(in srgb, var(--wb) 45%, transparent),
-    inset 0 1px 0 #ffffff1a, inset 0 0 0.9cqw rgba(0, 0, 0, 0.18);
+    var(--glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -0.7cqw 1.1cqw rgba(0, 0, 0, 0.2),
+    inset 0.5cqw 0 0.8cqw -0.4cqw rgba(255, 255, 255, 0.08);
 }
 
 .pad--loaded {
   --wt: color-mix(in srgb, var(--c) 70%, #555);
   --wb: color-mix(in srgb, var(--c) 62%, #e6e6ee);
+  --glow: 0 0 0 transparent;
+}
+
+/*
+ * The underlight: a gradient that fades out below and a little around the pad. It sits behind the pads and is translucent,
+ * so where two neighbours' light overlaps you see the two colours combine.
+ */
+.pad--loaded::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -17%;
+  right: -17%;
+  top: 60%;
+  height: 68%;
+  background: radial-gradient(ellipse 50% 78% at 50% 20%, color-mix(in srgb, var(--c) 100%, transparent), color-mix(in srgb, var(--c) 52%, transparent) 50%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
+  pointer-events: none;
 }
 
 .pad:active,
@@ -644,38 +673,24 @@
 }
 
 /* The number and type are printed on the plastic below the pad, so the pad's underlight falls across them. */
+/* The number and type are printed on the plastic below the pad, so the pad's underlight falls across them. */
 .pad__number {
   position: absolute;
-  left: -3%;
-  right: -3%;
-  top: calc(100% + 0.6cqw);
-  padding: 1.1cqw 3% 3.4cqw;
+  left: 0;
+  right: 0;
+  top: calc(100% + 1.6cqw);
   font-size: 3cqw;
   line-height: 1;
   color: var(--ink3);
   text-align: left;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(#000 55%, transparent);
-  mask-image: linear-gradient(#000 55%, transparent);
-}
-
-.pad__number > span {
-  position: relative;
-  color: var(--ink3);
-}
-
-.pad--loaded .pad__number {
-  background: radial-gradient(ellipse 50% 100% at 50% 0, color-mix(in srgb, var(--c) 62%, transparent), transparent);
 }
 
 /* multiply keeps the lettering dark ink, tinted by the light that reaches it, like paint under a coloured lamp */
 .pad--loaded .pad__number > span {
   color: color-mix(in srgb, var(--c) 30%, #2a2720);
   mix-blend-mode: multiply;
-  text-shadow: 0 0 1.2cqw color-mix(in srgb, var(--c) 80%, transparent);
 }
 
 .pad--dragging {
