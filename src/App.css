@@ -18,7 +18,9 @@
   gap: 2.6cqw;
   /* the status bar and home indicator sit over the chassis in the installed app, so keep clear of them */
   padding: calc(env(safe-area-inset-top, 0px) + 3.5cqw) 5.5cqw calc(env(safe-area-inset-bottom, 0px) + 3cqw);
-  background: linear-gradient(var(--chassis1), var(--chassis2));
+  /* matte ABS plastic: fine moulded grain, faint light speckle and a soft sheen across the top */
+  background-color: var(--chassis2);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .45 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
   box-shadow: inset 0 2px 0 var(--hi), inset 0 0 0 1px var(--edge);
   container-type: inline-size;
   overflow: hidden;
@@ -198,8 +200,8 @@
 
 /* ---- LCD screen ---- */
 .screen {
-  flex: 1;
-  min-height: 42cqw;
+  flex: none;
+  height: 54cqw;
   padding: 3cqw 4cqw;
   border: 2.2cqw solid var(--bezel);
   border-radius: 2cqw;
@@ -530,56 +532,63 @@
 }
 
 /* ---- pads and the drawers that cover them ---- */
-/* The pad plate: blue-grey panel the rubber pads sit in, like the MPC2000XL's pad section. */
 .padzone {
   position: relative;
-  flex: none;
-  padding: 3.4cqw 3.4cqw 0;
-  border-radius: 1.4cqw;
-  background: linear-gradient(#a3adb4, #8f9aa2);
-  box-shadow: inset 0 0 0 1px #6c767d, inset 0 2px 4px rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.5);
+  flex: 1;
+  min-height: 0;
 }
 
 .pads {
+  height: 100%;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  column-gap: 2.8cqw;
-  row-gap: 5.2cqw;
-  padding-bottom: 5.4cqw;
+  grid-template-rows: repeat(4, 1fr);
+  column-gap: var(--g);
+  row-gap: 6.4cqw;
+  padding-bottom: 5cqw;
 }
 
-/* A flat, slightly mottled grey rubber pad in a black-edged cut-out. Its underlight shows as a thin lit edge and a glow. */
 .pad {
-  --c: transparent;
+  --wt: #38383c;
+  --wb: #4a4a50;
   position: relative;
-  aspect-ratio: 1;
   padding: 0;
   border: 0;
-  border-radius: 0.9cqw;
-  background-color: #727276;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .3 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(155deg, #86868a, #6c6c70 55%, #626266);
+  border-radius: 2.2cqw;
+  /* matte rubber: coarse grain over a soft, unglossy shading */
+  background-color: #7b7b7e;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), radial-gradient(120% 100% at 30% 10%, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.12));
   touch-action: none;
   transition: transform 0.06s;
   box-shadow:
-    0 0 0 0.4cqw #17171a,
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 0 0 0.35cqw rgba(0, 0, 0, 0.12),
-    inset 0 -0.8cqw 1.2cqw rgba(0, 0, 0, 0.22);
+    0 0.9px 0 color-mix(in srgb, var(--wt) 89%, var(--wb)),
+    0 1.8px 0 color-mix(in srgb, var(--wt) 78%, var(--wb)),
+    0 2.7px 0 color-mix(in srgb, var(--wt) 67%, var(--wb)),
+    0 3.6px 0 color-mix(in srgb, var(--wt) 56%, var(--wb)),
+    0 4.5px 0 color-mix(in srgb, var(--wt) 44%, var(--wb)),
+    0 5.4px 0 color-mix(in srgb, var(--wt) 33%, var(--wb)),
+    0 6.3px 0 color-mix(in srgb, var(--wt) 22%, var(--wb)),
+    0 7.2px 0 color-mix(in srgb, var(--wt) 11%, var(--wb)),
+    0 8.1px 0 color-mix(in srgb, var(--wt) 0%, var(--wb)),
+    0 8px 10px color-mix(in srgb, var(--wb) 45%, transparent),
+    inset 0 1px 0 #ffffff1a, inset 0 0 0.9cqw rgba(0, 0, 0, 0.18);
 }
 
 .pad--loaded {
-  box-shadow:
-    0 0 0 0.4cqw #17171a,
-    0 0.9cqw 0 0.1cqw color-mix(in srgb, var(--c) 70%, #777),
-    0 1.2cqw 3.2cqw 0.2cqw color-mix(in srgb, var(--c) 85%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 0 0 0.35cqw rgba(0, 0, 0, 0.12),
-    inset 0 -0.8cqw 1.2cqw rgba(0, 0, 0, 0.22);
+  --wt: color-mix(in srgb, var(--c) 70%, #555);
+  --wb: color-mix(in srgb, var(--c) 62%, #e6e6ee);
 }
 
-.pad:active {
-  transform: translateY(1px);
-  filter: brightness(1.12);
+.pad:active,
+.pad--selected:active {
+  transform: translateY(1.5px);
+  box-shadow:
+    0 0.9px 0 color-mix(in srgb, var(--wt) 75%, var(--wb)),
+    0 1.8px 0 color-mix(in srgb, var(--wt) 50%, var(--wb)),
+    0 2.7px 0 color-mix(in srgb, var(--wt) 25%, var(--wb)),
+    0 3.6px 0 color-mix(in srgb, var(--wt) 0%, var(--wb)),
+    0 4px 6px color-mix(in srgb, var(--wb) 40%, transparent),
+    inset 0 1px 0 #ffffff33;
 }
 
 /* The selected pad is outlined by a thin line of marching ants. */
@@ -1396,11 +1405,4 @@
 
 .transport__button[aria-pressed="true"]:not(.transport__button--rec) {
   background: #cfe3b6;
-}
-
-/* On short screens the pads are allowed to be wider than tall, so everything still fits. */
-@media (max-height: 760px) {
-  .pad {
-    aspect-ratio: 1.3;
-  }
 }
