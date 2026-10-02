@@ -52,16 +52,59 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 2cqw;
+  gap: 1.3cqw;
   height: 11cqw;
+}
+
+.icon-button {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1cqw;
+  width: 11cqw;
+  height: 8.5cqw;
+  padding: 0;
+  border: 0;
+  border-radius: 1.2cqw;
+  background: var(--btn);
+  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #a49e8c;
+  color: var(--ink);
+}
+
+.icon-button[aria-expanded="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.icon-button__glyph {
+  width: 5.2cqw;
+  height: 5.2cqw;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* points down while closed (the drawer drops down from here), up while open */
+.icon-button__arrow {
+  width: 2.2cqw;
+  height: 2.2cqw;
+  fill: currentColor;
+  transition: transform 0.15s;
+}
+
+.icon-button__arrow--open {
+  transform: rotate(180deg);
 }
 
 .history-button {
   flex: none;
   display: grid;
   place-items: center;
-  width: 11cqw;
-  height: 11cqw;
+  width: 8.5cqw;
+  height: 8.5cqw;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -86,9 +129,9 @@
 }
 
 .history-button:active:not(:disabled),
+.icon-button:active,
 .tone:active,
-.export:active:not(:disabled),
-.drawer-button:active:not(:disabled) {
+.export:active:not(:disabled) {
   transform: translateY(2px);
   box-shadow: 0 0 0 var(--edge);
 }
@@ -135,7 +178,7 @@
 .tone,
 .export {
   flex: none;
-  width: 18cqw;
+  width: 12cqw;
   height: 8.5cqw;
   padding: 0;
   border: 0;
@@ -143,8 +186,8 @@
   background: var(--btn);
   box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #a49e8c;
   color: var(--ink);
-  font-size: 3.2cqw;
-  letter-spacing: 0.04em;
+  font-size: 2.9cqw;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
@@ -153,6 +196,10 @@
   background: var(--accent);
   color: var(--accent-ink);
   box-shadow: 0 2px 0 var(--edge);
+}
+
+.export {
+  width: 15.5cqw;
 }
 
 .export:disabled {
@@ -426,73 +473,24 @@
   outline-offset: 0.5cqw;
 }
 
-/* ---- drawer bar: the two buttons that open the keyboard and the sound classifier ---- */
-.drawer-bar {
+/* ---- screen with drawers ---- */
+.screen-wrap {
   flex: none;
   position: relative;
-  display: flex;
-  gap: 2cqw;
-  height: 10cqw;
-}
-
-.drawer-button {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2cqw;
-  padding: 0 2cqw;
-  border: 0;
-  border-radius: 1.2cqw;
-  background: var(--btn);
-  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #a49e8c;
-  color: var(--ink);
-  font-size: 3.8cqw;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.drawer-button[aria-expanded="true"] {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
-.drawer-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.drawer-button b {
-  font-size: 4.2cqw;
-}
-
-.drawer-button svg {
-  width: 5.5cqw;
-  height: 5.5cqw;
-  flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 0.15s;
-}
-
-/* points down while closed (the drawer opens downward), flips up while open */
-.drawer-button__arrow--open {
-  transform: rotate(180deg);
 }
 
 .hold-zone,
 .drop-targets {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
   z-index: 16;
   animation: hold-fade 0.2s ease-out;
 }
 
 .hold-zone {
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -511,6 +509,7 @@
 .drop-targets {
   display: flex;
   gap: 2cqw;
+  height: 14cqw;
 }
 
 .drop-target {
@@ -554,8 +553,8 @@
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: repeat(4, 1fr);
   column-gap: var(--g);
-  row-gap: 3.4cqw;
-  padding-bottom: 1.4cqw;
+  row-gap: 6.4cqw;
+  padding-bottom: 5cqw;
 }
 
 .pad {
@@ -615,6 +614,18 @@
   color: #fff;
 }
 
+.pad__number {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 1.6cqw);
+  font-size: 3cqw;
+  line-height: 1;
+  color: var(--ink3);
+  text-align: left;
+  pointer-events: none;
+}
+
 .pad--dragging {
   opacity: 0.35;
 }
@@ -656,7 +667,7 @@
   pointer-events: none;
 }
 
-/* Both drawers open from the drawer bar and slide down over the pads. */
+/* Both drawers drop down from the top of the screen and cover its upper part. */
 .drawer {
   position: absolute;
   top: 0;
@@ -664,9 +675,9 @@
   right: 0;
   z-index: 12;
   padding: 2.5cqw;
-  border-radius: 1.6cqw;
+  border-radius: 2cqw;
   background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--edge), 0 2cqw 4cqw rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 0 0 1px var(--edge), 0 2cqw 4cqw rgba(0, 0, 0, 0.4);
   animation: drawer-open 0.18s ease-out;
 }
 
@@ -685,78 +696,102 @@
   }
 }
 
-.drawer--keys {
-  height: 34cqw;
-  background: var(--chassis2);
-}
-
-.drawer--types {
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2cqw;
-}
-
 .drawer__hint {
-  flex: none;
+  margin-bottom: 1.6cqw;
   font-size: 3cqw;
   color: var(--ink3);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.drawer__list {
-  flex: 1;
-  min-height: 0;
+/* ---- sound type faceplates: plates tinted to their family, buttons poking through in shades of its tone ---- */
+.faceplates {
   display: flex;
   flex-direction: column;
-  gap: 2cqw;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  gap: 1.6cqw;
 }
 
-/* ---- keyboard ---- */
-.keyboard {
-  position: relative;
-  height: 100%;
+.faceplates__row {
   display: flex;
-  gap: 0.6cqw;
-  padding: 1.4cqw;
-  border-radius: 1.2cqw;
-  background: #2a2823;
+  gap: 1.6cqw;
+}
+
+.faceplate {
+  display: grid;
+  gap: 1cqw;
+  min-width: 0;
+  padding: 1.2cqw;
+  border-radius: 1.4cqw;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.type-button {
+  min-width: 0;
+  height: 8.6cqw;
+  padding: 0 0.4cqw;
+  border: 0;
+  border-radius: 0.9cqw;
+  font-size: 2.3cqw;
+  font-weight: 700;
+  line-height: 1.05;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 1.5px 0 rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+
+.type-button:active:not(:disabled) {
+  transform: translateY(1.5px);
+}
+
+/* Once a type is chosen it glows and the others dim. */
+.faceplates--chosen .type-button:not(.type-button--on) {
+  filter: brightness(0.55) saturate(0.55);
+}
+
+.type-button--on {
+  box-shadow: 0 0 3cqw 0.8cqw var(--c), 0 0 0 0.5cqw #fff, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  filter: brightness(1.12);
+}
+
+/* ---- key selector: the twelve notes in a row ---- */
+.keyboard {
+  display: flex;
+  gap: 0.8cqw;
 }
 
 .key {
-  padding: 0;
+  flex: 1;
+  min-width: 0;
+  height: 15cqw;
+  padding: 0 0 1.5cqw;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   border: 0;
+  border-radius: 1cqw;
+  font-size: 3cqw;
+  font-weight: 700;
   touch-action: none;
 }
 
-.key--white {
-  flex: 1;
-  border-radius: 0 0 1.2cqw 1.2cqw;
+.key--natural {
   background: #efebdd;
-  box-shadow: inset 0 -2px 0 #bdb7a5;
+  color: var(--ink);
+  box-shadow: 0 1.5px 0 #6d6858;
 }
 
-.key--black {
-  position: absolute;
-  top: 1.4cqw;
-  width: 7%;
-  height: 58%;
-  transform: translateX(-50%);
-  border-radius: 0 0 1cqw 1cqw;
-  background: #34312a;
-  box-shadow: inset 0 -2px 0 #000;
-  z-index: 1;
+.key--sharp {
+  background: #7f7868;
+  color: #efebdd;
+  box-shadow: 0 1.5px 0 #34312a;
 }
 
-.key--white.key--selected {
-  background: var(--accent);
-}
-
-.key--black.key--selected {
-  background: #a8301c;
+.key--selected {
+  box-shadow: inset 0 -1.6cqw 0 var(--accent), 0 1.5px 0 #6d6858;
 }
 
 /* ---- menu ---- */

@@ -2,17 +2,12 @@ import { useRef } from "react";
 import { NOTE_NAMES } from "../audio/theory";
 import { startSine } from "../audio/player";
 
-const WHITE_KEYS = [0, 2, 4, 5, 7, 9, 11];
-/** Black keys by pitch class, with how many white keys sit to their left. */
-const BLACK_KEYS = [
-  { pc: 1, after: 1 },
-  { pc: 3, after: 2 },
-  { pc: 6, after: 4 },
-  { pc: 8, after: 5 },
-  { pc: 10, after: 6 },
-];
+const SHARP = new Set([1, 3, 6, 8, 10]);
 
-/** One octave. Holding a key sounds a sine tone; the last key pressed stays highlighted as the target key. */
+/**
+ * The twelve notes in a row, for choosing the key to tune to (not for playing). Holding a note sounds a sine tone;
+ * the selected note is marked, and tapping it again deselects it.
+ */
 export function Keyboard({ selected, onSelect }: { selected: number | null; onSelect: (pc: number) => void }) {
   const releaseRef = useRef<(() => void) | null>(null);
 
@@ -27,30 +22,20 @@ export function Keyboard({ selected, onSelect }: { selected: number | null; onSe
     releaseRef.current?.();
     releaseRef.current = null;
   };
-  const handlers = (pc: number) => ({
-    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => press(e, pc),
-    onPointerUp: release,
-    onPointerCancel: release,
-  });
 
   return (
-    <div className="keyboard">
-      {WHITE_KEYS.map((pc) => (
+    <div className="keyboard" role="group" aria-label="Key">
+      {NOTE_NAMES.map((name, pc) => (
         <button
-          key={pc}
-          className={`key key--white${selected === pc ? " key--selected" : ""}`}
-          aria-label={NOTE_NAMES[pc]}
-          {...handlers(pc)}
-        />
-      ))}
-      {BLACK_KEYS.map(({ pc, after }) => (
-        <button
-          key={pc}
-          className={`key key--black${selected === pc ? " key--selected" : ""}`}
-          style={{ left: `${(after / 7) * 100}%` }}
-          aria-label={NOTE_NAMES[pc]}
-          {...handlers(pc)}
-        />
+          key={name}
+          className={`key ${SHARP.has(pc) ? "key--sharp" : "key--natural"}${selected === pc ? " key--selected" : ""}`}
+          aria-pressed={selected === pc}
+          onPointerDown={(e) => press(e, pc)}
+          onPointerUp={release}
+          onPointerCancel={release}
+        >
+          {name}
+        </button>
       ))}
     </div>
   );

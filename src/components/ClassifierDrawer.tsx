@@ -1,77 +1,94 @@
-import { CATEGORIES } from "../audio/classify";
-import type { CategoryId } from "../audio/classify";
-import { textColorOn, colorFor, type Palette } from "../audio/palettes";
+import { CATEGORIES, type CategoryId } from "../audio/classify";
+import { colorFor, textColorOn, type Palette } from "../audio/palettes";
 import type { Pad } from "./PadPanel";
-import { useSoundPreview } from "./useSoundPreview";
 
 /**
- * Drawer that opens under the key bar and lists every sound in the project with a play button, a delete button
- * and one coloured button per sound type, laid out as a 5 x 3 grid. All the buttons are equally bright until a type
- * is chosen; the chosen type then glows and the rest dim. Each button sits on its type's pad colour, so snare and clap,
- * both hats, and vox and perc show as neighbouring shades of one tone while kick stands apart.
+ * The sound types as a device faceplate: each family of sounds sits on its own plate, tinted to match, and its
+ * buttons poke through in shades of that tone. Every plate is as wide as its buttons, and the grid is 5 columns by
+ * 3 rows (15 types, nothing left over): drums, percussion, vox and loops fill the top two rows; below them melodic
+ * sounds, bass and the odds and ends sit side by side, mirrored around the bass.
+ */
+const PLATES: { name: string; rows: number; cols: number; ids: CategoryId[] }[][] = [
+  [
+    {
+      name: "Drums",
+      rows: 2,
+      cols: 5,
+      ids: ["kick", "snare", "clap", "closedHat", "openHat", "cymbal", "vox", "perc", "drumLoop", "percLoop"],
+    },
+  ],
+  [
+    { name: "Melodic", rows: 1, cols: 2, ids: ["melodic", "melodicLoop"] },
+    { name: "Bass", rows: 1, cols: 1, ids: ["bass"] },
+    { name: "Other", rows: 1, cols: 2, ids: ["fx", "other"] },
+  ],
+];
+
+const SHORT = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.short])) as Record<CategoryId, string>;
+
+/** The average of some hex colours, pulled toward charcoal so a plate reads as the dark surround of its buttons. */
+function plateColor(hexes: string[]): string {
+  const rgb = [0, 0, 0];
+  for (const hex of hexes) {
+    const n = parseInt(hex.slice(1), 16);
+    rgb[0] += (n >> 16) & 255;
+    rgb[1] += (n >> 8) & 255;
+    rgb[2] += n & 255;
+  }
+  const mixed = rgb.map((v) => Math.round((v / hexes.length) * 0.42 + 38 * 0.58));
+  return `#${mixed.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Drawer that opens over the top of the screen and classifies the selected pad. All buttons are equally bright until
+ * a type is chosen; then the chosen one glows and the others dim.
  */
 export function ClassifierDrawer({
-  pads,
+  pad,
   palette,
-  audioOf,
   onClassify,
-  onDelete,
 }: {
-  /** Every real sound, in pad order. */
-  pads: Pad[];
+  /** The selected sound, or null when no pad is selected. */
+  pad: Pad | null;
   palette: Palette;
-  /** The audio to preview: the raw sound, or its normalized version once Normalize now has run. */
-  audioOf: (pad: Pad) => Float32Array[];
   onClassify: (pad: Pad, category: CategoryId) => void;
-  onDelete: (pad: Pad) => void;
 }) {
-  const preview = useSoundPreview();
+  const chosen = pad?.category;
   return (
-    <div className="drawer drawer--types" role="region" aria-label="Sound classifier">
-      <div className="drawer__hint">Play a sound, then tap what it is.</div>
-      <div className="drawer__list">
-        {pads.length === 0 && <div className="drawer__hint">No sounds in this project.</div>}
-        {pads.map((pad) => (
-          <div key={pad.origIndex} className="sound-row">
-            <div className="sound-row__head">
-              <button
-                className="sound-row__icon"
-                onPointerDown={() => preview.toggle(pad.origIndex, audioOf(pad), pad.sampleRate)}
-                aria-label={`${preview.playing === pad.origIndex ? "Stop" : "Play"} ${pad.name}`}
-              >
-                {preview.playing === pad.origIndex ? "■" : "▶"}
-              </button>
-              <span className="sound-row__name">
-                <span className="sound-row__pad">{pad.index + 1}</span> {pad.name}
-              </span>
-              <button
-                className="sound-row__icon sound-row__icon--delete"
-                onClick={() => {
-                  if (preview.playing === pad.origIndex) preview.stop();
-                  onDelete(pad);
+    <div className="drawer drawer--types" role="region" aria-label="Sound type">
+      <div className="drawer__hint">{pad ? `Pad ${(pad.index % 16) + 1} · ${pad.name}` : "Tap a pad to choose its sound type"}</div>
+      <div className={`faceplates${chosen ? " faceplates--chosen" : ""}`}>
+        {PLATES.map((row, r) => (
+          <div key={r} className="faceplates__row">
+            {row.map((plate) => (
+              <div
+                key={plate.name}
+                className="faceplate"
+                style={{
+                  flex: plate.cols,
+                  gridTemplateColumns: `repeat(${plate.cols}, 1fr)`,
+                  background: plateColor(plate.ids.map((id) => colorFor(palette, id))),
                 }}
-                aria-label={`Delete ${pad.name}`}
+                aria-label={plate.name}
               >
-                🗑
-              </button>
-            </div>
-            <div className={`sound-row__types${pad.category ? " sound-row__types--chosen" : ""}`}>
-              {CATEGORIES.map((c) => {
-                const bg = colorFor(palette, c.id);
-                return (
-                  <button
-                    key={c.id}
-                    className={`type-button${pad.category === c.id ? " type-button--on" : ""}`}
-                    style={{ background: bg, color: textColorOn(bg), ["--c" as string]: bg }}
-                    aria-pressed={pad.category === c.id}
-                    aria-label={c.label}
-                    onClick={() => onClassify(pad, c.id)}
-                  >
-                    {c.short}
-                  </button>
-                );
-              })}
-            </div>
+                {plate.ids.map((id) => {
+                  const bg = colorFor(palette, id);
+                  return (
+                    <button
+                      key={id}
+                      className={`type-button${chosen === id ? " type-button--on" : ""}`}
+                      style={{ background: bg, color: textColorOn(bg), ["--c" as string]: bg }}
+                      disabled={!pad}
+                      aria-pressed={chosen === id}
+                      aria-label={CATEGORIES.find((c) => c.id === id)?.label}
+                      onClick={() => pad && onClassify(pad, id)}
+                    >
+                      {SHORT[id]}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         ))}
       </div>

@@ -877,7 +877,6 @@ function App() {
   );
 
   const toggleDrawer = (which: "keys" | "types") => setDrawer((d) => (d === which ? null : which));
-  const keyName = keyPc === null ? "Off" : NOTE_NAMES[keyPc];
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
   const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : autoColor ? autoColorOf(pad) : "#b3a6f2");
 
@@ -1002,6 +1001,25 @@ function App() {
 
         {/* Controls: undo and redo, the four banks, Tone and Export. */}
         <div className="controls">
+          <button className="icon-button" aria-label="Key" aria-expanded={drawer === "keys"} onClick={() => toggleDrawer("keys")}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
+              <path d="M7.5 2.5v8a4.5 4.5 0 0 0 9 0v-8M12 15v6.5" />
+            </svg>
+            <svg viewBox="0 0 8 8" aria-hidden="true" className={`icon-button__arrow${drawer === "keys" ? " icon-button__arrow--open" : ""}`}>
+              <path d="M1 2.5h6L4 6.2z" />
+            </svg>
+          </button>
+          <button className="icon-button" aria-label="Sound type" aria-expanded={drawer === "types"} onClick={() => toggleDrawer("types")}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
+              <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+              <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+              <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+              <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+            </svg>
+            <svg viewBox="0 0 8 8" aria-hidden="true" className={`icon-button__arrow${drawer === "types" ? " icon-button__arrow--open" : ""}`}>
+              <path d="M1 2.5h6L4 6.2z" />
+            </svg>
+          </button>
           <button className="history-button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 0 12" transform="translate(0 -3)" />
@@ -1033,54 +1051,49 @@ function App() {
           </button>
         </div>
 
-        <section className="screen">
-          {selectedPad?.placeholder && !layout.on ? (
-            <div className="screen__message">
-              <strong>{selectedPad.placeholder.label}</strong>
-              <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
-            </div>
-          ) : selectedPad ? (
-            layout.on ? (
-              <div className="screen__stack">
-                <ViewToggle view={padView} onChange={setPadView} />
-                {padView === "swap" || selectedPad.placeholder || selectedPad.ghost ? swapList : panel}
+        <div className="screen-wrap">
+          <section className="screen">
+            {selectedPad?.placeholder && !layout.on ? (
+              <div className="screen__message">
+                <strong>{selectedPad.placeholder.label}</strong>
+                <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
+              </div>
+            ) : selectedPad ? (
+              layout.on ? (
+                <div className="screen__stack">
+                  <ViewToggle view={padView} onChange={setPadView} />
+                  {padView === "swap" || selectedPad.placeholder || selectedPad.ghost ? swapList : panel}
+                </div>
+              ) : (
+                panel
+              )
+            ) : hasProject ? (
+              <div className="screen__message">
+                <strong>{projectName}</strong>
+                <span>{analyzing > 0 ? "Analyzing pads…" : "Tap a pad"}</span>
               </div>
             ) : (
-              panel
-            )
-          ) : hasProject ? (
-            <div className="screen__message">
-              <strong>{projectName}</strong>
-              <span>{analyzing > 0 ? "Analyzing pads…" : "Tap a pad"}</span>
-            </div>
-          ) : (
-            <label className="dropzone">
-              <svg className="dropzone__ants" aria-hidden="true">
-                <rect className="dropzone__ants-base" pathLength="280" />
-                <rect className="dropzone__ants-dash" pathLength="280" />
-              </svg>
-              <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
-              <strong>{loading ? "Loading…" : "Drop a .koala project"}</strong>
-              <span>or tap to choose one</span>
-            </label>
-          )}
-        </section>
+              <label className="dropzone">
+                <svg className="dropzone__ants" aria-hidden="true">
+                  <rect className="dropzone__ants-base" pathLength="280" />
+                  <rect className="dropzone__ants-dash" pathLength="280" />
+                </svg>
+                <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
+                <strong>{loading ? "Loading…" : "Drop a .koala project"}</strong>
+                <span>or tap to choose one</span>
+              </label>
+            )}
+          </section>
 
-        {/* Two buttons open drawers from the same spot: the keyboard (tuning key) and the sound classifier. */}
-        <div className="drawer-bar">
-          <button className="drawer-button" aria-expanded={drawer === "keys"} onClick={() => toggleDrawer("keys")}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" className={drawer === "keys" ? "drawer-button__arrow--open" : ""}>
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-            <span>Key</span>
-            <b>{keyName}</b>
-          </button>
-          <button className="drawer-button" aria-expanded={drawer === "types"} disabled={!hasProject || analyzing > 0} onClick={() => toggleDrawer("types")}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" className={drawer === "types" ? "drawer-button__arrow--open" : ""}>
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-            <span>Sound types</span>
-          </button>
+          {drawer === "keys" && (
+            <div className="drawer drawer--keys">
+              <div className="drawer__hint">Key</div>
+              <Keyboard selected={keyPc} onSelect={selectKey} />
+            </div>
+          )}
+          {drawer === "types" && (
+            <ClassifierDrawer pad={selectedPad && isReal(selectedPad) ? selectedPad : null} palette={palette} onClassify={classifyPad} />
+          )}
           {drag && !expanded && (
             <div className={`hold-zone${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
               HOLD
@@ -1127,27 +1140,11 @@ function App() {
                   aria-label={`Pad ${slot + 1}`}
                 >
                   {pad && (pad.placeholder || pad.ghost || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
+                  <span className="pad__number">{slot + 1}</span>
                 </button>
               );
             })}
           </div>
-
-          {drawer === "keys" && (
-            <div className="drawer drawer--keys">
-              <Keyboard selected={keyPc} onSelect={selectKey} />
-            </div>
-          )}
-          {drawer === "types" && (
-            <ClassifierDrawer
-              pads={Object.values(pads)
-                .filter(isReal)
-                .sort((a, b) => a.index - b.index)}
-              palette={palette}
-              audioOf={audioOf}
-              onClassify={classifyPad}
-              onDelete={deletePad}
-            />
-          )}
 
           {drag && expanded && (
             <div className="allpads">
