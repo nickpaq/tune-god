@@ -59,7 +59,10 @@ export function PadPanel({
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
   const total = autoShift + trim / 100;
-  const status = pad.tune ? `✓ Tuned ${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(2)}` : "Not tuned";
+  // While tuning is off the button already says so, so the line under the title names the sound type instead.
+  const status = pad.tune
+    ? `Tuned ${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(2)} st`
+    : (CATEGORIES.find((c) => c.id === pad.category)?.label ?? "");
 
   return (
     <div className="pad-panel">

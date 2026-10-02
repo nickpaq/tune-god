@@ -157,6 +157,8 @@ function App() {
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   /** The drawer open under the key bar: the keyboard (tuning key), the sound classifier, or neither. */
   const [drawer, setDrawer] = useState<"keys" | "types" | null>(null);
+  /** Set when one drawer replaces another, so the new one waits for the old one to slide shut. */
+  const [drawerAfter, setDrawerAfter] = useState(false);
   /** Set while the export is waiting for the answer about drums the layout has no slot for. */
   const [extraPrompt, setExtraPrompt] = useState(false);
   /** On the finger-drumming page, whether the top box shows the drum swap list or the tuning controls. */
@@ -897,7 +899,10 @@ function App() {
     />
   );
 
-  const toggleDrawer = (which: "keys" | "types") => setDrawer((d) => (d === which ? null : which));
+  const toggleDrawer = (which: "keys" | "types") => {
+    setDrawerAfter(drawer !== null && drawer !== which);
+    setDrawer((d) => (d === which ? null : which));
+  };
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
   const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : pad.category ? autoColorOf(pad) : "#b3a6f2");
   /** The note marked in the key drawer: the project key, or in "Tune one" the selected pad's own key. */
@@ -913,13 +918,6 @@ function App() {
       }}
     >
       <div className="phone">
-        {/* In the installed app these sit either side of the clock in the status bar. */}
-        <span className="brand brand--left" aria-hidden="true">
-          Tune
-        </span>
-        <span className="brand brand--right" aria-hidden="true">
-          God
-        </span>
         {menuOpen && (
           <div className="menu">
             <button
@@ -1031,31 +1029,23 @@ function App() {
           </div>
         )}
 
-        {/* Controls: undo and redo, the four banks, Tone and Export. */}
+        {/* Controls: the two drawers on the left, the four banks in the middle and the menu on the right, mirrored around the banks. */}
         <div className="controls">
-          <button className="icon-button" aria-label="Key" aria-expanded={drawer === "keys"} onClick={() => toggleDrawer("keys")}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
-              <path d="M7.5 2.5v8a4.5 4.5 0 0 0 9 0v-8M12 15v6.5" />
-            </svg>
-          </button>
-          <button className="icon-button" aria-label="Sound type" aria-expanded={drawer === "types"} onClick={() => toggleDrawer("types")}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
-              <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-              <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
-              <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
-              <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
-            </svg>
-          </button>
-          <button className="history-button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 0 12" transform="translate(0 -3)" />
-            </svg>
-          </button>
-          <button className="history-button" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo} aria-label="Redo">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m15 7 5 5-5 5M20 12H10a6 6 0 0 0 0 12" transform="translate(0 -3)" />
-            </svg>
-          </button>
+          <div className="controls__side">
+            <button className="icon-button" aria-label="Key" aria-expanded={drawer === "keys"} onClick={() => toggleDrawer("keys")}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
+                <path d="M7.5 2.5v8a4.5 4.5 0 0 0 9 0v-8M12 15v6.5" />
+              </svg>
+            </button>
+            <button className="icon-button" aria-label="Sound type" aria-expanded={drawer === "types"} onClick={() => toggleDrawer("types")}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
+                <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+                <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+                <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+                <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+              </svg>
+            </button>
+          </div>
           <div className="banks">
             {BANKS.map((name, i) => {
               const hasSamples = Object.keys(pads).some((index) => Math.floor(Number(index) / 16) === i);
@@ -1069,11 +1059,14 @@ function App() {
               );
             })}
           </div>
-          <button className="icon-button" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
-              <path d="M4 7h16M4 12h16M4 17h16" />
-            </svg>
-          </button>
+          <div className="controls__side">
+            <button className="icon-button icon-button--wide" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+              Menu
+            </button>
+          </div>
         </div>
 
         <div className="screen-wrap">
@@ -1110,9 +1103,18 @@ function App() {
             )}
           </section>
 
-          {drawer === "keys" && (
-            <div className="drawer drawer--keys">
-              <div className="drawer__hint">Key</div>
+          {/* The drawers slide down out of a slot along the top of the screen and cover all of it; both stay mounted so they can slide shut too. */}
+          <div className={`drawer-slot${drawer ? " drawer-slot--open" : ""}`} onClick={(e) => e.target === e.currentTarget && setDrawer(null)}>
+            <div
+              className={`drawer drawer--keys${drawer === "keys" ? " drawer--open" : ""}${drawerAfter ? " drawer--after" : ""}`}
+              role="region"
+              aria-label="Key"
+              inert={drawer !== "keys"}
+            >
+              <div className="drawer__head">
+                <span>Key</span>
+                <span>{tuneAll ? "All pads" : selectedPad ? `Pad ${(selectedPad.index % 16) + 1}` : "Tap a pad"}</span>
+              </div>
               <Keyboard selected={shownKey} onSelect={selectKey} />
               <div className="drawer__foot">
                 <button className="switch" role="switch" aria-checked={tuneAll} onClick={() => setTuneAll((on) => !on)}>
@@ -1125,11 +1127,17 @@ function App() {
                   Tone
                 </button>
               </div>
+              <button className="drawer__handle" aria-label="Close key drawer" onClick={() => setDrawer(null)} />
             </div>
-          )}
-          {drawer === "types" && (
-            <ClassifierDrawer pad={selectedPad && isReal(selectedPad) ? selectedPad : null} palette={palette} onClassify={classifyPad} />
-          )}
+            <ClassifierDrawer
+              open={drawer === "types"}
+              after={drawerAfter}
+              pad={selectedPad && isReal(selectedPad) ? selectedPad : null}
+              palette={palette}
+              onClassify={classifyPad}
+              onClose={() => setDrawer(null)}
+            />
+          </div>
           {drag && !expanded && (
             <div className={`hold-zone${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
               HOLD
@@ -1175,7 +1183,11 @@ function App() {
                   onContextMenu={(e) => e.preventDefault()}
                   aria-label={`Pad ${slot + 1}`}
                 >
-                  {pad && (pad.placeholder || pad.ghost || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
+                  {pad && (pad.placeholder || pad.ghost || autoColor) && (
+                    <span key={labelOf(pad)} className="pad__label">
+                      {labelOf(pad)}
+                    </span>
+                  )}
                   {selected === index && (
                     <svg className="pad__ants" aria-hidden="true">
                       <rect className="pad__ants-base" pathLength="280" />
@@ -1183,7 +1195,7 @@ function App() {
                     </svg>
                   )}
                   <span className="pad__number">
-                    <span>
+                    <span key={pad?.category ?? ""}>
                       {slot + 1}
                       {pad && isReal(pad) && pad.category ? ` ${CATEGORIES[categoryIndex(pad.category)].short}` : ""}
                     </span>
@@ -1226,40 +1238,28 @@ function App() {
           )}
         </div>
 
-        {/* Transport row, MPC style. Record and play are placeholders; undo and redo are the same as the ones at the top. */}
+        {/* Transport row, MPC style, under the thumbs: undo, redo, record and play. Record and play are placeholders. */}
         <div className="transport">
-          <div className="transport__key">
-            <button className="transport__button" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo} aria-label="Redo">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z" />
-              </svg>
-            </button>
-            REDO
-          </div>
-          <div className="transport__key">
-            <button className="transport__button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" />
-              </svg>
-            </button>
-            UNDO
-          </div>
-          <div className="transport__key">
-            <button className="transport__button transport__button--rec" aria-pressed={recArmed} aria-label="Record" onClick={() => setRecArmed((on) => !on)}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="6" />
-              </svg>
-            </button>
-            REC
-          </div>
-          <div className="transport__key">
-            <button className="transport__button" aria-pressed={playing} aria-label={playing ? "Pause" : "Play"} onClick={() => setPlaying((on) => !on)}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                {playing ? <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /> : <path d="M8 5v14l11-7z" />}
-              </svg>
-            </button>
-            PLAY
-          </div>
+          <button className="transport__button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" />
+            </svg>
+          </button>
+          <button className="transport__button" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo} aria-label="Redo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z" />
+            </svg>
+          </button>
+          <button className="transport__button transport__button--rec" aria-pressed={recArmed} aria-label="Record" onClick={() => setRecArmed((on) => !on)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="6" />
+            </svg>
+          </button>
+          <button className="transport__button" aria-pressed={playing} aria-label={playing ? "Pause" : "Play"} onClick={() => setPlaying((on) => !on)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              {playing ? <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /> : <path d="M8 5v14l11-7z" />}
+            </svg>
+          </button>
         </div>
 
         {layoutPickerOpen && (

@@ -6,18 +6,31 @@
   background: var(--stage);
 }
 
-/* The chassis. Everything inside is sized in cqw (1% of the chassis width), so it scales as one piece. */
+/*
+ * The chassis. Everything inside is sized in cqw (1% of the chassis width), so it scales as one piece. One spacing unit
+ * (--u) sets every margin and gap, and there are two corner radii: --radius for panels and pads, --r-key for keys.
+ */
 .phone {
-  --radius: 2.2cqw; /* shared corner radius for panes and buttons */
-  --g: 2.4cqw;
+  --u: 2.4cqw;
+  --radius: 2.2cqw;
+  --r-key: 1.2cqw;
+  --g: var(--u);
+  /* a moulded key cap: lit from above, a hard contact edge and a soft shadow onto the panel */
+  --cap: linear-gradient(#f3eee0, #dbd5c2);
+  --cap-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -1px 0 rgba(0, 0, 0, 0.08), 0 1.5px 0 #7f7967, 0 2.5px 4px rgba(0, 0, 0, 0.3);
+  /* the same cap pushed in: the contact edge and shadow collapse */
+  --cap-down: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0.5px 0 #7f7967, 0 1px 1px rgba(0, 0, 0, 0.2);
+  /* a lit legend: the colour of an LED behind a translucent cap */
+  --led: #ff4b2b;
+  --led-glow: 0 0 1.2cqw rgba(255, 75, 43, 0.65);
   position: relative;
   width: min(100vw, calc(100dvh * 9 / 17.6));
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 2.6cqw;
-  /* the controls start below the status bar */
-  padding: 15.1cqw 5.5cqw 1.6cqw;
+  gap: var(--u);
+  /* the controls start below the status bar, and the transport stays clear of the home indicator */
+  padding: max(var(--u), env(safe-area-inset-top)) var(--u) max(var(--u), env(safe-area-inset-bottom));
   /* matte ABS plastic: fine moulded grain, faint light speckle and a soft sheen across the top */
   background-color: var(--chassis2);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .45 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
@@ -29,66 +42,53 @@
   font-weight: 700;
 }
 
-/* "Tune" and "God" flank the clock in the installed app's status bar (iPhone with a Dynamic Island); elsewhere they are hidden. */
-.brand {
-  display: none;
-  position: absolute;
-  top: 8.2cqw;
-  transform: translateY(-50%);
-  font-size: 2.3cqw;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink3);
-  pointer-events: none;
-}
-
-.brand--left {
-  right: calc(100% - 12.8cqw);
-}
-
-.brand--right {
-  left: 24.5cqw;
-}
-
-@media (display-mode: standalone) {
-  .brand {
-    display: block;
-  }
-}
-
-/* ---- controls (top row) ---- */
+/* ---- controls (top row): three wells of equal height, the two side ones of equal width, mirrored around the banks ---- */
 .controls {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: 1.3cqw;
+  display: grid;
+  grid-template-columns: 21cqw 1fr 21cqw;
+  gap: var(--u);
   height: 11cqw;
 }
 
-.icon-button {
-  flex: none;
+.controls__side,
+.banks {
+  display: flex;
+  gap: 1.2cqw;
+  min-width: 0;
+  padding: 1.2cqw;
+  border-radius: calc(var(--r-key) + 1.2cqw);
+  background: var(--well);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.icon-button,
+.bank,
+.tone {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 1cqw;
-  width: 9.5cqw;
-  height: 8.5cqw;
   padding: 0;
   border: 0;
-  border-radius: 1.2cqw;
-  background: var(--btn);
-  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #a49e8c;
+  border-radius: var(--r-key);
+  background: var(--cap);
+  box-shadow: var(--cap-shadow);
   color: var(--ink);
+  transition: color 0.15s, box-shadow 0.12s, transform 0.08s;
 }
 
-.icon-button[aria-expanded="true"] {
-  background: var(--accent);
-  color: var(--accent-ink);
+.icon-button--wide {
+  font-size: 3cqw;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .icon-button__glyph {
-  width: 5.6cqw;
-  height: 5.6cqw;
+  width: 5.2cqw;
+  height: 5.2cqw;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -96,74 +96,35 @@
   stroke-linejoin: round;
 }
 
-.history-button {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 8.5cqw;
-  height: 8.5cqw;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--btn);
-  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #a49e8c;
-  color: var(--ink);
-}
-
-.history-button svg {
-  width: 55%;
-  height: 55%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.history-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.history-button:active:not(:disabled),
 .icon-button:active,
+.bank:active,
 .tone:active {
-  transform: translateY(2px);
-  box-shadow: 0 0 0 var(--edge);
+  transform: translateY(1px);
+  box-shadow: var(--cap-down);
 }
 
-.banks {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  display: flex;
-  gap: 1.2cqw;
-  padding: 1.2cqw;
-  border-radius: 1.4cqw;
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--edge);
+/* A control that is on stays pushed in, and its legend lights up from behind. */
+.icon-button[aria-expanded="true"],
+.bank--active,
+.tone--on {
+  transform: translateY(1px);
+  background: linear-gradient(#e9e3d3, #d6d0bd);
+  box-shadow: var(--cap-down);
+  color: var(--led);
+  text-shadow: var(--led-glow);
+}
+
+.icon-button[aria-expanded="true"] .icon-button__glyph {
+  filter: drop-shadow(var(--led-glow));
 }
 
 .bank {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 1cqw;
-  background: var(--btn);
-  box-shadow: 0 2px 0 var(--edge);
   color: var(--ink3);
   font-size: 4.8cqw;
 }
 
-.bank--empty {
-  opacity: 0.55;
-}
-
-.bank--active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  opacity: 1;
+.bank--empty:not(.bank--active) {
+  color: color-mix(in srgb, var(--ink3) 45%, transparent);
 }
 
 .bank--target {
@@ -173,34 +134,24 @@
 
 .tone {
   flex: none;
-  width: 12cqw;
-  height: 8.5cqw;
-  padding: 0;
-  border: 0;
-  border-radius: 1.2cqw;
-  background: var(--btn);
-  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #a49e8c;
-  color: var(--ink);
+  width: 14cqw;
+  height: 7cqw;
   font-size: 2.9cqw;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.tone--on {
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 2px 0 var(--edge);
 }
 
 /* ---- LCD screen ---- */
 .screen {
+  position: relative;
   flex: 1;
   min-height: 0;
-  padding: 3cqw 4cqw;
-  border: 2.2cqw solid var(--bezel);
-  border-radius: 2cqw;
-  background: var(--lcd);
-  box-shadow: inset 0 0 0 1px var(--lcd-edge), inset 0 0 14px #4e6147;
+  padding: 3cqw 3.6cqw;
+  border: 1.4cqw solid var(--bezel);
+  border-radius: var(--radius);
+  /* an evenly backlit panel, a little brighter in the middle, sunk under the bezel */
+  background: radial-gradient(120% 90% at 50% 45%, #9db394, var(--lcd) 70%);
+  box-shadow: inset 0 0 0 1px var(--lcd-edge), inset 0 1.2cqw 2.4cqw rgba(0, 0, 0, 0.28), inset 0 0 14px #4e6147;
   color: var(--lcd-ink);
   /* inside the LCD, the "ink" is LCD ink */
   --ink: var(--lcd-ink);
@@ -210,9 +161,18 @@
   --accent: #26391f;
   --accent-ink: #cfe3c3;
   --track: rgba(31, 42, 28, 0.25);
-  font-family: "VT323", "Courier New", ui-monospace, monospace;
-  font-weight: 400;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-weight: 500;
   overflow: hidden;
+}
+
+/* the glass over the LCD catches a soft reflection across its top */
+.screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 38%);
+  pointer-events: none;
 }
 
 .screen .dropzone,
@@ -323,13 +283,14 @@
   color: var(--lcd-ink2);
 }
 
+/* Drawn by the LCD itself: an outlined box, shown in inverse video when on. */
 .tune-toggle {
   min-width: 30cqw;
   padding: 1.2cqw 3cqw;
   border: 0;
-  border-radius: 1.2cqw;
-  background: var(--btn);
-  box-shadow: 0 2px 0 var(--lcd-ink2);
+  border-radius: 0.8cqw;
+  background: transparent;
+  box-shadow: inset 0 0 0 0.5cqw var(--lcd-ink2);
   color: var(--lcd-ink);
   font: inherit;
   font-size: 5.4cqw;
@@ -337,8 +298,9 @@
 }
 
 .tune-toggle--on {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--lcd-ink);
+  box-shadow: none;
+  color: var(--lcd);
 }
 
 /* height 0 with a flex basis of 0: the canvas must not size the screen from its own pixel buffer */
@@ -538,8 +500,8 @@
   position: relative;
   flex: none;
   isolation: isolate;
-  margin-inline: -5.5cqw;
-  padding: 3.4cqw 1.6cqw 0;
+  margin-inline: calc(-1 * var(--u));
+  padding: var(--u) var(--u) 0;
   background: linear-gradient(#a3adb4, #8f9aa2);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 3px 4px -2px rgba(0, 0, 0, 0.3), 0 -1px 0 #6c767d, 0 1px 0 rgba(255, 255, 255, 0.5);
 }
@@ -547,14 +509,16 @@
 .pads {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  column-gap: 2.2cqw;
-  row-gap: 7.2cqw;
-  padding-bottom: 6.2cqw;
+  column-gap: var(--u);
+  /* each gap holds a pad's printed caption (8.1px lit edge + 1.3cqw + 2.7cqw of type) plus one unit, the same as above the first row */
+  row-gap: calc(8.1px + 4cqw + var(--u));
+  padding-bottom: calc(8.1px + 4cqw + var(--u));
 }
 
 .pad {
-  --wt: #38383c;
-  --wb: #4a4a50;
+  /* an unlit pad's edge: the same depth as a lit one, just dark */
+  --wt: #505055;
+  --wb: #66666c;
   --glow: 0 8px 10px color-mix(in srgb, var(--wb) 45%, transparent);
   position: relative;
   aspect-ratio: 1;
@@ -564,8 +528,9 @@
   /* matte rubber, domed: lit toward the top, falling away to the edges and the bottom */
   background-color: #7b7b7e;
   background-image: radial-gradient(130% 115% at 50% 22%, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0) 52%, rgba(0, 0, 0, 0.18));
+  top: 0;
   touch-action: none;
-  transition: transform 0.06s;
+  transition: top 0.06s;
   box-shadow:
     0 0.9px 0 color-mix(in srgb, var(--wt) 89%, var(--wb)),
     0 1.8px 0 color-mix(in srgb, var(--wt) 78%, var(--wb)),
@@ -606,18 +571,39 @@
   opacity: 0.5;
   filter: blur(3.4cqw);
   pointer-events: none;
+  transition: opacity 0.08s;
 }
 
+/*
+ * Pressed, the pad sinks into the plate. It moves with top, not transform: a transform would make the pad its own
+ * stacking context and lift the underlight on top of the rubber. Sunk in, the pad blocks some of the light leaking out
+ * around it, so the halo and the lettering dim and the rubber falls slightly into shadow.
+ */
 .pad:active,
 .pad--selected:active {
-  transform: translateY(1.5px);
+  top: 1.5px;
   box-shadow:
     0 0.9px 0 color-mix(in srgb, var(--wt) 75%, var(--wb)),
     0 1.8px 0 color-mix(in srgb, var(--wt) 50%, var(--wb)),
     0 2.7px 0 color-mix(in srgb, var(--wt) 25%, var(--wb)),
     0 3.6px 0 color-mix(in srgb, var(--wt) 0%, var(--wb)),
-    0 4px 6px color-mix(in srgb, var(--wb) 40%, transparent),
-    inset 0 1px 0 #ffffff33;
+    0 4px 6px color-mix(in srgb, var(--wb) 25%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -0.7cqw 1.1cqw rgba(0, 0, 0, 0.26),
+    inset 0 0 0 100cqw rgba(0, 0, 0, 0.06);
+}
+
+.pad--loaded:active::before {
+  opacity: 0.28;
+}
+
+/* the caption is printed on the plate, so it stays put while the pad sinks */
+.pad:active .pad__number {
+  top: calc(100% + 8.1px + 1.3cqw - 1.5px);
+}
+
+.pad--loaded:active .pad__number::after {
+  opacity: 0.16;
 }
 
 /* The selected pad is outlined by a thin line of marching ants. */
@@ -660,8 +646,8 @@
 .pad--tuned::after {
   content: "✓";
   position: absolute;
-  top: 6%;
-  right: 9%;
+  top: 1.4cqw;
+  right: 1.6cqw;
   font-size: 5cqw;
   font-weight: 700;
   line-height: 1;
@@ -676,15 +662,19 @@
   right: 0;
   /* clear of the pad's 8px lit edge, so the print sits on the plastic below it, inside the glow */
   top: calc(100% + 8.1px + 1.3cqw);
-  font-size: 3cqw;
+  font-size: 2.7cqw;
   line-height: 1;
-  text-align: left;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
 }
 
 /* Ink that is not fully opaque: the lit plastic shows through the print, and a hair of highlight on the lower edge of each stroke makes it read as printed. */
 .pad__number > span {
+  display: inline-block;
+  animation: relabel 0.35s ease-out;
   color: rgba(70, 64, 48, 0.62);
   mix-blend-mode: multiply;
   text-shadow: 0 0.4px 0 rgba(255, 255, 255, 0.45), 0 0 0.6px rgba(70, 64, 48, 0.5);
@@ -713,8 +703,24 @@
   outline-offset: 0.2cqw;
 }
 
+/* A new type's wording fades in where the old one was, so a change is noticed. */
+@keyframes relabel {
+  from {
+    opacity: 0;
+    transform: translateY(-0.8cqw);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pad__number > span,
+  .pad__label {
+    animation: none;
+  }
+}
+
 .pad__label {
   display: block;
+  animation: relabel 0.35s ease-out;
   padding: 0 4%;
   font-size: 2.8cqw;
   font-weight: 700;
@@ -745,62 +751,147 @@
   pointer-events: none;
 }
 
-/* Both drawers drop down from the top of the screen and cover its upper part. */
-.drawer {
+/*
+ * The drawers slide out of a slot along the top of the screen. The slot clips them, so a drawer travels in from behind
+ * its top edge with its contents riding along, throws a shadow down onto the LCD as it comes and dims what it covers.
+ * Opening is a quick start and a long, damped settle; closing accelerates away. Both drawers stay mounted so they can
+ * close as smoothly as they open, and a drawer replacing another waits for that one to slide shut.
+ */
+.drawer-slot {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  inset: 0;
   z-index: 12;
-  padding: 2.5cqw;
-  border-radius: 2cqw;
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--edge), 0 2cqw 4cqw rgba(0, 0, 0, 0.4);
-  animation: drawer-open 0.18s ease-out;
+  overflow: hidden;
+  border-radius: var(--radius);
+  pointer-events: none;
 }
 
-@keyframes drawer-open {
-  from {
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-  }
+.drawer-slot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(24, 22, 18, 0.45);
+  opacity: 0;
+  transition: opacity 0.3s ease-in;
+}
+
+.drawer-slot--open {
+  pointer-events: auto;
+}
+
+.drawer-slot--open::before {
+  opacity: 1;
+  transition: opacity 0.4s ease-out;
+}
+
+.drawer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--u);
+  padding: var(--u) var(--u) 5cqw;
+  border-radius: var(--radius);
+  background: linear-gradient(#b5af9c, #a29c8a);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 0 0 1px var(--edge), 0 1.6cqw 3.2cqw rgba(0, 0, 0, 0.45);
+  transform: translateY(calc(-100% - 5cqw));
+  visibility: hidden;
+  transition: transform 0.26s cubic-bezier(0.55, 0, 0.8, 0.3), visibility 0s 0.26s;
+}
+
+.drawer--open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.44s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
+}
+
+.drawer--open.drawer--after {
+  transition-delay: 0.22s, 0s;
+}
+
+/* the drawer's front edge, which you would pull it by */
+.drawer::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4cqw;
+  border-top: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: linear-gradient(rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.1));
+  pointer-events: none;
+}
+
+.drawer__handle {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: 0;
+  width: 24cqw;
+  height: 4cqw;
+  padding: 0;
+  border: 0;
+  background: none;
+  transform: translateX(-50%);
+}
+
+.drawer__handle::before {
+  content: "";
+  display: block;
+  width: 10cqw;
+  height: 0.9cqw;
+  margin: auto;
+  border-radius: 0.45cqw;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .drawer {
-    animation: none;
+  .drawer,
+  .drawer--open,
+  .drawer-slot::before {
+    transition: none;
   }
 }
 
-.drawer__hint {
-  margin-bottom: 1.6cqw;
+.drawer__head {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
   font-size: 3cqw;
+  line-height: 1;
   color: var(--ink3);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ---- sound type faceplates: dark recessed plates of neutral keys, each with a small light in its type's colour ---- */
 .faceplates {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.6cqw;
+  gap: var(--u);
 }
 
 /* Both plates are the same width with the same five columns, so the keys line up from plate to plate. */
+/* The plates share the drawer's height so that all three rows of keys come out the same height. */
 .faceplate {
+  flex: 2 1 3.6cqw;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
+  grid-auto-rows: 1fr;
   gap: 1.2cqw;
   padding: 1.2cqw;
-  border-radius: 1.6cqw;
+  border-radius: calc(var(--r-key) + 1.2cqw);
   background: linear-gradient(#3a3832, #2e2c28);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.faceplate:last-child {
+  flex: 1 1 2.4cqw;
 }
 
 /* A moulded key cap: lit from above, a hard contact edge below and a soft shadow onto the plate. */
@@ -811,11 +902,11 @@
   justify-content: center;
   gap: 1cqw;
   min-width: 0;
-  height: 9cqw;
+  min-height: 0;
   padding: 0 0.4cqw;
   border: 0;
-  border-radius: 1cqw;
-  background: linear-gradient(#f1ecde, #dbd5c2);
+  border-radius: var(--r-key);
+  background: var(--cap);
   color: var(--ink);
   font-size: 2.3cqw;
   font-weight: 700;
@@ -823,7 +914,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(0, 0, 0, 0.1), 0 1.5px 0 #7c7664, 0 2px 3px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--cap-shadow), 0 2px 3px rgba(0, 0, 0, 0.25);
   transition: background 0.2s, box-shadow 0.2s, transform 0.08s;
 }
 
@@ -869,11 +960,10 @@
 }
 
 .drawer__foot {
+  flex: none;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 2.4cqw;
-  margin-top: 2.4cqw;
+  justify-content: space-between;
 }
 
 .switch {
@@ -922,6 +1012,8 @@
 
 /* ---- key selector: the twelve notes in a row ---- */
 .keyboard {
+  flex: 1;
+  min-height: 15cqw;
   display: flex;
   gap: 0.8cqw;
 }
@@ -929,39 +1021,44 @@
 .key {
   flex: 1;
   min-width: 0;
-  height: 15cqw;
   padding: 0 0 1.5cqw;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   border: 0;
-  border-radius: 1cqw;
+  border-radius: var(--r-key);
   font-size: 3cqw;
   font-weight: 700;
   touch-action: none;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.08s;
 }
 
 .key--natural {
-  background: #efebdd;
+  background: var(--cap);
   color: var(--ink);
-  box-shadow: 0 1.5px 0 #6d6858;
+  box-shadow: var(--cap-shadow);
 }
 
 .key--sharp {
-  background: #7f7868;
+  background: linear-gradient(#8a8473, #6f6a5b);
   color: #efebdd;
-  box-shadow: 0 1.5px 0 #34312a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1.5px 0 #34312a, 0 2.5px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* The chosen key is held down and lit from inside. */
 .key--selected {
-  box-shadow: inset 0 -1.6cqw 0 var(--accent), 0 1.5px 0 #6d6858;
+  transform: translateY(1px);
+  background: linear-gradient(color-mix(in srgb, var(--led) 26%, #fff8f2), color-mix(in srgb, var(--led) 42%, #e8dccf));
+  color: var(--ink);
+  box-shadow: inset 0 0 1.6cqw rgba(255, 75, 43, 0.4), var(--cap-down), 0 0 2cqw rgba(255, 75, 43, 0.45);
 }
 
 /* ---- menu ---- */
 .menu {
   position: absolute;
-  top: 27.5cqw;
-  right: 5.5cqw;
+  /* just under the menu button */
+  top: calc(max(var(--u), env(safe-area-inset-top)) + 11cqw + 1.2cqw);
+  right: var(--u);
   z-index: 18;
   display: flex;
   flex-direction: column;
@@ -1388,47 +1485,35 @@
 }
 
 /* ---- transport row (placeholders for now) ---- */
-/* Lined up with the pads: the same 1.6cqw from the sides, and the labels the same 1.6cqw from the bottom. */
+/* Four keys in the pads' columns, the same unit apart. */
 .transport {
   flex: none;
-  display: flex;
-  gap: 2.2cqw;
-  margin-inline: -3.9cqw;
-  margin-top: 1.2cqw;
-}
-
-.transport__key {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.2cqw;
-  font-size: 2.4cqw;
-  line-height: 1;
-  letter-spacing: 0.1em;
-  color: var(--ink3);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--u);
 }
 
 .transport__button {
-  width: 100%;
-  height: 8cqw;
+  height: 9cqw;
   padding: 0;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 0.9cqw;
-  background: #ece7d6;
-  box-shadow: 0 0 0 0.3cqw #3a372f, 0 1.5px 0 0.3cqw #3a372f, inset 0 1px 0 #fff9;
+  border-radius: var(--r-key);
+  background: var(--cap);
+  box-shadow: var(--cap-shadow);
   color: var(--ink);
+  transition: box-shadow 0.12s, transform 0.08s, opacity 0.15s;
 }
 
 .transport__button:active:not(:disabled) {
-  transform: translateY(1.5px);
+  transform: translateY(1px);
+  box-shadow: var(--cap-down);
 }
 
 .transport__button:disabled {
-  opacity: 0.5;
+  opacity: 0.35;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
 .transport__button svg {
@@ -1438,16 +1523,21 @@
 }
 
 .transport__button--rec {
-  background: #d9594b;
+  background: linear-gradient(#e2675a, #c8493c);
   color: #fff;
-  box-shadow: 0 0 0 0.3cqw #3a372f, 0 1.5px 0 0.3cqw #3a372f, inset 0 1px 0 #ffffff55;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1.5px 0 #7d2a20, 0 2.5px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* armed: held down and lit */
 .transport__button--rec[aria-pressed="true"] {
-  background: #ff3b24;
-  box-shadow: 0 0 0 0.3cqw #3a372f, 0 0 3cqw 0.6cqw #ff3b24aa, inset 0 1px 0 #ffffff77;
+  transform: translateY(1px);
+  background: linear-gradient(#ff5a44, #f03a24);
+  box-shadow: inset 0 0 1.6cqw rgba(255, 255, 255, 0.3), 0 0.5px 0 #7d2a20, 0 0 3cqw rgba(255, 59, 36, 0.6);
 }
 
 .transport__button[aria-pressed="true"]:not(.transport__button--rec) {
-  background: #cfe3b6;
+  transform: translateY(1px);
+  box-shadow: var(--cap-down);
+  color: #2f9e4f;
+  filter: drop-shadow(0 0 1cqw rgba(47, 158, 79, 0.5));
 }

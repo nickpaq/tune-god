@@ -35,6 +35,18 @@ body {
   overscroll-behavior: none;
 }
 
+/*
+ * Installed on iOS with a translucent status bar, a fixed full-screen box can come out one status bar short, leaving a
+ * dark band along the bottom. The installed app has no browser toolbars, so the large viewport is exactly the screen.
+ */
+@media (display-mode: standalone) {
+  html,
+  body {
+    bottom: auto;
+    height: 100lvh;
+  }
+}
+
 body {
   margin: 0;
   background: var(--stage);

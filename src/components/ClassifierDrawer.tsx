@@ -6,23 +6,38 @@ import { PLATES } from "./typePlates";
 const SHORT = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.short])) as Record<CategoryId, string>;
 
 /**
- * Drawer that opens over the top of the screen and classifies the selected pad. Every light is on until a type is
- * chosen; then the chosen key lights up in its colour and the other lights dim.
+ * Drawer that slides down over the screen and classifies the selected pad. Every light is on until a type is chosen;
+ * then the chosen key latches down, backlit in its colour, and the other lights dim.
  */
 export function ClassifierDrawer({
+  open,
+  after,
   pad,
   palette,
   onClassify,
+  onClose,
 }: {
+  open: boolean;
+  /** Wait for another drawer to slide shut before opening. */
+  after: boolean;
   /** The selected sound, or null when no pad is selected. */
   pad: Pad | null;
   palette: Palette;
   onClassify: (pad: Pad, category: CategoryId) => void;
+  onClose: () => void;
 }) {
   const chosen = pad?.category;
   return (
-    <div className="drawer drawer--types" role="region" aria-label="Sound type">
-      {!pad && <div className="drawer__hint">Tap a pad to choose its sound type</div>}
+    <div
+      className={`drawer drawer--types${open ? " drawer--open" : ""}${after ? " drawer--after" : ""}`}
+      role="region"
+      aria-label="Sound type"
+      inert={!open}
+    >
+      <div className="drawer__head">
+        <span>Sound type</span>
+        <span>{pad ? `Pad ${(pad.index % 16) + 1}` : "Tap a pad"}</span>
+      </div>
       <div className={`faceplates${chosen ? " faceplates--chosen" : ""}`}>
         {PLATES.map((plate) => (
           <div key={plate.name} className="faceplate" aria-label={plate.name}>
@@ -43,6 +58,7 @@ export function ClassifierDrawer({
           </div>
         ))}
       </div>
+      <button className="drawer__handle" aria-label="Close sound type drawer" onClick={onClose} />
     </div>
   );
 }

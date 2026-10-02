@@ -11,23 +11,25 @@ export interface Palette {
  * Palettes are built in OKLCH, so every palette is balanced by construction: its tones share one lightness and one
  * colourfulness, and differ only where a difference means something.
  *
- * Where each colour goes is the same in every palette. Drums are the warm half of the wheel (kick red, snare orange,
- * perc amber, hats yellow), loops sit in the greens and teals, melodic sounds are blue, bass is a deep indigo, FX are
- * magenta and Other is a quiet neutral. Hats are the lightest tone and bass the darkest, like the sounds themselves.
+ * Where each colour goes is the same in every palette, and every hue is a clean one: the oranges, ambers, yellows and
+ * olives (roughly 45 to 120 degrees), which turn muddy as soon as they are shaded, are left out entirely. Going round
+ * the wheel: kick red, snare rose, FX magenta, perc and vox violet, bass a deep indigo, melodic blue, melodic loops
+ * azure, hats a light cyan and drum loops green, with Other a quiet cool grey. Hats are the lightest tone and bass the
+ * darkest, like the sounds themselves.
  */
 
-/** Hue (degrees), lightness offset and chroma factor for each tone, in TONES order. */
+/** Hue (degrees), lightness offset and chroma factor for each tone. */
 const ROLES: Record<ToneId, { h: number; dl: number; c: number }> = {
-  kick: { h: 24, dl: -0.05, c: 1.05 },
-  snareClap: { h: 50, dl: 0.02, c: 1 },
-  hats: { h: 100, dl: 0.17, c: 0.85 },
-  percVox: { h: 70, dl: 0.09, c: 0.62 },
-  fx: { h: 340, dl: 0, c: 0.95 },
-  bass: { h: 282, dl: -0.2, c: 0.9 },
-  melodic: { h: 238, dl: 0.03, c: 0.9 },
-  other: { h: 80, dl: 0.06, c: 0.12 },
-  drumPercLoop: { h: 152, dl: 0, c: 0.85 },
-  melodicLoop: { h: 196, dl: -0.03, c: 0.85 },
+  kick: { h: 22, dl: -0.03, c: 1.05 },
+  snareClap: { h: 354, dl: 0.03, c: 0.95 },
+  fx: { h: 322, dl: -0.02, c: 1 },
+  percVox: { h: 296, dl: 0.04, c: 0.85 },
+  bass: { h: 272, dl: -0.18, c: 0.95 },
+  melodic: { h: 248, dl: 0, c: 0.9 },
+  melodicLoop: { h: 228, dl: 0.05, c: 0.8 },
+  hats: { h: 190, dl: 0.13, c: 0.7 },
+  drumPercLoop: { h: 152, dl: 0.02, c: 0.85 },
+  other: { h: 250, dl: 0.06, c: 0.12 },
 };
 
 interface PaletteSpec {
@@ -44,12 +46,11 @@ interface PaletteSpec {
 }
 
 const SPECS: PaletteSpec[] = [
-  { id: "koala", name: "Koala", l: 0.7, c: 0.15 },
-  { id: "studio", name: "Studio", l: 0.67, c: 0.085 },
-  { id: "vintage", name: "Vintage", l: 0.66, c: 0.11, spread: 0.8 },
-  { id: "pastel", name: "Pastel", l: 0.84, c: 0.075, spread: 0.55 },
-  { id: "neon", name: "Neon", l: 0.75, c: 0.24, spread: 0.7 },
-  { id: "midnight", name: "Midnight", l: 0.55, c: 0.12, spread: 0.8 },
+  { id: "koala", name: "Koala", l: 0.68, c: 0.16 },
+  { id: "studio", name: "Studio", l: 0.66, c: 0.11, spread: 0.85 },
+  { id: "pastel", name: "Pastel", l: 0.83, c: 0.085, spread: 0.55 },
+  { id: "neon", name: "Neon", l: 0.72, c: 0.25, spread: 0.7 },
+  { id: "midnight", name: "Midnight", l: 0.56, c: 0.14, spread: 0.8 },
   {
     id: "grayscale",
     name: "Grayscale",
@@ -146,10 +147,7 @@ const SHADE_STEP = 0.085;
 export function shade(hex: string, steps: number): string {
   if (steps === 0) return hex;
   const [l, c, h] = hexToOklch(hex);
-  const lighter = l < 0.62;
-  // A yellow that only got darker would turn olive, so it leans toward gold as it darkens.
-  const hue = !lighter && h > 80 && h < 125 ? h - 4 * steps : h;
-  return oklchToHex(lighter ? l + steps * SHADE_STEP : l - steps * SHADE_STEP, c, hue);
+  return oklchToHex(l < 0.62 ? l + steps * SHADE_STEP : l - steps * SHADE_STEP, c, h);
 }
 
 /** A category's pad colour: its tone's base colour, shaded so related sounds (snare and clap) read as family. */
