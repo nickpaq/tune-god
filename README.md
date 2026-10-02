@@ -12,12 +12,14 @@ A local-first web app for [Koala Sampler](https://koalasampler.com) projects. Dr
 ### Sound categories
 Fifteen categories, from filename keywords first and then simple acoustic features (length, decay, spectral balance, detected pitch): **Kick, Snare, Clap, Closed Hat, Open Hat, Cymbal, Vox, Perc, FX, Bass, Melodic, Drum Loop, Perc Loop, Melodic Loop, Other**. Crash, ride and other cymbals are Cymbals (the hat tone), and an unnamed hat ringing over 1 s counts as one; toms, shakers and tambourines count as Perc; chants and breaths are Vox. A hat with no open/closed keyword in its name is called open when it rings longer than 0.3 s. A name containing "loop" turns its category into the loop version ("perc loop" is a Perc Loop); breaks and amens are Drum Loops; unnamed samples over 4 s are Melodic Loops if pitched and Drum Loops otherwise.  If you re-type a sound that sits on the finger-drumming page so it no longer fits its slot, a sound of the slot's type from a later page takes its place (or a missing-pad gap if there is none). Categories drive tuning, colour, labels, loudness trims and bus routing.
 
-Change a pad's category in the pad panel, or use the **Sound classifier** (menu, below the finger drumming presets): it lists every sound in the project with a play button (raw audio, or the normalized audio once Normalize now has run, with a short fade so stopping never clicks), a delete button, and one checkbox per category. Each checkbox is coloured like its pad, so related types (snare and clap, both hats, vox and perc) show as neighbouring shades of one tone.
+Change a pad's category in the pad panel, or open the **Sound classifier** drawer (the **Sound types** button under the screen): it lists every sound in the project with a play button (raw audio, or the normalized audio once Normalize now has run, with a short fade so stopping never clicks), a delete button, and a symmetric 5 x 3 grid of coloured buttons, one per category, each named and coloured like its pad, so related types (snare and clap, both hats, vox and perc) show as neighbouring shades of one tone. All the buttons are equally bright until a type is chosen; the chosen one then glows and the rest dim.
 
 ### Long samples
 A sample longer than 60 s makes export very slow, so importing a project that contains any shows a warning listing them, with play and delete buttons for each (or keep them all). The limit is `MAX_SAMPLE_SECONDS` in `src/App.tsx`.
 
 ### Tuning
+- Open the **Key** drawer (the button under the screen, which shows the current key) and pick a key on the piano; tapping the key that is already selected switches tuning off and every sound reverts to its original pitch, so the keyboard is both a selector and an on/off switch.
+- The selected pad's waveform is drawn on the screen above its tuning sliders.
 - Pick a key on the piano; pads classified Bass, Melodic or Melodic Loop with a detected pitch are tuned to it by default, decided by the classifier alone (everything else is left alone). Koala's own stretch setting on a pad is never changed. You can toggle Tune per pad, and manual choices survive key changes.
 - Each pad has semitone and cent trim sliders (a custom precision slider, so iOS Safari behaves).
 - **Tone** plays a reference sine on the chosen key alongside a pad for ear-checking.
@@ -55,7 +57,7 @@ A sample longer than 60 s makes export very slow, so importing a project that co
 - **Export** bakes tuning into the audio (24-bit WAV), writes volumes, colours, labels, pans, buses and the rearrangement, and downloads `<name>_tuned.koala`. Pads you don't retune or rebalance keep their original audio byte for byte. A progress counter shows on the button during long renders.
 
 ### Interface
-- The page is locked so it never scrolls or rubber-bands; the layout is drawn over a screenshot-based phone frame and scales to any width.
+- The page is locked so it never scrolls or rubber-bands; the layout is a beige MPC-style chassis drawn in CSS that scales to any width.
 
 ## How pitch detection works
 

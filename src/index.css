@@ -1,16 +1,25 @@
 :root {
-  --bg: #2d111d;
-  --pad-empty: #4a3a40;
-  --pad-loaded: #a83a55;
-  --ring: #ec455f;
-  --line: #d8ced0;
-  --cyan: #62cbf9;
-  --panel: #3a1727;
-  --on-cyan: #06212e;
-  color-scheme: dark;
-  color: #fff;
-  background: var(--bg);
-  font: 16px/1.3 "DIN Alternate", "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  /* Putty: a beige MPC-style chassis, grey rubber pads and a green LCD. */
+  --stage: #141214;
+  --chassis1: #d3cdbb;
+  --chassis2: #bcb5a1;
+  --hi: #efeadb;
+  --edge: #8b8573;
+  --ink: #38342b;
+  --ink3: #625d4f;
+  --well: #a39d8b;
+  --btn: #e4dfcd;
+  --accent: #e8412a;
+  --accent-ink: #fff;
+  --lcd: #93a98a;
+  --lcd-edge: #5d6e56;
+  --lcd-ink: #1f2a1c;
+  --lcd-ink2: #3b4a37;
+  --bezel: #8a8473;
+  color-scheme: light;
+  color: var(--ink);
+  background: var(--stage);
+  font: 16px/1.3 "DIN Alternate", "Archivo Narrow", "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -28,7 +37,7 @@ body {
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--stage);
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;

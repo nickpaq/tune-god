@@ -1,4 +1,5 @@
 import { PrecisionSlider } from "./PrecisionSlider";
+import { Waveform } from "./Waveform";
 import { CATEGORIES, type CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
 import type { GhostKind } from "../audio/ghost";
@@ -37,7 +38,7 @@ export interface Pad {
   cents: number;
 }
 
-/** What the teal section shows for the selected pad: tune toggle and the two trim sliders. */
+/** What the screen shows for the selected pad: tune toggle and the two trim sliders. */
 export function PadPanel({
   pad,
   autoShift,
@@ -69,6 +70,8 @@ export function PadPanel({
           {pad.tune ? "Tune: on" : "Tune: off"}
         </button>
       </div>
+
+      <Waveform channelData={pad.channelData} />
 
       {autoColor && (
         <label className="pad-panel__category">

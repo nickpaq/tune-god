@@ -16,7 +16,7 @@ import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
 import { isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
-import { colorFor, paletteById, shade, textColorOn, DEFAULT_PALETTE_ID } from "./audio/palettes";
+import { colorFor, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad, replaceMisfit } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
@@ -26,7 +26,7 @@ import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import { extraDrumCount, fillGhostSlot, withoutExtraDrums, type ExtraDrums } from "./audio/extraDrums";
 import { SwapList } from "./components/SwapList";
-import { ClassifierModal } from "./components/ClassifierModal";
+import { ClassifierDrawer } from "./components/ClassifierDrawer";
 import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
@@ -35,43 +35,11 @@ import { makeGhostPad } from "./audio/ghostPads";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
-import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
+import { NOTE_NAMES, A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
-import background from "./assets/koala-empty.jpg";
 import "./App.css";
 
-// Everything is positioned in the screenshot's own pixel space (919 x 1999)
-// and converted to percentages, so the overlay scales with the background.
-const W = 919;
-const H = 1999;
-const box = (x: number, y: number, w: number, h: number) => ({
-  left: `${(x / W) * 100}%`,
-  top: `${(y / H) * 100}%`,
-  width: `${(w / W) * 100}%`,
-  height: `${(h / H) * 100}%`,
-});
-
-// Every pane shares one left/right edge, and the pad grid spans exactly that width.
-const LEFT = 20;
-const RIGHT = 899;
-const CONTENT_W = RIGHT - LEFT;
-const PAD_GAP = 17;
-const PAD_W = (CONTENT_W - 3 * PAD_GAP) / 4;
-const PAD_COLS = [0, 1, 2, 3].map((c) => LEFT + c * (PAD_W + PAD_GAP));
-const PAD_ROWS = [991, 1198, 1406, 1613];
-const PAD_H = 190;
 const BANKS = ["A", "B", "C", "D"];
-// Bottom row: undo/redo circles at the left, banks in the middle, Tone and Export (same size) at the right.
-const BAR_Y = 1836;
-const BAR_H = 80;
-const BAR_GAP = 17;
-const UNDO_X = LEFT;
-const REDO_X = UNDO_X + BAR_H + BAR_GAP;
-const BTN_W = 158;
-const EXPORT_X = RIGHT - BTN_W;
-const TONE_X = EXPORT_X - BAR_GAP - BTN_W;
-const BANKS_X = REDO_X + BAR_H + BAR_GAP;
-const BANKS_W = TONE_X - BAR_GAP - BANKS_X;
 /** How many edits undo can step back through. */
 const MAX_HISTORY = 100;
 /** Slider drags on the same control within this window count as one undo step. */
@@ -186,7 +154,8 @@ function App() {
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
-  const [classifierOpen, setClassifierOpen] = useState(false);
+  /** The drawer open under the key bar: the keyboard (tuning key), the sound classifier, or neither. */
+  const [drawer, setDrawer] = useState<"keys" | "types" | null>(null);
   /** Set while the export is waiting for the answer about drums the layout has no slot for. */
   const [extraPrompt, setExtraPrompt] = useState(false);
   /** On the finger-drumming page, whether the top box shows the drum swap list or the tuning controls. */
@@ -399,7 +368,7 @@ function App() {
     setLayout((l) => ({ ...l, on: false, pre: {} }));
     setNormalizedData({});
     setLongSamples([]);
-    setClassifierOpen(false);
+    setDrawer(null);
     setSelected(null);
     setKeyPc(null);
     setTunedTarget(null);
@@ -723,15 +692,17 @@ function App() {
   /**
    * Picking a key retargets every pad. Pads whose Tune switch the user has set by hand keep it,
    * and every pad keeps its semitone/cents trim, so manual corrections survive a key change.
+   * Tapping the key that is already selected switches tuning off, so every sound reverts to its original pitch.
    */
   const selectKey = (pc: number) => {
     recordEdit();
-    setKeyPc(pc);
-    setTunedTarget(pc);
-    tunedTargetRef.current = pc;
+    const next = pc === keyPc ? null : pc;
+    setKeyPc(next);
+    setTunedTarget(next);
+    tunedTargetRef.current = next;
     setPads((prev) =>
       Object.fromEntries(
-        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: tuneDefault(false, false, p.category, p.detectedMidi, pc) }]),
+        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: tuneDefault(false, false, p.category, p.detectedMidi, next) }]),
       ),
     );
   };
@@ -905,6 +876,11 @@ function App() {
     />
   );
 
+  const toggleDrawer = (which: "keys" | "types") => setDrawer((d) => (d === which ? null : which));
+  const keyName = keyPc === null ? "Off" : NOTE_NAMES[keyPc];
+  /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
+  const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : autoColor ? autoColorOf(pad) : "#b3a6f2");
+
   return (
     <div
       className="stage"
@@ -914,30 +890,17 @@ function App() {
         pickFile(e.dataTransfer.files);
       }}
     >
-      <div className="phone" style={{ backgroundImage: `url(${background})` }}>
-        {/* Hides what's baked into the screenshot: the screenshot's pad grid, the "C" bank highlight, MUTE/SOLO and SAMPLES. */}
-        <div className="cover" style={box(0, 975, W, 845)} />
-        <div className="cover" style={box(446, 1598, 230, 220)} />
-        <div className="cover" style={box(288, 1826, 330, 100)} />
-        <div className="cover" style={box(725, 1826, 175, 100)} />
-        <div className="cover" style={box(0, 1826, W, 100)} />
-        {/* The screenshot's baked-in Dynamic Island and home indicator. */}
-        <div className="cover" style={box(0, 0, W, 90)} />
-        <div className="cover" style={box(0, 1940, W, 59)} />
-
-        <button
-          className="menu-button"
-          style={box(RIGHT - 75, 195, 75, 65)}
-          onClick={() => setMenuOpen((open) => !open)}
-          aria-label="Export options"
-          aria-expanded={menuOpen}
-        >
-          <svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true">
-            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-          </svg>
-        </button>
+      <div className="phone">
+        <header className="top">
+          <span className="top__title">Tune God</span>
+          <button className="menu-button" onClick={() => setMenuOpen((open) => !open)} aria-label="Export options" aria-expanded={menuOpen}>
+            <svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+            </svg>
+          </button>
+        </header>
         {menuOpen && (
-          <div className="menu" style={{ top: `${(268 / H) * 100}%`, right: `${((W - RIGHT) / W) * 100}%` }}>
+          <div className="menu">
             <label>
               <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
               Balance loudness
@@ -992,16 +955,6 @@ function App() {
             >
               Layouts
             </button>
-            <button
-              className="menu__button"
-              disabled={!hasProject || analyzing > 0}
-              onClick={() => {
-                setClassifierOpen(true);
-                setMenuOpen(false);
-              }}
-            >
-              Sound classifier
-            </button>
             <label className="menu__a4">
               A4 reference (Hz)
               <input
@@ -1047,15 +1000,48 @@ function App() {
           </div>
         )}
 
-        <section className="teal" style={box(LEFT, 280, CONTENT_W, 510)}>
+        {/* Controls: undo and redo, the four banks, Tone and Export. */}
+        <div className="controls">
+          <button className="history-button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 0 12" transform="translate(0 -3)" />
+            </svg>
+          </button>
+          <button className="history-button" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo} aria-label="Redo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 7 5 5-5 5M20 12H10a6 6 0 0 0 0 12" transform="translate(0 -3)" />
+            </svg>
+          </button>
+          <div className="banks">
+            {BANKS.map((name, i) => {
+              const hasSamples = Object.keys(pads).some((index) => Math.floor(Number(index) / 16) === i);
+              const cls = ["bank", shownBank === i && "bank--active", !hasSamples && "bank--empty", hover === `bank:${i}` && "bank--target"]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <button key={name} className={cls} data-drop="bank" data-index={i} onClick={() => setBank(i)}>
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+          <button className={`tone${toneOn ? " tone--on" : ""}`} aria-pressed={toneOn} onClick={() => setToneOn((on) => !on)}>
+            Tone
+          </button>
+          <button className="export" disabled={!canExport} onClick={() => (layout.on && extraDrumCount(pads) > 0 ? setExtraPrompt(true) : exportProject())}>
+            {exporting ? exportProgress || "…" : "Export"}
+          </button>
+        </div>
+
+        <section className="screen">
           {selectedPad?.placeholder && !layout.on ? (
-            <div className="teal__message">
+            <div className="screen__message">
               <strong>{selectedPad.placeholder.label}</strong>
               <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
             </div>
           ) : selectedPad ? (
             layout.on ? (
-              <div className="teal__stack">
+              <div className="screen__stack">
                 <ViewToggle view={padView} onChange={setPadView} />
                 {padView === "swap" || selectedPad.placeholder || selectedPad.ghost ? swapList : panel}
               </div>
@@ -1063,7 +1049,7 @@ function App() {
               panel
             )
           ) : hasProject ? (
-            <div className="teal__message">
+            <div className="screen__message">
               <strong>{projectName}</strong>
               <span>{analyzing > 0 ? "Analyzing pads…" : "Tap a pad"}</span>
             </div>
@@ -1073,131 +1059,98 @@ function App() {
                 <rect className="dropzone__ants-base" pathLength="280" />
                 <rect className="dropzone__ants-dash" pathLength="280" />
               </svg>
-              <input
-                type="file"
-                accept=".koala"
-                hidden
-                onChange={(e) => pickFile(e.target.files)}
-              />
+              <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
               <strong>{loading ? "Loading…" : "Drop a .koala project"}</strong>
               <span>or tap to choose one</span>
             </label>
           )}
         </section>
 
-        <section className="pink" style={box(LEFT, 806, CONTENT_W, 169)}>
-          <Keyboard selected={keyPc} onSelect={selectKey} />
-          {drag && (
+        {/* Two buttons open drawers from the same spot: the keyboard (tuning key) and the sound classifier. */}
+        <div className="drawer-bar">
+          <button className="drawer-button" aria-expanded={drawer === "keys"} onClick={() => toggleDrawer("keys")}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className={drawer === "keys" ? "drawer-button__arrow--open" : ""}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+            <span>Key</span>
+            <b>{keyName}</b>
+          </button>
+          <button className="drawer-button" aria-expanded={drawer === "types"} disabled={!hasProject || analyzing > 0} onClick={() => toggleDrawer("types")}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className={drawer === "types" ? "drawer-button__arrow--open" : ""}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+            <span>Sound types</span>
+          </button>
+          {drag && !expanded && (
             <div className={`hold-zone${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
               HOLD
             </div>
           )}
-        </section>
-
-        {Array.from({ length: 16 }, (_, slot) => {
-          const index = shownBank * 16 + slot;
-          const pad = pads[index];
-          const cls = [
-            "pad",
-            pad && "pad--loaded",
-            pad && autoColor && "pad--colored",
-            pad?.placeholder && "pad--placeholder",
-            pad?.tune && "pad--tuned",
-            selected === index && "pad--selected",
-            drag?.from === index && "pad--dragging",
-            hover === `pad:${index}` && "pad--target",
-          ]
-            .filter(Boolean)
-            .join(" ");
-          return (
-            <button
-              key={slot}
-              className={cls}
-              style={{
-                ...box(PAD_COLS[slot % 4], PAD_ROWS[Math.floor(slot / 4)], PAD_W, PAD_H),
-                ...(pad?.placeholder
-                  ? { background: placeholderColor(pad), color: "#fff" }
-                  : pad && autoColor
-                  ? (() => {
-                      const bg = autoColorOf(pad);
-                      return { background: bg, color: textColorOn(bg) };
-                    })()
-                  : null),
-              }}
-              data-drop="pad"
-              data-index={index}
-              onPointerDown={(e) => onPadDown(e, index)}
-              onPointerMove={onPadMove}
-              onContextMenu={(e) => e.preventDefault()}
-              aria-label={`Pad ${slot + 1}`}
-            >
-              {pad && (pad.placeholder || pad.ghost || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
-            </button>
-          );
-        })}
-
-        <div className="banks" style={box(BANKS_X, BAR_Y, BANKS_W, BAR_H)}>
-          {BANKS.map((name, i) => {
-            const hasSamples = Object.keys(pads).some(
-              (index) => Math.floor(Number(index) / 16) === i,
-            );
-            const cls = [
-              "bank",
-              shownBank === i && "bank--active",
-              !hasSamples && "bank--empty",
-            ]
-              .filter(Boolean)
-              .join(" ");
-            return (
-              <button
-                key={name}
-                className={`${cls}${hover === `bank:${i}` ? " bank--target" : ""}`}
-                data-drop="bank"
-                data-index={i}
-                onClick={() => setBank(i)}
-              >
-                {name}
-              </button>
-            );
-          })}
+          {drag && expanded && (
+            <div className="drop-targets">
+              <div className={`drop-target drop-target--trash${hover === "trash:" ? " drop-target--hot" : ""}`} data-drop="trash">
+                🗑
+              </div>
+              <div className={`drop-target drop-target--unused${hover === "unused:" ? " drop-target--hot" : ""}`} data-drop="unused">
+                Unused pad
+              </div>
+            </div>
+          )}
         </div>
 
-        <button
-          className="history-button"
-          style={box(UNDO_X, BAR_Y, BAR_H, BAR_H)}
-          disabled={historySize.undo === 0 || analyzing > 0}
-          onClick={undo}
-          aria-label="Undo"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 0 12" transform="translate(0 -3)" />
-          </svg>
-        </button>
-        <button
-          className="history-button"
-          style={box(REDO_X, BAR_Y, BAR_H, BAR_H)}
-          disabled={historySize.redo === 0 || analyzing > 0}
-          onClick={redo}
-          aria-label="Redo"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m15 7 5 5-5 5M20 12H10a6 6 0 0 0 0 12" transform="translate(0 -3)" />
-          </svg>
-        </button>
+        <div className="padzone">
+          <div className="pads">
+            {Array.from({ length: 16 }, (_, slot) => {
+              const index = shownBank * 16 + slot;
+              const pad = pads[index];
+              const cls = [
+                "pad",
+                pad && "pad--loaded",
+                pad?.placeholder && "pad--placeholder",
+                pad?.tune && "pad--tuned",
+                selected === index && "pad--selected",
+                drag?.from === index && "pad--dragging",
+                hover === `pad:${index}` && "pad--target",
+              ]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <button
+                  key={slot}
+                  className={cls}
+                  style={pad ? ({ "--c": litColor(pad) } as React.CSSProperties) : undefined}
+                  data-drop="pad"
+                  data-index={index}
+                  onPointerDown={(e) => onPadDown(e, index)}
+                  onPointerMove={onPadMove}
+                  onContextMenu={(e) => e.preventDefault()}
+                  aria-label={`Pad ${slot + 1}`}
+                >
+                  {pad && (pad.placeholder || pad.ghost || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
+                </button>
+              );
+            })}
+          </div>
 
-        <button
-          className={`tone${toneOn ? " tone--on" : ""}`}
-          style={box(TONE_X, BAR_Y, BTN_W, BAR_H)}
-          aria-pressed={toneOn}
-          onClick={() => setToneOn((on) => !on)}
-        >
-          Tone
-        </button>
+          {drawer === "keys" && (
+            <div className="drawer drawer--keys">
+              <Keyboard selected={keyPc} onSelect={selectKey} />
+            </div>
+          )}
+          {drawer === "types" && (
+            <ClassifierDrawer
+              pads={Object.values(pads)
+                .filter(isReal)
+                .sort((a, b) => a.index - b.index)}
+              palette={palette}
+              audioOf={audioOf}
+              onClassify={classifyPad}
+              onDelete={deletePad}
+            />
+          )}
 
-
-        {drag && expanded && (
-          <>
-            <div className="allpads" style={box(LEFT, 985, CONTENT_W, 835)}>
+          {drag && expanded && (
+            <div className="allpads">
               {BANKS.map((name, b) => (
                 <div key={name} className="allpads__bank">
                   <span className="allpads__label">{name}</span>
@@ -1226,22 +1179,8 @@ function App() {
                 </div>
               ))}
             </div>
-            <div
-              className={`drop-target drop-target--trash${hover === "trash:" ? " drop-target--hot" : ""}`}
-              style={box(LEFT, 850, 250, 110)}
-              data-drop="trash"
-            >
-              🗑
-            </div>
-            <div
-              className={`drop-target drop-target--unused${hover === "unused:" ? " drop-target--hot" : ""}`}
-              style={box(RIGHT - 330, 850, 330, 110)}
-              data-drop="unused"
-            >
-              Unused pad
-            </div>
-          </>
-        )}
+          )}
+        </div>
 
         {layoutPickerOpen && (
           <LayoutPicker
@@ -1252,26 +1191,8 @@ function App() {
           />
         )}
 
-        {classifierOpen && (
-          <ClassifierModal
-            pads={Object.values(pads)
-              .filter(isReal)
-              .sort((a, b) => a.index - b.index)}
-            palette={palette}
-            audioOf={audioOf}
-            onClassify={classifyPad}
-            onDelete={deletePad}
-            onClose={() => setClassifierOpen(false)}
-          />
-        )}
-
         {longPads.length > 0 && (
-          <LongSamplesModal
-            pads={longPads}
-            maxSeconds={MAX_SAMPLE_SECONDS}
-            onDelete={deletePad}
-            onClose={() => setLongSamples([])}
-          />
+          <LongSamplesModal pads={longPads} maxSeconds={MAX_SAMPLE_SECONDS} onDelete={deletePad} onClose={() => setLongSamples([])} />
         )}
 
         {extraPrompt && (
@@ -1285,18 +1206,7 @@ function App() {
           />
         )}
 
-        {paletteOpen && (
-          <PalettePicker selectedId={paletteId} onSelect={setPaletteId} onClose={() => setPaletteOpen(false)} />
-        )}
-
-        <button
-          className="export"
-          style={box(EXPORT_X, BAR_Y, BTN_W, BAR_H)}
-          disabled={!canExport}
-          onClick={() => (layout.on && extraDrumCount(pads) > 0 ? setExtraPrompt(true) : exportProject())}
-        >
-          {exporting ? exportProgress || "…" : "Export"}
-        </button>
+        {paletteOpen && <PalettePicker selectedId={paletteId} onSelect={setPaletteId} onClose={() => setPaletteOpen(false)} />}
       </div>
       {drag && pads[drag.from] && (
         <div
