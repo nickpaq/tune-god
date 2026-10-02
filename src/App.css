@@ -200,8 +200,8 @@
 
 /* ---- LCD screen ---- */
 .screen {
-  flex: none;
-  height: 54cqw;
+  flex: 1;
+  min-height: 0;
   padding: 3cqw 4cqw;
   border: 2.2cqw solid var(--bezel);
   border-radius: 2cqw;
@@ -347,8 +347,10 @@
   color: var(--accent-ink);
 }
 
+/* height 0 with a flex basis of 0: the canvas must not size the screen from its own pixel buffer */
 .waveform {
-  flex: 1;
+  flex: 1 1 0;
+  height: 0;
   min-height: 12cqw;
   width: 100%;
   display: block;
@@ -466,8 +468,10 @@
 
 /* ---- screen with drawers ---- */
 .screen-wrap {
-  flex: none;
+  flex: 1;
+  min-height: 40cqw;
   position: relative;
+  display: flex;
 }
 
 .hold-zone,
@@ -532,19 +536,18 @@
 }
 
 /* ---- pads and the drawers that cover them ---- */
+/* The pads reach almost to the edges of the chassis (1.6cqw short of them) and are square; the screen takes the leftover height. */
 .padzone {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  flex: none;
+  margin-inline: -3.9cqw;
 }
 
 .pads {
-  height: 100%;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
-  column-gap: var(--g);
-  row-gap: 6.4cqw;
+  column-gap: 2.2cqw;
+  row-gap: 6cqw;
   padding-bottom: 5cqw;
 }
 
@@ -552,6 +555,7 @@
   --wt: #38383c;
   --wb: #4a4a50;
   position: relative;
+  aspect-ratio: 1;
   padding: 0;
   border: 0;
   border-radius: 2.2cqw;
