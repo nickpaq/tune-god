@@ -548,8 +548,8 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   column-gap: 2.2cqw;
-  row-gap: 6cqw;
-  padding-bottom: 4.4cqw;
+  row-gap: 7.2cqw;
+  padding-bottom: 6.2cqw;
 }
 
 .pad {
@@ -674,7 +674,8 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(100% + 1.6cqw);
+  /* clear of the pad's 8px lit edge, so the print sits on the plastic below it, inside the glow */
+  top: calc(100% + 8.1px + 1.3cqw);
   font-size: 3cqw;
   line-height: 1;
   text-align: left;
@@ -697,9 +698,9 @@
   right: -3cqw;
   top: -2.4cqw;
   bottom: -2cqw;
-  background: radial-gradient(ellipse 70% 100% at 50% 0, color-mix(in srgb, var(--c) 70%, #fff), transparent 85%);
+  background: radial-gradient(ellipse closest-side at 50% 50%, color-mix(in srgb, var(--c) 70%, #fff), transparent);
   mix-blend-mode: screen;
-  opacity: 0.6;
+  opacity: 0.32;
   pointer-events: none;
 }
 
