@@ -54,7 +54,7 @@ A sample longer than 60 s makes export very slow, so importing a project that co
 - Circular undo/redo buttons at the bottom-left. Covers pad edits (tune, trims, category), key changes, pad moves, swaps and deletes. Slider drags count as one step; up to 100 steps; cleared when a new project loads.
 
 ### Export
-- **Export** bakes tuning into the audio (24-bit WAV), writes volumes, colours, labels, pans, buses and the rearrangement, and downloads `<name>_tuned.koala`. Pads you don't retune or rebalance keep their original audio byte for byte. A progress counter shows on the button during long renders.
+- **Export** (the first item in the menu) bakes tuning into the audio (24-bit WAV), writes volumes, colours, labels, pans, buses and the rearrangement, and downloads `<name>_tuned.koala`. Pads you don't retune or rebalance keep their original audio byte for byte. A progress counter shows on the menu item during long renders.
 
 ### Interface
 - The page is locked so it never scrolls or rubber-bands; the layout is a beige MPC-style chassis drawn in CSS that scales to any width.

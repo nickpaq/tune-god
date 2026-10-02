@@ -16,8 +16,8 @@
   display: flex;
   flex-direction: column;
   gap: 2.6cqw;
-  /* the status bar and home indicator sit over the chassis in the installed app, so keep clear of them */
-  padding: calc(env(safe-area-inset-top, 0px) + 3.5cqw) 5.5cqw 1.6cqw;
+  /* the controls start below the status bar */
+  padding: 15.1cqw 5.5cqw 1.6cqw;
   /* matte ABS plastic: fine moulded grain, faint light speckle and a soft sheen across the top */
   background-color: var(--chassis2);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .45 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
@@ -29,25 +29,31 @@
   font-weight: 700;
 }
 
-.top {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 7cqw;
-  font-size: 3.8cqw;
-  letter-spacing: 0.14em;
+/* "Tune" and "God" flank the clock in the installed app's status bar (iPhone with a Dynamic Island); elsewhere they are hidden. */
+.brand {
+  display: none;
+  position: absolute;
+  top: 8.2cqw;
+  transform: translateY(-50%);
+  font-size: 2.3cqw;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink3);
+  pointer-events: none;
 }
 
-.menu-button {
-  width: 10cqw;
-  height: 7cqw;
-  padding: 0.5cqw 1.5cqw;
-  border: none;
-  background: none;
-  color: var(--ink3);
+.brand--left {
+  right: calc(100% - 12.8cqw);
+}
+
+.brand--right {
+  left: 24.5cqw;
+}
+
+@media (display-mode: standalone) {
+  .brand {
+    display: block;
+  }
 }
 
 /* ---- controls (top row) ---- */
@@ -121,8 +127,7 @@
 
 .history-button:active:not(:disabled),
 .icon-button:active,
-.tone:active,
-.export:active:not(:disabled) {
+.tone:active {
   transform: translateY(2px);
   box-shadow: 0 0 0 var(--edge);
 }
@@ -166,8 +171,7 @@
   outline-offset: 0.2cqw;
 }
 
-.tone,
-.export {
+.tone {
   flex: none;
   width: 12cqw;
   height: 8.5cqw;
@@ -182,20 +186,10 @@
   text-transform: uppercase;
 }
 
-.tone--on,
-.export:not(:disabled) {
+.tone--on {
   background: var(--accent);
   color: var(--accent-ink);
   box-shadow: 0 2px 0 var(--edge);
-}
-
-.export {
-  width: 15.5cqw;
-}
-
-.export:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 /* ---- LCD screen ---- */
@@ -932,7 +926,7 @@
 /* ---- menu ---- */
 .menu {
   position: absolute;
-  top: 12cqw;
+  top: 27.5cqw;
   right: 5.5cqw;
   z-index: 18;
   display: flex;
@@ -981,6 +975,11 @@
   font: inherit;
   color: var(--ink);
   text-transform: uppercase;
+}
+
+.menu__button--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 .menu__button:disabled {

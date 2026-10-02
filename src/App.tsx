@@ -913,16 +913,27 @@ function App() {
       }}
     >
       <div className="phone">
-        <header className="top">
-          <span className="top__title">Tune God</span>
-          <button className="menu-button" onClick={() => setMenuOpen((open) => !open)} aria-label="Export options" aria-expanded={menuOpen}>
-            <svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true">
-              <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-            </svg>
-          </button>
-        </header>
+        {/* In the installed app these sit either side of the clock in the status bar. */}
+        <span className="brand brand--left" aria-hidden="true">
+          Tune
+        </span>
+        <span className="brand brand--right" aria-hidden="true">
+          God
+        </span>
         {menuOpen && (
           <div className="menu">
+            <button
+              className="menu__button menu__button--primary"
+              disabled={!canExport}
+              onClick={() => {
+                if (layout.on && extraDrumCount(pads) > 0) {
+                  setMenuOpen(false);
+                  setExtraPrompt(true);
+                } else void exportProject();
+              }}
+            >
+              {exporting ? `Exporting ${exportProgress || "…"}` : "Export"}
+            </button>
             <label>
               <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
               Balance loudness
@@ -1060,8 +1071,10 @@ function App() {
               );
             })}
           </div>
-          <button className="export" disabled={!canExport} onClick={() => (layout.on && extraDrumCount(pads) > 0 ? setExtraPrompt(true) : exportProject())}>
-            {exporting ? exportProgress || "…" : "Export"}
+          <button className="icon-button" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
           </button>
         </div>
 
