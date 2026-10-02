@@ -17,7 +17,7 @@
   flex-direction: column;
   gap: 2.6cqw;
   /* the status bar and home indicator sit over the chassis in the installed app, so keep clear of them */
-  padding: calc(env(safe-area-inset-top, 0px) + 3.5cqw) 5.5cqw calc(env(safe-area-inset-bottom, 0px) + 3cqw);
+  padding: calc(env(safe-area-inset-top, 0px) + 3.5cqw) 5.5cqw 1.6cqw;
   /* matte ABS plastic: fine moulded grain, faint light speckle and a soft sheen across the top */
   background-color: var(--chassis2);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .45 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
@@ -589,26 +589,28 @@
 }
 
 .pad--loaded {
-  --wt: color-mix(in srgb, var(--c) 70%, #555);
-  --wb: color-mix(in srgb, var(--c) 62%, #e6e6ee);
+  --wt: color-mix(in srgb, var(--c) 34%, #6a6a70);
+  --wb: color-mix(in srgb, var(--c) 40%, #dcdce2);
   --glow: 0 0 0 transparent;
 }
 
 /*
- * The underlight: a gradient that fades out below and a little around the pad. It sits behind the pads and is translucent,
- * so where two neighbours' light overlaps you see the two colours combine.
+ * The underlight: a soft, washed-out halo that leaks out from under the pad on all four sides, most of all along the bottom.
+ * It is a blurred, translucent slab behind the pads, so it fades out gradually and, where two neighbours' light overlaps,
+ * the two colours mix.
  */
 .pad--loaded::before {
   content: "";
   position: absolute;
   z-index: -1;
-  left: -17%;
-  right: -17%;
-  top: 60%;
-  height: 68%;
-  background: radial-gradient(ellipse 50% 78% at 50% 20%, color-mix(in srgb, var(--c) 100%, transparent), color-mix(in srgb, var(--c) 52%, transparent) 50%, transparent 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
+  left: -7%;
+  right: -7%;
+  top: -5%;
+  bottom: -30%;
+  border-radius: 28%;
+  background: color-mix(in srgb, var(--c) 62%, #e8e8ee);
+  opacity: 0.5;
+  filter: blur(3.4cqw);
   pointer-events: none;
 }
 
@@ -672,8 +674,8 @@
   color: #fff;
 }
 
-/* The number and type are printed on the plastic below the pad, so the pad's underlight falls across them. */
-/* The number and type are printed on the plastic below the pad, so the pad's underlight falls across them. */
+/* The number and type are printed on the plastic below the pad, the same for every pad. Multiply blends the ink into
+   whatever light falls there, so a lit pad's glow shows through the lettering like light on printed plastic. */
 .pad__number {
   position: absolute;
   left: 0;
@@ -681,15 +683,13 @@
   top: calc(100% + 1.6cqw);
   font-size: 3cqw;
   line-height: 1;
-  color: var(--ink3);
   text-align: left;
   white-space: nowrap;
   pointer-events: none;
 }
 
-/* multiply keeps the lettering dark ink, tinted by the light that reaches it, like paint under a coloured lamp */
-.pad--loaded .pad__number > span {
-  color: color-mix(in srgb, var(--c) 30%, #2a2720);
+.pad__number > span {
+  color: #5a5546;
   mix-blend-mode: multiply;
 }
 
@@ -1364,12 +1364,13 @@
 }
 
 /* ---- transport row (placeholders for now) ---- */
+/* Lined up with the pads: the same 1.6cqw from the sides, and the labels the same 1.6cqw from the bottom. */
 .transport {
   flex: none;
   display: flex;
-  gap: 2.4cqw;
-  height: 13cqw;
-  padding-top: 0.6cqw;
+  gap: 2.2cqw;
+  margin-inline: -3.9cqw;
+  margin-top: 1.2cqw;
 }
 
 .transport__key {
@@ -1378,8 +1379,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1cqw;
+  gap: 1.2cqw;
   font-size: 2.4cqw;
+  line-height: 1;
   letter-spacing: 0.1em;
   color: var(--ink3);
 }
