@@ -18,7 +18,7 @@ Change a pad's category in the pad panel, or open the **Sound type** drawer (the
 A sample longer than 60 s makes export very slow, so importing a project that contains any shows a warning listing them, with play and delete buttons for each (or keep them all). The limit is `MAX_SAMPLE_SECONDS` in `src/App.tsx`.
 
 ### Tuning
-- Open the **Key** drawer (the tuning-fork button at the top left) and pick a note from the row of twelve; tapping the key that is already selected switches tuning off and every sound reverts to its original pitch, so the keyboard is both a selector and an on/off switch.
+- Open the **Key** drawer (the tuning-fork button at the top left) and pick a note from the row of twelve; tapping the key that is already selected switches tuning off and every sound reverts to its original pitch, so the keyboard is both a selector and an on/off switch. The drawer also holds the **Tone** button and a **Tune all / Tune one** switch: in Tune one, a tapped key applies only to the selected pad (tapping its key again switches that pad's tuning off), and Tune all applies it to every pad again.
 - The selected pad's waveform is drawn on the screen above its tuning sliders.
 - Pads classified Bass, Melodic or Melodic Loop with a detected pitch are tuned to it by default, decided by the classifier alone (everything else is left alone). Koala's own stretch setting on a pad is never changed. You can toggle Tune per pad, and manual choices survive key changes.
 - Each pad has semitone and cent trim sliders (a custom precision slider, so iOS Safari behaves).

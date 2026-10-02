@@ -81,8 +81,9 @@ const MAX_SPREAD_PERCENT = 40;
  * Total semitone shift for a pad: the shortest move (never more than 6 up or
  * down) from its exact detected pitch onto the target note, plus the manual trim.
  */
-function shiftFor(pad: Pad, target: number | null, a4: number): number {
+function shiftFor(pad: Pad, projectKey: number | null, a4: number): number {
   if (!pad.tune) return 0;
+  const target = pad.keyPc ?? projectKey;
   let base = 0;
   if (target !== null && pad.detectedMidi != null) {
     base = (((target - pad.detectedMidi) % 12) + 12) % 12;
@@ -164,6 +165,8 @@ function App() {
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
+  /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
+  const [tuneAll, setTuneAll] = useState(saved.tuneAll ?? true);
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
   const [a4Text, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
   /** Ghost under the finger while a pad is being dragged, and the drop target under it ("kind:index"). */
@@ -273,6 +276,7 @@ function App() {
                     ? {
                         tune: remembered.tune,
                         tuneLocked: remembered.tuneLocked,
+                        keyPc: remembered.keyPc,
                         semis: remembered.semis,
                         cents: remembered.cents,
                         category: cat,
@@ -319,8 +323,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ normalize, spread, autoColor, routeBuses, autoPlayback, paletteId, toneOn, a4, bank, selected, keyPc, tunedTarget });
-  }, [normalize, spread, autoColor, routeBuses, autoPlayback, paletteId, toneOn, a4, bank, selected, keyPc, tunedTarget]);
+    saveState({ normalize, spread, autoColor, routeBuses, autoPlayback, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
+  }, [normalize, spread, autoColor, routeBuses, autoPlayback, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -331,6 +335,7 @@ function App() {
       out[p.origIndex] = {
         tune: p.tune,
         tuneLocked: p.tuneLocked,
+        keyPc: p.keyPc,
         semis: p.semis,
         cents: p.cents,
         category: p.category,
@@ -538,7 +543,7 @@ function App() {
         audioOf(pad),
         pad.sampleRate,
         shiftFor(pad, tunedTarget, a4),
-        pad.tune && toneOn ? keyPc : null,
+        pad.tune && toneOn ? (pad.keyPc ?? keyPc) : null,
         padMode(pad),
       ),
     );
@@ -695,16 +700,29 @@ function App() {
    * Tapping the key that is already selected switches tuning off, so every sound reverts to its original pitch.
    */
   const selectKey = (pc: number) => {
+    if (!tuneAll) return selectKeyForPad(pc);
     recordEdit();
     const next = pc === keyPc ? null : pc;
     setKeyPc(next);
     setTunedTarget(next);
     tunedTargetRef.current = next;
+    // A key for every pad replaces any key a single pad was given.
     setPads((prev) =>
       Object.fromEntries(
-        Object.entries(prev).map(([i, p]) => [i, p.tuneLocked ? p : { ...p, tune: tuneDefault(false, false, p.category, p.detectedMidi, next) }]),
+        Object.entries(prev).map(([i, p]) => {
+          const plain = { ...p, keyPc: undefined };
+          return [i, p.tuneLocked ? plain : { ...plain, tune: tuneDefault(false, false, p.category, p.detectedMidi, next) }];
+        }),
       ),
     );
+  };
+
+  /** "Tune one": the key applies to the selected pad only. Tapping that pad's key again switches its tuning off. */
+  const selectKeyForPad = (pc: number) => {
+    const pad = selected !== null ? pads[selected] : undefined;
+    if (!pad || !isReal(pad)) return;
+    const same = pad.tune && (pad.keyPc ?? keyPc) === pc;
+    patchPad(pad.index, same ? { tune: false, tuneLocked: true, keyPc: undefined } : { tune: true, tuneLocked: true, keyPc: pc });
   };
 
   /**
@@ -878,7 +896,9 @@ function App() {
 
   const toggleDrawer = (which: "keys" | "types") => setDrawer((d) => (d === which ? null : which));
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
-  const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : autoColor ? autoColorOf(pad) : "#b3a6f2");
+  const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : pad.category ? autoColorOf(pad) : "#b3a6f2");
+  /** The note marked in the key drawer: the project key, or in "Tune one" the selected pad's own key. */
+  const shownKey = tuneAll ? keyPc : selectedPad?.tune ? (selectedPad.keyPc ?? keyPc) : null;
 
   return (
     <div
@@ -1005,9 +1025,6 @@ function App() {
             <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
               <path d="M7.5 2.5v8a4.5 4.5 0 0 0 9 0v-8M12 15v6.5" />
             </svg>
-            <svg viewBox="0 0 8 8" aria-hidden="true" className={`icon-button__arrow${drawer === "keys" ? " icon-button__arrow--open" : ""}`}>
-              <path d="M1 2.5h6L4 6.2z" />
-            </svg>
           </button>
           <button className="icon-button" aria-label="Sound type" aria-expanded={drawer === "types"} onClick={() => toggleDrawer("types")}>
             <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
@@ -1015,9 +1032,6 @@ function App() {
               <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
               <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
               <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
-            </svg>
-            <svg viewBox="0 0 8 8" aria-hidden="true" className={`icon-button__arrow${drawer === "types" ? " icon-button__arrow--open" : ""}`}>
-              <path d="M1 2.5h6L4 6.2z" />
             </svg>
           </button>
           <button className="history-button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
@@ -1043,9 +1057,6 @@ function App() {
               );
             })}
           </div>
-          <button className={`tone${toneOn ? " tone--on" : ""}`} aria-pressed={toneOn} onClick={() => setToneOn((on) => !on)}>
-            Tone
-          </button>
           <button className="export" disabled={!canExport} onClick={() => (layout.on && extraDrumCount(pads) > 0 ? setExtraPrompt(true) : exportProject())}>
             {exporting ? exportProgress || "…" : "Export"}
           </button>
@@ -1088,7 +1099,18 @@ function App() {
           {drawer === "keys" && (
             <div className="drawer drawer--keys">
               <div className="drawer__hint">Key</div>
-              <Keyboard selected={keyPc} onSelect={selectKey} />
+              <Keyboard selected={shownKey} onSelect={selectKey} />
+              <div className="drawer__foot">
+                <button className="switch" role="switch" aria-checked={tuneAll} onClick={() => setTuneAll((on) => !on)}>
+                  <span className="switch__track">
+                    <span className="switch__knob" />
+                  </span>
+                  {tuneAll ? "Tune all" : "Tune one"}
+                </button>
+                <button className={`tone${toneOn ? " tone--on" : ""}`} aria-pressed={toneOn} onClick={() => setToneOn((on) => !on)}>
+                  Tone
+                </button>
+              </div>
             </div>
           )}
           {drawer === "types" && (
@@ -1140,9 +1162,17 @@ function App() {
                   aria-label={`Pad ${slot + 1}`}
                 >
                   {pad && (pad.placeholder || pad.ghost || autoColor) && <span className="pad__label">{labelOf(pad)}</span>}
+                  {selected === index && (
+                    <svg className="pad__ants" aria-hidden="true">
+                      <rect className="pad__ants-base" pathLength="280" />
+                      <rect className="pad__ants-dash" pathLength="280" />
+                    </svg>
+                  )}
                   <span className="pad__number">
-                    {slot + 1}
-                    {pad && isReal(pad) && pad.category ? ` ${CATEGORIES[categoryIndex(pad.category)].short}` : ""}
+                    <span>
+                      {slot + 1}
+                      {pad && isReal(pad) && pad.category ? ` ${CATEGORIES[categoryIndex(pad.category)].short}` : ""}
+                    </span>
                   </span>
                 </button>
               );

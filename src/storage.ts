@@ -9,6 +9,8 @@ const STORE = "project";
 export interface SavedPad {
   tune: boolean;
   tuneLocked?: boolean;
+  /** A key set for this pad alone ("Tune one"). */
+  keyPc?: number;
   semis: number;
   cents: number;
   category?: CategoryId;
@@ -26,6 +28,8 @@ export interface SavedState {
   autoPlayback?: boolean;
   paletteId?: string;
   toneOn?: boolean;
+  /** The key drawer's switch: a key applies to every pad ("Tune all", the default) or only the selected pad. */
+  tuneAll?: boolean;
   /** A4 reference pitch in Hz (440 = standard). */
   a4?: number;
   bank?: number;

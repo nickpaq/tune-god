@@ -31,6 +31,8 @@ export interface Pad {
   /** Set on a ghost snare or soft kick: a quieter, duller copy of another sound, made when a finger-drumming layout is applied. */
   ghost?: { kind: GhostKind; sourceOrigIndex: number };
   tune: boolean;
+  /** A key chosen for this pad alone ("Tune one"); it overrides the project key. */
+  keyPc?: number;
   /** Set once the user toggles Tune by hand; "Tune all" then leaves this pad's choice alone. */
   tuneLocked?: boolean;
   /** Manual trim on top of the computed shift. */
