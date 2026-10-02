@@ -20,7 +20,7 @@ A sample longer than 60 s makes export very slow, so importing a project that co
 ### Tuning
 - Open the **Key** drawer (the tuning-fork button at the top left) and pick a note from the row of twelve; tapping the key that is already selected switches tuning off and every sound reverts to its original pitch, so the keyboard is both a selector and an on/off switch.
 - The selected pad's waveform is drawn on the screen above its tuning sliders.
-- Pick a key on the piano; pads classified Bass, Melodic or Melodic Loop with a detected pitch are tuned to it by default, decided by the classifier alone (everything else is left alone). Koala's own stretch setting on a pad is never changed. You can toggle Tune per pad, and manual choices survive key changes.
+- Pads classified Bass, Melodic or Melodic Loop with a detected pitch are tuned to it by default, decided by the classifier alone (everything else is left alone). Koala's own stretch setting on a pad is never changed. You can toggle Tune per pad, and manual choices survive key changes.
 - Each pad has semitone and cent trim sliders (a custom precision slider, so iOS Safari behaves).
 - **Tone** plays a reference sine on the chosen key alongside a pad for ear-checking.
 - Tapping a pad plays it held and looping, retuning live as you move sliders. Live preview uses the browser's playback-rate change for instant response.
