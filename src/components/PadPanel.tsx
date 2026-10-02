@@ -3,7 +3,10 @@ import { Waveform } from "./Waveform";
 import { CATEGORIES, type CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
 import type { GhostKind } from "../audio/ghost";
-import { formatSignedCents, formatSignedSemitones } from "../audio/theory";
+import { formatTrim, splitTrim, trimCents } from "../audio/theory";
+
+/** The trim slider reaches 12 semitones either way. */
+const TRIM_RANGE_CENTS = 1200;
 
 export interface Pad {
   /** 0-based grid slot across all four banks; changes when the pad is moved. */
@@ -54,7 +57,8 @@ export function PadPanel({
   autoColor: boolean;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "category">>) => void;
 }) {
-  const total = autoShift + pad.semis + pad.cents / 100;
+  const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
+  const total = autoShift + trim / 100;
   const status = pad.tune ? `✓ Tuned ${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(2)}` : "Not tuned";
 
   return (
@@ -93,37 +97,21 @@ export function PadPanel({
 
       <div className={`pad-panel__slider${pad.tune ? "" : " pad-panel__slider--off"}`}>
         <div className="pad-panel__label">
-          <span>Semitones</span>
-          <span>{formatSignedSemitones(pad.semis)}</span>
+          <span>Pitch trim</span>
+          <span>{formatTrim(trim)} st</span>
         </div>
         <PrecisionSlider
-          min={-12}
-          max={12}
+          min={-TRIM_RANGE_CENTS}
+          max={TRIM_RANGE_CENTS}
           step={1}
-          value={pad.semis}
+          keyStep={10}
+          fineSpan={100}
+          value={trim}
           bipolar
-          onChange={(semis) => onChange({ semis })}
-          onDoubleClick={() => onChange({ semis: 0 })}
-          valueLabel={formatSignedSemitones}
-          title="Semitone trim. Drag down to slow the scrub. Double-tap to reset."
-        />
-      </div>
-
-      <div className={`pad-panel__slider${pad.tune ? "" : " pad-panel__slider--off"}`}>
-        <div className="pad-panel__label">
-          <span>Cents</span>
-          <span>{formatSignedCents(pad.cents)}</span>
-        </div>
-        <PrecisionSlider
-          min={-100}
-          max={100}
-          step={1}
-          value={pad.cents}
-          bipolar
-          onChange={(cents) => onChange({ cents })}
-          onDoubleClick={() => onChange({ cents: 0 })}
-          valueLabel={formatSignedCents}
-          title="Fine cents trim. Drag down to slow the scrub. Double-tap to reset."
+          onChange={(cents) => onChange(splitTrim(cents))}
+          onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
+          valueLabel={formatTrim}
+          title="Pitch trim. Drag down to slow the scrub: at the bottom of the screen the whole track is one semitone. Double-tap to reset."
         />
       </div>
     </div>

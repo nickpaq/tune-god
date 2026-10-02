@@ -1,20 +1,15 @@
 import { useState, useRef } from "react";
 
-/**
- * How much a slider's horizontal drag is slowed per pixel of vertical travel
- * away from the initial touch/click point — dragging straight down lets you
- * fine-tune the value instead of jumping across the full range in a few
- * millimeters. Continuous rather than a stepped zone, so there's no jarring
- * snap as the finger crosses a threshold; speed only ever asymptotically
- * approaches (never hits) zero, so extreme drags still nudge the value.
- */
-const VERTICAL_SLOWDOWN_SOFTNESS = 60;
+/** Below this much room between the touch and the bottom of the screen, the full fine-tune is reached in this many pixels. */
+const MIN_DRAG_ROOM_PX = 60;
 
 interface DragState {
   pointerId: number;
   lastX: number;
   startY: number;
   value: number;
+  /** Pixels from where the drag started to the bottom of the screen, the distance over which the slider gets finer. */
+  room: number;
 }
 
 /**
@@ -26,8 +21,11 @@ interface DragState {
  * there's no competing native behavior left to suppress.
  *
  * Pointer dragging moves the value by how far the pointer travels rather
- * than jumping to its absolute position, and slows that motion the further
- * the pointer strays vertically from where the drag started. Keyboard
+ * than jumping to its absolute position. Level with (or above) where the drag
+ * started the thumb follows the finger one to one; the lower the finger goes
+ * toward the bottom of the screen, the finer the control gets, smoothly, until
+ * at the very bottom a sweep across the whole track changes the value by only
+ * `fineSpan`. Keyboard
  * (arrow/Home/End/Page keys) and double-click-to-reset are reimplemented
  * manually since there's no native input backing them anymore.
  */
@@ -35,6 +33,8 @@ export function PrecisionSlider({
   min,
   max,
   step,
+  keyStep = step,
+  fineSpan,
   value,
   onChange,
   onDoubleClick,
@@ -46,6 +46,10 @@ export function PrecisionSlider({
   min: number;
   max: number;
   step: number;
+  /** How far an arrow key moves the value (Page keys move ten times this). Defaults to `step`. */
+  keyStep?: number;
+  /** How much the value changes across the whole track when the finger is at the bottom of the screen: the finest setting. */
+  fineSpan: number;
   value: number;
   onChange: (value: number) => void;
   onDoubleClick?: () => void;
@@ -68,7 +72,13 @@ export function PrecisionSlider({
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { pointerId: e.pointerId, lastX: e.clientX, startY: e.clientY, value };
+    dragRef.current = {
+      pointerId: e.pointerId,
+      lastX: e.clientX,
+      startY: e.clientY,
+      value,
+      room: Math.max(MIN_DRAG_ROOM_PX, window.innerHeight - e.clientY),
+    };
     setDragging(true);
   };
 
@@ -80,9 +90,11 @@ export function PrecisionSlider({
     const trackWidth = track.getBoundingClientRect().width || 1;
     const dx = e.clientX - drag.lastX;
     drag.lastX = e.clientX;
-    const verticalDistance = Math.abs(e.clientY - drag.startY);
-    const speed = 1 / (1 + verticalDistance / VERTICAL_SLOWDOWN_SOFTNESS);
-    const deltaValue = (dx / trackWidth) * (max - min) * speed;
+    // 0 level with the touch (or above it), 1 at the bottom of the screen. The sweep per track width goes from the
+    // whole range down to fineSpan along a geometric curve, so every bit of extra downward travel feels the same.
+    const down = Math.min(1, Math.max(0, (e.clientY - drag.startY) / drag.room));
+    const sweep = (max - min) * Math.pow(fineSpan / (max - min), down);
+    const deltaValue = (dx / trackWidth) * sweep;
     drag.value = Math.min(max, Math.max(min, drag.value + deltaValue));
     onChange(snapToStep(drag.value));
   };
@@ -95,17 +107,17 @@ export function PrecisionSlider({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const bigStep = step * 10;
+    const bigStep = keyStep * 10;
     switch (e.key) {
       case "ArrowRight":
       case "ArrowUp":
         e.preventDefault();
-        onChange(snapToStep(value + step));
+        onChange(snapToStep(value + keyStep));
         break;
       case "ArrowLeft":
       case "ArrowDown":
         e.preventDefault();
-        onChange(snapToStep(value - step));
+        onChange(snapToStep(value - keyStep));
         break;
       case "PageUp":
         e.preventDefault();

@@ -82,12 +82,19 @@ export function formatCents(cents: number): string {
   return rounded > 0 ? `+${rounded}c` : `${rounded}c`;
 }
 
-/** Signed whole semitones for a slider's floating value bubble, e.g. 3 -> "+3", -2 -> "-2", 0 -> "0". */
-export function formatSignedSemitones(v: number): string {
-  return `${v > 0 ? "+" : v < 0 ? "-" : ""}${Math.abs(v)}`;
+
+/** A pad's manual trim as one number of cents: its semitone and cent trims together. */
+export function trimCents(semis: number, cents: number): number {
+  return semis * 100 + cents;
 }
 
-/** Signed whole cents for a slider's floating value bubble, e.g. 15 -> "+15", -30 -> "-30", 0 -> "0". */
-export function formatSignedCents(v: number): string {
-  return `${v > 0 ? "+" : v < 0 ? "-" : ""}${Math.abs(v)}`;
+/** Splits a trim in cents back into the pad's whole semitones and the cents left over (both carry the trim's sign). */
+export function splitTrim(totalCents: number): { semis: number; cents: number } {
+  const semis = Math.trunc(totalCents / 100);
+  return { semis, cents: totalCents - semis * 100 };
+}
+
+/** A trim in cents as signed semitones with two decimals for the slider, e.g. 137 -> "+1.37", -50 -> "-0.50", 0 -> "0.00". */
+export function formatTrim(totalCents: number): string {
+  return `${totalCents > 0 ? "+" : totalCents < 0 ? "-" : ""}${(Math.abs(totalCents) / 100).toFixed(2)}`;
 }

@@ -19,9 +19,9 @@ A sample longer than 60 s makes export very slow, so importing a project that co
 
 ### Tuning
 - Open the **Key** drawer (the tuning-fork button at the top left) and pick a note from the row of twelve; tapping the key that is already selected switches tuning off and every sound reverts to its original pitch, so the keyboard is both a selector and an on/off switch. The drawer also holds the **Tone** button and a **Tune all / Tune one** switch: in Tune one, a tapped key applies only to the selected pad (tapping its key again switches that pad's tuning off), and Tune all applies it to every pad again.
-- The selected pad's waveform is drawn on the screen above its tuning sliders.
+- The selected pad's waveform is drawn on the screen above its pitch trim slider.
 - Pads classified Bass, Melodic or Melodic Loop with a detected pitch are tuned to it by default, decided by the classifier alone (everything else is left alone). Koala's own stretch setting on a pad is never changed. You can toggle Tune per pad, and manual choices survive key changes.
-- Each pad has semitone and cent trim sliders (a custom precision slider, so iOS Safari behaves).
+- Each pad has one pitch trim slider, ±12 semitones in 1-cent steps (a custom precision slider, so iOS Safari behaves). Grab it and the thumb follows your finger one to one; the further down the screen your finger goes, the finer it gets, smoothly, until at the very bottom of the screen a sweep across the whole track is exactly one semitone. Double-tap resets it.
 - **Tone** plays a reference sine on the chosen key alongside a pad for ear-checking.
 - Tapping a pad plays it held and looping, retuning live as you move sliders. Live preview uses the browser's playback-rate change for instant response.
 - **Export uses a much higher quality repitch:** a 256-tap Kaiser-windowed sinc resampler (about 140 dB stopband, 4096 interpolated kernel phases, double-precision accumulation). Measured on pure tones the error is about -145 to -150 dB and the response is flat through 19 kHz. The repitch is a sampler-style resample, so duration and formants shift with pitch and transients stay crisp. `scripts/checkResample.ts` reproduces the measurements.
