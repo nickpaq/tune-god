@@ -15,7 +15,7 @@ export default defineConfig({
       // Precache everything so the app works fully offline after the first load.
       workbox: {
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
-        globPatterns: ["**/*.{js,css,html,wasm,svg,png,ico}"],
+        globPatterns: ["**/*.{js,css,html,wasm,svg,png,ico,woff2}"],
       },
       manifest: {
         name: "KoalaTune",
