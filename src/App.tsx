@@ -164,6 +164,9 @@ function App() {
   /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
+  /** Placeholder transport buttons: they only light up for now. */
+  const [recArmed, setRecArmed] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
   const [tuneAll, setTuneAll] = useState(saved.tuneAll ?? true);
@@ -1210,6 +1213,42 @@ function App() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Transport row, MPC style. Record and play are placeholders; undo and redo are the same as the ones at the top. */}
+        <div className="transport">
+          <div className="transport__key">
+            <button className="transport__button" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo} aria-label="Redo">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z" />
+              </svg>
+            </button>
+            REDO
+          </div>
+          <div className="transport__key">
+            <button className="transport__button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" />
+              </svg>
+            </button>
+            UNDO
+          </div>
+          <div className="transport__key">
+            <button className="transport__button transport__button--rec" aria-pressed={recArmed} aria-label="Record" onClick={() => setRecArmed((on) => !on)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="6" />
+              </svg>
+            </button>
+            REC
+          </div>
+          <div className="transport__key">
+            <button className="transport__button" aria-pressed={playing} aria-label={playing ? "Pause" : "Play"} onClick={() => setPlaying((on) => !on)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                {playing ? <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /> : <path d="M8 5v14l11-7z" />}
+              </svg>
+            </button>
+            PLAY
+          </div>
         </div>
 
         {layoutPickerOpen && (

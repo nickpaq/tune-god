@@ -1,5 +1,5 @@
 .stage {
-  height: 100dvh;
+  height: 100%;
   overflow: hidden;
   display: flex;
   justify-content: center;
@@ -16,7 +16,8 @@
   display: flex;
   flex-direction: column;
   gap: 2.6cqw;
-  padding: 5.5cqw 5.5cqw 5cqw;
+  /* the status bar and home indicator sit over the chassis in the installed app, so keep clear of them */
+  padding: calc(env(safe-area-inset-top, 0px) + 3.5cqw) 5.5cqw calc(env(safe-area-inset-bottom, 0px) + 3cqw);
   background: linear-gradient(var(--chassis1), var(--chassis2));
   box-shadow: inset 0 2px 0 var(--hi), inset 0 0 0 1px var(--edge);
   container-type: inline-size;
@@ -197,8 +198,8 @@
 
 /* ---- LCD screen ---- */
 .screen {
-  flex: none;
-  height: 62cqw;
+  flex: 1;
+  min-height: 42cqw;
   padding: 3cqw 4cqw;
   border: 2.2cqw solid var(--bezel);
   border-radius: 2cqw;
@@ -529,61 +530,56 @@
 }
 
 /* ---- pads and the drawers that cover them ---- */
+/* The pad plate: blue-grey panel the rubber pads sit in, like the MPC2000XL's pad section. */
 .padzone {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  flex: none;
+  padding: 3.4cqw 3.4cqw 0;
+  border-radius: 1.4cqw;
+  background: linear-gradient(#a3adb4, #8f9aa2);
+  box-shadow: inset 0 0 0 1px #6c767d, inset 0 2px 4px rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .pads {
-  height: 100%;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
-  column-gap: var(--g);
-  row-gap: 6.4cqw;
-  padding-bottom: 5cqw;
+  column-gap: 2.8cqw;
+  row-gap: 5.2cqw;
+  padding-bottom: 5.4cqw;
 }
 
+/* A flat, slightly mottled grey rubber pad in a black-edged cut-out. Its underlight shows as a thin lit edge and a glow. */
 .pad {
-  --wt: #38383c;
-  --wb: #4a4a50;
+  --c: transparent;
   position: relative;
+  aspect-ratio: 1;
   padding: 0;
   border: 0;
-  border-radius: 2.2cqw;
-  background: #7b7b7e;
+  border-radius: 0.9cqw;
+  background-color: #727276;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .3 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(155deg, #86868a, #6c6c70 55%, #626266);
   touch-action: none;
   transition: transform 0.06s;
   box-shadow:
-    0 0.9px 0 color-mix(in srgb, var(--wt) 89%, var(--wb)),
-    0 1.8px 0 color-mix(in srgb, var(--wt) 78%, var(--wb)),
-    0 2.7px 0 color-mix(in srgb, var(--wt) 67%, var(--wb)),
-    0 3.6px 0 color-mix(in srgb, var(--wt) 56%, var(--wb)),
-    0 4.5px 0 color-mix(in srgb, var(--wt) 44%, var(--wb)),
-    0 5.4px 0 color-mix(in srgb, var(--wt) 33%, var(--wb)),
-    0 6.3px 0 color-mix(in srgb, var(--wt) 22%, var(--wb)),
-    0 7.2px 0 color-mix(in srgb, var(--wt) 11%, var(--wb)),
-    0 8.1px 0 color-mix(in srgb, var(--wt) 0%, var(--wb)),
-    0 8px 10px color-mix(in srgb, var(--wb) 45%, transparent),
-    inset 0 1px 0 #ffffff33;
+    0 0 0 0.4cqw #17171a,
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 0 0 0.35cqw rgba(0, 0, 0, 0.12),
+    inset 0 -0.8cqw 1.2cqw rgba(0, 0, 0, 0.22);
 }
 
 .pad--loaded {
-  --wt: color-mix(in srgb, var(--c) 70%, #555);
-  --wb: color-mix(in srgb, var(--c) 62%, #e6e6ee);
+  box-shadow:
+    0 0 0 0.4cqw #17171a,
+    0 0.9cqw 0 0.1cqw color-mix(in srgb, var(--c) 70%, #777),
+    0 1.2cqw 3.2cqw 0.2cqw color-mix(in srgb, var(--c) 85%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 0 0 0.35cqw rgba(0, 0, 0, 0.12),
+    inset 0 -0.8cqw 1.2cqw rgba(0, 0, 0, 0.22);
 }
 
-.pad:active,
-.pad--selected:active {
-  transform: translateY(1.5px);
-  box-shadow:
-    0 0.9px 0 color-mix(in srgb, var(--wt) 75%, var(--wb)),
-    0 1.8px 0 color-mix(in srgb, var(--wt) 50%, var(--wb)),
-    0 2.7px 0 color-mix(in srgb, var(--wt) 25%, var(--wb)),
-    0 3.6px 0 color-mix(in srgb, var(--wt) 0%, var(--wb)),
-    0 4px 6px color-mix(in srgb, var(--wb) 40%, transparent),
-    inset 0 1px 0 #ffffff33;
+.pad:active {
+  transform: translateY(1px);
+  filter: brightness(1.12);
 }
 
 /* The selected pad is outlined by a thin line of marching ants. */
@@ -1337,4 +1333,74 @@
 
 .swap-list__pager button:disabled {
   opacity: 0.3;
+}
+
+/* ---- transport row (placeholders for now) ---- */
+.transport {
+  flex: none;
+  display: flex;
+  gap: 2.4cqw;
+  height: 13cqw;
+  padding-top: 0.6cqw;
+}
+
+.transport__key {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1cqw;
+  font-size: 2.4cqw;
+  letter-spacing: 0.1em;
+  color: var(--ink3);
+}
+
+.transport__button {
+  width: 100%;
+  height: 8cqw;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0.9cqw;
+  background: #ece7d6;
+  box-shadow: 0 0 0 0.3cqw #3a372f, 0 1.5px 0 0.3cqw #3a372f, inset 0 1px 0 #fff9;
+  color: var(--ink);
+}
+
+.transport__button:active:not(:disabled) {
+  transform: translateY(1.5px);
+}
+
+.transport__button:disabled {
+  opacity: 0.5;
+}
+
+.transport__button svg {
+  width: 4.6cqw;
+  height: 4.6cqw;
+  fill: currentColor;
+}
+
+.transport__button--rec {
+  background: #d9594b;
+  color: #fff;
+  box-shadow: 0 0 0 0.3cqw #3a372f, 0 1.5px 0 0.3cqw #3a372f, inset 0 1px 0 #ffffff55;
+}
+
+.transport__button--rec[aria-pressed="true"] {
+  background: #ff3b24;
+  box-shadow: 0 0 0 0.3cqw #3a372f, 0 0 3cqw 0.6cqw #ff3b24aa, inset 0 1px 0 #ffffff77;
+}
+
+.transport__button[aria-pressed="true"]:not(.transport__button--rec) {
+  background: #cfe3b6;
+}
+
+/* On short screens the pads are allowed to be wider than tall, so everything still fits. */
+@media (max-height: 760px) {
+  .pad {
+    aspect-ratio: 1.3;
+  }
 }
