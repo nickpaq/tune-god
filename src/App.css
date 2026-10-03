@@ -124,6 +124,12 @@
   font-size: 4.8cqw;
 }
 
+/* the active bank stays pushed in, but its letter is not lit or coloured */
+.bank.bank--active {
+  color: var(--ink3);
+  text-shadow: none;
+}
+
 .bank--empty:not(.bank--active) {
   color: color-mix(in srgb, var(--ink3) 45%, transparent);
 }
