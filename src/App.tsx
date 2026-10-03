@@ -45,7 +45,7 @@ const MAX_HISTORY = 100;
 /** Slider drags on the same control within this window count as one undo step. */
 const COALESCE_MS = 1000;
 /** A pad press that travels this far (CSS px) becomes a drag instead of a hit. */
-const DRAG_THRESHOLD_PX = 12;
+const DRAG_THRESHOLD_PX = 40;
 /** Hovering a bank button this long while dragging opens the all-pads view. */
 const DWELL_MS = 350;
 
