@@ -186,6 +186,8 @@ function App() {
   const releasePad = useRef<Map<number, PadHandle>>(new Map());
   /** The sample dropped on HOLD; it loops until any pad is pressed. */
   const holdVoice = useRef<PadHandle | null>(null);
+  /** The pad index the held voice is playing, so tuning changes can follow it. */
+  const holdIndex = useRef<number | null>(null);
   const tunedTargetRef = useRef<number | null>(saved.tunedTarget ?? null);
   /** Per-pad choices from the last visit, applied as each pad finishes analysis. */
   const restorePads = useRef<Record<number, SavedPad>>(saved.pads ?? {});
@@ -540,6 +542,7 @@ function App() {
     if (pad.placeholder) return; // silent: nothing to play
     holdVoice.current?.release();
     holdVoice.current = null;
+    holdIndex.current = null;
     releasePad.current.get(index)?.release();
     releasePad.current.set(
       index,
@@ -671,11 +674,12 @@ function App() {
     };
   }, []);
 
-  /** Plays a pad's sample on a loop, untoned, until any pad is pressed. */
+  /** Plays a pad's sample on a loop until any pad is pressed; tuning changes retune it live. */
   const holdPad = (index: number) => {
     const pad = pads[index];
     if (!pad || pad.placeholder) return;
     holdVoice.current?.release();
+    holdIndex.current = index;
     holdVoice.current = startPad(-2, audioOf(pad), pad.sampleRate, shiftFor(pad, tunedTarget, a4), null, "loop");
   };
 
@@ -690,6 +694,8 @@ function App() {
       const pad = pads[index];
       if (pad) handle.setShift(shiftFor(pad, tunedTarget, a4));
     }
+    const held = holdIndex.current === null ? undefined : pads[holdIndex.current];
+    if (held) holdVoice.current?.setShift(shiftFor(held, tunedTarget, a4));
   }, [pads, tunedTarget, a4]);
 
   useEffect(() => setReferencePitch(a4), [a4]);
