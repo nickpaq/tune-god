@@ -37,13 +37,13 @@ body {
 
 /*
  * Installed on iOS with a translucent status bar, a fixed full-screen box can come out one status bar short, leaving a
- * dark band along the bottom. The installed app has no browser toolbars, so the large viewport is exactly the screen.
+ * dark band along the bottom and clipping the transport row. main.tsx measures the screen into --app-h.
  */
 @media (display-mode: standalone) {
   html,
   body {
     bottom: auto;
-    height: 100lvh;
+    height: var(--app-h, 100lvh);
   }
 }
 
