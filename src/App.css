@@ -523,8 +523,9 @@
   grid-template-columns: repeat(4, var(--pad));
   justify-content: space-between;
   /* each gap holds a pad's printed caption (8.1px lit edge + 1.3cqw + 2.7cqw of type) plus one unit, the same as above the first row */
-  row-gap: var(--caption);
-  padding-bottom: var(--caption);
+  /* tightened by 1.2cqw per gap; the 3 gaps' saving (3.6cqw) goes to the bottom padding so the screen keeps its size and place */
+  row-gap: calc(var(--caption) - 1.2cqw);
+  padding-bottom: calc(var(--caption) + 3.6cqw);
 }
 
 .pad {
