@@ -30,7 +30,7 @@
   flex-direction: column;
   gap: var(--u);
   /* the controls start below the status bar, and the transport stays clear of the home indicator */
-  padding: max(var(--u), env(safe-area-inset-top)) var(--u) calc(max(var(--u), env(safe-area-inset-bottom)) + 4cqw);
+  padding: max(var(--u), env(safe-area-inset-top)) var(--u) calc(max(var(--u), env(safe-area-inset-bottom)) + 8cqw);
   /* matte ABS plastic: fine moulded grain, faint light speckle and a soft sheen across the top */
   background-color: var(--chassis2);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .45 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
@@ -508,24 +508,24 @@
 }
 
 .pads {
-  /* a pad's printed caption plus the gap that holds it */
-  --caption: calc(8.1px + 4cqw + var(--u));
+  /* the gap between pads, top to bottom: one unit between the lit edges, as side to side (the 8.1px is the pad's lit edge) */
+  --row-gap: calc(var(--u) + 8.1px);
   /*
-   * Pad size (set here, not on .phone, because cq units must resolve against the chassis): a square a quarter of the row,
-   * unless the chassis is too short. Then the four pad rows take what is left of its content height (cqh excludes the
-   * status bar and home indicator padding) after the keys, the screen at its minimum, the captions and the transport.
+   * Pad size (set here, not on .phone, because cq units must resolve against the chassis): a square a quarter of the row
+   * (one unit between pads and at both sides), unless the chassis is too short. Then the four pad rows take what is left of
+   * its content height (cqh excludes the status bar and home indicator margins) after the keys, the screen at its minimum,
+   * the gaps between rows, the bottom margin and the transport.
    */
   --pad: min(
     22cqw,
-    calc((100cqh - 11cqw - 4 * var(--u) - 40cqw - 4 * var(--caption) - 9cqw - 4cqw) / 4)
+    calc((100cqh - 11cqw - 4 * var(--u) - 40cqw - 4 * var(--row-gap) - 9cqw - 8cqw) / 4)
   );
   display: grid;
   grid-template-columns: repeat(4, var(--pad));
   justify-content: space-between;
-  /* each gap holds a pad's printed caption (8.1px lit edge + 1.3cqw + 2.7cqw of type) plus one unit, the same as above the first row */
-  /* tightened by 1.2cqw per gap; the 3 gaps' saving (3.6cqw) goes to the bottom padding so the screen keeps its size and place */
-  row-gap: calc(var(--caption) - 1.2cqw);
-  padding-bottom: calc(var(--caption) + 3.6cqw);
+  row-gap: var(--row-gap);
+  /* room for the last row's lit edge */
+  padding-bottom: var(--row-gap);
 }
 
 .pad {
@@ -612,7 +612,7 @@
 
 /* the caption is printed on the plate, so it stays put while the pad sinks */
 .pad:active .pad__number {
-  top: calc(100% + 8.1px + 1.3cqw - 1.5px);
+  bottom: calc(100% + 0.4cqw + 1.5px);
 }
 
 .pad--loaded:active .pad__number::after {
@@ -671,14 +671,14 @@
    whatever light falls there, so a lit pad's glow shows through the lettering like light on printed plastic. */
 .pad__number {
   position: absolute;
-  left: 0;
+  left: 0.6cqw;
   right: 0;
-  /* clear of the pad's 8px lit edge, so the print sits on the plastic below it, inside the glow */
-  top: calc(100% + 8.1px + 1.3cqw);
-  font-size: 2.7cqw;
+  /* small, above the pad's top-left corner */
+  bottom: calc(100% + 0.4cqw);
+  font-size: 1.8cqw;
   line-height: 1;
   letter-spacing: 0.06em;
-  text-align: center;
+  text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
