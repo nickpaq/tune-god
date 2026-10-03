@@ -596,6 +596,22 @@
   bottom: calc(100% + 0.4cqw + 1.5px);
 }
 
+/* The sound type's symbol is pressed into the rubber: dark grey with a faint lip of light underneath. */
+.pad__symbol {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 52%;
+  height: 52%;
+  fill: none;
+  stroke: #3f3f44;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16));
+  pointer-events: none;
+}
+
 /* The selected pad is outlined by a thin line of marching ants. */
 .pad__ants {
   position: absolute;

@@ -26,6 +26,8 @@ export interface SavedState {
   autoColor?: boolean;
   routeBuses?: boolean;
   autoPlayback?: boolean;
+  /** Show a grey sound-type symbol on each pad. */
+  padSymbols?: boolean;
   paletteId?: string;
   toneOn?: boolean;
   /** The key drawer's switch: a key applies to every pad ("Tune all", the default) or only the selected pad. */

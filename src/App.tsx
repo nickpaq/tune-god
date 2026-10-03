@@ -34,6 +34,7 @@ import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
+import { PadSymbol } from "./components/PadSymbol";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
@@ -151,6 +152,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
   const [routeBuses, setRouteBuses] = useState(saved.routeBuses ?? false);
+  const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
   const [autoPlayback, setAutoPlayback] = useState(saved.autoPlayback ?? false);
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -327,8 +329,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ normalize, spread, autoColor, routeBuses, autoPlayback, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
-  }, [normalize, spread, autoColor, routeBuses, autoPlayback, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
+    saveState({ normalize, spread, autoColor, routeBuses, autoPlayback, padSymbols, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
+  }, [normalize, spread, autoColor, routeBuses, autoPlayback, padSymbols, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -912,6 +914,12 @@ function App() {
     if (pad.placeholder || pad.ghost) return labelOf(pad);
     return isReal(pad) && pad.category ? CATEGORIES[categoryIndex(pad.category)].short : "";
   };
+  /** The sound type a pad's symbol shows: real sounds and ghosts have one, silent placeholders none. */
+  const symbolOf = (pad: Pad | undefined): CategoryId | undefined => {
+    if (!pad || pad.placeholder) return undefined;
+    if (pad.ghost) return pad.ghost.kind === "ghostSnare" ? "snare" : "kick";
+    return pad.category;
+  };
   const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : pad.category ? autoColorOf(pad) : "#b3a6f2");
   /** The note marked in the key drawer: the project key, or in "Tune one" the selected pad's own key. */
   const shownKey = tuneAll ? keyPc : selectedPad?.tune ? (selectedPad.keyPc ?? keyPc) : null;
@@ -958,6 +966,10 @@ function App() {
             <label>
               <input type="checkbox" checked={routeBuses} onChange={(e) => setRouteBuses(e.target.checked)} />
               Route pads to buses by sound type
+            </label>
+            <label>
+              <input type="checkbox" checked={padSymbols} onChange={(e) => setPadSymbols(e.target.checked)} />
+              Show symbols on pads
             </label>
             <label>
               <input type="checkbox" checked={autoPlayback} onChange={(e) => setAutoPlayback(e.target.checked)} />
@@ -1191,6 +1203,7 @@ function App() {
                   onContextMenu={(e) => e.preventDefault()}
                   aria-label={`Pad ${slot + 1}`}
                 >
+                  {padSymbols && symbolOf(pad) && <PadSymbol category={symbolOf(pad)!} />}
                   {selected === index && (
                     <svg className="pad__ants" aria-hidden="true">
                       <rect className="pad__ants-base" pathLength="280" />
