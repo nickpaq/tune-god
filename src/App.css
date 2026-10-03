@@ -30,7 +30,7 @@
   flex-direction: column;
   gap: var(--u);
   /* the controls start below the status bar, and the transport stays clear of the home indicator */
-  padding: max(var(--u), env(safe-area-inset-top)) var(--u) max(var(--u), env(safe-area-inset-bottom));
+  padding: max(var(--u), env(safe-area-inset-top)) var(--u) calc(max(var(--u), env(safe-area-inset-bottom)) + 4cqw);
   /* matte ABS plastic: fine moulded grain, faint light speckle and a soft sheen across the top */
   background-color: var(--chassis2);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .45 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
@@ -517,7 +517,7 @@
    */
   --pad: min(
     22cqw,
-    calc((100cqh - 11cqw - 4 * var(--u) - 40cqw - 4 * var(--caption) - 9cqw) / 4)
+    calc((100cqh - 11cqw - 4 * var(--u) - 40cqw - 4 * var(--caption) - 9cqw - 4cqw) / 4)
   );
   display: grid;
   grid-template-columns: repeat(4, var(--pad));
