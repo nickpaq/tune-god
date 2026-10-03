@@ -539,7 +539,7 @@
   border: 0;
   border-radius: 2.2cqw;
   /* matte rubber, domed: lit toward the top, falling away to the edges and the bottom */
-  background-color: #7b7b7e;
+  background-color: #5c5c61;
   background-image: radial-gradient(130% 115% at 50% 22%, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0) 52%, rgba(0, 0, 0, 0.18));
   top: 0;
   touch-action: none;
@@ -682,30 +682,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pad__number > span,
-  .pad__label {
+  .pad__number > span {
     animation: none;
   }
-}
-
-.pad__label {
-  display: block;
-  animation: relabel 0.35s ease-out;
-  padding: 0 4%;
-  font-size: 2.8cqw;
-  font-weight: 700;
-  line-height: 1.1;
-  text-align: center;
-  text-transform: uppercase;
-  color: #f4f2ea;
-  pointer-events: none;
-}
-
-.pad--placeholder,
-.pad--loaded:has(.pad__label) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .drag-ghost {

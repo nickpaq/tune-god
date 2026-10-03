@@ -906,6 +906,12 @@ function App() {
     setDrawer((d) => (d === which ? null : which));
   };
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
+  /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
+  const captionOf = (pad: Pad | undefined): string => {
+    if (!pad) return "";
+    if (pad.placeholder || pad.ghost) return labelOf(pad);
+    return isReal(pad) && pad.category ? CATEGORIES[categoryIndex(pad.category)].short : "";
+  };
   const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : pad.category ? autoColorOf(pad) : "#b3a6f2");
   /** The note marked in the key drawer: the project key, or in "Tune one" the selected pad's own key. */
   const shownKey = tuneAll ? keyPc : selectedPad?.tune ? (selectedPad.keyPc ?? keyPc) : null;
@@ -1185,11 +1191,6 @@ function App() {
                   onContextMenu={(e) => e.preventDefault()}
                   aria-label={`Pad ${slot + 1}`}
                 >
-                  {pad && (pad.placeholder || pad.ghost || autoColor) && (
-                    <span key={labelOf(pad)} className="pad__label">
-                      {labelOf(pad)}
-                    </span>
-                  )}
                   {selected === index && (
                     <svg className="pad__ants" aria-hidden="true">
                       <rect className="pad__ants-base" pathLength="280" />
@@ -1197,9 +1198,9 @@ function App() {
                     </svg>
                   )}
                   <span className="pad__number">
-                    <span key={pad?.category ?? ""}>
+                    <span key={captionOf(pad)}>
                       {slot + 1}
-                      {pad && isReal(pad) && pad.category ? ` ${CATEGORIES[categoryIndex(pad.category)].short}` : ""}
+                      {captionOf(pad) && ` ${captionOf(pad)}`}
                     </span>
                   </span>
                 </button>
