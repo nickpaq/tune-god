@@ -606,17 +606,9 @@
     inset 0 0 0 100cqw rgba(0, 0, 0, 0.06);
 }
 
-.pad--loaded:active::before {
-  opacity: 0.28;
-}
-
 /* the caption is printed on the plate, so it stays put while the pad sinks */
 .pad:active .pad__number {
   bottom: calc(100% + 0.4cqw + 1.5px);
-}
-
-.pad--loaded:active .pad__number::after {
-  opacity: 0.16;
 }
 
 /* The selected pad is outlined by a thin line of marching ants. */
