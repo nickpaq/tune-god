@@ -563,34 +563,13 @@
 .pad--loaded {
   --wt: color-mix(in srgb, var(--c) 34%, #6a6a70);
   --wb: color-mix(in srgb, var(--c) 40%, #dcdce2);
-  --glow: 0 0 0 transparent;
+  /* just a slight bloom of the edge colour below the pad */
+  --glow: 0 9px 7px -3px color-mix(in srgb, var(--c) 35%, transparent);
 }
 
 /*
- * The underlight: a soft, washed-out halo that leaks out from under the pad on all four sides, most of all along the bottom.
- * It is a blurred, translucent slab behind the pads, so it fades out gradually and, where two neighbours' light overlaps,
- * the two colours mix.
- */
-.pad--loaded::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  left: -7%;
-  right: -7%;
-  top: -5%;
-  bottom: -30%;
-  border-radius: 28%;
-  background: color-mix(in srgb, var(--c) 62%, #e8e8ee);
-  opacity: 0.5;
-  filter: blur(3.4cqw);
-  pointer-events: none;
-  transition: opacity 0.08s;
-}
-
-/*
- * Pressed, the pad sinks into the plate. It moves with top, not transform: a transform would make the pad its own
- * stacking context and lift the underlight on top of the rubber. Sunk in, the pad blocks some of the light leaking out
- * around it, so the halo and the lettering dim and the rubber falls slightly into shadow.
+ * Pressed, the pad sinks into the plate (with top, not transform) and the rubber falls slightly into shadow.
+ * The colour along its bottom edge stays as it is.
  */
 .pad:active,
 .pad--selected:active {
@@ -683,20 +662,6 @@
   color: rgba(70, 64, 48, 0.62);
   mix-blend-mode: multiply;
   text-shadow: 0 0.4px 0 rgba(255, 255, 255, 0.45), 0 0 0.6px rgba(70, 64, 48, 0.5);
-}
-
-/* The pad's light falls across the lettering too, on top of the ink, so the print takes on the glow instead of sitting over it. */
-.pad--loaded .pad__number::after {
-  content: "";
-  position: absolute;
-  left: -3cqw;
-  right: -3cqw;
-  top: -2.4cqw;
-  bottom: -2cqw;
-  background: radial-gradient(ellipse closest-side at 50% 50%, color-mix(in srgb, var(--c) 70%, #fff), transparent);
-  mix-blend-mode: screen;
-  opacity: 0.32;
-  pointer-events: none;
 }
 
 .pad--dragging {
