@@ -630,8 +630,7 @@ function App() {
     if (!d) return;
     if (!d.active) {
       if (!pads[d.from] || Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < DRAG_THRESHOLD_PX) return;
-      d.active = true;
-      liftPad(d.from);
+      d.active = true; // the sound keeps playing through the drag; the release at the end of the hold stops it
     }
     setDrag({ from: d.from, x: e.clientX, y: e.clientY });
     const target = targetAt(e.clientX, e.clientY);
