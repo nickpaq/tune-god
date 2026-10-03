@@ -30,21 +30,14 @@
 html,
 body {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* the viewport, except in the installed iOS app, where main.tsx measures the screen into --app-h because the viewport
+     comes out short there, clipping the transport row */
+  height: var(--app-h, 100%);
   overflow: hidden;
   overscroll-behavior: none;
-}
-
-/*
- * Installed on iOS with a translucent status bar, a fixed full-screen box can come out one status bar short, leaving a
- * dark band along the bottom and clipping the transport row. main.tsx measures the screen into --app-h.
- */
-@media (display-mode: standalone) {
-  html,
-  body {
-    bottom: auto;
-    height: var(--app-h, 100lvh);
-  }
 }
 
 body {

@@ -17,20 +17,30 @@ for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
   document.addEventListener(type, (e) => e.preventDefault());
 }
 
-// Installed on iOS with a translucent status bar, the viewport units (and innerHeight) come out one status bar short, so
-// the chassis ends early and the transport row is clipped. `navigator.standalone` is iOS-only; there the screen is the
-// whole app, so size to it. iOS doesn't swap screen.width/height on rotation, so pick the side by orientation.
-if ((navigator as Navigator & { standalone?: boolean }).standalone) {
+// Installed on iOS, the viewport units (and innerHeight) come out as if the page were in Safari, one status bar short or
+// worse, so the chassis ends early and the transport row is clipped. On an installed iOS app the screen is the whole app,
+// so size to it. Older iOS flags the app with `navigator.standalone`; newer iOS web apps opened from a manifest may only
+// match the display-mode query, so check both. iOS doesn't swap screen.width/height on rotation, so pick by orientation.
+const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const installed = () =>
+  (navigator as Navigator & { standalone?: boolean }).standalone === true ||
+  matchMedia("(display-mode: standalone), (display-mode: fullscreen)").matches;
+if (ios) {
   const fit = () => {
+    const root = document.documentElement;
+    if (!installed()) {
+      root.style.removeProperty("--app-h");
+      return;
+    }
     const portrait = matchMedia("(orientation: portrait)").matches;
     const long = Math.max(screen.width, screen.height);
     const short = Math.min(screen.width, screen.height);
-    const h = Math.max(window.innerHeight, portrait ? long : short);
-    document.documentElement.style.setProperty("--app-h", `${h}px`);
+    root.style.setProperty("--app-h", `${Math.max(window.innerHeight, portrait ? long : short)}px`);
   };
   fit();
   addEventListener("resize", fit);
-  addEventListener("orientationchange", fit);
+  addEventListener("orientationchange", () => setTimeout(fit, 300));
+  addEventListener("pageshow", fit);
 }
 
 createRoot(document.getElementById('root')!).render(
