@@ -10,6 +10,8 @@ interface DragState {
   value: number;
   /** Pixels from where the drag started to the bottom of the screen, the distance over which the slider gets finer. */
   room: number;
+  /** The cents left over when the drag began (the value minus its nearest whole coarse step), kept while snapping. */
+  offset: number;
 }
 
 /**
@@ -35,6 +37,7 @@ export function PrecisionSlider({
   step,
   keyStep = step,
   fineSpan,
+  coarseStep,
   value,
   onChange,
   onDoubleClick,
@@ -50,6 +53,8 @@ export function PrecisionSlider({
   keyStep?: number;
   /** How much the value changes across the whole track when the finger is at the bottom of the screen: the finest setting. */
   fineSpan: number;
+  /** While the finger is directly over the track, the value snaps to multiples of this (e.g. whole semitones). */
+  coarseStep?: number;
   value: number;
   onChange: (value: number) => void;
   onDoubleClick?: () => void;
@@ -77,7 +82,8 @@ export function PrecisionSlider({
       lastX: e.clientX,
       startY: e.clientY,
       value,
-      room: Math.max(MIN_DRAG_ROOM_PX, window.innerHeight - e.clientY),
+      offset: coarseStep ? value - Math.round(value / coarseStep) * coarseStep : 0,
+      room: Math.max(MIN_DRAG_ROOM_PX, (window.innerHeight - e.clientY) / 2),
     };
     setDragging(true);
   };
@@ -96,7 +102,14 @@ export function PrecisionSlider({
     const sweep = (max - min) * Math.pow(fineSpan / (max - min), down);
     const deltaValue = (dx / trackWidth) * sweep;
     drag.value = Math.min(max, Math.max(min, drag.value + deltaValue));
-    onChange(snapToStep(drag.value));
+    const rect = track.getBoundingClientRect();
+    const overTrack = e.clientY >= rect.top - 12 && e.clientY <= rect.bottom + 12;
+    if (coarseStep && overTrack) {
+      // whole steps from where the drag began, so any cents offset the value already had stays until a double-tap resets it
+      onChange(Math.min(max, Math.max(min, Math.round((drag.value - drag.offset) / coarseStep) * coarseStep + drag.offset)));
+    } else {
+      onChange(snapToStep(drag.value));
+    }
   };
 
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {

@@ -109,6 +109,7 @@ export function PadPanel({
           step={1}
           keyStep={10}
           fineSpan={100}
+          coarseStep={100}
           value={trim}
           bipolar
           onChange={(cents) => onChange(splitTrim(cents))}
