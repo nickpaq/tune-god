@@ -58,13 +58,13 @@ describe("planning the sounds", () => {
   ];
   const tally = (list: { category: string }[]) => list.reduce<Record<string, number>>((n, s) => ({ ...n, [s.category]: (n[s.category] ?? 0) + 1 }), {});
 
-  it("puts one sound per kit slot on the pads and holds four alternatives of each kit type back, hidden", () => {
+  it("puts one sound per kit slot on the pads and holds ten alternatives of each kit type back, hidden", () => {
     const { visible, hidden } = planPackSounds(pack, { kitSlots: KIT, random: seeded() });
     const shown = tally(visible);
     const spare = tally(hidden);
     for (const [category, slots] of Object.entries(KIT)) {
       expect(shown[category]).toBe(slots);
-      expect(spare[category]).toBe(4);
+      expect(spare[category]).toBe(10);
     }
     // No file is both on a pad and a hidden spare.
     const names = [...visible, ...hidden].map((s) => s.file.name);
@@ -80,6 +80,15 @@ describe("planning the sounds", () => {
     expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
     for (const c of others) expect(tally(hidden)[c]).toBe(4);
     expect(visible.length).toBeLessThanOrEqual(64);
+  });
+
+  it("fills the pads after the kit with melodics and loops, not with 'other' sounds", () => {
+    const { visible, hidden } = planPackSounds([...pack, ...many("Misc", 50)], { kitSlots: KIT, random: seeded(2) });
+    expect(tally(visible).other).toBeUndefined();
+    expect(tally(hidden).other).toBeUndefined();
+    // But a pack with nothing else still gets its other sounds on the pads.
+    const onlyOther = planPackSounds([...many("Kicks", 5), ...many("Misc", 50)], { kitSlots: KIT, random: seeded(2) });
+    expect(tally(onlyOther.visible).other).toBe(48);
   });
 
   it("keeps alternatives back for a small type instead of putting every file on a pad", () => {

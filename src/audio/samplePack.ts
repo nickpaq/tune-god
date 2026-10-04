@@ -129,8 +129,10 @@ export interface PickedSound<T = unknown> {
   category: CategoryId;
 }
 
-/** Hidden alternatives kept for each type, for the hot-swap menu. */
-export const PACK_ALTERNATIVES = 4;
+/** Hidden alternatives kept for each drum type the layout has slots for, for the hot-swap menu. */
+export const PACK_ALTERNATIVES = 10;
+/** Hidden alternatives kept for each of the other types (bass, melodic, loops). */
+export const PACK_OTHER_ALTERNATIVES = 4;
 /** Pads taken by the finger-drumming page (bank A); the pack's other sounds fill the pads after it. */
 export const KIT_PADS = 16;
 
@@ -164,6 +166,7 @@ export function planPackSounds<T>(
     slots = PACK_SLOTS,
     kitPads = KIT_PADS,
     alternatives = PACK_ALTERNATIVES,
+    otherAlternatives = PACK_OTHER_ALTERNATIVES,
     byteBudget = PACK_BYTE_BUDGET,
     maxFileBytes = maxFileBytesFor(byteBudget),
     random = Math.random,
@@ -173,6 +176,7 @@ export function planPackSounds<T>(
     slots?: number;
     kitPads?: number;
     alternatives?: number;
+    otherAlternatives?: number;
     byteBudget?: number;
     maxFileBytes?: number;
     random?: () => number;
@@ -199,11 +203,14 @@ export function planPackSounds<T>(
   const visibleWant = new Map<CategoryId, number>();
   for (const c of kitTypes) visibleWant.set(c, Math.min(kitSlots[c]!, queues.get(c)?.length ?? 0));
   const others = [...queues.keys()].filter((c) => !kitTypes.includes(c));
+  // The pads after the kit are for melodics, bass and loops; "other" only fills them when the pack has nothing else.
+  const fillers = others.some((c) => c !== "other" && queues.get(c)!.length > 0) ? others.filter((c) => c !== "other") : others;
+  const altsFor = (c: CategoryId) => (kitTypes.includes(c) ? alternatives : c === "other" ? 0 : otherAlternatives);
   let room = Math.max(0, slots - kitPads);
-  const share = new Map(others.map((c) => [c, 0]));
+  const share = new Map(fillers.map((c) => [c, 0]));
   // The alternatives are set aside first, so a small type keeps some spares to swap in rather than putting every file on a pad.
-  const forPads = (c: CategoryId) => Math.max(1, queues.get(c)!.length - alternatives);
-  for (let open = others.filter((c) => queues.get(c)!.length > 0); room > 0 && open.length; ) {
+  const forPads = (c: CategoryId) => Math.max(1, queues.get(c)!.length - altsFor(c));
+  for (let open = fillers.filter((c) => queues.get(c)!.length > 0); room > 0 && open.length; ) {
     for (const c of shuffled(open, random)) {
       if (room <= 0) break;
       share.set(c, share.get(c)! + 1);
@@ -231,13 +238,13 @@ export function planPackSounds<T>(
   };
 
   for (const tier of BUDGET_TIERS) {
-    const types = (tier === "kit" ? kitTypes : tier).filter((c) => queues.has(c) && (tier === "kit" || !kitTypes.includes(c)));
+    const types = (tier === "kit" ? kitTypes : tier).filter((c) => queues.has(c) && (tier === "kit" || !kitTypes.includes(c)) && (kitTypes.includes(c) || fillers.includes(c)));
     for (let progressed = true; progressed; ) {
       progressed = false;
       for (const category of shuffled(types, random)) {
         const wantShown = visibleWant.get(category) ?? 0;
         const isShown = (shown.get(category) ?? 0) < wantShown;
-        if (!isShown && (kept.get(category) ?? 0) >= alternatives) continue;
+        if (!isShown && (kept.get(category) ?? 0) >= altsFor(category)) continue;
         const file = pop(category);
         if (!file) continue;
         progressed = true;
@@ -256,7 +263,7 @@ export function planPackSounds<T>(
   const target = slots - kitPads;
   for (let progressed = true; progressed && visible.filter((v) => !kitTypes.includes(v.category)).length < target; ) {
     progressed = false;
-    for (const category of shuffled(others, random)) {
+    for (const category of shuffled(fillers, random)) {
       if (visible.filter((v) => !kitTypes.includes(v.category)).length >= target) break;
       const file = pop(category);
       if (!file) continue;

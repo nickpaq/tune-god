@@ -30,14 +30,14 @@ describe("sample pack project", () => {
     expect(built.file.name).toBe("My Pack.koala");
     const zip = await JSZip.loadAsync(await built.file.arrayBuffer());
     const json = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
-    // One sound per kit slot on the pads, and four spares per type numbered past the grid so they sit on no pad.
-    expect(json.pads.map((p: any) => p.pad)).toEqual([0, 1, 2, ...Array.from({ length: 12 }, (_, i) => 64 + i)]);
+    // One sound per kit slot on the pads, and ten spares per type numbered past the grid so they sit on no pad.
+    expect(json.pads.map((p: any) => p.pad)).toEqual([0, 1, 2, ...Array.from({ length: 30 }, (_, i) => 64 + i)]);
     for (const p of json.pads) expect(zip.file(`sampler/${p.sampleId}.wav`)).not.toBeNull();
 
     const shown = Object.entries(built.categories).filter(([pad]) => Number(pad) < 64).map(([, c]) => c).sort();
     expect(shown).toEqual(["closedHat", "kick", "snare"]);
     const spare = Object.entries(built.categories).filter(([pad]) => Number(pad) >= 64).map(([, c]) => c);
-    for (const c of ["closedHat", "kick", "snare"]) expect(spare.filter((s) => s === c)).toHaveLength(4);
+    for (const c of ["closedHat", "kick", "snare"]) expect(spare.filter((s) => s === c)).toHaveLength(10);
   });
 
   it("levels the sounds as it builds: gain goes into the audio, the type's mix onto the pad knob", async () => {
