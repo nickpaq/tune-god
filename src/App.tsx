@@ -652,7 +652,27 @@ function App() {
       ? cur.layout.pre
       : Object.fromEntries(Object.values(cur.pads).filter(isReal).map((p) => [p.origIndex, p.index]));
     recordEdit();
-    setPads(arrangeInto(cur.pads, id));
+    const arranged = arrangeInto(cur.pads, id);
+    const spares = Object.values(cur.hidden);
+    if (spares.length > 0) {
+      // A sample pack fills its gaps (missing kit sounds, bank B and C slots) from its hot-swap spares straight away.
+      const lay = layoutById(id);
+      const missing = missingSlots(arranged, lay);
+      const slotOf = assignFill(missing, lay, spares.map((p) => ({ category: p.category ?? "other", is808: p.is808 })));
+      const used = new Set<number>();
+      for (const [slot, at] of slotOf) {
+        const spare = spares[at];
+        arranged[slot] = { ...spare, index: slot, tune: tuneDefault(spare.tuneLocked, spare.tune, spare.category, spare.detectedMidi, tunedTarget) };
+        used.add(spare.origIndex);
+      }
+      lay.slots.forEach((slotDef, i) => {
+        if (!slotDef.ghostOf || (arranged[i] && !arranged[i].placeholder)) return;
+        const source = lay.slots.map((s, j) => ({ s, j })).filter(({ s, j }) => !s.ghostOf && s.category === slotDef.ghostOf && arranged[j] && isReal(arranged[j])).map(({ j }) => arranged[j])[0];
+        if (source) arranged[i] = makeGhostPad(i, slotDef.ghostOf === "snare" ? "ghostSnare" : "softKick", source);
+      });
+      if (used.size) setHidden((prev) => Object.fromEntries(Object.entries(prev).filter(([, p]) => !used.has(p.origIndex))));
+    }
+    setPads(arranged);
     setLayout({ on: true, id, pre });
     setSelected(null);
     setBank(0);

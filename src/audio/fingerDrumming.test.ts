@@ -220,4 +220,10 @@ describe("arrangeFingerDrumming for a sample pack", () => {
     expect(extra.filter((s) => a.positions.get(s.key) === undefined)).toHaveLength(0);
     expect(new Set(a.positions.values()).size).toBe(a.positions.size);
   });
+
+  it("fills all four bank C bass pads from 808s when a pack has no ordinary bass", () => {
+    const eights = [0, 1, 2, 3].map(() => sound("bass", { is808: true }));
+    const a = arrangeFingerDrumming(eights, horizontal, { pack: true });
+    expect(eights.map((s) => indexOf(a, s)).sort((x, y) => x! - y!)).toEqual([32, 33, 34, 35]);
+  });
 });

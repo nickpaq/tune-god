@@ -58,7 +58,7 @@ function frequency(s: ArrangeSound): number {
 const byFrequency = (a: ArrangeSound, b: ArrangeSound) => frequency(a) - frequency(b);
 
 /** Drums a slot may borrow when no sound matches it exactly: a clap can stand in for a snare, an open hat for a closed one. */
-const SUBSTITUTE_GROUP: Partial<Record<CategoryId, string>> = {
+export const SUBSTITUTE_GROUP: Partial<Record<CategoryId, string>> = {
   kick: "kick",
   snare: "snare",
   clap: "snare",
@@ -135,8 +135,15 @@ function placePack(tonal: ArrangeSound[], leftoverDrums: ArrangeSound[], taken: 
   const bankC = PADS_PER_BANK * 2;
   put(of("melodicLoop"), PADS_PER_BANK, PACK_LOOP_PADS);
   put(of("melodic"), PADS_PER_BANK + PACK_LOOP_PADS, PACK_MELODIC_PADS);
-  put(bass.filter((s) => !s.is808), bankC, PACK_BASS_PADS);
-  put(bass.filter((s) => s.is808), bankC + PACK_BASS_PADS, PACK_BASS_PADS);
+  // Two ordinary-bass pads then two 808 pads; a shortfall in one kind is made up from the other, as the planner does.
+  const spare = { plain: bass.filter((s) => !s.is808), eights: bass.filter((s) => s.is808) };
+  for (let n = 0; n < 2 * PACK_BASS_PADS; n++) {
+    const ownKind = n < PACK_BASS_PADS ? spare.plain : spare.eights;
+    const otherKind = n < PACK_BASS_PADS ? spare.eights : spare.plain;
+    const pick = ownKind.shift() ?? otherKind.shift();
+    if (pick) positions.set(pick.key, bankC + n);
+  }
+  overflow.push(...spare.plain, ...spare.eights);
   const rest = TONAL_ORDER.filter((c) => c !== "bass" && c !== "melodic" && c !== "melodicLoop").flatMap(of);
   put(rest, bankC + 2 * PACK_BASS_PADS, PADS_PER_BANK - 2 * PACK_BASS_PADS);
   const used = new Set([...taken, ...positions.values()]);

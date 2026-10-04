@@ -1,6 +1,7 @@
 // Adding a second sample pack to a project that already has one: which pad slots are still missing a sound, what kinds of
 // sound they want, and which new sound goes in which slot. Nothing the user already has is moved or replaced.
 import { isKitCategory, type CategoryId } from "./classify";
+import { SUBSTITUTE_GROUP } from "./fingerDrumming";
 import type { FingerLayout } from "./fingerLayouts";
 import { BANK_B_QUOTA, type PlanKey } from "./samplePack";
 
@@ -104,6 +105,8 @@ export function assignFill(missing: number[], layout: FingerLayout, sounds: Fill
     else if (zone.kind === "bass") at = take((s) => s.category === "bass" && !s.is808);
     else if (zone.kind === "808") at = take((s) => s.category === "bass" && !!s.is808);
     else at = take((s) => !hasOwnPlace(s));
+    // A kit slot with no sound of its type takes one of the same family (any hat for a hat slot, a clap for a snare).
+    if (at < 0 && zone.kind === "kit") at = take((s) => SUBSTITUTE_GROUP[s.category] !== undefined && SUBSTITUTE_GROUP[s.category] === SUBSTITUTE_GROUP[zone.category]);
     if (at < 0 && (zone.kind === "bass" || zone.kind === "808")) at = take((s) => s.category === "bass");
     if (at >= 0) out.set(i, at);
   }
