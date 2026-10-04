@@ -36,4 +36,3 @@ export function placeholderColor(pad: Pad): string {
   return pad.placeholder?.kind === "empty" ? EMPTY_PAD_COLOR : MISSING_PAD_COLOR;
 }
 
-export const isPlaceholder = (pad: Pad | undefined): boolean => !!pad?.placeholder;

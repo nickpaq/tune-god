@@ -21,11 +21,6 @@ export interface FoundPack {
 
 type Entry = FileSystemEntry;
 
-/** True when a drop holds a folder, so the app can tell a pack from a single .koala file. */
-export function dropHasFolder(items: DataTransferItemList | undefined): boolean {
-  return Array.from(items ?? []).some((item) => item.kind === "file" && item.webkitGetAsEntry?.()?.isDirectory);
-}
-
 /**
  * Entries must be taken from the drop event synchronously (the list is emptied once the handler yields),
  * so this is called straight from the handler and the walking happens afterwards.

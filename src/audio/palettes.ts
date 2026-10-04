@@ -194,7 +194,3 @@ export function colorFor(palette: Palette, category: CategoryId): string {
   return shade(toneColor(palette, CATEGORY_TONE[category]), SHADE[category] ?? 0);
 }
 
-/** Black or white, whichever reads better over `hex`. */
-export function textColorOn(hex: string): string {
-  return hexToOklch(hex)[0] > 0.66 ? "#000" : "#fff";
-}

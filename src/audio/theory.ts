@@ -19,42 +19,6 @@ export function frequencyToMidi(frequency: number, a4 = 440): number {
   return 69 + 12 * Math.log2(frequency / a4);
 }
 
-/** Cents offset of a fractional MIDI value from its nearest integer semitone. */
-export function centsOffsetFromNearest(midi: number): number {
-  const nearest = Math.round(midi);
-  return (midi - nearest) * 100;
-}
-
-export function pitchClassOf(midi: number): number {
-  return ((Math.round(midi) % 12) + 12) % 12;
-}
-
-export function pitchClassIndex(name: string): number {
-  const normalized = name.trim().toUpperCase().replace("♯", "#").replace("♭", "b");
-  const flatToSharp: Record<string, string> = {
-    DB: "C#",
-    EB: "D#",
-    GB: "F#",
-    AB: "G#",
-    BB: "A#",
-  };
-  const sharp = flatToSharp[normalized] ?? normalized;
-  const idx = NOTE_NAMES.findIndex((n) => n.toUpperCase() === sharp);
-  if (idx === -1) throw new Error(`Unrecognized note name: ${name}`);
-  return idx;
-}
-
-/**
- * Smallest signed semitone shift (in [-6, 6]) that moves `fromPitchClass`
- * onto `toPitchClass`, wrapping through the nearest octave direction.
- */
-export function smallestSignedShift(fromPitchClass: number, toPitchClass: number): number {
-  let diff = (toPitchClass - fromPitchClass) % 12;
-  if (diff > 6) diff -= 12;
-  if (diff < -6) diff += 12;
-  return diff;
-}
-
 /** Converts a semitone shift ratio for pitch-shifting APIs (e.g. Rubber Band's pitch scale). */
 export function semitonesToRatio(semitones: number): number {
   return Math.pow(2, semitones / 12);
@@ -75,13 +39,6 @@ export function clampA4Reference(hz: number): number {
 export function referenceOffsetSemitones(a4Reference: number): number {
   return 12 * Math.log2(a4Reference / 440);
 }
-
-export function formatCents(cents: number): string {
-  const rounded = Math.round(cents);
-  if (rounded === 0) return "in tune";
-  return rounded > 0 ? `+${rounded}c` : `${rounded}c`;
-}
-
 
 /** A pad's manual trim as one number of cents: its semitone and cent trims together. */
 export function trimCents(semis: number, cents: number): number {

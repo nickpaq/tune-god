@@ -11,13 +11,6 @@ export function getAudioContext(): AudioContext {
   return sharedContext;
 }
 
-export async function decodeFile(file: File): Promise<AudioBuffer> {
-  const arrayBuffer = await file.arrayBuffer();
-  const ctx = getAudioContext();
-  // decodeAudioData detaches the buffer, so callers must not need `file` again.
-  return ctx.decodeAudioData(arrayBuffer.slice(0));
-}
-
 export interface DecodedAudio {
   sampleRate: number;
   channelData: Float32Array[];
@@ -74,17 +67,6 @@ export async function decodeNative(file: File): Promise<DecodedAudio> {
   if (wav && wav.channelData.length > 0 && wav.channelData[0].length > 0) return wav;
   const buffer = await getAudioContext().decodeAudioData(bytes.slice(0));
   return { sampleRate: buffer.sampleRate, channelData: cloneChannelData(buffer) };
-}
-
-/** Downmixes a (possibly multi-channel) AudioBuffer to a single mono Float32Array. */
-export function toMono(buffer: AudioBuffer): Float32Array {
-  if (buffer.numberOfChannels === 1) return buffer.getChannelData(0).slice();
-  const mono = new Float32Array(buffer.length);
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const data = buffer.getChannelData(ch);
-    for (let i = 0; i < data.length; i++) mono[i] += data[i] / buffer.numberOfChannels;
-  }
-  return mono;
 }
 
 /** Downmixes raw per-channel Float32Arrays (e.g. stored on a SampleItem) to mono. */
