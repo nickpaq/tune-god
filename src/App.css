@@ -596,16 +596,16 @@
   bottom: calc(100% + 0.4cqw + 1.5px);
 }
 
-/* The sound type's symbol is pressed into the rubber: dark grey with a faint lip of light underneath. */
+/* The sound type's symbol, small in the pad's top left corner, pressed into the rubber: dark grey with a faint lip of light underneath. */
 .pad__symbol {
   position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 52%;
-  height: 52%;
+  top: 7%;
+  left: 7%;
+  width: 22%;
+  height: 22%;
   fill: none;
   stroke: #3f3f44;
-  stroke-width: 1.7;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16));
