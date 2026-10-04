@@ -102,7 +102,7 @@ npx tsx scripts/checkResample.ts    # resampler accuracy on pure tones
 npx tsx scripts/checkLoudness.ts    # loudness meter and balancer sanity checks
 ```
 
-Icons in `public/pwa-*.png` and `public/apple-touch-icon.png` are auto-generated placeholders (`scripts/generate-icons.mjs`).
+The icon is the koala (with a cigarette) in `public/favicon.svg`; `public/pwa-192.png`, `public/pwa-512.png` and `public/apple-touch-icon.png` are the same art as full-bleed squares, rendered from that SVG without its rounded frame (`scripts/generate-icons.mjs` is an old placeholder generator and would overwrite them with a plain "T"; do not run it).
 
 ## Using on iOS
 
