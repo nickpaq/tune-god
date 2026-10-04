@@ -20,6 +20,8 @@ export interface ArrangeSound {
   midi?: number | null;
   /** Spectral centroid in Hz, used to order sounds with no clear pitch. */
   centroid?: number;
+  /** A bass sound that is an 808, which a sample pack keeps apart from ordinary bass. */
+  is808?: boolean;
 }
 
 export interface ArrangePlaceholder {
@@ -111,28 +113,32 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[]): Kit {
   return { slots, leftover: drums.filter((d) => !used.has(d.key)) };
 }
 
-/** A sample pack's bank B holds this many drum loops (its first two rows) and then this many melodics (the last two). */
+/** A sample pack's bank B holds eight melodic loops (its first two rows) and then eight melodics (the last two). */
 const PACK_LOOP_PADS = 8;
 const PACK_MELODIC_PADS = 8;
+/** Bank C starts with two ordinary basses and two 808s. */
+const PACK_BASS_PADS = 2;
 
 /**
- * Where a sample pack's non-kit sounds go: bank B takes eight drum loops then eight melodics, bank C everything else
- * (lowest to highest, bass first), and bank D stays empty. Sounds that do not fit their place take the first free pad
- * of banks B, C then D, so none is lost.
+ * Where a sample pack's non-kit sounds go: bank B takes eight melodic loops then eight melodics; bank C two basses, two
+ * 808s (all classified as bass) and then every other type (drum loops, perc loops, other, lowest to highest); bank D stays
+ * empty for the user. Sounds that do not fit their place take the first free pad of banks B, C then D, so none is lost.
  */
 function placePack(tonal: ArrangeSound[], leftoverDrums: ArrangeSound[], taken: Set<number>, positions: Map<number, number>): void {
   const of = (c: CategoryId) => tonal.filter((s) => (s.category ?? "other") === c).sort(byFrequency);
-  const loops = of("drumLoop");
-  const melodics = of("melodic");
-  const rest = TONAL_ORDER.filter((c) => c !== "drumLoop" && c !== "melodic").flatMap(of);
+  const bass = of("bass");
   const overflow: ArrangeSound[] = [];
   const put = (list: ArrangeSound[], start: number, count: number) => {
     list.slice(0, count).forEach((s, n) => positions.set(s.key, start + n));
     overflow.push(...list.slice(count));
   };
-  put(loops, PADS_PER_BANK, PACK_LOOP_PADS);
-  put(melodics, PADS_PER_BANK + PACK_LOOP_PADS, PACK_MELODIC_PADS);
-  put(rest, PADS_PER_BANK * 2, PADS_PER_BANK);
+  const bankC = PADS_PER_BANK * 2;
+  put(of("melodicLoop"), PADS_PER_BANK, PACK_LOOP_PADS);
+  put(of("melodic"), PADS_PER_BANK + PACK_LOOP_PADS, PACK_MELODIC_PADS);
+  put(bass.filter((s) => !s.is808), bankC, PACK_BASS_PADS);
+  put(bass.filter((s) => s.is808), bankC + PACK_BASS_PADS, PACK_BASS_PADS);
+  const rest = TONAL_ORDER.filter((c) => c !== "bass" && c !== "melodic" && c !== "melodicLoop").flatMap(of);
+  put(rest, bankC + 2 * PACK_BASS_PADS, PADS_PER_BANK - 2 * PACK_BASS_PADS);
   const used = new Set([...taken, ...positions.values()]);
   const free: number[] = [];
   for (let i = PADS_PER_BANK; i < PAD_COUNT; i++) if (!used.has(i)) free.push(i);

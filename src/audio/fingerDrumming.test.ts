@@ -189,26 +189,33 @@ describe("classification by name", () => {
 });
 
 describe("arrangeFingerDrumming for a sample pack", () => {
-  const many = (category: CategoryId, n: number) => Array.from({ length: n }, () => sound(category));
+  const many = (category: CategoryId, n: number, extra: Partial<ArrangeSound> = {}) => Array.from({ length: n }, () => sound(category, extra));
   const sounds = [
     drum("kick"), drum("snare"), drum("closedHat"), drum("openHat"),
-    ...many("drumLoop", 8), ...many("melodic", 8), ...many("bass", 4), ...many("percLoop", 4), ...many("melodicLoop", 4), ...many("other", 4),
+    ...many("melodicLoop", 8), ...many("melodic", 8), ...many("bass", 2), ...many("bass", 2, { is808: true }),
+    ...many("drumLoop", 4), ...many("percLoop", 4), ...many("other", 4),
   ];
+  const where = (a: ReturnType<typeof arrangeFingerDrumming>, c: CategoryId, only808?: boolean) =>
+    sounds.filter((s) => s.category === c && (only808 === undefined || !!s.is808 === only808)).map((s) => indexOf(a, s)!).sort((x, y) => x - y);
 
-  it("puts eight loops then eight melodics on bank B, the rest on bank C, and nothing on bank D", () => {
+  it("puts eight melodic loops then eight melodics on bank B", () => {
     const a = arrangeFingerDrumming(sounds, horizontal, { pack: true });
-    const where = (c: CategoryId) => sounds.filter((s) => s.category === c).map((s) => indexOf(a, s)!).sort((x, y) => x - y);
-    expect(where("drumLoop")).toEqual([16, 17, 18, 19, 20, 21, 22, 23]);
-    expect(where("melodic")).toEqual([24, 25, 26, 27, 28, 29, 30, 31]);
-    for (const c of ["bass", "percLoop", "melodicLoop", "other"] as CategoryId[]) for (const i of where(c)) expect(i).toBeGreaterThanOrEqual(32), expect(i).toBeLessThan(48);
-    // Bank D is all "Empty pad" placeholders.
+    expect(where(a, "melodicLoop")).toEqual([16, 17, 18, 19, 20, 21, 22, 23]);
+    expect(where(a, "melodic")).toEqual([24, 25, 26, 27, 28, 29, 30, 31]);
+  });
+
+  it("puts two basses, then two 808s, then every other type on bank C, and leaves bank D empty", () => {
+    const a = arrangeFingerDrumming(sounds, horizontal, { pack: true });
+    expect(where(a, "bass", false)).toEqual([32, 33]);
+    expect(where(a, "bass", true)).toEqual([34, 35]);
+    for (const c of ["drumLoop", "percLoop", "other"] as CategoryId[]) for (const i of where(a, c)) expect(i).toBeGreaterThanOrEqual(36), expect(i).toBeLessThan(48);
     const bankD = a.placeholders.filter((p) => p.index >= 48);
     expect(bankD).toHaveLength(16);
     expect(bankD.every((p) => p.kind === "empty")).toBe(true);
   });
 
-  it("does not lose sounds that overflow their bank", () => {
-    const extra = [...sounds, ...many("drumLoop", 3)];
+  it("does not lose sounds that overflow their place", () => {
+    const extra = [...sounds, ...many("melodicLoop", 3), ...many("bass", 3)];
     const a = arrangeFingerDrumming(extra, horizontal, { pack: true });
     expect(extra.filter((s) => a.positions.get(s.key) === undefined)).toHaveLength(0);
     expect(new Set(a.positions.values()).size).toBe(a.positions.size);

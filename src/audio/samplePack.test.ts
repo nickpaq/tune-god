@@ -71,42 +71,60 @@ describe("planning the sounds", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("gives bank B eight drum loops and eight melodics, and shares bank C's sixteen between everything else", () => {
-    const { visible, hidden } = planPackSounds([...pack, ...many("Perc Loops", 30), ...many("Misc", 30)], { kitSlots: KIT, random: seeded(5) });
+  it("plans bank B as eight melodic loops and eight melodics, and bank C as two basses, two 808s and twelve of everything else", () => {
+    const files = [
+      ...pack.filter((f) => f.folders[0] !== "Bass" && f.folders[0] !== "Drum Loops"),
+      ...many("Bass", 30), ...many("808s", 30), ...many("Drum Loops", 30), ...many("Perc Loops", 30), ...many("Misc", 30),
+    ];
+    const { visible, hidden } = planPackSounds(files, { kitSlots: KIT, random: seeded(5) });
     const shown = tally(visible);
-    expect(shown.drumLoop).toBe(8);
+    expect(shown.melodicLoop).toBe(8);
     expect(shown.melodic).toBe(8);
-    // Bank C: bass, melodic loops, perc loops and other, sixteen between them.
-    const rest = ["bass", "melodicLoop", "percLoop", "other"].map((c) => shown[c]);
-    expect(rest.reduce((a, b) => a + b, 0)).toBe(16);
+    expect(shown.bass).toBe(4);
+    expect(visible.filter((v) => v.category === "bass" && v.is808)).toHaveLength(2);
+    expect(visible.filter((v) => v.category === "bass" && !v.is808)).toHaveLength(2);
+    // The other twelve are shared between drum loops, perc loops and other.
+    const rest = ["drumLoop", "percLoop", "other"].map((c) => shown[c]);
+    expect(rest.reduce((a, b) => a + b, 0)).toBe(12);
     expect(Math.max(...rest) - Math.min(...rest)).toBeLessThanOrEqual(1);
-    for (const c of ["drumLoop", "melodic", "bass", "melodicLoop", "percLoop"]) expect(tally(hidden)[c]).toBe(4);
-    // 14 kit pads + 8 + 8 + 16: nothing on bank D.
-    expect(visible).toHaveLength(14 + 8 + 8 + 16);
+    for (const c of ["melodicLoop", "melodic", "bass", "drumLoop", "percLoop"]) expect(tally(hidden)[c]).toBeGreaterThanOrEqual(4);
+    // 14 kit pads + 8 + 8 + 4 + 12: nothing for bank D.
+    expect(visible).toHaveLength(14 + 8 + 8 + 4 + 12);
+  });
+
+  it("knows an 808 by its name or its folder", () => {
+    const files = [file(["808s"], "thing.wav"), file(["Bass"], "Big 808 Sub.wav"), file(["Bass"], "Reese.wav")];
+    const { visible } = planPackSounds(files, { kitSlots: {}, random: seeded() });
+    expect(visible.filter((v) => v.is808).map((v) => v.file.name).sort()).toEqual(["Big 808 Sub.wav", "thing.wav"]);
+  });
+
+  it("makes up a shortage of one bass kind from the other", () => {
+    const { visible } = planPackSounds([...many("Bass", 20)], { kitSlots: {}, random: seeded() });
+    expect(tally(visible).bass).toBe(4);
+    expect(visible.some((v) => v.is808)).toBe(false);
   });
 
   it("leaves bank B's loop pads short rather than filling them with something else when loops are too big to load", () => {
-    const files = [...many("Kicks", 3), ...many("Drum Loops", 20, 5000), ...many("Synths", 20)];
+    const files = [...many("Kicks", 3), ...many("Melodic Loops", 20, 5000), ...many("Synths", 20)];
     const { visible } = planPackSounds(files, { kitSlots: KIT, maxFileBytes: 1000, random: seeded() });
-    expect(tally(visible).drumLoop).toBeUndefined();
+    expect(tally(visible).melodicLoop).toBeUndefined();
     expect(tally(visible).melodic).toBe(8);
   });
 
   it("keeps alternatives back for a small type instead of putting every file on a pad", () => {
-    const { visible, hidden } = planPackSounds([...many("Bass", 10), ...many("Synths", 10)], { kitSlots: KIT, random: seeded() });
-    expect(tally(visible).bass).toBe(6);
-    expect(tally(hidden).bass).toBe(4);
-    // Bank B's melodics fill their eight pads first; the two files left over are the spares.
-    expect(tally(visible).melodic).toBe(8);
-    expect(tally(hidden).melodic).toBe(2);
+    const { visible, hidden } = planPackSounds([...many("Percussion Loops", 10), ...many("Misc", 10)], { kitSlots: KIT, random: seeded() });
+    // Bank C's twelve rest pads are shared; each type sets four files aside as spares.
+    expect(tally(visible).percLoop).toBe(6);
+    expect(tally(hidden).percLoop).toBe(4);
+    expect(tally(visible).other).toBe(6);
   });
 
   it("gives a small type only what it has, and the kit still gets its alternatives first", () => {
-    const small = [...many("Kicks", 3), ...many("Snares", 20), ...many("Bass", 100)];
+    const small = [...many("Kicks", 3), ...many("Snares", 20), ...many("Synths", 100)];
     const { visible, hidden } = planPackSounds(small, { kitSlots: KIT, random: seeded() });
     expect(tally(visible).kick).toBe(1);
     expect(tally(hidden).kick).toBe(2); // only three kicks exist: one shown, two spare
-    expect(tally(visible).bass).toBe(16); // bank C's sixteen
+    expect(tally(visible).melodic).toBe(8); // bank B's eight
   });
 
   it("spends a tight byte budget on the kit before bass, and bass before loops", () => {

@@ -17,7 +17,7 @@ import { buildTunedKoala, downloadBlob, type GhostPadExport, type TunedSample } 
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { CATEGORIES, categoryIndex, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad, replaceMisfit } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
@@ -216,7 +216,7 @@ function App() {
   /** What the drop zone says while a pack is being measured and levelled. */
   const [importStatus, setImportStatus] = useState("");
 
-  const loadProject = useCallback(async (file: File, restore = false, pack?: { categories: Record<number, CategoryId>; knobDb: Record<number, number> }) => {
+  const loadProject = useCallback(async (file: File, restore = false, pack?: { categories: Record<number, CategoryId>; knobDb: Record<number, number>; is808: Record<number, true> }) => {
     const token = ++loadToken.current;
     setLoading(true);
     try {
@@ -275,6 +275,7 @@ function App() {
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
           knobDb: restore ? restorePads.current[ref.pad]?.knobDb : pack?.knobDb[ref.pad],
+          is808: restore ? restorePads.current[ref.pad]?.is808 : pack?.is808[ref.pad],
           trimmedFrom: range?.start,
           tune: false,
           semis: 0,
@@ -370,11 +371,12 @@ function App() {
         cents: p.cents,
         category: p.category,
         knobDb: p.knobDb,
+        is808: p.is808,
         position: p.index,
       };
     }
     for (const p of Object.values(hidden)) {
-      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, hidden: true };
+      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, hidden: true };
     }
     // Sounds the user deleted stay deleted when the project is reopened.
     for (const ref of projectRef.current?.pads ?? []) {
@@ -518,7 +520,7 @@ function App() {
       .filter(isReal)
       .sort((a, b) => a.index - b.index);
     const { positions, placeholders, ghosts } = arrangeFingerDrumming(
-      real.map((p) => ({ key: p.origIndex, category: p.category, midi: p.detectedMidi, centroid: p.centroid })),
+      real.map((p) => ({ key: p.origIndex, category: p.category, midi: p.detectedMidi, centroid: p.centroid, is808: p.is808 })),
       layoutById(layoutId),
       // A sample pack keeps its loops and melodics on bank B, everything else on bank C, and bank D empty.
       { pack: Object.keys(latest.current.hidden).length > 0 },
@@ -592,8 +594,10 @@ function App() {
     recordEdit();
     const spares = latest.current.hidden;
     const slot = layout.on && pad.index < 16 ? layoutById(layout.id).slots[pad.index] : undefined;
-    const retyped: Pad = { ...pad, category, index: -1, ...(pad.tuneLocked ? {} : { tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) }) };
-    const replacement = Object.values(spares).find((p) => p.category === pad.category);
+    // An 808 is a bass sound told apart by its name.
+    const retyped: Pad = { ...pad, category, index: -1, is808: category === "bass" && is808Name(pad.name), ...(pad.tuneLocked ? {} : { tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) }) };
+    const sameType = Object.values(spares).filter((p) => p.category === pad.category);
+    const replacement = sameType.find((p) => !!p.is808 === !!pad.is808) ?? sameType[0];
     const nextSpares = { ...spares };
     if (replacement) delete nextSpares[replacement.origIndex];
     nextSpares[pad.origIndex] = retyped;
@@ -1011,7 +1015,7 @@ function App() {
           ...Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index >= 16 && p.index !== selectedPad.index && isKitCategory(slotCategory)),
         ],
         slotCategory,
-      )}
+      ).sort((a, b) => (slotCategory === "bass" ? Number(!!a.is808 !== !!selectedPad.is808) - Number(!!b.is808 !== !!selectedPad.is808) : 0))}
       audioOf={audioOf}
       onSwap={(other) => {
         if (hidden[other.origIndex]) return swapInHidden(other, selectedPad);

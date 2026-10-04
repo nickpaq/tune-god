@@ -14,6 +14,8 @@ export interface SavedPad {
   semis: number;
   cents: number;
   category?: CategoryId;
+  /** A bass sound that is an 808 (see Pad.is808). */
+  is808?: boolean;
   /** Knob level of a sample pack sound (see Pad.knobDb). */
   knobDb?: number;
   /** Where the sound sits now, if the user moved it. Pads are keyed by their original slot. */

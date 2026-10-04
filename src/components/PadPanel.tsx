@@ -35,6 +35,8 @@ export interface Pad {
   ghost?: { kind: GhostKind; sourceOrigIndex: number };
   /** The pad knob's level in dB for a sound from a sample pack, whose audio already holds its loudness gain; preview plays at this level. */
   knobDb?: number;
+  /** A bass sound that is an 808 (by its name or folder); a sample pack keeps two of these and two ordinary basses on bank C. */
+  is808?: boolean;
   tune: boolean;
   /** A key chosen for this pad alone ("Tune one"); it overrides the project key. */
   keyPc?: number;

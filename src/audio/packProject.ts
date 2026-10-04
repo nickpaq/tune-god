@@ -99,6 +99,8 @@ export interface PackProject {
   categories: Record<number, CategoryId>;
   /** The volume knob level (dB) written for each pad; the loudness gain itself is already in the audio. */
   knobDb: Record<number, number>;
+  /** Pads (by number) that hold an 808 rather than an ordinary bass. */
+  is808: Record<number, true>;
   plan: PackPlan<PackSource>;
 }
 
@@ -155,10 +157,11 @@ export async function buildPackProject(pack: FoundPack, options: BuildOptions): 
   const pads: unknown[] = [];
   const categories: Record<number, CategoryId> = {};
   const knobDb: Record<number, number> = {};
+  const is808: Record<number, true> = {};
   let shownCount = 0;
   let hiddenCount = 0;
   for (let n = 0; n < readable.length; n++) {
-    const { sound: { file, category }, hidden } = readable[n];
+    const { sound: { file, category, is808: eight08 }, hidden } = readable[n];
     // Sounds for pads take pad numbers 0 up; hot-swap alternatives are numbered from 64, off the grid.
     const slot = hidden ? HIDDEN_PAD_BASE + hiddenCount++ : shownCount++;
     onProgress?.(`Levelling ${n + 1}/${readable.length}`);
@@ -171,10 +174,11 @@ export async function buildPackProject(pack: FoundPack, options: BuildOptions): 
     pads.push({ pad: slot, type: "sample", sampleId: id, vol: volFromDb(balance.knobDb[n]), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
     categories[slot] = category;
     knobDb[slot] = balance.knobDb[n];
+    if (eight08) is808[slot] = true;
   }
 
   zip.file("sampler/sampler.json", JSON.stringify({ samples, pads }));
   // Audio is already compressed or dense PCM; storing it skips a slow pass over every byte.
   const blob = await zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true });
-  return { file: new File([blob], `${pack.name}.koala`, { type: "application/octet-stream" }), categories, knobDb, plan };
+  return { file: new File([blob], `${pack.name}.koala`, { type: "application/octet-stream" }), categories, knobDb, is808, plan };
 }

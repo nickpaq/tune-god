@@ -146,6 +146,11 @@ function hatByDecay(decay: number): CategoryId {
   return decay >= CYMBAL_DECAY ? "cymbal" : decay >= OPEN_HAT_DECAY ? "openHat" : "closedHat";
 }
 
+/** Whether a file or folder name says 808 ("808 Kick", "Sub_808_01", "808s"): the long, tuned sub kicks bass pads keep apart from ordinary bass. */
+export function is808Name(name: string): boolean {
+  return /(^|[^0-9a-z])808s?($|[^0-9a-z])/i.test(name.replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " "));
+}
+
 /** Category implied by a file name ("hat" when it is a hat of unknown openness), or null when it has no telltale word. */
 export function classifyByName(fileName: string): CategoryId | "hat" | null {
   const name = fileName
