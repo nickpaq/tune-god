@@ -2,6 +2,7 @@ import { CATEGORIES, type CategoryId } from "../audio/classify";
 import { colorFor, textColorOn, type Palette } from "../audio/palettes";
 import type { Pad } from "./PadPanel";
 import { PLATES } from "./typePlates";
+import { useDrawerDrag } from "./useDrawerDrag";
 
 const SHORT = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.short])) as Record<CategoryId, string>;
 
@@ -27,6 +28,7 @@ export function ClassifierDrawer({
   onClose: () => void;
 }) {
   const chosen = pad?.category;
+  const drag = useDrawerDrag(onClose);
   return (
     <div
       className={`drawer drawer--types${open ? " drawer--open" : ""}${after ? " drawer--after" : ""}`}
@@ -60,7 +62,7 @@ export function ClassifierDrawer({
           </div>
         ))}
       </div>
-      <button className="drawer__handle" aria-label="Close sound type drawer" onClick={onClose} />
+      <button className="drawer__handle" aria-label="Close sound type drawer" {...drag} />
     </div>
   );
 }

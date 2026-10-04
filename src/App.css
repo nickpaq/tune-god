@@ -799,12 +799,19 @@
   z-index: 1;
   left: 50%;
   bottom: 0;
-  width: 24cqw;
-  height: 4cqw;
+  width: 30cqw;
+  height: 7cqw;
   padding: 0;
   border: 0;
   background: none;
   transform: translateX(-50%);
+  /* dragged up to close, so the browser must not take the gesture for a scroll */
+  touch-action: none;
+  cursor: grab;
+}
+
+.drawer__handle:active {
+  cursor: grabbing;
 }
 
 .drawer__handle::before {
@@ -1510,4 +1517,49 @@
   border: 0.4cqw solid currentColor;
   border-radius: 1.6cqw;
   cursor: pointer;
+}
+
+/*
+ * The key drawer only comes down over the top half of the screen. Nothing dims or blocks the lower half, where the pad's
+ * pitch trim slider sits centred and stays in reach, so a key and the trim can be set together.
+ */
+.drawer-slot--keys {
+  pointer-events: none;
+}
+
+.drawer-slot--keys::before {
+  opacity: 0;
+}
+
+.drawer--keys {
+  inset: 0 0 auto 0;
+  height: 50%;
+}
+
+.drawer--keys.drawer--open {
+  pointer-events: auto;
+}
+
+.drawer--keys .keyboard {
+  min-height: 0;
+}
+
+.screen--keys {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+}
+
+.screen--keys > * {
+  grid-row: 2;
+  min-height: 0;
+}
+
+.screen--keys .pad-panel {
+  justify-content: center;
+}
+
+.screen--keys .pad-panel__head,
+.screen--keys .waveform,
+.screen--keys .pad-panel__category {
+  display: none;
 }

@@ -29,6 +29,7 @@ import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import { extraDrumCount, fillGhostSlot, withoutExtraDrums, type ExtraDrums } from "./audio/extraDrums";
 import { SwapList } from "./components/SwapList";
 import { ClassifierDrawer } from "./components/ClassifierDrawer";
+import { useDrawerDrag } from "./components/useDrawerDrag";
 import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, kitSlotCounts, layoutById } from "./audio/fingerLayouts";
@@ -992,6 +993,7 @@ function App() {
     />
   );
 
+  const keyDrawerDrag = useDrawerDrag(() => setDrawer(null));
   const toggleDrawer = (which: "keys" | "types") => {
     setDrawerAfter(drawer !== null && drawer !== which);
     setDrawer((d) => (d === which ? null : which));
@@ -1192,14 +1194,14 @@ function App() {
         </div>
 
         <div className="screen-wrap">
-          <section className="screen">
+          <section className={`screen${drawer === "keys" ? " screen--keys" : ""}`}>
             {selectedPad?.placeholder && !layout.on ? (
               <div className="screen__message">
                 <strong>{selectedPad.placeholder.label}</strong>
                 <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
               </div>
             ) : selectedPad ? (
-              layout.on ? (
+              layout.on && !(drawer === "keys" && isReal(selectedPad)) ? (
                 <div className="screen__stack">
                   <ViewToggle view={padView} onChange={setPadView} />
                   {padView === "swap" || selectedPad.placeholder || selectedPad.ghost ? swapList : panel}
@@ -1250,7 +1252,7 @@ function App() {
           </section>
 
           {/* The drawers slide down out of a slot along the top of the screen and cover all of it; both stay mounted so they can slide shut too. */}
-          <div className={`drawer-slot${drawer ? " drawer-slot--open" : ""}`} onClick={(e) => e.target === e.currentTarget && setDrawer(null)}>
+          <div className={`drawer-slot${drawer ? " drawer-slot--open" : ""}${drawer === "keys" ? " drawer-slot--keys" : ""}`} onClick={(e) => e.target === e.currentTarget && setDrawer(null)}>
             <div
               className={`drawer drawer--keys${drawer === "keys" ? " drawer--open" : ""}${drawerAfter ? " drawer--after" : ""}`}
               role="region"
@@ -1273,7 +1275,7 @@ function App() {
                   Tone
                 </button>
               </div>
-              <button className="drawer__handle" aria-label="Close key drawer" onClick={() => setDrawer(null)} />
+              <button className="drawer__handle" aria-label="Close key drawer" {...keyDrawerDrag} />
             </div>
             <ClassifierDrawer
               open={drawer === "types"}
