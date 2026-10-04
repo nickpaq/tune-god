@@ -8,7 +8,7 @@ What is known about Koala's `mixer.json`, for the export code in `src/audio/mixe
 - A pad's `bus` in `sampler/sampler.json` is 0 to 3 for A to D, -1 for Main. Confirmed against a project with pads routed to every bus: pad on bus 0 labelled kick, 1 bass, 2 drums, 3 melodic.
 - The user's own template strips are named `kick`, `bass`, `drums`, `melodic`. That is the layout the app now writes (Kick, Bass, Drums, Melodic).
 - Effect order is slot order. Slot position of the template plugins is arbitrary.
-- `sampler.json` pads also carry an `eq` object (`lo` highpass, `mid` peaking, `hi` highshelf; each `freq`, `gain`, `q`, `type`). Not used by the app yet.
+- **Two different EQs.** (1) The per-pad EQ lives on each pad in `sampler/sampler.json` as `eq` and is not a mixer plugin: `{enabled: "true", lo, mid, hi}`, each band `{type, freq, gain, q}`. Seen: `lo` type `highpass` (freq 139 to 180 Hz on the four test pads, shown with gain -18 and q 1), `mid` type `peaking` (1000 Hz, 0 dB, q 1) and `hi` type `highshelf` (8000 Hz, 0 dB, q 1); the last two are Koala's defaults. The ranges for the per-pad bands were not measured. Not written by the app yet. (2) The EQ plugin in the master strip, whose readings and ranges are in this file, is the one the user sent min and max values for, and the one the app's master chain adds.
 - `song.json` holds app state (`selectedPad`, `padGrid`, `version`, ...). Not used by the app.
 
 ## Plugins and parameter ranges seen
