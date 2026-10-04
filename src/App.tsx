@@ -315,19 +315,22 @@ function App() {
                     category: cat,
                   }
                 : { category }),
-              tune: tuneDefault(
-                remembered?.tuneLocked || cur.tuneLocked,
-                remembered?.tuneLocked ? remembered.tune : cur.tune,
-                cat,
-                detectedMidi,
-                tunedTargetRef.current,
-              ),
+              // A sound reopened from a previous visit keeps exactly the Tune state it was left with; only a new sound is decided by analysis.
+              tune: remembered
+                ? remembered.tune
+                : tuneDefault(cur.tuneLocked, cur.tune, cat, detectedMidi, tunedTargetRef.current),
             });
             // The sound may sit on a pad or in the hot-swap pool, and may have been moved, swapped or deleted while it was analysing.
             setPads((prev) => {
               const slot = Object.keys(prev).find((k) => prev[Number(k)].origIndex === ref.pad);
               if (slot === undefined) return prev;
-              return { ...prev, [Number(slot)]: analysed(prev[Number(slot)]) };
+              const done = analysed(prev[Number(slot)]);
+              const next = { ...prev, [Number(slot)]: done };
+              // Ghost snares and soft kicks rebuilt on reopening were made before their source was analysed, so they take its sound type now.
+              for (const [k, g] of Object.entries(prev)) {
+                if (g.ghost?.sourceOrigIndex === ref.pad) next[Number(k)] = { ...g, category: done.category };
+              }
+              return next;
             });
             setHidden((prev) => (prev[ref.pad] ? { ...prev, [ref.pad]: analysed(prev[ref.pad]) } : prev));
             setAnalyzing((n) => n - 1);
