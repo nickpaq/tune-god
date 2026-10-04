@@ -13,7 +13,7 @@ export function SwapList({
   audioOf,
   onSwap,
 }: {
-  /** Name of the tapped slot, e.g. "PAD 3". */
+  /** Identifies the tapped slot; the list starts from the top again when it changes. */
   slotLabel: string;
   candidates: Pad[];
   audioOf: (pad: Pad) => Float32Array[];
@@ -29,10 +29,7 @@ export function SwapList({
   }, [slotLabel]);
   return (
     <div className="swap-list">
-      <div className="swap-list__head">
-        <strong>{slotLabel}: swap in</strong>
-        <span>{candidates.length}</span>
-      </div>
+      <div className="swap-list__head">Hot swap</div>
       <div className="swap-list__rows" ref={rows}>
         {candidates.length === 0 && <div className="swap-list__empty">No other sounds to swap in.</div>}
         {candidates.map((pad) => {
