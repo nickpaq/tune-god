@@ -1,5 +1,6 @@
 import { FINGER_LAYOUTS } from "../audio/fingerLayouts";
-import { colorFor, shade, textColorOn, type Palette } from "../audio/palettes";
+import { colorFor, shade, type Palette } from "../audio/palettes";
+import { PadSymbol } from "./PadSymbol";
 
 /**
  * Popup listing every finger-drumming layout with a preview of bank A. The preview always shows a
@@ -25,7 +26,7 @@ export function LayoutPicker({
             ✕
           </button>
         </div>
-        <div className="palette-modal__key">Bank A preview, bottom row under your thumbs. Colors follow your palette.</div>
+        <div className="palette-modal__key">Bank A preview, bottom row under your thumbs. Colors and symbols follow your palette and pads.</div>
         <div className="palette-modal__list">
           {FINGER_LAYOUTS.map((layout) => (
             <button
@@ -40,10 +41,14 @@ export function LayoutPicker({
               <span className="layout-row__desc">{layout.description}</span>
               <span className="layout-row__grid">
                 {layout.slots.map((slot, i) => {
-                  const bg = slot.ghostOf ? shade(colorFor(palette, slot.category), 2) : colorFor(palette, slot.category);
+                  const c = slot.ghostOf ? shade(colorFor(palette, slot.category), 2) : colorFor(palette, slot.category);
+                  // Drawn like the pads themselves: dark rubber with the sound type's symbol, a lit edge in its colour, and the name printed underneath.
                   return (
-                    <span key={i} style={{ background: bg, color: textColorOn(bg) }}>
-                      {slot.label}
+                    <span key={i} className="mini-slot">
+                      <span className="mini-pad" style={{ "--c": c } as React.CSSProperties}>
+                        <PadSymbol category={slot.category} />
+                      </span>
+                      <span className="mini-slot__label">{slot.label}</span>
                     </span>
                   );
                 })}

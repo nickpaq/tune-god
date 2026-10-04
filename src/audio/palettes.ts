@@ -11,16 +11,14 @@ export interface Palette {
 
 /*
  * Palettes are built in OKLCH, so every palette is balanced by construction: its tones share one lightness and one
- * colourfulness, and differ only where a difference means something.
- *
- * Where each colour goes is the same in every palette, and every hue is a clean one: the oranges, ambers, yellows and
- * olives (roughly 45 to 120 degrees), which turn muddy as soon as they are shaded, are left out entirely. Going round
- * the wheel: kick red, snare rose, FX magenta, perc and vox violet, bass a deep indigo, melodic blue, melodic loops
- * azure, hats a light cyan and drum loops green, with Other a quiet cool grey. Hats are the lightest tone and bass the
- * darkest, like the sounds themselves.
+ * colourfulness, and differ only where a difference means something. Each palette lays its own hues around the wheel
+ * (see `hues` below) so they look like different schemes, not one scheme at different strengths, but all follow the same
+ * rules: snare, hats (and so cymbals) and perc sit about a third of the wheel from one another, since they are the
+ * sounds most often next to each other and must never blur together; hats are the lightest tone and bass the darkest,
+ * like the sounds themselves; and Other is a quiet grey.
  */
 
-/** Hue (degrees), lightness offset and chroma factor for each tone. */
+/** Default hue (degrees), lightness offset and chroma factor for each tone; a palette may move the hues. */
 const ROLES: Record<ToneId, { h: number; dl: number; c: number }> = {
   kick: { h: 22, dl: -0.03, c: 1.05 },
   snareClap: { h: 354, dl: 0.03, c: 0.95 },
@@ -37,6 +35,8 @@ const ROLES: Record<ToneId, { h: number; dl: number; c: number }> = {
 interface PaletteSpec {
   id: string;
   name: string;
+  /** Hues (degrees) for the tones, replacing the defaults in ROLES. */
+  hues?: Partial<Record<ToneId, number>>;
   /** Lightness of the base tones (0 to 1). */
   l: number;
   /** Chroma of the base tones; out-of-gamut colours are pulled in. */
@@ -48,17 +48,22 @@ interface PaletteSpec {
 }
 
 const SPECS: PaletteSpec[] = [
-  { id: "koala", name: "Koala", l: 0.68, c: 0.16 },
-  { id: "studio", name: "Studio", l: 0.66, c: 0.11, spread: 0.85 },
-  { id: "pastel", name: "Pastel", l: 0.83, c: 0.085, spread: 0.55 },
-  { id: "neon", name: "Neon", l: 0.72, c: 0.25, spread: 0.7 },
-  { id: "midnight", name: "Midnight", l: 0.56, c: 0.14, spread: 0.8 },
+  // Koala: the whole wheel, evenly: red kick, rose snare, cyan hats, green perc and vox, violet bass.
+  { id: "koala", name: "Koala", l: 0.68, c: 0.16, hues: { kick: 25, snareClap: 350, hats: 205, percVox: 135, fx: 315, bass: 298, melodic: 268, melodicLoop: 238, drumPercLoop: 80 } },
+  // Studio: dusty and cool, with sand and rust as the warm accents.
+  { id: "studio", name: "Studio", l: 0.66, c: 0.11, spread: 0.85, hues: { kick: 38, snareClap: 205, hats: 95, percVox: 325, fx: 170, bass: 262, melodic: 235, melodicLoop: 18, drumPercLoop: 150 } },
+  // Pastel: candy, warm from rose through apricot to butter, with mint, sky and lilac against it.
+  { id: "pastel", name: "Pastel", l: 0.83, c: 0.095, spread: 0.55, hues: { kick: 8, snareClap: 58, hats: 178, percVox: 298, fx: 340, bass: 275, melodic: 245, melodicLoop: 215, drumPercLoop: 105 } },
+  // Neon: hot and electric, and the one palette that runs magenta, lime and orange together.
+  { id: "neon", name: "Neon", l: 0.72, c: 0.25, spread: 0.7, hues: { kick: 40, snareClap: 335, hats: 120, percVox: 215, fx: 300, bass: 265, melodic: 175, melodicLoop: 15, drumPercLoop: 145 } },
+  // Midnight: deep jewel tones: ruby, emerald, sapphire, amethyst and gold.
+  { id: "midnight", name: "Midnight", l: 0.56, c: 0.14, spread: 0.8, hues: { kick: 18, snareClap: 160, hats: 90, percVox: 300, fx: 345, bass: 255, melodic: 225, melodicLoop: 200, drumPercLoop: 45 } },
   {
     id: "grayscale",
     name: "Grayscale",
     l: 0.58,
     c: 0,
-    ls: { kick: 0.32, snareClap: 0.5, hats: 0.9, percVox: 0.72, fx: 0.44, bass: 0.2, melodic: 0.62, other: 0.8, drumPercLoop: 0.38, melodicLoop: 0.56 },
+    ls: { kick: 0.3, snareClap: 0.56, hats: 0.96, percVox: 0.2, fx: 0.47, bass: 0.07, melodic: 0.66, other: 0.86, drumPercLoop: 0.42, melodicLoop: 0.74 },
   },
 ];
 
@@ -122,7 +127,7 @@ function build(spec: PaletteSpec): Palette {
     name: spec.name,
     colors: TONES.map((t) => {
       const r = ROLES[t];
-      return oklchToHex(spec.ls?.[t] ?? spec.l + r.dl * spread, spec.c * r.c, r.h);
+      return oklchToHex(spec.ls?.[t] ?? spec.l + r.dl * spread, spec.c * r.c, spec.hues?.[t] ?? r.h);
     }),
   };
 }
@@ -137,13 +142,13 @@ const SHADE: Partial<Record<CategoryId, number>> = { clap: 1, openHat: 1, cymbal
  */
 const ORGAN: Record<CategoryId, string> = {
   kick: "#DE3B1A",
-  snare: "#E3541C",
+  snare: "#E2455F",
   clap: "#E86E20",
   closedHat: "#EEBA12",
   openHat: "#E9A20E",
-  cymbal: "#F3D25A",
+  cymbal: "#F8EBA8",
   vox: "#F0A66E",
-  perc: "#E7860F",
+  perc: "#2AA79B",
   drumLoop: "#2E9A4B",
   percLoop: "#4DB36E",
   melodic: "#E2919A",

@@ -516,7 +516,7 @@
 .pads {
   /*
    * the gap between pads, top to bottom: one unit between the lit edges, as side to side (the 8.1px is the pad's lit edge),
-   * plus 0.85cqw so the caption printed above each pad has air above it as well as below (it sits close to its own pad).
+   * plus 0.85cqw so the caption printed under each pad has air below it as well as above (it sits close to its own pad).
    */
   --row-gap: calc(var(--u) + 0.85cqw + 8.1px);
   /*
@@ -596,7 +596,7 @@
 
 /* the caption is printed on the plate, so it stays put while the pad sinks */
 .pad:active .pad__number {
-  bottom: calc(100% + 0.4cqw + 1.5px);
+  top: calc(100% + 8.1px + 0.4cqw - 1.5px);
 }
 
 /* The sound type's symbol, small in the pad's top left corner, pressed into the rubber: dark grey with a faint lip of light underneath. */
@@ -669,8 +669,8 @@
   position: absolute;
   left: 0.6cqw;
   right: 0;
-  /* small, above the pad's top-left corner */
-  bottom: calc(100% + 0.4cqw);
+  /* small, under the pad's lit edge, close to its own pad (the gap below it, to the next row, is the larger one) */
+  top: calc(100% + 8.1px + 0.4cqw);
   font-size: 1.8cqw;
   line-height: 1;
   letter-spacing: 0.06em;
@@ -1222,20 +1222,46 @@
 .layout-row__grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1cqw;
+  gap: 1.4cqw 1.6cqw;
+  padding: 2cqw;
+  border-radius: 1.6cqw;
+  /* the blue-grey plate the real pads sit on */
+  background: linear-gradient(#a3adb4, #8f9aa2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 2px 3px -1px rgba(0, 0, 0, 0.3);
 }
 
-.layout-row__grid span {
+.layout-row__grid .mini-slot {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 9cqw;
-  padding: 0.5cqw;
-  border-radius: 1cqw;
-  font-size: 2.3cqw;
-  font-weight: 700;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5cqw;
+  min-width: 0;
+}
+
+/* a small copy of a loaded pad: rubber domed toward the top, a lit edge in the sound type's colour underneath */
+.mini-pad {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 1.2cqw;
+  background-color: #5c5c61;
+  background-image: radial-gradient(130% 115% at 50% 22%, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0) 52%, rgba(0, 0, 0, 0.18));
+  box-shadow:
+    0 0.5cqw 0 color-mix(in srgb, var(--c) 58%, #5d5d64),
+    0 0.9cqw 0 color-mix(in srgb, var(--c) 78%, #e4e4ea),
+    0 1.2cqw 1cqw -0.4cqw color-mix(in srgb, var(--c) 35%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -0.5cqw 0.8cqw rgba(0, 0, 0, 0.2);
+}
+
+.mini-slot__label {
+  margin-top: 1cqw;
+  font-size: 1.9cqw;
   line-height: 1.1;
+  letter-spacing: 0.04em;
   text-align: center;
+  text-transform: uppercase;
+  color: rgba(70, 64, 48, 0.75);
   overflow-wrap: anywhere;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATEGORIES, CATEGORY_TONE, TONES } from "./classify";
+import { CATEGORIES, CATEGORY_TONE, TONES, type CategoryId } from "./classify";
 import { PALETTES, colorFor, hexToOklch, oklchToHex, toneColor } from "./palettes";
 
 describe("palettes", () => {
@@ -33,6 +33,20 @@ describe("palettes", () => {
       const colors = CATEGORIES.map((c) => lab(colorFor(p, c.id)));
       for (let i = 0; i < colors.length; i++)
         for (let j = i + 1; j < colors.length; j++) expect(Math.hypot(...colors[i].map((v, k) => v - colors[j][k]))).toBeGreaterThan(0.025);
+    }
+  });
+
+  it("keeps snares, cymbals and perc well apart in every palette", () => {
+    const lab = (hex: string) => {
+      const [l, c, h] = hexToOklch(hex);
+      return [l, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180)];
+    };
+    const apart = (p: (typeof PALETTES)[number], a: CategoryId, b: CategoryId) =>
+      Math.hypot(...lab(colorFor(p, a)).map((v, k) => v - lab(colorFor(p, b))[k]));
+    for (const p of PALETTES) {
+      expect(apart(p, "snare", "cymbal"), `${p.name} snare/cymbal`).toBeGreaterThan(0.14);
+      expect(apart(p, "snare", "perc"), `${p.name} snare/perc`).toBeGreaterThan(0.14);
+      expect(apart(p, "cymbal", "perc"), `${p.name} cymbal/perc`).toBeGreaterThan(0.1);
     }
   });
 
