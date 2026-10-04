@@ -65,7 +65,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 - Minimum project: low band 20 Hz at +18 dB, high band 20 kHz at +18 dB, Q 0.5. Maximum project: low band 32 Hz at -18 dB, high band 12.6 kHz at -18 dB, Q 10.
 - So the EQ's frequency range is 20 Hz to 20 kHz (the graph's whole width), and gain is +-18 dB. The stored `hi freq` in `mixer-all-min.json` is 9236 Hz, not 20 kHz, so that file was saved before the node was dragged to its end; `lo freq` 20 and 31.7 and `hi freq` 12599 match what the screen showed. The tests skip frequency parameters for that reason.
-- The app's EQ preset (60 Hz, 1 kHz, 10 kHz) is inside that range.
+- The per-pad EQ and the mixer EQ plugin are the same design (the user confirmed), so both share these ranges and the band types: **lo = highpass, mid = peaking bell, hi = high shelf** (types as stored on pads). An earlier note here that all three bands are bells was wrong. The lo band's gain is probably ignored because a highpass has none.
 
 ## Confirmed
 
@@ -88,5 +88,6 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 - Bass bus: SIDECHAIN (source kick, threshold -24 dB, release 120 ms, output 0 dB).
 - Kick bus: CLIPPER (input +3 dB, threshold -2 dB, output 0, HQ on).
-- Master: EQ, DRIVE, COMPRESSOR, CLIPPER, LIMITER (+3 dB input gain), only into an empty master strip.
-- Per pad (with Settings by sound type): `eq.lo.freq` highpass and, on hats and cymbals, `eq.hi.gain` -2 dB.
+- Melodic bus: EQ (lo highpass 150 Hz, hi shelf -2 dB at 8 kHz).
+- Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (+3 dB input gain), only into an empty master strip.
+- Per pad (with Settings by sound type): `eq.lo.freq` highpass (80 to 300 Hz by type) and, on hats and cymbals, `eq.hi.gain` -2 dB.

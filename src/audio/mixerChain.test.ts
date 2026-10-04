@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { BUS_NAMES, CATEGORY_BUS } from "./routing";
-import { bassSidechain, fillEmptySlots, masterChain, SIDECHAIN_SOURCE_BUS, type MixerSlot } from "./mixerChain";
+import { bassSidechain, fillEmptySlots, kickClipper, masterChain, melodicEq, SIDECHAIN_SOURCE_BUS, type MixerSlot } from "./mixerChain";
 
 async function load(mixer?: unknown): Promise<ParsedKoalaProject> {
   const zip = await JSZip.loadAsync(readFileSync(new URL("../../docs/calibration/calibration.koala", import.meta.url)));
@@ -74,7 +74,7 @@ describe("effect parameters", () => {
   const hi = read("mixer-all-max.json");
   const find = (mixer: any, fxName: string) => [...mixer.buses.flatMap((b: any) => b.chain), ...mixer.master.chain].find((s: any) => s?.name === fxName);
 
-  it.each([...masterChain(), bassSidechain()].map((fx) => [fx.name, fx] as const))("%s uses Koala's parameter names and stays inside their range", (name, fx) => {
+  it.each([...masterChain(), bassSidechain(), kickClipper(), melodicEq()].map((fx) => [fx.name, fx] as const))("%s uses Koala's parameter names and stays inside their range", (name, fx) => {
     const a = find(lo, name).parameters;
     const b = find(hi, name).parameters;
     expect(Object.keys(fx.parameters).sort()).toEqual(Object.keys(a).sort());
@@ -92,7 +92,13 @@ describe("effect parameters", () => {
   });
 });
 
-describe("kick clipping and per-pad EQ", () => {
+describe("kick clipping, melodic EQ and per-pad EQ", () => {
+  it("puts an EQ on the melodic bus only", async () => {
+    const mixer = await exported(await load(), { busNames: BUS_NAMES, sidechain: true });
+    expect(mixer.buses[3].chain.filter((s: any) => s?.name === "EQ")).toHaveLength(1);
+    expect(mixer.buses.slice(0, 3).some((b: any) => b.chain.some((s: any) => s?.name === "EQ"))).toBe(false);
+  });
+
   it("puts a clipper on the kick bus once, and none on the others", async () => {
     const options = { busNames: BUS_NAMES, sidechain: true } as const;
     const mixer = await exported(await load(), options);
@@ -107,10 +113,10 @@ describe("kick clipping and per-pad EQ", () => {
     const project = await load();
     const pad = project.samplerJson.pads[0];
     pad.eq = { enabled: "true", lo: { type: "highpass", freq: 138, gain: -18, q: 1 }, mid: { type: "peaking", freq: 2000, gain: 3, q: 1 }, hi: { type: "highshelf", freq: 8000, gain: 0, q: 1 } };
-    const { blob } = await buildTunedKoala(project, [], { playback: new Map([[pad.sampleId, { eq: { highpassHz: 180, highShelfDb: -2 } }]]) });
+    const { blob } = await buildTunedKoala(project, [], { playback: new Map([[pad.sampleId, { eq: { highpassHz: 300, highShelfDb: -2 } }]]) });
     const json = JSON.parse(await (await JSZip.loadAsync(await blob.arrayBuffer())).file("sampler/sampler.json")!.async("string"));
     const eq = json.pads.find((p: any) => p.sampleId === pad.sampleId).eq;
-    expect(eq.lo).toMatchObject({ type: "highpass", freq: 180 });
+    expect(eq.lo).toMatchObject({ type: "highpass", freq: 300 });
     expect(eq.hi).toMatchObject({ type: "highshelf", freq: 8000, gain: -2 });
     expect(eq.mid).toEqual({ type: "peaking", freq: 2000, gain: 3, q: 1 });
     expect(eq.enabled).toBe("true");

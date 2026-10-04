@@ -21,22 +21,22 @@ export const BASS_MUTE_GROUP = 6;
 export const MELODIC_RELEASE = 0.3;
 
 /**
- * Per-pad EQ by sound type, to keep the low end for the kick and bass: everything else is high-passed (never above 180 Hz,
- * the highest value seen on a Koala pad) and the hats and cymbals get a slight, warm cut on the high shelf.
- * Kicks, bass and the loops that carry them are left as they are.
+ * Per-pad EQ by sound type, to keep the low end for the kick and bass: everything else is high-passed and the hats and cymbals
+ * get a slight, warm cut on the high shelf. The pad EQ has the same three bands and ranges as Koala's EQ plugin (20 Hz to 20 kHz,
+ * gain +-18 dB). Kicks, bass and the drum loops that carry them are left as they are.
  */
 const PAD_EQ: Partial<Record<CategoryId, PadEq>> = {
-  closedHat: { highpassHz: 180, highShelfDb: -2 },
-  openHat: { highpassHz: 180, highShelfDb: -2 },
-  cymbal: { highpassHz: 180, highShelfDb: -2 },
-  perc: { highpassHz: 150 },
-  clap: { highpassHz: 150 },
-  snare: { highpassHz: 100 },
+  closedHat: { highpassHz: 300, highShelfDb: -2 },
+  openHat: { highpassHz: 300, highShelfDb: -2 },
+  cymbal: { highpassHz: 250, highShelfDb: -2 },
+  perc: { highpassHz: 200 },
+  clap: { highpassHz: 200 },
+  snare: { highpassHz: 120 },
   vox: { highpassHz: 120 },
-  fx: { highpassHz: 150 },
+  fx: { highpassHz: 200 },
   melodic: { highpassHz: 80 },
   melodicLoop: { highpassHz: 80 },
-  percLoop: { highpassHz: 120 },
+  percLoop: { highpassHz: 150 },
 };
 
 function basePlayback(category: CategoryId): PadPlayback | undefined {

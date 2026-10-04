@@ -3,7 +3,7 @@ import type { PadEq, PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
-import { bassSidechain, fillEmptySlots, kickClipper, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
+import { bassSidechain, fillEmptySlots, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
 
 /** A silent pad the finger-drumming layout adds: where it sits, what Koala shows on it, and its colour. */
@@ -113,7 +113,7 @@ export async function buildTunedKoala(
   if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
-  if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, master: masterChain });
+  if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, melodicEq: sidechain, master: masterChain });
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
   const base = project.originalName.replace(/\.koala$/i, "");
@@ -145,11 +145,11 @@ function applyPadEq(pad: any, eq: PadEq): void {
 const emptyStrip = (name: string) => ({ chain: [null, null, null, null, null], mute: false, name, solo: false, volume: 0 });
 
 /**
- * Sets up the mixer in mixer.json: bus strip names, a sidechain from the kick bus onto the bass bus, a little clipping on the kick bus, and the master chain.
+ * Sets up the mixer in mixer.json: bus strip names, a sidechain from the kick bus onto the bass bus, a little clipping on the kick bus, an EQ on the melodic bus, and the master chain.
  * Each bus keeps its effects and levels, and an effect only goes into an empty slot (the master chain only into an empty
  * master strip). A project that has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
  */
-async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean; kickClip?: boolean }): Promise<void> {
+async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean; kickClip?: boolean; melodicEq?: boolean }): Promise<void> {
   const entry = project.zip.file("mixer.json");
   const mixer = entry ? JSON.parse(await entry.async("string")) : { buses: [], master: emptyStrip("MAIN") };
   mixer.buses = Array.isArray(mixer.buses) ? mixer.buses : [];
@@ -165,6 +165,11 @@ async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]
     const kick = (mixer.buses[0] ??= emptyStrip(BUS_NAMES[0]));
     kick.chain = Array.isArray(kick.chain) ? kick.chain : [null, null, null, null, null];
     if (!kick.chain.some((fx: MixerSlot) => fx?.name === "CLIPPER")) fillEmptySlots(kick.chain, [kickClipper()]);
+  }
+  if (setup.melodicEq) {
+    const melodic = (mixer.buses[3] ??= emptyStrip(BUS_NAMES[3]));
+    melodic.chain = Array.isArray(melodic.chain) ? melodic.chain : [null, null, null, null, null];
+    if (!melodic.chain.some((fx: MixerSlot) => fx?.name === "EQ")) fillEmptySlots(melodic.chain, [melodicEq()]);
   }
   if (setup.master) {
     const master = (mixer.master ??= emptyStrip("MAIN"));
