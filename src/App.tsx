@@ -464,6 +464,8 @@ function App() {
     if (!packSetup.current || loading || analyzing > 0 || Object.keys(pads).length === 0) return;
     packSetup.current = false;
     setNormalize(true);
+    // The export writes each pad's colour and label for Koala only with this on, so a pack import turns it on.
+    setAutoColor(true);
     applyLayout(layout.id);
     past.current = [];
     future.current = [];
@@ -1030,7 +1032,8 @@ function App() {
       const colors = new Map<number, { color: string; label: string }>();
       if (autoColor) {
         for (const p of allPads) {
-          if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: labelOf(p) });
+          // The label is what the pad's caption says in the app, without its number.
+          if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
         }
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports });
