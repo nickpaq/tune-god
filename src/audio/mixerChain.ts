@@ -31,11 +31,12 @@ export const melodicEq = (): MixerEffect =>
   effect("EQ", { "lo freq": 150, "lo gain": 0, "lo Q": 0.7, "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, "hi freq": 8000, "hi gain": -2, "hi Q": 0.5 });
 
 /**
- * A little clipping on the kick bus: driven 3 dB into a soft clip at -2 dB, so a kick peaking near -1 dBFS has about 4 dB
- * of its peak rounded off. That adds weight and grit to the kick without squaring it. CLIPPER input +-36 dB, threshold
- * about -35..0 dB, output -36..0 dB, `oversample` is the HQ button.
+ * Clipping on the kick bus, into the soft clip. In Koala's CLIPPER the threshold sets the shape of the curve as well as the level:
+ * a threshold near 0 dB gives sharp corners, a low one a smooth S-curve. So the threshold is set low enough to stay soft (-6 dB) and the
+ * input drives the kick into it (+4 dB, so a kick peaking near -1 dBFS is pushed about 9 dB over the knee). The kick comes out peaking
+ * near the threshold. CLIPPER input +-36 dB, threshold about -35..0 dB, output -36..0 dB (it can only lower the level), `oversample` is HQ.
  */
-export const kickClipper = (): MixerEffect => effect("CLIPPER", { input: 3, threshold: -2, output: 0, oversample: 1 });
+export const kickClipper = (): MixerEffect => effect("CLIPPER", { input: 4, threshold: -6, output: 0, oversample: 1 });
 
 /**
  * Heavy and warm master chain, in signal order: EQ (its low band is a highpass, the mid a bell and the high a high shelf: a bell of +2.5 dB at 70 Hz for weight, a gentle -3 dB shelf from 8 kHz for warmth, and the highpass left at 20 Hz as a rumble filter), DRIVE (parallel saturation for warmth),

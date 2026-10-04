@@ -69,6 +69,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 ## Confirmed
 
+- `CLIPPER.threshold` controls the shape of the clip curve as well as the level (user): near 0 dB the corners are sharp, a low threshold is a smooth S-curve (seen at -35 dB). `output` only attenuates (-36 to 0 dB).
 - `LIMITER.gain` is **input gain** (-18 to +18 dB) into the limiter, per the user. The app writes +3 dB so the master is pushed gently into it.
 - Plugin names and every parameter name above.
 - `SIDECHAIN.source` is a bus number (the dropdown named bus 0 "kick").
@@ -87,7 +88,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 ## What the app writes
 
 - Bass bus: SIDECHAIN (source kick, threshold -24 dB, release 120 ms, output 0 dB).
-- Kick bus: CLIPPER (input +3 dB, threshold -2 dB, output 0, HQ on).
+- Kick bus: CLIPPER (input +4 dB, threshold -6 dB, output 0, HQ on).
 - Melodic bus: EQ (lo highpass 150 Hz, hi shelf -2 dB at 8 kHz).
 - Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (+3 dB input gain), only into an empty master strip.
 - Per pad (with Settings by sound type): `eq.lo.freq` highpass (80 to 300 Hz by type) and, on hats and cymbals, `eq.hi.gain` -2 dB.

@@ -103,7 +103,7 @@ describe("kick clipping, melodic EQ and per-pad EQ", () => {
     const options = { busNames: BUS_NAMES, sidechain: true } as const;
     const mixer = await exported(await load(), options);
     expect(mixer.buses[0].chain.filter((s: any) => s?.name === "CLIPPER")).toHaveLength(1);
-    expect(mixer.buses[0].chain.find((s: any) => s?.name === "CLIPPER").parameters).toMatchObject({ input: 3, threshold: -2, oversample: 1 });
+    expect(mixer.buses[0].chain.find((s: any) => s?.name === "CLIPPER").parameters).toMatchObject({ input: 4, threshold: -6, oversample: 1 });
     expect(mixer.buses.slice(1).some((b: any) => b.chain.some((s: any) => s?.name === "CLIPPER"))).toBe(false);
     const again = await exported(await load(mixer), options);
     expect(again.buses[0].chain.filter((s: any) => s?.name === "CLIPPER")).toHaveLength(1);
