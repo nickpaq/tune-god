@@ -6,24 +6,9 @@ Goal: re-skin and re-lay-out the app to match, **without changing behaviour** (l
 
 ## 0. Status of the work on branch `graphite-barlow-redesign`
 
-Uncommitted, in progress. Done:
+Implemented and checked: fonts, tokens, components, `App.tsx` and the full `App.css` rewrite. `npx tsc -b`, `npm test` (85 tests) and `npm run build` pass; `oxlint` shows only the two warnings that were already there. Checked in headless Chromium at 390 x 844 (empty drop zone, Type, Tune, Swap, menu), 390 x 700 and 1024 x 768, with no console errors.
 
-| Item | State |
-| --- | --- |
-| `@fontsource/barlow-semi-condensed` and `@fontsource/silkscreen` installed and imported in `src/main.tsx` | done |
-| `src/index.css` rewritten with graphite tokens | done |
-| `index.html` theme-color and `vite.config.ts` manifest colours set to `#222326` | done |
-| `src/components/TypeKeys.tsx` (new) | done |
-| `src/components/Keyboard.tsx` (piano layout markup) | done |
-| `src/components/SwapList.tsx` (SVG glyphs, no header, footer count) | done |
-| `src/components/PadPanel.tsx` (Tune screen markup) | done |
-| `src/App.tsx` (mode state, new JSX, Add pack in menu) | done, compiles |
-| `ClassifierDrawer.tsx` and `useDrawerDrag.ts` | deleted |
-| **`src/App.css`** | **NOT written. It still holds the old putty/drawer styles, so the app is visually broken until section 6 is done.** |
-| README / docs updates | not done |
-| Visual verification | not done |
-
-The remaining work is mainly section 6 (the stylesheet) plus verification (section 9).
+Not yet verified by hand: dragging pads (HOLD zone, all-pads view, trash), a populated hot-swap list (the test fixture has no spare sounds), Add pack from the menu, undo/redo, export, and a real iPhone. The bank-dwell and drag targets sit in the same elements as before, so they should work, but they have not been exercised.
 
 ## 1. Fonts
 

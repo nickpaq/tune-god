@@ -7,200 +7,883 @@
 }
 
 /*
- * The chassis. Everything inside is sized in cqw (1% of the chassis width), so it scales as one piece. One spacing unit
- * (--u) sets every margin and gap, and there are two corner radii: --radius for panels and pads, --r-key for keys.
+ * The chassis. Everything inside is sized in cqw (1% of the chassis width), so it scales as one piece: canvas px / 3.9.
+ * Two panels: the lighter upper one (keys, screen, deck) and the darker lower one (pads, transport).
  */
 .phone {
   --u: 2.4cqw;
   --radius: 2.2cqw;
-  --r-key: 1.2cqw;
-  --g: var(--u);
-  /* a moulded key cap: lit from above, a hard contact edge and a soft shadow onto the panel */
-  --cap: linear-gradient(#f3eee0, #dbd5c2);
-  --cap-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -1px 0 rgba(0, 0, 0, 0.08), 0 1.5px 0 #7f7967, 0 2.5px 4px rgba(0, 0, 0, 0.3);
-  /* the same cap pushed in: the contact edge and shadow collapse */
-  --cap-down: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0.5px 0 #7f7967, 0 1px 1px rgba(0, 0, 0, 0.2);
-  /* a lit legend: the colour of an LED behind a translucent cap */
-  --led: #ff4b2b;
-  --led-glow: 0 0 1.2cqw rgba(255, 75, 43, 0.65);
   position: relative;
   width: min(100vw, calc(var(--app-h, 100dvh) * 9 / 17.6));
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--u);
-  /* the controls start below the status bar, and the transport stays clear of the home indicator */
-  padding: max(var(--u), env(safe-area-inset-top)) var(--u) calc(max(var(--u), env(safe-area-inset-bottom)) + 8cqw);
-  /* matte ABS plastic: fine moulded grain, faint light speckle and a soft sheen across the top */
-  background-color: var(--chassis2);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .45 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
-  box-shadow: inset 0 2px 0 var(--hi), inset 0 0 0 1px var(--edge);
-  /* size containment so cqh is the chassis height: the pads shrink to fit it (see .pads) */
+  background: var(--chassis2);
   container-type: size;
   overflow: hidden;
   touch-action: manipulation;
   color: var(--ink);
-  font-weight: 700;
+  font-weight: 600;
 }
 
-/* ---- controls (top row): three wells of equal height, the two side ones of equal width, mirrored around the banks ---- */
+.upper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2.6cqw;
+  padding: max(3cqw, env(safe-area-inset-top)) 4.1cqw 3cqw;
+  background: var(--chassis1);
+  border-bottom: 1px solid var(--seam-d);
+}
+
+.lower {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2cqw;
+  padding: 3cqw 4.1cqw calc(max(var(--u), env(safe-area-inset-bottom)) + 3cqw);
+  box-shadow: inset 0 1px 0 var(--seam-l);
+}
+
+/* ---- keycaps ---- */
+.cap {
+  position: relative;
+  border: 0;
+  padding: 0;
+  border-radius: 1.5cqw;
+  color: var(--key-ink);
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 var(--key-edge), 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  font-size: 2.6cqw;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: box-shadow 0.1s, transform 0.08s;
+}
+
+.cap:active:not(:disabled),
+.cap--on {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), 0 1px 0 var(--key-edge);
+}
+
+.cap:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cap__led {
+  position: absolute;
+  left: 50%;
+  top: 1.3cqw;
+  width: 1.3cqw;
+  height: 1.3cqw;
+  margin-left: -0.65cqw;
+  border-radius: 50%;
+  background: var(--led-off);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+
+.cap--on .cap__led {
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.cap__legend {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1.8cqw;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ---- header ---- */
 .controls {
   flex: none;
-  display: grid;
-  grid-template-columns: 21cqw 1fr 21cqw;
-  gap: var(--u);
-  height: 11cqw;
+  display: flex;
+  gap: 2.6cqw;
+  height: 11.3cqw;
 }
 
-.controls__side,
-.banks {
+.tray {
   display: flex;
-  gap: 1.2cqw;
-  min-width: 0;
-  padding: 1.2cqw;
-  border-radius: calc(var(--r-key) + 1.2cqw);
-  background: var(--well);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-.icon-button,
-.bank,
-.tone {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   gap: 1cqw;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-key);
-  background: var(--cap);
-  box-shadow: var(--cap-shadow);
-  color: var(--ink);
-  transition: color 0.15s, box-shadow 0.12s, transform 0.08s;
+  padding: 1cqw;
+  border-radius: 2.6cqw;
+  background: var(--well);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), 0 1px 0 var(--seam-l);
 }
 
-.icon-button--wide {
-  font-size: 3cqw;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.cap--mode {
+  width: 9.7cqw;
+  height: 9.2cqw;
 }
 
-.icon-button__glyph {
-  width: 5.2cqw;
-  height: 5.2cqw;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.cap--bank {
+  width: 8.7cqw;
+  height: 9.2cqw;
 }
 
-.icon-button:active,
-.bank:active,
-.tone:active {
-  transform: translateY(1px);
-  box-shadow: var(--cap-down);
+.cap--bank .cap__legend {
+  bottom: 1.5cqw;
+  font-size: 4.1cqw;
+  letter-spacing: 0;
 }
 
-/* A control that is on stays pushed in, and its legend lights up from behind. */
-.icon-button[aria-expanded="true"],
-.icon-button[aria-pressed="true"],
-.bank--active,
-.tone--on {
-  transform: translateY(1px);
-  background: linear-gradient(#e9e3d3, #d6d0bd);
-  box-shadow: var(--cap-down);
-  color: var(--led);
-  text-shadow: var(--led-glow);
+.cap--empty:not(.cap--on) .cap__legend {
+  opacity: 0.45;
 }
 
-.icon-button[aria-expanded="true"] .icon-button__glyph,
-.icon-button[aria-pressed="true"] .icon-button__glyph {
-  filter: drop-shadow(var(--led-glow));
-}
-
-.bank {
-  color: var(--ink3);
-  font-size: 4.8cqw;
-}
-
-/* the active bank stays pushed in, but its letter is not lit or coloured */
-.bank.bank--active {
-  color: var(--ink3);
-  text-shadow: none;
-}
-
-.bank--empty:not(.bank--active) {
-  color: color-mix(in srgb, var(--ink3) 45%, transparent);
-}
-
-.bank--target {
+.cap--target {
   outline: 0.8cqw solid var(--accent);
   outline-offset: 0.2cqw;
 }
 
-.tone {
-  flex: none;
-  width: 14cqw;
-  height: 7cqw;
-  font-size: 2.9cqw;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.cap--menu {
+  flex: 1;
+  min-width: 0;
+  margin: 1cqw 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.3cqw;
 }
 
-/* ---- LCD screen ---- */
+.cap--menu .cap__legend {
+  position: static;
+}
+
+.cap--menu__glyph {
+  width: 3.6cqw;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+/* ---- screen: a black OLED in a bezel ---- */
+.screen-wrap {
+  flex: 1;
+  min-height: 38cqw;
+  position: relative;
+  display: flex;
+}
+
 .screen {
   position: relative;
   flex: 1;
-  min-height: 0;
-  padding: 3cqw 3.6cqw;
-  border: 1.4cqw solid var(--bezel);
-  border-radius: var(--radius);
-  /* an evenly backlit panel, a little brighter in the middle, sunk under the bezel */
-  background: radial-gradient(120% 90% at 50% 45%, #9db394, var(--lcd) 70%);
-  box-shadow: inset 0 0 0 1px var(--lcd-edge), inset 0 1.2cqw 2.4cqw rgba(0, 0, 0, 0.28), inset 0 0 14px #4e6147;
-  color: var(--lcd-ink);
-  /* inside the LCD, the "ink" is LCD ink */
-  --ink: var(--lcd-ink);
-  --ink3: var(--lcd-ink2);
-  --edge: var(--lcd-ink2);
-  --btn: #a7bb9d;
-  --accent: #26391f;
-  --accent-ink: #cfe3c3;
-  --track: rgba(31, 42, 28, 0.25);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-weight: 500;
-  overflow: hidden;
+  min-width: 0;
+  padding: 2cqw 2.8cqw;
+  border-radius: 2.6cqw;
+  background: var(--bezel);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75), 0 1px 0 var(--seam-l);
 }
 
-/* the glass over the LCD catches a soft reflection across its top */
-.screen::after {
+.oled {
+  /* inside the OLED the ink is the pixel colour and the accent is lit pixels too */
+  --accent: var(--oled);
+  --accent-ink: #000;
+  --track: rgba(238, 242, 236, 0.28);
+  --ink: var(--oled);
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0.5cqw;
+  background: #000;
+  color: var(--oled);
+  font: 400 6.15cqw/1 "Silkscreen", monospace;
+  text-shadow: 0 0 6px var(--oled-glow);
+  text-transform: uppercase;
+  -webkit-font-smoothing: none;
+}
+
+/* the pixel grid, and the glass over it catching a soft reflection */
+.oled::before,
+.oled::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 38%);
+  z-index: 2;
   pointer-events: none;
+}
+
+.oled::before {
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.62) 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.62) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+.oled::after {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 38%);
+}
+
+.oled__head {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  height: 6.15cqw;
+  padding: 0 0.8cqw;
+  background: var(--oled);
+  color: #000;
+  text-shadow: none;
+  white-space: nowrap;
+}
+
+.oled > :not(.oled__head) {
+  flex: 1;
+  min-height: 0;
 }
 
 .screen .dropzone,
 .screen .screen__message {
-  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1.5cqw;
+  padding: 0.8cqw;
   text-align: center;
-  font-size: 5.2cqw;
-  text-transform: uppercase;
+  font-size: 5cqw;
 }
 
 .dropzone {
   position: relative;
   cursor: pointer;
   border-radius: 3cqw;
+}
+
+.dropzone strong,
+.screen__message strong {
+  font-size: 9cqw;
+  font-weight: 400;
+  line-height: 0.95;
+}
+
+/* the title of a Type screen, the sample and the key/shift line */
+.type-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2cqw;
+  padding: 0.8cqw;
+}
+
+.type-readout__name {
+  font-size: 12.3cqw;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.type-readout__sample {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type-readout__line {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ---- Tune screen ---- */
+.pad-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6cqw;
+  padding: 0.6cqw 0.8cqw;
+}
+
+.pad-panel__top {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 3cqw;
+}
+
+.pad-panel__note {
+  min-width: 22cqw;
+  font-size: 18.5cqw;
+  line-height: 0.85;
+  white-space: nowrap;
+}
+
+.pad-panel__lines {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5cqw;
+  white-space: nowrap;
+}
+
+/* drawn by the screen itself: an outlined box, in inverse video when on */
+.tune-toggle {
+  height: 6.15cqw;
+  padding: 0 1.2cqw;
+  border: 0.77cqw solid var(--oled);
+  border-radius: 0;
+  background: transparent;
+  color: var(--oled);
+  font: inherit;
+  text-shadow: inherit;
+  line-height: 1;
+  text-transform: inherit;
+}
+
+.tune-toggle--on {
+  background: var(--oled);
+  color: #000;
+  text-shadow: none;
+}
+
+/* height 0 with a flex basis of 0: the canvas must not size the screen from its own pixel buffer */
+.waveform {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 6cqw;
+  width: 100%;
+  display: block;
+  border-top: 1px solid var(--track);
+  border-bottom: 1px solid var(--track);
+  color: var(--oled);
+}
+
+.pad-panel__slider {
+  flex: none;
+}
+
+.pad-panel__slider--off {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.pad-panel__scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 3.6cqw;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+/* ---- sliders: lit pixels on the OLED ---- */
+.precision-slider {
+  display: flex;
+  align-items: center;
+  height: 6.4cqw;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.precision-slider__track {
+  position: relative;
+  width: 100%;
+  height: 0.77cqw;
+  background: var(--track);
+}
+
+/* centre notch: where "no trim" sits */
+.precision-slider__track::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -1.5cqw;
+  bottom: -1.5cqw;
+  width: 0.77cqw;
+  margin-left: -0.385cqw;
+  background: var(--oled);
+  opacity: 0.6;
+}
+
+.precision-slider__fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: var(--oled);
+}
+
+.precision-slider__thumb {
+  position: absolute;
+  top: 50%;
+  width: 1.9cqw;
+  height: 4.6cqw;
+  background: #000;
+  border: 0.77cqw solid var(--oled);
+  transform: translate(-50%, -50%);
+}
+
+.precision-slider__bubble {
+  position: absolute;
+  bottom: calc(100% + 3cqw);
+  transform: translateX(-50%);
+  padding: 0.6cqw 1.6cqw;
+  background: var(--oled);
+  color: #000;
+  font-size: 5.4cqw;
+  text-shadow: none;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.precision-slider:focus-visible {
+  outline: none;
+}
+
+.precision-slider:focus-visible .precision-slider__thumb {
+  outline: 0.5cqw solid var(--oled);
+  outline-offset: 0.5cqw;
+}
+
+/* ---- Swap screen ---- */
+.swap-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.swap-list__rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* it scrolls inside the locked page and never hands the scroll on to it */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: none;
+  scroll-snap-type: y proximity;
+}
+
+.swap-list__rows::-webkit-scrollbar {
+  display: none;
+}
+
+.swap-list__empty {
+  padding: 3cqw 0.8cqw;
+  text-align: center;
+}
+
+.swap-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8cqw;
+  height: 6.9cqw;
+  padding-left: 0.8cqw;
+  scroll-snap-align: start;
+}
+
+.swap-row__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* OLED buttons: an outlined box, in inverse video while pressed or playing */
+.swap-row__btn {
+  flex: none;
+  width: 8.5cqw;
+  height: 6.15cqw;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0.77cqw solid var(--oled);
+  border-radius: 0;
+  background: transparent;
+  color: var(--oled);
+}
+
+.swap-row__btn svg {
+  width: 3.4cqw;
+  height: 3.4cqw;
+  fill: currentColor;
+}
+
+.swap-row__btn:active,
+.swap-row__btn--on {
+  background: var(--oled);
+  color: #000;
+}
+
+.swap-list__foot {
+  flex: none;
+  padding: 0.6cqw 0.8cqw 0;
+  text-align: right;
+  opacity: 0.6;
+}
+
+/* ---- deck ---- */
+.deck {
+  flex: none;
+  height: 30.8cqw;
+}
+
+.type-keys {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-rows: 9.2cqw;
+  gap: 1.5cqw;
+}
+
+.type-key {
+  position: relative;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  border-radius: 1.8cqw;
+  color: var(--key-ink);
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 var(--key-edge), 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: box-shadow 0.1s, transform 0.08s;
+}
+
+.type-key:active:not(:disabled),
+.type-key--on {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), 0 1px 0 var(--key-edge);
+}
+
+.type-key:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.type-key__lamp {
+  position: absolute;
+  left: 1.8cqw;
+  top: 1.8cqw;
+  width: 3.6cqw;
+  height: 1cqw;
+  border-radius: 0.5cqw;
+  background: var(--c);
+  opacity: 0.35;
+}
+
+.type-key--on .type-key__lamp {
+  opacity: 1;
+  box-shadow: 0 0 5px var(--c), 0 0 12px color-mix(in srgb, var(--c) 60%, transparent);
+}
+
+.type-key__legend {
+  position: absolute;
+  left: 1.8cqw;
+  right: 0.6cqw;
+  bottom: 1.8cqw;
+  overflow: hidden;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 2.6cqw;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.deck--tune {
+  display: flex;
+  gap: 2cqw;
+}
+
+/* ---- piano: seven naturals with five sharps standing over them ---- */
+.keyboard {
+  --gap: 0.5cqw;
+  position: relative;
+  flex: 0 0 75.4cqw;
+  height: 100%;
+}
+
+.keyboard__naturals {
+  display: flex;
+  gap: var(--gap);
+  height: 100%;
+}
+
+.key {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: var(--key-ink);
+  font-size: 2.8cqw;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  touch-action: none;
+  transition: box-shadow 0.1s, transform 0.08s;
+}
+
+.key--natural {
+  flex: 1;
+  border-radius: 0 0 1.5cqw 1.5cqw;
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 var(--key-edge), 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.key--sharp {
+  position: absolute;
+  top: 0;
+  width: 6.7cqw;
+  height: 18cqw;
+  left: calc((var(--i) + 1) * (100% - 6 * var(--gap)) / 7 + var(--i) * var(--gap) + var(--gap) / 2 - 3.35cqw);
+  border-radius: 0 0 1.3cqw 1.3cqw;
+  color: #bdb9ae;
+  font-size: 2.3cqw;
+  background: linear-gradient(180deg, #26272b, #141517);
+  box-shadow: 0 3px 0 #000, 0 5px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.key--selected {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), 0 1px 0 var(--key-edge);
+}
+
+.key--sharp.key--selected {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 1px 0 #000;
+}
+
+.key__lamp {
+  position: absolute;
+  left: 50%;
+  bottom: 6.2cqw;
+  width: 1.5cqw;
+  height: 1.5cqw;
+  margin-left: -0.75cqw;
+  border-radius: 50%;
+  background: var(--led-off);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+
+.key--sharp .key__lamp {
+  bottom: 5cqw;
+}
+
+.key--selected .key__lamp {
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.key__name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2cqw;
+  text-align: center;
+}
+
+.key--sharp .key__name {
+  bottom: 1.8cqw;
+}
+
+.deck__side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5cqw;
+}
+
+.cap--side {
+  flex: 1;
+  border-radius: 1.8cqw;
+  letter-spacing: 0.1em;
+}
+
+.cap--side .cap__led {
+  top: 2.3cqw;
+}
+
+.cap--side .cap__legend {
+  bottom: 2.6cqw;
+}
+
+/* ---- pads: lit glass in a black well ---- */
+.padzone {
+  position: relative;
+  isolation: isolate;
+  margin-inline: -1.5cqw;
+  padding: 1.5cqw;
+  border-radius: 2.6cqw;
+  background: #0d0d0e;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+.pads {
+  /* canvas size, shrinking only when the chassis is short (it keeps room for a 45cqw screen and the deck) */
+  --pad-h: min(20.5cqw, calc((100cqh - 3cqw - 11.3cqw - 5 * 2.6cqw - 45cqw - 30.8cqw - 3cqw - 4.5cqw - 10.3cqw - 8cqw) / 4));
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: var(--pad-h);
+  gap: 1.5cqw;
+}
+
+.pad {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 1cqw;
+  background: radial-gradient(75% 70% at 50% 45%, #2c2d30, #1c1d1f 75%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -3px 8px rgba(0, 0, 0, 0.4);
+  text-align: left;
+  touch-action: none;
+}
+
+.pad--loaded {
+  background: radial-gradient(75% 70% at 50% 55%, color-mix(in srgb, var(--c) 55%, #fff), color-mix(in srgb, var(--c) 88%, #fff) 65%, color-mix(in srgb, var(--c) 82%, #000) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), inset 0 -3px 8px rgba(0, 0, 0, 0.22), 0 0 12px color-mix(in srgb, var(--c) 33%, transparent);
+}
+
+.pad--placeholder {
+  opacity: 0.6;
+}
+
+.pad--selected {
+  background: radial-gradient(75% 70% at 50% 55%, color-mix(in srgb, var(--c) 38%, #fff), color-mix(in srgb, var(--c) 88%, #fff) 65%, color-mix(in srgb, var(--c) 82%, #000) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), inset 0 -3px 8px rgba(0, 0, 0, 0.22), 0 0 22px color-mix(in srgb, var(--c) 67%, transparent), 0 0 0 2px #fff;
+}
+
+.pad:not(.pad--loaded).pad--selected {
+  background: radial-gradient(75% 70% at 50% 45%, #2c2d30, #1c1d1f 75%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -3px 8px rgba(0, 0, 0, 0.4), 0 0 0 2px #fff;
+}
+
+.pad:active {
+  filter: brightness(0.92);
+}
+
+.pad--dragging {
+  opacity: 0.35;
+}
+
+.pad--target {
+  outline: 0.9cqw solid var(--accent);
+  outline-offset: 0.2cqw;
+}
+
+.pad--tuned::after {
+  content: "✓";
+  position: absolute;
+  left: 1.8cqw;
+  bottom: 1.4cqw;
+  font-size: 5cqw;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+
+/* the number and type, printed in the pad's top left corner */
+.pad__number {
+  position: absolute;
+  left: 1.8cqw;
+  top: 1.5cqw;
+  right: 1.5cqw;
+  overflow: hidden;
+  font-size: 2.6cqw;
+  font-weight: 700;
+  line-height: 3.1cqw;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  color: rgba(20, 20, 22, 0.78);
+}
+
+.pad:not(.pad--loaded) .pad__number {
+  color: #8a8780;
+}
+
+.pad__number > span {
+  display: inline-block;
+  animation: relabel 0.35s ease-out;
+}
+
+/* a new type's wording fades in where the old one was, so a change is noticed */
+@keyframes relabel {
+  from {
+    opacity: 0;
+    transform: translateY(-0.8cqw);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pad__number > span {
+    animation: none;
+  }
+}
+
+/* the sound type's symbol, small in the pad's bottom right corner */
+.pad__symbol {
+  position: absolute;
+  bottom: 8%;
+  right: 7%;
+  width: 22%;
+  height: 22%;
+  fill: none;
+  stroke: rgba(20, 20, 22, 0.55);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* ---- transport row and name plate ---- */
+.transport {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2cqw;
+  height: 10.3cqw;
+}
+
+.cap--transport {
+  width: 16.4cqw;
+  height: 9.2cqw;
+  display: grid;
+  place-items: center;
+  border-radius: 1.8cqw;
+}
+
+.cap--transport:disabled {
+  opacity: 0.35;
+}
+
+.cap--transport svg {
+  width: 4.1cqw;
+  height: 4.1cqw;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nameplate {
+  margin-left: auto;
+  text-align: right;
+  color: var(--ink3);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.nameplate__name {
+  font-size: 3.3cqw;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.32em;
+  margin-right: -0.32em;
+}
+
+.nameplate__sub {
+  margin-top: 1cqw;
+  font-size: 2.3cqw;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  margin-right: -0.24em;
 }
 
 /* Marching ants, like a lasso selection: white dashes crawling along a dark outline. */
@@ -245,188 +928,6 @@
     animation: none;
   }
 }
-
-.dropzone strong,
-.screen__message strong {
-  font-size: 8cqw;
-  font-weight: 400;
-  line-height: 0.95;
-}
-
-.pad-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 1.5cqw;
-}
-
-.pad-panel__head {
-  flex: none;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.pad-panel__title {
-  font-size: 8cqw;
-  line-height: 0.95;
-}
-
-.pad-panel__sub {
-  font-size: 4.6cqw;
-  line-height: 1;
-  white-space: nowrap;
-  color: var(--lcd-ink2);
-}
-
-/* Drawn by the LCD itself: an outlined box, shown in inverse video when on. */
-.tune-toggle {
-  min-width: 30cqw;
-  padding: 1.2cqw 3cqw;
-  border: 0;
-  border-radius: 0.8cqw;
-  background: transparent;
-  box-shadow: inset 0 0 0 0.5cqw var(--lcd-ink2);
-  color: var(--lcd-ink);
-  font: inherit;
-  font-size: 5.4cqw;
-  text-transform: uppercase;
-}
-
-.tune-toggle--on {
-  background: var(--lcd-ink);
-  box-shadow: none;
-  color: var(--lcd);
-}
-
-/* height 0 with a flex basis of 0: the canvas must not size the screen from its own pixel buffer */
-.waveform {
-  flex: 1 1 0;
-  height: 0;
-  min-height: 12cqw;
-  width: 100%;
-  display: block;
-  border-top: 1px solid var(--track);
-  border-bottom: 1px solid var(--track);
-  color: var(--lcd-ink);
-}
-
-.pad-panel__label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 4.2cqw;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.pad-panel__slider--off {
-  opacity: 0.35;
-  pointer-events: none;
-}
-
-.pad-panel__category {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 3cqw;
-  font-size: 4.2cqw;
-  text-transform: uppercase;
-}
-
-.pad-panel__category select {
-  flex: 1;
-  min-width: 0;
-  padding: 0.6cqw 1.5cqw;
-  border: 0;
-  border-radius: 1cqw;
-  background: var(--btn);
-  color: var(--lcd-ink);
-  font: inherit;
-  font-size: 16px;
-  text-transform: none;
-}
-
-/* ---- sliders ---- */
-.precision-slider {
-  display: flex;
-  align-items: center;
-  height: 8cqw;
-  cursor: pointer;
-  touch-action: none;
-}
-
-.precision-slider__track {
-  position: relative;
-  width: 100%;
-  height: 1.6cqw;
-  border-radius: 1cqw;
-  background: var(--track);
-}
-
-/* center notch: where "no trim" sits */
-.precision-slider__track::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -1.2cqw;
-  bottom: -1.2cqw;
-  width: 0.5cqw;
-  margin-left: -0.25cqw;
-  background: var(--lcd-ink2);
-  opacity: 0.6;
-}
-
-.precision-slider__fill {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  border-radius: 1cqw;
-  background: var(--accent);
-}
-
-.precision-slider__thumb {
-  position: absolute;
-  top: 50%;
-  width: 6cqw;
-  height: 6cqw;
-  border-radius: 50%;
-  background: var(--btn);
-  border: 0.5cqw solid var(--accent);
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0.4cqw 1cqw rgba(0, 0, 0, 0.3);
-}
-
-.precision-slider__bubble {
-  position: absolute;
-  bottom: calc(100% + 4cqw);
-  transform: translateX(-50%);
-  padding: 0.5cqw 2cqw;
-  border-radius: 1.4cqw;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 5cqw;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.precision-slider:focus-visible {
-  outline: none;
-}
-
-.precision-slider:focus-visible .precision-slider__thumb {
-  outline: 0.5cqw solid var(--accent);
-  outline-offset: 0.5cqw;
-}
-
-/* ---- screen with drawers ---- */
-.screen-wrap {
-  flex: 1;
-  min-height: 38cqw;
-  position: relative;
-  display: flex;
-}
-
 .hold-zone,
 .drop-targets {
   position: absolute;
@@ -487,221 +988,6 @@
     opacity: 0;
   }
 }
-
-/* ---- pads and the drawers that cover them ---- */
-/*
- * The pad plate runs edge to edge in blue-grey. The pads sit 1.6cqw in from the edges and are square; the screen takes the
- * leftover height. isolation keeps the pad glows inside the plate so they can blend with it and with each other.
- */
-.padzone {
-  position: relative;
-  flex: none;
-  isolation: isolate;
-  margin-inline: calc(-1 * var(--u));
-  padding: var(--u) var(--u) 0;
-  background: linear-gradient(#a3adb4, #8f9aa2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 3px 4px -2px rgba(0, 0, 0, 0.3), 0 -1px 0 #6c767d, 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.pads {
-  /*
-   * the gap between pads, top to bottom: one unit between the lit edges, as side to side (the 8.1px is the pad's lit edge),
-   * plus 0.65cqw so the caption printed under each pad has air below it as well as above (it sits close to its own pad).
-   */
-  --row-gap: calc(var(--u) + 0.65cqw + 8.1px);
-  /*
-   * Pad size (set here, not on .phone, because cq units must resolve against the chassis): a square a quarter of the row
-   * (one unit between pads and at both sides), unless the chassis is too short. Then the four pad rows take what is left of
-   * its content height (cqh excludes the status bar and home indicator margins) after the keys, the screen at its minimum,
-   * the gaps between rows, the bottom margin and the transport.
-   */
-  --pad: min(
-    22cqw,
-    calc((100cqh - 11cqw - 4 * var(--u) - 40cqw - 4 * var(--row-gap) - 9cqw - 8cqw) / 4)
-  );
-  display: grid;
-  grid-template-columns: repeat(4, var(--pad));
-  justify-content: space-between;
-  row-gap: var(--row-gap);
-  /* room for the last row's lit edge */
-  padding-bottom: var(--row-gap);
-}
-
-.pad {
-  /* an unlit pad's edge: the same depth as a lit one, just dark */
-  --wt: #505055;
-  --wb: #66666c;
-  --glow: 0 8px 10px color-mix(in srgb, var(--wb) 45%, transparent);
-  position: relative;
-  aspect-ratio: 1;
-  padding: 0;
-  border: 0;
-  border-radius: 2.2cqw;
-  /* matte rubber, domed: lit toward the top, falling away to the edges and the bottom */
-  background-color: #5c5c61;
-  background-image: radial-gradient(130% 115% at 50% 22%, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0) 52%, rgba(0, 0, 0, 0.18));
-  top: 0;
-  touch-action: none;
-  transition: top 0.06s;
-  box-shadow:
-    0 0.9px 0 color-mix(in srgb, var(--wt) 89%, var(--wb)),
-    0 1.8px 0 color-mix(in srgb, var(--wt) 78%, var(--wb)),
-    0 2.7px 0 color-mix(in srgb, var(--wt) 67%, var(--wb)),
-    0 3.6px 0 color-mix(in srgb, var(--wt) 56%, var(--wb)),
-    0 4.5px 0 color-mix(in srgb, var(--wt) 44%, var(--wb)),
-    0 5.4px 0 color-mix(in srgb, var(--wt) 33%, var(--wb)),
-    0 6.3px 0 color-mix(in srgb, var(--wt) 22%, var(--wb)),
-    0 7.2px 0 color-mix(in srgb, var(--wt) 11%, var(--wb)),
-    0 8.1px 0 color-mix(in srgb, var(--wt) 0%, var(--wb)),
-    var(--glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -0.7cqw 1.1cqw rgba(0, 0, 0, 0.2),
-    inset 0.5cqw 0 0.8cqw -0.4cqw rgba(255, 255, 255, 0.08);
-}
-
-.pad--loaded {
-  --wt: color-mix(in srgb, var(--c) 58%, #5d5d64);
-  --wb: color-mix(in srgb, var(--c) 78%, #e4e4ea);
-  /* just a slight bloom of the edge colour below the pad */
-  --glow: 0 9px 7px -3px color-mix(in srgb, var(--c) 35%, transparent);
-}
-
-/*
- * Pressed, the pad sinks into the plate (with top, not transform) and the rubber falls slightly into shadow.
- * The colour along its bottom edge stays as it is.
- */
-.pad:active,
-.pad--selected:active {
-  top: 1.5px;
-  box-shadow:
-    0 0.9px 0 color-mix(in srgb, var(--wt) 75%, var(--wb)),
-    0 1.8px 0 color-mix(in srgb, var(--wt) 50%, var(--wb)),
-    0 2.7px 0 color-mix(in srgb, var(--wt) 25%, var(--wb)),
-    0 3.6px 0 color-mix(in srgb, var(--wt) 0%, var(--wb)),
-    0 4px 6px color-mix(in srgb, var(--wb) 25%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -0.7cqw 1.1cqw rgba(0, 0, 0, 0.26),
-    inset 0 0 0 100cqw rgba(0, 0, 0, 0.06);
-}
-
-/* the caption is printed on the plate, so it stays put while the pad sinks */
-.pad:active .pad__number {
-  top: calc(100% + 8.1px + 0.7cqw - 1.5px);
-}
-
-/* The sound type's symbol, small in the pad's top left corner, pressed into the rubber: dark grey with a faint lip of light underneath. */
-.pad__symbol {
-  position: absolute;
-  top: 7%;
-  left: 7%;
-  width: 22%;
-  height: 22%;
-  fill: none;
-  stroke: #3f3f44;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16));
-  pointer-events: none;
-}
-
-/* The selected pad is outlined by a thin line of marching ants. */
-.pad__ants {
-  position: absolute;
-  left: -1.1cqw;
-  top: -1.1cqw;
-  width: calc(100% + 2.2cqw);
-  height: calc(100% + 2.2cqw);
-  overflow: visible;
-  pointer-events: none;
-}
-
-.pad__ants rect {
-  x: 0.15cqw;
-  y: 0.15cqw;
-  width: calc(100% - 0.3cqw);
-  height: calc(100% - 0.3cqw);
-  rx: 3cqw;
-  fill: none;
-  stroke-width: 0.3cqw;
-}
-
-.pad__ants-base {
-  stroke: #000;
-}
-
-.pad__ants-dash {
-  stroke: #fff;
-  stroke-dasharray: 2 2;
-  animation: marching-ants 0.8s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pad__ants-dash {
-    animation: none;
-  }
-}
-
-.pad--tuned::after {
-  content: "✓";
-  position: absolute;
-  top: 1.4cqw;
-  right: 1.6cqw;
-  font-size: 5cqw;
-  font-weight: 700;
-  line-height: 1;
-  color: #fff;
-}
-
-/* The number and type are printed on the plastic below the pad, the same for every pad. Multiply blends the ink into
-   whatever light falls there, so a lit pad's glow shows through the lettering like light on printed plastic. */
-.pad__number {
-  position: absolute;
-  left: 0.6cqw;
-  right: 0;
-  /* small, under the pad's lit edge, close to its own pad (the gap below it, to the next row, is the larger one) */
-  top: calc(100% + 8.1px + 0.7cqw);
-  font-size: 1.8cqw;
-  line-height: 1;
-  letter-spacing: 0.06em;
-  text-align: left;
-  text-transform: uppercase;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-/* Ink that is not fully opaque: the lit plastic shows through the print, and a hair of highlight on the lower edge of each stroke makes it read as printed. */
-.pad__number > span {
-  display: inline-block;
-  animation: relabel 0.35s ease-out;
-  color: rgba(70, 64, 48, 0.62);
-  mix-blend-mode: multiply;
-  text-shadow: 0 0.4px 0 rgba(255, 255, 255, 0.45), 0 0 0.6px rgba(70, 64, 48, 0.5);
-}
-
-.pad--dragging {
-  opacity: 0.35;
-}
-
-.pad--target {
-  outline: 0.9cqw solid var(--accent);
-  outline-offset: 0.2cqw;
-}
-
-/* A new type's wording fades in where the old one was, so a change is noticed. */
-@keyframes relabel {
-  from {
-    opacity: 0;
-    transform: translateY(-0.8cqw);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pad__number > span {
-    animation: none;
-  }
-}
-
 .drag-ghost {
   position: fixed;
   z-index: 40;
@@ -714,307 +1000,14 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
   pointer-events: none;
 }
-
-/*
- * The drawers slide out of a slot along the top of the screen. The slot clips them, so a drawer travels in from behind
- * its top edge with its contents riding along, throws a shadow down onto the LCD as it comes and dims what it covers.
- * Opening is a quick start and a long, damped settle; closing accelerates away. Both drawers stay mounted so they can
- * close as smoothly as they open, and a drawer replacing another waits for that one to slide shut.
- */
-.drawer-slot {
-  position: absolute;
-  inset: 0;
-  z-index: 12;
-  overflow: hidden;
-  border-radius: var(--radius);
-  pointer-events: none;
-}
-
-.drawer-slot::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(24, 22, 18, 0.45);
-  opacity: 0;
-  transition: opacity 0.3s ease-in;
-}
-
-.drawer-slot--open {
-  pointer-events: auto;
-}
-
-.drawer-slot--open::before {
-  opacity: 1;
-  transition: opacity 0.4s ease-out;
-}
-
-.drawer {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--u);
-  padding: var(--u) var(--u) 5cqw;
-  border-radius: var(--radius);
-  background: linear-gradient(#b5af9c, #a29c8a);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 0 0 1px var(--edge), 0 1.6cqw 3.2cqw rgba(0, 0, 0, 0.45);
-  transform: translateY(calc(-100% - 5cqw));
-  visibility: hidden;
-  transition: transform 0.26s cubic-bezier(0.55, 0, 0.8, 0.3), visibility 0s 0.26s;
-}
-
-.drawer--open {
-  transform: none;
-  visibility: visible;
-  transition: transform 0.44s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
-}
-
-.drawer--open.drawer--after {
-  transition-delay: 0.22s, 0s;
-}
-
-/* the drawer's front edge, which you would pull it by */
-.drawer::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 4cqw;
-  border-top: 1px solid rgba(0, 0, 0, 0.14);
-  border-radius: 0 0 var(--radius) var(--radius);
-  background: linear-gradient(rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.1));
-  pointer-events: none;
-}
-
-.drawer__handle {
-  position: absolute;
-  z-index: 1;
-  left: 50%;
-  bottom: 0;
-  width: 30cqw;
-  height: 7cqw;
-  padding: 0;
-  border: 0;
-  background: none;
-  transform: translateX(-50%);
-  /* dragged up to close, so the browser must not take the gesture for a scroll */
-  touch-action: none;
-  cursor: grab;
-}
-
-.drawer__handle:active {
-  cursor: grabbing;
-}
-
-.drawer__handle::before {
-  content: "";
-  display: block;
-  width: 10cqw;
-  height: 0.9cqw;
-  margin: auto;
-  border-radius: 0.45cqw;
-  background: rgba(0, 0, 0, 0.28);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .drawer,
-  .drawer--open,
-  .drawer-slot::before {
-    transition: none;
-  }
-}
-
-.drawer__head {
-  flex: none;
-  display: flex;
-  justify-content: space-between;
-  font-size: 3cqw;
-  line-height: 1;
-  color: var(--ink3);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-}
-
-/* ---- sound type faceplates: black panels of coloured rocker tabs, like an organ's ---- */
-.faceplates {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--u);
-}
-
-/* Both plates are the same width with the same five columns, so the keys line up from plate to plate. */
-/* The plates share the drawer's height so that all three rows of keys come out the same height. */
-.faceplate {
-  flex: 2 1 3.6cqw;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  grid-auto-rows: 1fr;
-  /* the tabs sit almost edge to edge, as on the organ */
-  gap: 1.2cqw 0.6cqw;
-  padding: 1.2cqw;
-  border-radius: calc(var(--r-key) + 1.2cqw);
-  background: linear-gradient(#232220, #161514);
-  /* a thin brushed-gold trim around each panel */
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 0 0.35cqw #bfae7f, 0 0 0 0.5cqw rgba(0, 0, 0, 0.35), 0 1px 0 0.5cqw rgba(255, 255, 255, 0.3);
-}
-
-.faceplate:last-child {
-  flex: 1 1 2.4cqw;
-}
-
-/*
- * An organ's rocker tab: translucent coloured plastic, lit a little through its top face, with a glossy highlight along
- * the top edge and a darker lip along the bottom where it pivots, throwing a hard shadow onto the black panel.
- */
-.type-button {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  min-width: 0;
-  min-height: 0;
-  padding: 0 0.4cqw 1.6cqw;
-  border: 0;
-  border-radius: 0.8cqw;
-  background: linear-gradient(rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.06) 32%, rgba(255, 255, 255, 0) 70%), var(--c);
-  font-size: 2.2cqw;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -0.7cqw 0 rgba(0, 0, 0, 0.14),
-    0 0.6cqw 0 rgba(0, 0, 0, 0.55),
-    0 1cqw 1.4cqw rgba(0, 0, 0, 0.5);
-  transition: filter 0.2s, box-shadow 0.15s, transform 0.08s, opacity 0.2s;
-}
-
-.type-button:active:not(:disabled) {
-  transform: translateY(0.4cqw);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -0.3cqw 0 rgba(0, 0, 0, 0.2), 0 0.2cqw 0 rgba(0, 0, 0, 0.55);
-}
-
-.type-button:disabled {
-  cursor: default;
-}
-
-/* The chosen tab is rocked down and lit from behind: brighter, glowing onto the panel, with a lit line along its top. */
-.type-button--on {
-  transform: translateY(0.4cqw);
-  filter: brightness(1.12) saturate(1.08);
-  box-shadow:
-    inset 0 0.5cqw 0 rgba(255, 255, 255, 0.85),
-    inset 0 0 2.4cqw rgba(255, 255, 255, 0.35),
-    0 0.2cqw 0 rgba(0, 0, 0, 0.55),
-    0 0 3cqw 0.4cqw color-mix(in srgb, var(--c) 75%, transparent);
-}
-
-.drawer__foot {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.switch {
-  display: flex;
-  align-items: center;
-  gap: 1.8cqw;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: 3cqw;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.switch__track {
-  position: relative;
-  width: 11cqw;
-  height: 5.4cqw;
-  border-radius: 3cqw;
-  background: var(--accent);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
-  transition: background 0.15s;
-}
-
-.switch[aria-checked="false"] .switch__track {
-  background: #7f7868;
-}
-
-.switch__knob {
-  position: absolute;
-  top: 0.7cqw;
-  left: 0.7cqw;
-  width: 4cqw;
-  height: 4cqw;
-  border-radius: 50%;
-  background: var(--btn);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  transition: transform 0.15s;
-}
-
-.switch[aria-checked="true"] .switch__knob {
-  transform: translateX(5.6cqw);
-}
-
-/* ---- key selector: the twelve notes in a row ---- */
-.keyboard {
-  flex: 1;
-  min-height: 15cqw;
-  display: flex;
-  gap: 0.8cqw;
-}
-
-.key {
-  flex: 1;
-  min-width: 0;
-  padding: 0 0 1.5cqw;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--r-key);
-  font-size: 3cqw;
-  font-weight: 700;
-  touch-action: none;
-  transition: background 0.15s, box-shadow 0.15s, transform 0.08s;
-}
-
-.key--natural {
-  background: var(--cap);
-  color: var(--ink);
-  box-shadow: var(--cap-shadow);
-}
-
-.key--sharp {
-  background: linear-gradient(#8a8473, #6f6a5b);
-  color: #efebdd;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1.5px 0 #34312a, 0 2.5px 4px rgba(0, 0, 0, 0.3);
-}
-
-/* The chosen key is held down and lit from inside. */
-.key--selected {
-  transform: translateY(1px);
-  background: linear-gradient(color-mix(in srgb, var(--led) 26%, #fff8f2), color-mix(in srgb, var(--led) 42%, #e8dccf));
-  color: var(--ink);
-  box-shadow: inset 0 0 1.6cqw rgba(255, 75, 43, 0.4), var(--cap-down), 0 0 2cqw rgba(255, 75, 43, 0.45);
-}
-
 /* ---- menu ---- */
 .menu {
   position: absolute;
   /* just under the menu button */
-  top: calc(max(var(--u), env(safe-area-inset-top)) + 11cqw + 1.2cqw);
-  right: var(--u);
+  top: calc(max(3cqw, env(safe-area-inset-top)) + 11.3cqw + 1.2cqw);
+  right: 4.1cqw;
+  max-height: calc(100cqh - 20cqw);
+  overflow-y: auto;
   z-index: 18;
   display: flex;
   flex-direction: column;
@@ -1178,7 +1171,7 @@
   gap: 0.8cqw;
   padding: 0.8cqw;
   border-radius: 1.2cqw;
-  background: linear-gradient(#3a3832, #2e2c28);
+  background: linear-gradient(#3a3c40, #2a2b2e);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
@@ -1298,11 +1291,10 @@
   border: 0;
   border-radius: var(--radius);
   background: var(--chassis1);
-  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #a49e8c;
+  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #4a4c52;
   color: var(--ink);
   font-size: 3.6cqw;
 }
-
 /* ---- all-pads view (shown while dragging over the bank buttons) ---- */
 .allpads {
   position: absolute;
@@ -1334,7 +1326,7 @@
 .allpads__cell {
   aspect-ratio: 4 / 3;
   border-radius: 1.2cqw;
-  background: #7b7b7e;
+  background: #2c2d30;
   opacity: 0.5;
 }
 
@@ -1350,150 +1342,6 @@
   outline: 0.9cqw solid var(--accent);
   outline-offset: -0.9cqw;
 }
-
-/* ---- hot-swap list ---- */
-/* Drawn on the LCD like the other screens: ink on the glass, no colour coding, slim rows, and a list that scrolls by itself. */
-.swap-list {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5cqw;
-}
-
-/* a small label centred at the top of the list */
-.swap-list__head {
-  flex: none;
-  text-align: center;
-  font-size: 3cqw;
-  line-height: 1;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--lcd-ink2);
-}
-
-.swap-list__rows {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  /* it scrolls inside the locked page and never hands the scroll on to it */
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
-  border-top: 1px solid var(--track);
-  scrollbar-width: none;
-}
-
-.swap-list__rows::-webkit-scrollbar {
-  display: none;
-}
-
-.swap-list__empty {
-  padding-top: 2cqw;
-  font-size: 3.6cqw;
-  text-transform: uppercase;
-  color: var(--lcd-ink2);
-}
-
-.swap-row {
-  display: flex;
-  align-items: center;
-  gap: 1.6cqw;
-  min-height: 8.4cqw;
-  border-bottom: 1px solid var(--track);
-  font-size: 3.8cqw;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.swap-row__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* LCD buttons: an outlined box, shown in inverse video while pressed or playing, like the Tune button. */
-.swap-row__btn {
-  flex: none;
-  width: 9cqw;
-  height: 6cqw;
-  padding: 0;
-  border: 0;
-  border-radius: 0.8cqw;
-  background: transparent;
-  box-shadow: inset 0 0 0 0.4cqw var(--lcd-ink2);
-  color: var(--lcd-ink);
-  font: inherit;
-  font-size: 3.4cqw;
-  line-height: 1;
-}
-
-.swap-row__btn:active,
-.swap-row__btn--on {
-  background: var(--lcd-ink);
-  box-shadow: none;
-  color: var(--lcd);
-}
-
-/* ---- transport row (placeholders for now) ---- */
-/* Four keys in the pads' columns, the same unit apart. */
-.transport {
-  flex: none;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--u);
-}
-
-.transport__button {
-  height: 9cqw;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--r-key);
-  background: var(--cap);
-  box-shadow: var(--cap-shadow);
-  color: var(--ink);
-  transition: box-shadow 0.12s, transform 0.08s, opacity 0.15s;
-}
-
-.transport__button:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: var(--cap-down);
-}
-
-.transport__button:disabled {
-  opacity: 0.35;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
-}
-
-.transport__button svg {
-  width: 4.6cqw;
-  height: 4.6cqw;
-  fill: currentColor;
-}
-
-.transport__button--rec {
-  background: linear-gradient(#e2675a, #c8493c);
-  color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1.5px 0 #7d2a20, 0 2.5px 4px rgba(0, 0, 0, 0.3);
-}
-
-/* armed: held down and lit */
-.transport__button--rec[aria-pressed="true"] {
-  transform: translateY(1px);
-  background: linear-gradient(#ff5a44, #f03a24);
-  box-shadow: inset 0 0 1.6cqw rgba(255, 255, 255, 0.3), 0 0.5px 0 #7d2a20, 0 0 3cqw rgba(255, 59, 36, 0.6);
-}
-
-.transport__button[aria-pressed="true"]:not(.transport__button--rec) {
-  transform: translateY(1px);
-  box-shadow: var(--cap-down);
-  color: #2f9e4f;
-  filter: drop-shadow(0 0 1cqw rgba(47, 158, 79, 0.5));
-}
-
 /* A small text button under the drop zone's prompt for choosing a sample pack folder. */
 .dropzone__pack {
   margin-top: 1cqw;
@@ -1506,115 +1354,4 @@
   border: 0.4cqw solid currentColor;
   border-radius: 1.6cqw;
   cursor: pointer;
-}
-
-/*
- * The key drawer only comes down over the top half of the screen. Nothing dims or blocks the lower half, where the pad's
- * pitch trim slider sits centred and stays in reach, so a key and the trim can be set together.
- */
-.drawer-slot--keys {
-  pointer-events: none;
-}
-
-.drawer-slot--keys::before {
-  opacity: 0;
-}
-
-.drawer--keys {
-  inset: 0 0 auto 0;
-  height: 50%;
-}
-
-.drawer--keys.drawer--open {
-  pointer-events: auto;
-}
-
-.drawer--keys .keyboard {
-  min-height: 0;
-}
-
-/*
- * The screen's two faces share its space: the hot-swap list (the default) and the tuning panel. Entering tuning mode, the
- * list sinks and fades while the panel rises into the lower half, under the key drawer coming down above it; sliding the
- * drawer shut lets the panel grow up to fill the whole screen, and its waveform and details fade back in as it does.
- */
-.screen__layer {
-  position: absolute;
-  inset: 3cqw 3.6cqw;
-  transition: top 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
-}
-
-.screen__layer--swap {
-  opacity: 1;
-}
-
-.screen--tune .screen__layer--swap {
-  opacity: 0;
-  transform: translateY(3cqw);
-  visibility: hidden;
-  transition: opacity 0.22s ease, transform 0.3s ease-in, visibility 0s 0.3s;
-}
-
-.screen__layer--tune {
-  opacity: 0;
-  transform: translateY(-3cqw);
-  visibility: hidden;
-  transition: opacity 0.2s ease, transform 0.3s ease-in, visibility 0s 0.3s;
-}
-
-.screen--tune .screen__layer--tune {
-  opacity: 1;
-  transform: none;
-  visibility: visible;
-  /* a beat behind the list's exit, so the two overlap only as a cross-fade */
-  transition: top 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.34s ease 0.12s, transform 0.46s cubic-bezier(0.16, 1, 0.3, 1) 0.12s, visibility 0s;
-}
-
-/* Under the key drawer (the top half of the screen), the panel is just the pitch trim slider, centred. */
-.screen--keys .screen__layer--tune {
-  top: calc(50% + 1cqw);
-}
-
-.screen__layer--tune .pad-panel {
-  transition: gap 0.4s ease;
-}
-
-.screen__layer--tune .pad-panel__head,
-.screen__layer--tune .pad-panel__category {
-  max-height: 14cqw;
-  transition: max-height 0.4s ease, opacity 0.3s ease 0.1s;
-}
-
-.screen__layer--tune .waveform {
-  transition: flex-grow 0.4s ease, min-height 0.4s ease, opacity 0.3s ease 0.1s, border-color 0.3s;
-}
-
-.screen--keys .pad-panel {
-  justify-content: center;
-  gap: 0;
-}
-
-.screen--keys .pad-panel__head,
-.screen--keys .pad-panel__category {
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: max-height 0.4s ease, opacity 0.15s ease;
-}
-
-.screen--keys .waveform {
-  flex-grow: 0;
-  min-height: 0;
-  opacity: 0;
-  border-color: transparent;
-  transition: flex-grow 0.4s ease, min-height 0.4s ease, opacity 0.15s ease, border-color 0.15s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .screen__layer,
-  .screen__layer--tune .pad-panel,
-  .screen__layer--tune .pad-panel__head,
-  .screen__layer--tune .waveform {
-    transition: none;
-  }
 }
