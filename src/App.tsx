@@ -30,7 +30,7 @@ import { SwapList } from "./components/SwapList";
 import { ClassifierDrawer } from "./components/ClassifierDrawer";
 import { useDrawerDrag } from "./components/useDrawerDrag";
 import { LongSamplesModal } from "./components/LongSamplesModal";
-import { arrangeFingerDrumming } from "./audio/fingerDrumming";
+import { arrangeFingerDrumming, EMPTY_PAD_LABEL } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, kitSlotCounts, layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
@@ -520,6 +520,8 @@ function App() {
     const { positions, placeholders, ghosts } = arrangeFingerDrumming(
       real.map((p) => ({ key: p.origIndex, category: p.category, midi: p.detectedMidi, centroid: p.centroid })),
       layoutById(layoutId),
+      // A sample pack keeps its loops and melodics on bank B, everything else on bank C, and bank D empty.
+      { pack: Object.keys(latest.current.hidden).length > 0 },
     );
     const next: Record<number, Pad> = {};
     for (const p of real) {
@@ -581,8 +583,32 @@ function App() {
   };
 
   /** Changes a sound's type. Tune follows the new type unless the user set it by hand. */
+  /**
+   * In a sample pack, a sound re-typed by the user leaves its pad: it joins the hot-swap pool as a sound of its new type (so
+   * it turns up in the swap list when a pad of that type is selected), and a spare of the pad's old type takes the pad's place,
+   * so every area of the pads keeps its sounds. With no spare to give, the pad is left as a silent placeholder.
+   */
+  const retypeIntoPool = (pad: Pad, category: CategoryId) => {
+    recordEdit();
+    const spares = latest.current.hidden;
+    const slot = layout.on && pad.index < 16 ? layoutById(layout.id).slots[pad.index] : undefined;
+    const retyped: Pad = { ...pad, category, index: -1, ...(pad.tuneLocked ? {} : { tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) }) };
+    const replacement = Object.values(spares).find((p) => p.category === pad.category);
+    const nextSpares = { ...spares };
+    if (replacement) delete nextSpares[replacement.origIndex];
+    nextSpares[pad.origIndex] = retyped;
+    setHidden(nextSpares);
+    setPads((prev) => ({
+      ...prev,
+      [pad.index]: replacement
+        ? { ...replacement, index: pad.index, tune: tuneDefault(replacement.tuneLocked, replacement.tune, replacement.category, replacement.detectedMidi, tunedTarget) }
+        : makePlaceholderPad(slot ? { index: pad.index, kind: "missing", label: `add ${slot.label}` } : { index: pad.index, kind: "empty", label: EMPTY_PAD_LABEL }),
+    }));
+  };
+
   const classifyPad = (pad: Pad, category: CategoryId) => {
     if (pad.category === category) return;
+    if (isReal(pad) && Object.keys(latest.current.hidden).length > 0) return retypeIntoPool(pad, category);
     const slot = layout.on && pad.index < 16 && !pad.placeholder && !pad.ghost ? layoutById(layout.id).slots[pad.index] : undefined;
     if (slot && slot.category !== category) {
       // The sound no longer belongs in its finger-drumming slot: a sound of the slot's type takes its place.

@@ -4,8 +4,6 @@
 // file names and sizes only; no audio is read until a file has been picked.
 import { classifyByName, type CategoryId } from "./classify";
 
-/** Pads in a Koala project (four banks of sixteen). */
-export const PACK_SLOTS = 64;
 const MB = 1024 * 1024;
 /** Total file size a pack import may load when nothing better is known. Decoded audio takes about three times this in memory. */
 export const PACK_BYTE_BUDGET = 96 * MB;
@@ -133,8 +131,12 @@ export interface PickedSound<T = unknown> {
 export const PACK_ALTERNATIVES = 10;
 /** Hidden alternatives kept for each of the other types (bass, melodic, loops). */
 export const PACK_OTHER_ALTERNATIVES = 4;
-/** Pads taken by the finger-drumming page (bank A); the pack's other sounds fill the pads after it. */
-export const KIT_PADS = 16;
+/**
+ * How the pack's sounds sit on the pads: bank A is the drum kit, bank B holds eight drum loops and eight melodics
+ * (pianos, plucks, bells), bank C everything else (bass, perc loops, melodic loops, other), and bank D is left empty.
+ */
+export const BANK_B_QUOTA: Partial<Record<CategoryId, number>> = { drumLoop: 8, melodic: 8 };
+export const BANK_C_PADS = 16;
 
 export interface PackPlan<T = unknown> {
   /** The sounds that go on pads. */
@@ -149,22 +151,24 @@ export interface PackPlan<T = unknown> {
 }
 
 /** Order the types are loaded in, so a tight memory budget runs out on loops and long sounds, not on the kit. */
-const BUDGET_TIERS: (CategoryId[] | "kit")[] = ["kit", ["bass", "melodic"], ["vox", "fx", "perc", "melodicLoop", "percLoop", "drumLoop", "other"]];
+const BUDGET_TIERS: (CategoryId[] | "kit")[] = ["kit", ["melodic", "bass"], ["vox", "fx", "perc", "melodicLoop", "percLoop", "drumLoop", "other"]];
 
 /**
  * Plans what a pack contributes. The drum kit comes first: for every type the finger-drumming page has slots for,
- * one sound per slot goes on a pad and `alternatives` more are held back, hidden, as hot-swap options. What is
- * left of the pads after bank A is shared out evenly between the other types (bass, melodic, loops...), each with
- * its own hidden alternatives. Types take turns within a tier of the memory budget (kit, then bass and melodic,
- * then the rest), so the budget runs out on the longest material last. A file that would push the total past
- * `byteBudget` (or is over `maxFileBytes`) is passed over for the next one of its type.
+ * one sound per slot goes on a pad and `alternatives` more are held back, hidden, as hot-swap options. Bank B then
+ * gets its drum loops and melodics, and bank C shares its pads evenly between everything else, each type with its
+ * own hidden alternatives (see BANK_B_QUOTA). Pads a type cannot fill stay empty: they are not given to other types,
+ * so a loop bank that cannot fit the size limits stays short rather than filling with something else. Types take
+ * turns within a tier of the memory budget (kit, then melodics and bass, then the rest), so the budget runs out on
+ * the longest material last. A file that would push the total past `byteBudget` (or is over `maxFileBytes`) is
+ * passed over for the next one of its type.
  */
 export function planPackSounds<T>(
   files: PackFile<T>[],
   {
     kitSlots,
-    slots = PACK_SLOTS,
-    kitPads = KIT_PADS,
+    bankB = BANK_B_QUOTA,
+    bankCPads = BANK_C_PADS,
     alternatives = PACK_ALTERNATIVES,
     otherAlternatives = PACK_OTHER_ALTERNATIVES,
     byteBudget = PACK_BYTE_BUDGET,
@@ -173,8 +177,8 @@ export function planPackSounds<T>(
   }: {
     /** Real (not ghost) slots per type on the finger-drumming page. */
     kitSlots: Partial<Record<CategoryId, number>>;
-    slots?: number;
-    kitPads?: number;
+    bankB?: Partial<Record<CategoryId, number>>;
+    bankCPads?: number;
     alternatives?: number;
     otherAlternatives?: number;
     byteBudget?: number;
@@ -197,20 +201,24 @@ export function planPackSounds<T>(
     queues.set(category, q);
   }
   for (const [category, q] of queues) queues.set(category, shuffled(q, random));
+  const available = (c: CategoryId) => queues.get(c)?.length ?? 0;
 
-  // How many of each type go on pads: a kit type gets its slots; the rest share the remaining pads evenly (a type with fewer files gives its share to the others).
+  // How many of each type go on pads. Kit types get their slots and bank B's types their quotas, files permitting.
   const kitTypes = (Object.keys(kitSlots) as CategoryId[]).filter((c) => (kitSlots[c] ?? 0) > 0);
+  const bankBTypes = (Object.keys(bankB) as CategoryId[]).filter((c) => (bankB[c] ?? 0) > 0 && !kitTypes.includes(c));
+  const restTypes = [...queues.keys()].filter((c) => !kitTypes.includes(c) && !bankBTypes.includes(c));
+  const planned = new Set<CategoryId>([...kitTypes, ...bankBTypes, ...restTypes]);
+  const altsFor = (c: CategoryId) => (kitTypes.includes(c) ? alternatives : otherAlternatives);
+
   const visibleWant = new Map<CategoryId, number>();
-  for (const c of kitTypes) visibleWant.set(c, Math.min(kitSlots[c]!, queues.get(c)?.length ?? 0));
-  const others = [...queues.keys()].filter((c) => !kitTypes.includes(c));
-  // The pads after the kit are for melodics, bass and loops; "other" only fills them when the pack has nothing else.
-  const fillers = others.some((c) => c !== "other" && queues.get(c)!.length > 0) ? others.filter((c) => c !== "other") : others;
-  const altsFor = (c: CategoryId) => (kitTypes.includes(c) ? alternatives : c === "other" ? 0 : otherAlternatives);
-  let room = Math.max(0, slots - kitPads);
-  const share = new Map(fillers.map((c) => [c, 0]));
-  // The alternatives are set aside first, so a small type keeps some spares to swap in rather than putting every file on a pad.
-  const forPads = (c: CategoryId) => Math.max(1, queues.get(c)!.length - altsFor(c));
-  for (let open = fillers.filter((c) => queues.get(c)!.length > 0); room > 0 && open.length; ) {
+  for (const c of kitTypes) visibleWant.set(c, Math.min(kitSlots[c]!, available(c)));
+  for (const c of bankBTypes) visibleWant.set(c, Math.min(bankB[c]!, available(c)));
+  // Bank C is shared evenly between the rest (a type with fewer files gives its share to the others). The alternatives are
+  // set aside first, so a small type keeps some spares to swap in rather than putting every file on a pad.
+  const forPads = (c: CategoryId) => Math.max(1, available(c) - altsFor(c));
+  const share = new Map(restTypes.map((c) => [c, 0]));
+  let room = bankCPads;
+  for (let open = restTypes.filter((c) => available(c) > 0); room > 0 && open.length; ) {
     for (const c of shuffled(open, random)) {
       if (room <= 0) break;
       share.set(c, share.get(c)! + 1);
@@ -238,12 +246,11 @@ export function planPackSounds<T>(
   };
 
   for (const tier of BUDGET_TIERS) {
-    const types = (tier === "kit" ? kitTypes : tier).filter((c) => queues.has(c) && (tier === "kit" || !kitTypes.includes(c)) && (kitTypes.includes(c) || fillers.includes(c)));
+    const types = (tier === "kit" ? kitTypes : tier).filter((c) => queues.has(c) && planned.has(c) && (tier === "kit" || !kitTypes.includes(c)));
     for (let progressed = true; progressed; ) {
       progressed = false;
       for (const category of shuffled(types, random)) {
-        const wantShown = visibleWant.get(category) ?? 0;
-        const isShown = (shown.get(category) ?? 0) < wantShown;
+        const isShown = (shown.get(category) ?? 0) < (visibleWant.get(category) ?? 0);
         if (!isShown && (kept.get(category) ?? 0) >= altsFor(category)) continue;
         const file = pop(category);
         if (!file) continue;
@@ -256,20 +263,6 @@ export function planPackSounds<T>(
           kept.set(category, (kept.get(category) ?? 0) + 1);
         }
       }
-    }
-  }
-
-  // If the budget cut some types short, other types' spare files fill the pads that are left.
-  const target = slots - kitPads;
-  for (let progressed = true; progressed && visible.filter((v) => !kitTypes.includes(v.category)).length < target; ) {
-    progressed = false;
-    for (const category of shuffled(fillers, random)) {
-      if (visible.filter((v) => !kitTypes.includes(v.category)).length >= target) break;
-      const file = pop(category);
-      if (!file) continue;
-      progressed = true;
-      visible.push({ file, category });
-      shown.set(category, (shown.get(category) ?? 0) + 1);
     }
   }
 

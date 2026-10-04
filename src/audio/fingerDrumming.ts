@@ -111,7 +111,37 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[]): Kit {
   return { slots, leftover: drums.filter((d) => !used.has(d.key)) };
 }
 
-export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayout): FingerArrangement {
+/** A sample pack's bank B holds this many drum loops (its first two rows) and then this many melodics (the last two). */
+const PACK_LOOP_PADS = 8;
+const PACK_MELODIC_PADS = 8;
+
+/**
+ * Where a sample pack's non-kit sounds go: bank B takes eight drum loops then eight melodics, bank C everything else
+ * (lowest to highest, bass first), and bank D stays empty. Sounds that do not fit their place take the first free pad
+ * of banks B, C then D, so none is lost.
+ */
+function placePack(tonal: ArrangeSound[], leftoverDrums: ArrangeSound[], taken: Set<number>, positions: Map<number, number>): void {
+  const of = (c: CategoryId) => tonal.filter((s) => (s.category ?? "other") === c).sort(byFrequency);
+  const loops = of("drumLoop");
+  const melodics = of("melodic");
+  const rest = TONAL_ORDER.filter((c) => c !== "drumLoop" && c !== "melodic").flatMap(of);
+  const overflow: ArrangeSound[] = [];
+  const put = (list: ArrangeSound[], start: number, count: number) => {
+    list.slice(0, count).forEach((s, n) => positions.set(s.key, start + n));
+    overflow.push(...list.slice(count));
+  };
+  put(loops, PADS_PER_BANK, PACK_LOOP_PADS);
+  put(melodics, PADS_PER_BANK + PACK_LOOP_PADS, PACK_MELODIC_PADS);
+  put(rest, PADS_PER_BANK * 2, PADS_PER_BANK);
+  const used = new Set([...taken, ...positions.values()]);
+  const free: number[] = [];
+  for (let i = PADS_PER_BANK; i < PAD_COUNT; i++) if (!used.has(i)) free.push(i);
+  [...overflow, ...leftoverDrums].forEach((s, n) => {
+    if (free[n] !== undefined) positions.set(s.key, free[n]);
+  });
+}
+
+export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayout, { pack = false }: { pack?: boolean } = {}): FingerArrangement {
   const drums = sounds.filter((s) => isKitCategory(s.category));
   const tonal = sounds.filter((s) => !isKitCategory(s.category));
   const kit = fillKit(layout, drums);
@@ -137,6 +167,15 @@ export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayo
     if (source) ghosts.push({ index: i, kind: slot.ghostOf === "snare" ? "ghostSnare" : "softKick", sourceKey: kit.slots[source.j]!.key });
     else placeholders.set(i, { index: i, kind: "missing", label: `add ${categoryLabel(slot.ghostOf!)}` });
   });
+
+  if (pack) {
+    placePack(tonal, leftoverDrums, new Set([...placeholders.keys(), ...ghosts.map((g) => g.index)]), positions);
+    const taken = new Set([...positions.values(), ...placeholders.keys(), ...ghosts.map((g) => g.index)]);
+    for (let index = 0; index < PAD_COUNT; index++) {
+      if (!taken.has(index)) placeholders.set(index, { index, kind: "empty", label: EMPTY_PAD_LABEL });
+    }
+    return { positions, ghosts, placeholders: [...placeholders.values()].sort((a, b) => a.index - b.index) };
+  }
 
   const ordered = TONAL_ORDER.flatMap((c) => tonal.filter((s) => (s.category ?? "other") === c).sort(byFrequency));
   const back: number[] = [];

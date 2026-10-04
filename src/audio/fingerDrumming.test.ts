@@ -187,3 +187,30 @@ describe("classification by name", () => {
     expect(classifySample(tick(0.8), 44100, "hihat 1.wav", null)).toBe("openHat");
   });
 });
+
+describe("arrangeFingerDrumming for a sample pack", () => {
+  const many = (category: CategoryId, n: number) => Array.from({ length: n }, () => sound(category));
+  const sounds = [
+    drum("kick"), drum("snare"), drum("closedHat"), drum("openHat"),
+    ...many("drumLoop", 8), ...many("melodic", 8), ...many("bass", 4), ...many("percLoop", 4), ...many("melodicLoop", 4), ...many("other", 4),
+  ];
+
+  it("puts eight loops then eight melodics on bank B, the rest on bank C, and nothing on bank D", () => {
+    const a = arrangeFingerDrumming(sounds, horizontal, { pack: true });
+    const where = (c: CategoryId) => sounds.filter((s) => s.category === c).map((s) => indexOf(a, s)!).sort((x, y) => x - y);
+    expect(where("drumLoop")).toEqual([16, 17, 18, 19, 20, 21, 22, 23]);
+    expect(where("melodic")).toEqual([24, 25, 26, 27, 28, 29, 30, 31]);
+    for (const c of ["bass", "percLoop", "melodicLoop", "other"] as CategoryId[]) for (const i of where(c)) expect(i).toBeGreaterThanOrEqual(32), expect(i).toBeLessThan(48);
+    // Bank D is all "Empty pad" placeholders.
+    const bankD = a.placeholders.filter((p) => p.index >= 48);
+    expect(bankD).toHaveLength(16);
+    expect(bankD.every((p) => p.kind === "empty")).toBe(true);
+  });
+
+  it("does not lose sounds that overflow their bank", () => {
+    const extra = [...sounds, ...many("drumLoop", 3)];
+    const a = arrangeFingerDrumming(extra, horizontal, { pack: true });
+    expect(extra.filter((s) => a.positions.get(s.key) === undefined)).toHaveLength(0);
+    expect(new Set(a.positions.values()).size).toBe(a.positions.size);
+  });
+});
