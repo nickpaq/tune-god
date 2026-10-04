@@ -61,6 +61,12 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 - **BITCOOKER:** SAMPLERATE 44.0 kHz, BIT DEPTH 24, JITTER 100 %, MIX 100 %.
 - **Mixer layout screenshot:** matches the files (bass has STEREOIZER in slot 4 and SIDECHAIN in slot 5, and so on).
 
+## EQ frequencies, from the user
+
+- Minimum project: low band 20 Hz at +18 dB, high band 20 kHz at +18 dB, Q 0.5. Maximum project: low band 32 Hz at -18 dB, high band 12.6 kHz at -18 dB, Q 10.
+- So the EQ's frequency range is 20 Hz to 20 kHz (the graph's whole width), and gain is +-18 dB. The stored `hi freq` in `mixer-all-min.json` is 9236 Hz, not 20 kHz, so that file was saved before the node was dragged to its end; `lo freq` 20 and 31.7 and `hi freq` 12599 match what the screen showed. The tests skip frequency parameters for that reason.
+- The app's EQ preset (60 Hz, 1 kHz, 10 kHz) is inside that range.
+
 ## Confirmed
 
 - Plugin names and every parameter name above.
@@ -74,6 +80,6 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 - LIMITER `gain`: input gain or output ceiling. Both extremes (-18 and +18 dB) were seen and the meters do not say. The app writes 0, which is neutral if it is input gain.
 - SIDECHAIN `output`: -12 to +12 dB, almost certainly an output gain after ducking, so the app writes 0. Duck depth is not a control.
-- EQ band types are bells; exact frequency limits per band are only known from the graph (low node reaches about 20 Hz, high node at least 12.6 kHz).
+- EQ mid band frequency range (the user never moved it; it sat near 1 kHz in both projects). Presumably the same 20 Hz to 20 kHz as the others.
 - UTILITY `channel` values 1 and 2 (probably L only and R only); WARBLE (never changed).
 - What the app writes at present is in `src/audio/mixerChain.ts`; a test (`mixerChain.test.ts`) checks it against the two fixtures.
