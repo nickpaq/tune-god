@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
+import { buildPackProject, entriesOfDrop, findPackInEntries, findPackInFileList, type FoundPack } from "./audio/packProject";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
 import {
@@ -199,14 +200,19 @@ function App() {
   const latest = useRef<Snapshot>({ pads: {}, keyPc: null, tunedTarget: null, layout });
   latest.current = { pads, keyPc, tunedTarget, layout };
   const projectRef = useRef<ParsedKoalaProject | null>(null);
+  const packInput = useRef<HTMLInputElement>(null);
 
-  const loadProject = useCallback(async (file: File, restore = false) => {
+  /** The sound type a dropped pack gave each pad (by pad number), used in place of the classifier's guess. */
+  const categoryHints = useRef<Record<number, CategoryId>>({});
+
+  const loadProject = useCallback(async (file: File, restore = false, hints: Record<number, CategoryId> = {}) => {
     const token = ++loadToken.current;
     setLoading(true);
     try {
       const project = await parseKoalaProject(file);
       if (token !== loadToken.current) return;
       projectRef.current = project;
+      categoryHints.current = hints;
       past.current = [];
       future.current = [];
       lastEdit.current = { key: "", time: 0 };
@@ -262,8 +268,9 @@ function App() {
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
           .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined }))
-          .then(({ midi: detectedMidi, category, detail, centroid }) => {
+          .then(({ midi: detectedMidi, category: guessed, detail, centroid }) => {
             if (token !== loadToken.current) return;
+            const category = categoryHints.current[ref.pad] ?? guessed;
             setPads((prev) => {
               const remembered = restorePads.current[ref.pad];
               // The pad may have been moved or deleted while it was analysing.
@@ -397,6 +404,29 @@ function App() {
   const pickFile = (files: FileList | File[] | null | undefined) => {
     const file = Array.from(files ?? []).find(isKoalaFile);
     if (file) void loadProject(file);
+  };
+
+  /** Turns a sample pack into a project (a mix of its sound types across the pads) and loads it like any other. */
+  const loadPack = async (find: () => Promise<FoundPack> | FoundPack) => {
+    setLoading(true);
+    try {
+      const built = await buildPackProject(await find());
+      if (built) await loadProject(built.file, false, built.categories);
+      else window.alert("No audio files (wav, aiff, flac, mp3, ogg or m4a) were found in that folder.");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** A drop: a .koala file loads as a project, a folder as a sample pack. */
+  const handleDrop = (data: DataTransfer) => {
+    const file = Array.from(data.files).find(isKoalaFile);
+    if (file) return void loadProject(file);
+    // The entries have to be taken now; the list is empty once this handler returns.
+    const entries = entriesOfDrop(data.items);
+    if (entries.some((entry) => entry.isDirectory)) void loadPack(() => findPackInEntries(entries));
   };
 
   /**
@@ -930,7 +960,7 @@ function App() {
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        pickFile(e.dataTransfer.files);
+        handleDrop(e.dataTransfer);
       }}
     >
       <div className="phone">
@@ -1117,8 +1147,32 @@ function App() {
                   <rect className="dropzone__ants-dash" pathLength="280" />
                 </svg>
                 <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
+                <input
+                  type="file"
+                  hidden
+                  // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
+                  webkitdirectory=""
+                  ref={packInput}
+                  onChange={(e) => {
+                    const list = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (list.length) void loadPack(() => findPackInFileList(list));
+                  }}
+                />
                 <strong>{loading ? "Loading…" : "Drop a .koala project"}</strong>
+                <span>or a sample pack folder</span>
                 <span>or tap to choose one</span>
+                <button
+                  type="button"
+                  className="dropzone__pack"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    packInput.current?.click();
+                  }}
+                >
+                  Choose a pack folder
+                </button>
               </label>
             )}
           </section>

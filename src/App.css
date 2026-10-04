@@ -1497,3 +1497,17 @@
   color: #2f9e4f;
   filter: drop-shadow(0 0 1cqw rgba(47, 158, 79, 0.5));
 }
+
+/* A small text button under the drop zone's prompt for choosing a sample pack folder. */
+.dropzone__pack {
+  margin-top: 1cqw;
+  padding: 0.8cqw 2.4cqw;
+  font: inherit;
+  font-size: 3.4cqw;
+  text-transform: uppercase;
+  color: inherit;
+  background: none;
+  border: 0.4cqw solid currentColor;
+  border-radius: 1.6cqw;
+  cursor: pointer;
+}
