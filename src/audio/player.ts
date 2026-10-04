@@ -94,6 +94,8 @@ export function startPad(
   mode: PadMode = "loop",
   /** Called when a non-looping sound plays to its end on its own (not when it is released or cut off). */
   onEnd?: () => void,
+  /** The pad knob's level in dB (0 or below): the sound itself already holds its loudness gain, the mix sits on the knob. */
+  levelDb = 0,
 ): PadHandle {
   const ctx = readyContext();
   activePads.get(pad)?.stop(0, CUT_FADE);
@@ -104,7 +106,13 @@ export function startPad(
   source.buffer = bufferFor(ctx, channelData, sampleRate);
   source.loop = mode === "loop";
   source.playbackRate.value = semitonesToRatio(shiftSemitones);
-  source.connect(gain);
+  const level = 10 ** (levelDb / 20);
+  if (level === 1) source.connect(gain);
+  else {
+    const knob = ctx.createGain();
+    knob.gain.value = level;
+    source.connect(knob).connect(gain);
+  }
 
   let osc: OscillatorNode | null = null;
   let toneGain: GainNode | null = null;
@@ -114,7 +122,7 @@ export function startPad(
     osc.frequency.value = midiToFrequency(60 + tonePitchClass, a4Reference);
     toneGain = ctx.createGain();
     // A sine of amplitude a has RMS a / sqrt(2), so this matches the sample's RMS.
-    toneGain.gain.value = Math.min(MAX_TONE_GAIN, rms(channelData) * Math.SQRT2);
+    toneGain.gain.value = Math.min(MAX_TONE_GAIN, rms(channelData) * Math.SQRT2 * level);
     osc.connect(toneGain).connect(gain);
     osc.start();
   }

@@ -15,7 +15,7 @@ import {
 import { setReferencePitch, startPad, type PadHandle, type PadMode } from "./audio/player";
 import { buildTunedKoala, downloadBlob, type GhostPadExport, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
-import { balanceFromStats, type BalanceStats } from "./audio/loudness";
+import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
 import { CATEGORIES, categoryIndex, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
@@ -73,8 +73,6 @@ const LAYOUT_SWITCH_WARNING =
   "Switching layouts rearranges your pads again, including any moves you made since applying the current layout. Recorded patterns are corrected to follow their pads and will still play back as expected. Continue?";
 const LAYOUT_OFF_WARNING =
   "Turning this off removes the placeholder pads and puts every sound back where it was before the layout was applied. You will lose the layout and any changes you made since. Continue?";
-/** Small padding: the loudest peak in any exported file, so a pad knob at 0 dB plays at this level. */
-const FILE_CEILING_DB = -1;
 /** Pad volume knob value for a dB level: plain linear amplitude (checked against a Koala project: -60 dB = 0.001, -6 dB = 0.501, 0 dB = 1, +6 dB = 1.995, -inf = 0). */
 const volFromDb = (db: number) => 10 ** (db / 20);
 /** Widest spread pan, in percent either side of centre. */
@@ -206,15 +204,20 @@ function App() {
 
   /** The sound type a dropped pack gave each pad (by pad number), used in place of the classifier's guess. */
   const categoryHints = useRef<Record<number, CategoryId>>({});
+  /** Set while a freshly imported sample pack still needs its finger-drumming layout and Normalize switched on (they wait for analysis). */
+  const packSetup = useRef(false);
+  /** What the drop zone says while a pack is being measured and levelled. */
+  const [importStatus, setImportStatus] = useState("");
 
-  const loadProject = useCallback(async (file: File, restore = false, hints: Record<number, CategoryId> = {}) => {
+  const loadProject = useCallback(async (file: File, restore = false, pack?: { categories: Record<number, CategoryId>; knobDb: Record<number, number> }) => {
     const token = ++loadToken.current;
     setLoading(true);
     try {
       const project = await parseKoalaProject(file);
       if (token !== loadToken.current) return;
       projectRef.current = project;
-      categoryHints.current = hints;
+      categoryHints.current = pack?.categories ?? {};
+      packSetup.current = !restore && !!pack;
       past.current = [];
       future.current = [];
       lastEdit.current = { key: "", time: 0 };
@@ -259,6 +262,7 @@ function App() {
           sampleId: ref.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
+          knobDb: restore ? restorePads.current[ref.pad]?.knobDb : pack?.knobDb[ref.pad],
           trimmedFrom: range?.start,
           tune: false,
           semis: 0,
@@ -354,6 +358,7 @@ function App() {
         semis: p.semis,
         cents: p.cents,
         category: p.category,
+        knobDb: p.knobDb,
         position: p.index,
       };
     }
@@ -412,15 +417,32 @@ function App() {
   const loadPack = async (find: () => Promise<FoundPack> | FoundPack) => {
     setLoading(true);
     try {
-      const built = await buildPackProject(await find(), { byteBudget: packByteBudget(packMemory) });
-      if (built) await loadProject(built.file, false, built.categories);
+      const built = await buildPackProject(await find(), {
+        byteBudget: packByteBudget(packMemory),
+        measure: (input) => getRenderWorker().measure(input),
+        onProgress: setImportStatus,
+      });
+      if (built) await loadProject(built.file, false, built);
       else window.alert("No audio files (wav, aiff, flac, mp3, ogg or m4a) were found in that folder.");
     } catch (err) {
       console.error(err);
     } finally {
+      setImportStatus("");
       setLoading(false);
     }
   };
+
+  // A new sample pack arrives measured and levelled already, so once its sounds are analysed it is switched to Normalize
+  // and arranged into the finger-drumming layout (bank A the kit, the rest after it). Nothing to undo back to: history starts clean.
+  useEffect(() => {
+    if (!packSetup.current || loading || analyzing > 0 || Object.keys(pads).length === 0) return;
+    packSetup.current = false;
+    setNormalize(true);
+    applyLayout(layout.id);
+    past.current = [];
+    future.current = [];
+    syncHistory();
+  });
 
   /** A drop: a .koala file loads as a project, a folder as a sample pack. */
   const handleDrop = (data: DataTransfer) => {
@@ -584,6 +606,8 @@ function App() {
         shiftFor(pad, tunedTarget, a4),
         pad.tune && toneOn ? (pad.keyPc ?? keyPc) : null,
         padMode(pad),
+        undefined,
+        normalize ? pad.knobDb : undefined,
       ),
     );
   };
@@ -710,7 +734,7 @@ function App() {
     if (!pad || pad.placeholder) return;
     holdVoice.current?.release();
     holdIndex.current = index;
-    holdVoice.current = startPad(-2, audioOf(pad), pad.sampleRate, shiftFor(pad, tunedTarget, a4), null, "loop");
+    holdVoice.current = startPad(-2, audioOf(pad), pad.sampleRate, shiftFor(pad, tunedTarget, a4), null, "loop", undefined, normalize ? pad.knobDb : undefined);
   };
 
   const liftPad = (index: number) => {
@@ -1174,7 +1198,7 @@ function App() {
                     if (list.length) void loadPack(() => findPackInFileList(list));
                   }}
                 />
-                <strong>{loading ? "Loading…" : "Drop a .koala project"}</strong>
+                <strong>{loading ? importStatus || "Loading…" : "Drop a .koala project"}</strong>
                 <span>or a sample pack folder</span>
                 <span>or tap to choose one</span>
                 <button

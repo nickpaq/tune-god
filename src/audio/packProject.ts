@@ -5,6 +5,8 @@ import JSZip from "jszip";
 import { decodeNative } from "./decode";
 import { encodeWav } from "./wavEncode";
 import type { CategoryId } from "./classify";
+import { applyGainDb } from "./gain";
+import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
 import { AUDIO_EXTENSIONS, selectPackSounds, type PackFile, type PackSelection } from "./samplePack";
 
 /** A dropped file the pack can read later. */
@@ -95,47 +97,74 @@ export interface PackProject {
   file: File;
   /** The chosen type of each sound, by pad number, so the classifier keeps it. */
   categories: Record<number, CategoryId>;
+  /** The volume knob level (dB) written for each pad; the loudness gain itself is already in the audio. */
+  knobDb: Record<number, number>;
   selection: PackSelection<PackSource>;
 }
+
+export interface BuildOptions {
+  byteBudget?: number;
+  random?: () => number;
+  /** Where loudness is measured (a worker in the app, so long loops don't stall the screen). */
+  measure?: (input: BalanceInput) => Promise<BalanceStats>;
+  /** Called as the sounds are processed ("Measuring 3/40"). */
+  onProgress?: (text: string) => void;
+}
+
+/** Pad knob value for a dB level: plain linear amplitude, as Koala's knob is. */
+const volFromDb = (db: number) => 10 ** (db / 20);
 
 /**
  * Picks the sounds and zips them into a Koala project, reading one file at a time so only the chosen
  * sounds are ever in memory. Plain WAVs go in byte for byte; any other format is decoded and written as a 24-bit WAV.
  * Returns null when the pack held no usable audio.
  */
-export async function buildPackProject(pack: FoundPack, options: { byteBudget?: number; random?: () => number } = {}): Promise<PackProject | null> {
+export async function buildPackProject(pack: FoundPack, options: BuildOptions = {}): Promise<PackProject | null> {
+  const { measure = async (input: BalanceInput) => balanceStats(input), onProgress } = options;
   const selection = selectPackSounds(pack.files, options);
   if (!selection.picked.length) return null;
 
+  // Pass 1: measure every picked sound, one at a time, keeping only its loudness and peak. The balance
+  // (a common loudness with a peak ceiling) needs the whole set, so nothing can be written before this ends.
+  const readable: typeof selection.picked = [];
+  const stats: BalanceStats[] = [];
+  for (const sound of selection.picked) {
+    onProgress?.(`Measuring ${readable.length + 1}/${selection.picked.length}`);
+    try {
+      const decoded = await decodeNative(await sound.file.source());
+      stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: sound.category }));
+      readable.push(sound);
+    } catch (err) {
+      // An unreadable file just leaves its pad empty.
+      console.error(err);
+    }
+  }
+  if (!readable.length) return null;
+  const balance = balanceFromStats(stats, FILE_CEILING_DB);
+
+  // Pass 2: decode again, bake in the gain and write the 24-bit WAV. Only the processed sound goes into the
+  // project, so there is no untouched copy to keep for undo, and the knob carries the per-type mix.
   const zip = new JSZip();
   const samples: unknown[] = [];
   const pads: unknown[] = [];
   const categories: Record<number, CategoryId> = {};
-  let slot = 0;
-  for (const { file, category } of selection.picked) {
-    let blob: Blob;
-    let frames: number;
-    try {
-      const source = await file.source();
-      const decoded = await decodeNative(source);
-      frames = decoded.channelData[0].length;
-      blob = /\.wave?$/i.test(file.name) ? source : encodeWav({ sampleRate: decoded.sampleRate, channelData: decoded.channelData, bitDepth: 24 });
-    } catch (err) {
-      // An unreadable file just leaves its pad empty.
-      console.error(err);
-      continue;
-    }
+  const knobDb: Record<number, number> = {};
+  for (let slot = 0; slot < readable.length; slot++) {
+    const { file, category } = readable[slot];
+    onProgress?.(`Levelling ${slot + 1}/${readable.length}`);
+    const decoded = await decodeNative(await file.source());
+    const channelData = applyGainDb(decoded.channelData, balance.gainDb[slot]);
+    const frames = channelData[0].length;
     const id = slot + 1;
-    zip.file(`sampler/${id}.wav`, await blob.arrayBuffer());
+    zip.file(`sampler/${id}.wav`, await encodeWav({ sampleRate: decoded.sampleRate, channelData, bitDepth: 24 }).arrayBuffer());
     samples.push({ id, metadata: { originalPath: file.name } });
-    pads.push({ pad: slot, type: "sample", sampleId: id, vol: 1, pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
+    pads.push({ pad: slot, type: "sample", sampleId: id, vol: volFromDb(balance.knobDb[slot]), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
     categories[slot] = category;
-    slot++;
+    knobDb[slot] = balance.knobDb[slot];
   }
-  if (!slot) return null;
 
   zip.file("sampler/sampler.json", JSON.stringify({ samples, pads }));
   // Audio is already compressed or dense PCM; storing it skips a slow pass over every byte.
   const blob = await zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true });
-  return { file: new File([blob], `${pack.name}.koala`, { type: "application/octet-stream" }), categories, selection };
+  return { file: new File([blob], `${pack.name}.koala`, { type: "application/octet-stream" }), categories, knobDb, selection };
 }

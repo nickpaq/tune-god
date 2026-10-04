@@ -1,9 +1,13 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildPackProject, findPackInFileList } from "./packProject";
+import { parseWav } from "./decode";
 import { encodeWav } from "./wavEncode";
 
-const wav = (frames: number) => encodeWav({ sampleRate: 44100, channelData: [new Float32Array(frames).fill(0.1)], bitDepth: 16 });
+// A 440 Hz tone, so it has a loudness to measure; `level` is its peak amplitude.
+const tone = (frames: number, level: number) =>
+  Float32Array.from({ length: frames }, (_, i) => level * Math.sin((2 * Math.PI * 440 * i) / 44100));
+const wav = (frames: number, level = 0.1) => encodeWav({ sampleRate: 44100, channelData: [tone(frames, level)], bitDepth: 16 });
 
 describe("sample pack project", () => {
   it("zips an even mix of the pack's types into a project and remembers each pad's type", async () => {
@@ -32,6 +36,32 @@ describe("sample pack project", () => {
     for (const c of Object.values(built.categories)) counts[c] = (counts[c] ?? 0) + 1;
     expect(Object.keys(counts).sort()).toEqual(["closedHat", "kick", "snare"]);
     expect(Math.max(...Object.values(counts)) - Math.min(...Object.values(counts))).toBeLessThanOrEqual(1);
+  });
+
+  it("levels the sounds as it builds: gain goes into the audio, the type's mix onto the pad knob", async () => {
+    const list: File[] = [];
+    // Same tone, one quiet and one loud, both kicks: they should come out at the same level.
+    for (const [name, level] of [["quiet", 0.05], ["loud", 0.5]] as const) {
+      const f = new File([wav(22050, level)], `${name}.wav`);
+      Object.defineProperty(f, "webkitRelativePath", { value: `Pack/Kicks/${name}.wav` });
+      list.push(f);
+    }
+    const progress: string[] = [];
+    const built = (await buildPackProject(findPackInFileList(list), { onProgress: (t) => progress.push(t) }))!;
+    const zip = await JSZip.loadAsync(await built.file.arrayBuffer());
+    const json = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
+    const peaks = await Promise.all(
+      json.pads.map(async (p: any) => {
+        const decoded = parseWav(await zip.file(`sampler/${p.sampleId}.wav`)!.async("arraybuffer"))!;
+        return Math.max(...decoded.channelData[0].map(Math.abs));
+      }),
+    );
+    expect(peaks[0]).toBeCloseTo(peaks[1], 2);
+    expect(peaks[0]).toBeLessThanOrEqual(10 ** (-1 / 20) + 1e-3); // under the -1 dBFS ceiling
+    expect(Object.values(built.knobDb)).toEqual([0, 0]); // kicks sit at 0 dB
+    expect(json.pads.every((p: any) => p.vol === 1)).toBe(true);
+    expect(progress.some((t) => t.startsWith("Measuring"))).toBe(true);
+    expect(progress.some((t) => t.startsWith("Levelling"))).toBe(true);
   });
 
   it("returns null when the folder holds no audio", async () => {

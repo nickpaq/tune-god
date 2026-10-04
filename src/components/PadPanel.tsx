@@ -33,6 +33,8 @@ export interface Pad {
   placeholder?: { kind: "missing" | "empty"; label: string };
   /** Set on a ghost snare or soft kick: a quieter, duller copy of another sound, made when a finger-drumming layout is applied. */
   ghost?: { kind: GhostKind; sourceOrigIndex: number };
+  /** The pad knob's level in dB for a sound from a sample pack, whose audio already holds its loudness gain; preview plays at this level. */
+  knobDb?: number;
   tune: boolean;
   /** A key chosen for this pad alone ("Tune one"); it overrides the project key. */
   keyPc?: number;

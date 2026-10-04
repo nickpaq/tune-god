@@ -11,6 +11,9 @@ const HOP_SECONDS = 0.01;
 /** Blocks quieter than this (LUFS) count as silence. */
 const ABSOLUTE_GATE_LUFS = -70;
 
+/** Small padding: the loudest peak in any exported file, so a pad knob at 0 dB plays at this level. */
+export const FILE_CEILING_DB = -1;
+
 /** Pad-knob level (dB, never above 0) that turns equal loudness into a mix that sits like a real one. */
 export const CATEGORY_TRIM_DB: Record<CategoryId, number> = {
   // After loudness matching, the low end and backbeat sit on top and the top end tucks under them.
