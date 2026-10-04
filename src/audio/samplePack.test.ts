@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryOfFile, categoryOfFolder, selectPackSounds, type PackFile } from "./samplePack";
+import { categoryOfFile, categoryOfFolder, packByteBudget, selectPackSounds, type PackFile } from "./samplePack";
 
 // A small deterministic random source so the shuffles are repeatable.
 function seeded(seed = 1) {
@@ -100,5 +100,18 @@ describe("choosing the sounds", () => {
     const { picked, skippedForSize } = selectPackSounds(files, { maxFileBytes: 1000 });
     expect(picked.map((p) => p.file.name)).toEqual(["ok.wav"]);
     expect(skippedForSize).toBe(1);
+  });
+});
+
+describe("memory budget", () => {
+  const MB = 1024 * 1024;
+  it("is conservative on iOS and scales with device memory elsewhere", () => {
+    expect(packByteBudget("low", { ios: true })).toBe(96 * MB);
+    expect(packByteBudget("auto", { ios: true })).toBe(192 * MB);
+    expect(packByteBudget("high", { ios: true })).toBe(384 * MB);
+    expect(packByteBudget("auto", { ios: false, deviceMemoryGb: 8 })).toBe(512 * MB);
+    expect(packByteBudget("auto", { ios: false, deviceMemoryGb: 1 })).toBe(128 * MB);
+    expect(packByteBudget("auto", { ios: false })).toBe(192 * MB);
+    expect(packByteBudget("high", { ios: false, deviceMemoryGb: 8 })).toBe(1024 * MB);
   });
 });

@@ -103,8 +103,8 @@ export interface PackProject {
  * sounds are ever in memory. Plain WAVs go in byte for byte; any other format is decoded and written as a 24-bit WAV.
  * Returns null when the pack held no usable audio.
  */
-export async function buildPackProject(pack: FoundPack, random?: () => number): Promise<PackProject | null> {
-  const selection = selectPackSounds(pack.files, { random });
+export async function buildPackProject(pack: FoundPack, options: { byteBudget?: number; random?: () => number } = {}): Promise<PackProject | null> {
+  const selection = selectPackSounds(pack.files, options);
   if (!selection.picked.length) return null;
 
   const zip = new JSZip();

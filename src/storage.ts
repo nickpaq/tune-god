@@ -28,6 +28,8 @@ export interface SavedState {
   autoPlayback?: boolean;
   /** Show a grey sound-type symbol on each pad. */
   padSymbols?: boolean;
+  /** How much of a dropped sample pack to load: "auto" guesses from the device. */
+  packMemory?: "low" | "auto" | "high";
   paletteId?: string;
   toneOn?: boolean;
   /** The key drawer's switch: a key applies to every pad ("Tune all", the default) or only the selected pad. */

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { buildPackProject, entriesOfDrop, findPackInEntries, findPackInFileList, type FoundPack } from "./audio/packProject";
+import { packByteBudget, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
 import {
@@ -154,6 +155,7 @@ function App() {
   const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
   const [routeBuses, setRouteBuses] = useState(saved.routeBuses ?? false);
   const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
+  const [packMemory, setPackMemory] = useState<PackMemory>(saved.packMemory ?? "auto");
   const [autoPlayback, setAutoPlayback] = useState(saved.autoPlayback ?? false);
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -336,8 +338,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ normalize, spread, autoColor, routeBuses, autoPlayback, padSymbols, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
-  }, [normalize, spread, autoColor, routeBuses, autoPlayback, padSymbols, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
+    saveState({ normalize, spread, autoColor, routeBuses, autoPlayback, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
+  }, [normalize, spread, autoColor, routeBuses, autoPlayback, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -410,7 +412,7 @@ function App() {
   const loadPack = async (find: () => Promise<FoundPack> | FoundPack) => {
     setLoading(true);
     try {
-      const built = await buildPackProject(await find());
+      const built = await buildPackProject(await find(), { byteBudget: packByteBudget(packMemory) });
       if (built) await loadProject(built.file, false, built.categories);
       else window.alert("No audio files (wav, aiff, flac, mp3, ogg or m4a) were found in that folder.");
     } catch (err) {
@@ -1000,6 +1002,19 @@ function App() {
             <label>
               <input type="checkbox" checked={padSymbols} onChange={(e) => setPadSymbols(e.target.checked)} />
               Show symbols on pads
+            </label>
+            <label className="menu__a4">
+              Sample pack memory
+              <select
+                className="menu__select"
+                value={packMemory}
+                onChange={(e) => setPackMemory(e.target.value as PackMemory)}
+                aria-label="Sample pack memory"
+              >
+                <option value="low">Low (96 MB)</option>
+                <option value="auto">Auto ({Math.round(packByteBudget("auto") / 1048576)} MB)</option>
+                <option value="high">High ({Math.round(packByteBudget("high") / 1048576)} MB)</option>
+              </select>
             </label>
             <label>
               <input type="checkbox" checked={autoPlayback} onChange={(e) => setAutoPlayback(e.target.checked)} />

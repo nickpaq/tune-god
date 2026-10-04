@@ -6,10 +6,37 @@ import { classifyByName, type CategoryId } from "./classify";
 
 /** Pads in a Koala project (four banks of sixteen). */
 export const PACK_SLOTS = 64;
-/** Total file size a pack import may load. Decoded audio takes about three times this in memory. */
-export const PACK_BYTE_BUDGET = 96 * 1024 * 1024;
-/** A single file bigger than this is never picked. */
-export const PACK_MAX_FILE_BYTES = 16 * 1024 * 1024;
+const MB = 1024 * 1024;
+/** Total file size a pack import may load when nothing better is known. Decoded audio takes about three times this in memory. */
+export const PACK_BYTE_BUDGET = 96 * MB;
+
+/** The menu's choice of how much of a pack to load. */
+export type PackMemory = "low" | "auto" | "high";
+
+/**
+ * How many bytes of files a pack import may load. Browsers cannot report free memory (Safari reports nothing at all),
+ * so "auto" is a guess from what they do tell us: iPhones and iPads get a middling figure, Chrome's device memory
+ * scales it, anything else gets a safe default. "low" and "high" let the user move it either way and see where it breaks.
+ */
+export function packByteBudget(
+  setting: PackMemory,
+  env: { ios: boolean; deviceMemoryGb?: number } = detectEnvironment(),
+): number {
+  if (setting === "low") return PACK_BYTE_BUDGET;
+  if (env.ios) return (setting === "high" ? 384 : 192) * MB;
+  const auto = env.deviceMemoryGb ? Math.min(512, Math.max(128, env.deviceMemoryGb * 64)) : 192;
+  return (setting === "high" ? Math.min(1024, auto * 2) : auto) * MB;
+}
+
+/** The biggest single file a budget allows: no one sample may swallow more than a sixth of it. */
+export const maxFileBytesFor = (byteBudget: number) => Math.round(byteBudget / 6);
+
+function detectEnvironment(): { ios: boolean; deviceMemoryGb?: number } {
+  if (typeof navigator === "undefined") return { ios: false };
+  // iPadOS reports itself as a Mac, but only it has a touch screen.
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return { ios, deviceMemoryGb: (navigator as Navigator & { deviceMemory?: number }).deviceMemory };
+}
 
 /** One audio file found in the pack: where it sits (folder names, outermost first) and how big it is. */
 export interface PackFile<T = unknown> {
@@ -123,7 +150,7 @@ export function selectPackSounds<T>(
   {
     slots = PACK_SLOTS,
     byteBudget = PACK_BYTE_BUDGET,
-    maxFileBytes = PACK_MAX_FILE_BYTES,
+    maxFileBytes = maxFileBytesFor(byteBudget),
     random = Math.random,
   }: { slots?: number; byteBudget?: number; maxFileBytes?: number; random?: () => number } = {},
 ): PackSelection<T> {
