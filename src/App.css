@@ -572,8 +572,8 @@
 .pad--loaded {
   --wt: color-mix(in srgb, var(--c) 58%, #5d5d64);
   --wb: color-mix(in srgb, var(--c) 78%, #e4e4ea);
-  /* the edge colour blooms below the pad: a tight bright halo and a wide soft one */
-  --glow: 0 9px 9px -2px color-mix(in srgb, var(--c) 75%, transparent), 0 12px 22px 2px color-mix(in srgb, var(--c) 48%, transparent);
+  /* just a slight bloom of the edge colour below the pad */
+  --glow: 0 9px 7px -3px color-mix(in srgb, var(--c) 35%, transparent);
 }
 
 /*
