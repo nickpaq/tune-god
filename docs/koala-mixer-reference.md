@@ -92,3 +92,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 - Melodic bus: EQ (lo highpass 150 Hz, hi shelf -2 dB at 8 kHz).
 - Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (+3 dB input gain), only into an empty master strip.
 - Per pad (with Settings by sound type): `eq.lo.freq` highpass (80 to 300 Hz by type) and, on hats and cymbals, `eq.hi.gain` -2 dB.
+
+## Sequence notes (read from a project with recorded patterns)
+
+`sequence.json`: `{autoPlay, beatsPerBar, bpm, currSequenceId, quantizeDivision, quantizing, seqSnap, swing, sequences[32]}`. `autoPlay: "next"` chains each pattern into the next. Each sequence is `{lastViewedPath, noteSequence: {pattern: {notes, numBars}}, parameterSequences}`; `notes` is null when empty. A note is `{chance: 1.0, length, num (pad, 0-based), pan (-1.0078740119934082 = the pad's own pan), pitch: 0.0, start: 0.0, subPad: -1, timeOffset, vel}`. `timeOffset` and `length` are in ticks, **4096 per beat** (1024 per 16th), `vel` is 0 to 127. A 1-bar pattern at 4/4 is 16384 ticks. Checked against a render: 5 patterns of 2, 1, 1, 1 and 1 bars rendered to exactly 6 bars (13.09 s at 110 BPM, 48 kHz stereo 24-bit). Whether `length` is also in ticks is assumed. How velocity maps to level is measured by the Kick velocity pattern of the mix calibration project.

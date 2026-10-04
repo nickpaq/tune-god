@@ -4,8 +4,13 @@ mix side of the export (loudness balance, bus routing, sidechain, clipper, EQ). 
 
 Run: python3 scripts/generateMixCalibration.py [template.koala]
 The template is any Koala project; its song.json, sequence.json and pad layout are reused (default: the project in docs/fixtures).
-Pad names say what each sound is and its peak level in dBFS. Pad 15 is a looping one-beat kick (110 BPM) and pad 16 a looping
-sustained 55 Hz bass: play both and the bass should duck once the export puts a sidechain on the bass bus.
+Pad names say what each sound is and its peak level in dBFS. Pad 16 is a looping one-beat kick (110 BPM) and pad 17 a looping
+sustained 55 Hz bass.
+
+It also writes six patterns (sequences 1 to 6, chained with autoPlay "next") to render as one continuous WAV, and
+docs/calibration/mix-calibration-timeline.md, which says where each pattern and each hit lands in that WAV.
+Note format (read from a Koala project with recorded notes): {chance, length, num (pad), pan (-1.0078740119934082 = pad's own),
+pitch, start, subPad, timeOffset, vel}; timeOffset and length are in ticks, 4096 per beat (1024 per 16th), vel 0 to 127.
 """
 import io, json, math, random, struct, sys, zipfile
 from pathlib import Path
@@ -123,6 +128,81 @@ SOUNDS = [
     ("reference_1kHz_-20dBFS.wav", fade(tone(1000, 2.0)), -20, False),
 ]
 
+TICKS_BEAT = 4096
+TICKS_BAR = TICKS_BEAT * 4
+STEP = TICKS_BEAT // 4  # a 16th note
+PAD_PAN = -1.0078740119934082
+
+def pad_of(prefix):
+    return next(i for i, (name, *_rest) in enumerate(SOUNDS) if name.startswith(prefix))
+
+def note(pad, at, length=STEP * 2, vel=127):
+    return {"chance": 1.0, "length": length, "num": pad, "pan": PAD_PAN, "pitch": 0.0, "start": 0.0, "subPad": -1, "timeOffset": at, "vel": float(vel)}
+
+def build_patterns():
+    """Six patterns, each followed by one empty bar. Returns (name, notes, bars, what it measures)."""
+    kick, kick_quiet, e808, snare_p = pad_of("kick_calibration"), pad_of("kick_quiet"), pad_of("808_bass"), pad_of("snare")
+    ch, oh, crash = pad_of("closed_hat"), pad_of("open_hat"), pad_of("crash")
+    bass_sus, ref, mel_loop, vox_p = pad_of("bass_sustain"), pad_of("reference"), pad_of("melodic_loop"), pad_of("vox")
+    one_shot_pads = [i for i, (n, _s, _p, looping) in enumerate(SOUNDS) if not looping and n.startswith(("reference",)) is False]
+    pats = []
+    # 1. reference tone, doubles as the alignment marker
+    pats.append(("Reference tone", [note(ref, 0, TICKS_BAR * 4)], 4, "1 kHz at -20 dBFS held for 4 bars: master level and meter reference"))
+    # 2. level ladder: every sound once, one per bar, full velocity
+    ladder, bar = [], 0
+    for i in one_shot_pads + [pad_of("kick_beat"), bass_sus]:
+        name, sig, _peak, looping = SOUNDS[i]
+        ladder.append(note(i, bar * TICKS_BAR, TICKS_BAR - STEP if looping else STEP * 4))
+        bar += 3 if len(sig) > SR * BEAT * 4 * 1.5 else 1  # a sound longer than a bar and a half gets three bars so it cannot bleed into the next
+    pats.append(("Level ladder", ladder, bar, "each sound once at velocity 127, one per bar, in pad order: its real output level"))
+    # 3. sidechain: four-on-the-floor kick over the held bass
+    sc = [note(bass_sus, 0, TICKS_BAR * 4)] + [note(kick, bar * TICKS_BAR + b * TICKS_BEAT, STEP * 4) for bar in range(4) for b in range(4)]
+    pats.append(("Sidechain", sc, 4, "kick on every beat over a held 55 Hz bass: ducking depth and release"))
+    # 4. kick level by velocity, then the quiet kick
+    kv = [(127, 0), (100, 1), (70, 2), (40, 3)]
+    kc = [note(kick, bar * TICKS_BAR, STEP * 4, vel) for vel, bar in kv] + [note(kick_quiet, 4 * TICKS_BAR, STEP * 4, 127)]
+    pats.append(("Kick velocity", kc, 5, "kick at velocity 127, 100, 70, 40 (bars 1 to 4), then the -18 dBFS kick at 127 (bar 5): clipper and velocity curve"))
+    # 5. hats and cymbals only
+    hc = [note(ch, bar * TICKS_BAR + k * STEP * 2, STEP) for bar in range(2) for k in range(8)] + [note(oh, 2 * TICKS_BAR + STEP * 8, STEP * 4), note(crash, 3 * TICKS_BAR, STEP * 8)]
+    pats.append(("Hats and cymbals", hc, 4, "closed hats on 8ths (bars 1 and 2), open hat (bar 3), crash (bar 4): pad highpass and high-shelf cut"))
+    # 6. full groove, 8 bars
+    g = []
+    for bar in range(8):
+        base = bar * TICKS_BAR
+        g += [note(kick, base + 0), note(kick, base + STEP * 6), note(kick, base + STEP * 10), note(snare_p, base + STEP * 4), note(snare_p, base + STEP * 12)]
+        g += [note(ch, base + k * STEP * 2, STEP) for k in range(8)]
+        if bar % 2 == 1: g.append(note(oh, base + STEP * 14, STEP * 2))
+        if bar % 2 == 0: g.append(note(e808, base, TICKS_BAR))
+    g += [note(mel_loop, bar * TICKS_BAR, TICKS_BAR * 2) for bar in (0, 2, 4, 6)] + [note(vox_p, 4 * TICKS_BAR + STEP * 2, STEP * 8)]
+    pats.append(("Full groove", g, 8, "kick, snare, hats, 808, melodic loop and vox together for 8 bars: overall balance and master chain"))
+    return pats
+
+def sequence_json(template_seq: bytes, pats):
+    seq = json.loads(template_seq)
+    seq.update({"autoPlay": "next", "currSequenceId": 0, "quantizeDivision": 16, "quantizing": True, "seqSnap": "Sequence", "swing": 0.0, "bpm": float(BPM), "beatsPerBar": 4})
+    for i, (_name, notes, bars, _what) in enumerate(pats):
+        seq["sequences"][i]["noteSequence"]["pattern"] = {"notes": sorted(notes, key=lambda n: (n["timeOffset"], n["num"])), "numBars": bars + 1}
+    return json.dumps(seq)
+
+def timeline_md(pats):
+    bar_s = 60 / BPM * 4
+    out = ["# Mix calibration timeline", "", f"Render patterns 1 to {len(pats)} in order as one continuous WAV at {BPM} BPM, 4/4 (one bar is {bar_s:.4f} s). Each pattern ends with one empty bar. A pad's level is the peak in dBFS written in its name; velocity is 127 unless noted.", "", "| # | Pattern | Starts at (s) | Bars (with the empty one) | Measures |", "| --- | --- | --- | --- | --- |"]
+    at = 0
+    for i, (name, _n, bars, what) in enumerate(pats):
+        out.append(f"| {i + 1} | {name} | {at * bar_s:.3f} | {bars + 1} | {what} |")
+        at += bars + 1
+    out += ["", f"Total: {at} bars, {at * bar_s:.2f} s.", "", "## Hits", "", "Time in seconds = pattern start + timeOffset / 4096 beats x beat length.", ""]
+    at = 0
+    for i, (name, notes, bars, _w) in enumerate(pats):
+        out.append(f"### {i + 1}. {name} (starts {at * bar_s:.3f} s)")
+        out.append("")
+        for n in sorted(notes, key=lambda n: (n["timeOffset"], n["num"])):
+            t = at * bar_s + n["timeOffset"] / TICKS_BEAT * 60 / BPM
+            out.append(f"- {t:7.3f} s  pad {n['num'] + 1:>2} {SOUNDS[n['num']][0].rsplit('.', 1)[0]}  vel {int(n['vel'])}  length {n['length']} ticks")
+        out.append("")
+        at += bars + 1
+    return "\n".join(out)
+
 def main():
     out_dir = Path(__file__).resolve().parent.parent / "docs" / "calibration"
     template = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "docs" / "fixtures" / "mix-calibration-template.koala"
@@ -146,9 +226,11 @@ def main():
         buses = [{"chain": [None] * 5, "mute": False, "name": n, "solo": False, "volume": 0.0} for n in ("kick", "bass", "drums", "melodic")]
         zf.writestr("mixer.json", json.dumps({"buses": buses, "master": {"chain": [None] * 5, "mute": False, "name": "MAIN", "solo": False, "volume": 0.0}}))
         zf.writestr("song.json", song)
-        zf.writestr("sequence.json", seq)
+        pats = build_patterns()
+        zf.writestr("sequence.json", sequence_json(seq, pats))
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "mix-calibration.koala").write_bytes(z.getvalue())
+    (out_dir / "mix-calibration-timeline.md").write_text(timeline_md(build_patterns()))
     print(f"wrote {out_dir / 'mix-calibration.koala'} ({len(z.getvalue()) // 1024} KB, {len(SOUNDS)} pads)")
 
 main()
