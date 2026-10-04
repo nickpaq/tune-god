@@ -17,7 +17,7 @@ const SYMBOLS: Record<CategoryId, string> = {
   bass: '<path d="M2 12c1.7-8.5 4-8.5 5.7 0s4 8.5 5.7 0 4-8.5 5.7 0c.5 2.5 1.2 4 3 4.5"/><path d="M2 20.5h20" opacity=".5"/>',
   melodic: '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M7.2 12.5V19M12 12.5V19M16.8 12.5V19"/><path d="M5.2 5h3.8v8H5.2zM10.1 5h3.8v8h-3.8zM15 5h3.8v8H15z"/>',
   drumLoop: `${LOOP}<ellipse cx="12" cy="10.6" rx="3.8" ry="1.5"/><path d="M8.2 10.6v3.8c0 1 1.7 1.6 3.8 1.6s3.8-.6 3.8-1.6v-3.8"/>`,
-  percLoop: `${LOOP}<g transform="translate(12 12) scale(.5) rotate(-30) translate(-12 -12)">${SHAKER}</g>`,
+  percLoop: `${LOOP}<g transform="translate(12 12) scale(.5) rotate(-30) translate(-12 -12)" stroke-width="4">${SHAKER}</g>`,
   melodicLoop: `${LOOP}<rect x="7.2" y="9" width="9.6" height="6.4" rx="1.2"/><path d="M10.4 12v3.4M13.6 12v3.4"/>`,
   other: '<circle cx="12" cy="12" r="9"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-width="3"/>',
 };
