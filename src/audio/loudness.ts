@@ -4,6 +4,7 @@
 // so quiet sounds come up and loud ones come down, with a peak ceiling so nothing clips. The mix
 // (a per-category trim: hats sit lower than kicks) is returned separately for the pad knobs.
 import type { CategoryId } from "./classify";
+import { ACTIVE_MIX_PRESET } from "./mixPresets";
 
 /** Ear-like integration time: shorter hits read quieter, sustained sounds read at full level. */
 const WINDOW_SECONDS = 0.2;
@@ -14,45 +15,16 @@ const ABSOLUTE_GATE_LUFS = -70;
 /** Small padding: the loudest peak in any exported file, so a pad knob at 0 dB plays at this level. */
 export const FILE_CEILING_DB = -1;
 
-/** Pad-knob level (dB, never above 0) that turns equal loudness into a mix that sits like a real one. */
-export const CATEGORY_TRIM_DB: Record<CategoryId, number> = {
-  // After loudness matching, the low end and backbeat sit on top and the top end tucks under them.
-  kick: 0,
-  snare: -1,
-  clap: -2,
-  // K-weighting boosts highs, so hats and cymbals read loud for their level; they sit well under the snare.
-  closedHat: -6,
-  openHat: -6,
-  cymbal: -7,
-  perc: -4,
-  bass: -1,
-  melodic: -4,
-  vox: -3,
-  fx: -6,
-  // Loops are already a mix of several parts, so they sit under the one-shots they play with.
-  drumLoop: -3,
-  percLoop: -5,
-  melodicLoop: -5,
-  other: -3,
-};
-
-/** Fraction of pads that may sit below the common loudness because their peak already reaches the ceiling. */
-const PEAK_LIMITED_FRACTION = 0.1;
-
 /**
- * Most a sample's peak (knob trim included) may stand above the common loudness, in dB. Loudness is
- * measured over 200 ms, so a short transient like a snare reads quiet and would otherwise be lifted until
- * it hit the ceiling, peaking ~12 dB over everything sustained. This holds such peaks to a normal drum crest.
+ * Per-type mix and peak limits. The numbers live in the active mix preset (src/audio/mixPresets.ts, `loudness`): the pad knob trim by
+ * type, the dB the kick and bass sit above the common loudness, the extra peak room per type, the most any peak may stand above the common
+ * loudness and the fraction of pads allowed to fall short of it. Change them there, not here.
  */
-const MAX_CREST_DB = 8;
-
-/** Extra dB a category sits above the common loudness, and extra peak room to get there (hip-hop: the kick leads). */
-const LOUDNESS_BONUS_DB: Partial<Record<CategoryId, number>> = { kick: 3 };
-/**
- * Hats and cymbals get less peak room than the 8 dB everyone else has: they are so short and bright that the loudness meter reads them
- * low and would lift them until their peaks matched the snare's, which sounds piercing. This keeps their peaks a few dB under it.
- */
-const CREST_BONUS_DB: Partial<Record<CategoryId, number>> = { kick: 5, closedHat: -5, openHat: -4, cymbal: -4 };
+export const CATEGORY_TRIM_DB: Record<CategoryId, number> = ACTIVE_MIX_PRESET.loudness.categoryTrimDb;
+const PEAK_LIMITED_FRACTION = ACTIVE_MIX_PRESET.loudness.peakLimitedFraction;
+const MAX_CREST_DB = ACTIVE_MIX_PRESET.loudness.maxCrestDb;
+const LOUDNESS_BONUS_DB = ACTIVE_MIX_PRESET.loudness.bonusDb;
+const CREST_BONUS_DB = ACTIVE_MIX_PRESET.loudness.crestBonusDb;
 
 type Biquad = { b0: number; b1: number; b2: number; a1: number; a2: number };
 

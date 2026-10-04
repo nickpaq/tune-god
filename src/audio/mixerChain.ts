@@ -1,7 +1,7 @@
-// Effects the export puts on Koala's mixer strips: a sidechain from the kick bus onto the bass bus, and a heavy, warm
-// master chain. Plugin and parameter names are Koala's own, copied from projects with every parameter at its minimum
-// and at its maximum, so the values below sit inside the ranges noted beside them. Slots that already hold a plugin
-// are never replaced.
+// Builds the effects the export puts on Koala's mixer strips from the active mix preset (src/audio/mixPresets.ts, where every value
+// to tweak lives): a sidechain from the kick bus onto the bass bus, clipping on the kick bus, an EQ on the melodic bus and a master
+// chain. Plugin and parameter names are Koala's own (docs/koala-mixer-reference.md). Slots that already hold a plugin are never replaced.
+import { ACTIVE_MIX_PRESET, type MixPreset } from "./mixPresets";
 
 /** One effect as Koala writes it into a strip's `chain` (five slots, an empty one is null). */
 export interface MixerEffect {
@@ -13,44 +13,21 @@ export type MixerSlot = MixerEffect | null;
 
 const effect = (name: string, parameters: Record<string, number>): MixerEffect => ({ bypass: false, name, parameters });
 
-/** The bus the sidechain listens to: the kick bus (A, bus 0). The SIDECHAIN plugin's `source` is a bus number. */
+/** The bus the sidechain listens to: the kick bus (A, bus 0). The SIDECHAIN plugin's `source` is a bus number. Fixed by the bus layout in routing.ts, not a genre choice. */
 export const SIDECHAIN_SOURCE_BUS = 0;
 
-/**
- * Ducks the bass bus whenever the kick bus plays. Threshold -60..0 dB, release 10..1000 ms, output -12..12 dB (an output gain, left at 0).
- * A short release lets the 808 come back under the kick's tail instead of pumping.
- */
-export const bassSidechain = (): MixerEffect =>
-  effect("SIDECHAIN", { source: SIDECHAIN_SOURCE_BUS, threshold: -24, release: 120, output: 0 });
+/** SIDECHAIN for the bass bus: ducks it whenever the kick bus plays. Values: preset.buses.bassSidechain. */
+export const bassSidechain = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect =>
+  effect("SIDECHAIN", { source: SIDECHAIN_SOURCE_BUS, ...preset.buses.bassSidechain });
 
-/**
- * EQ plugin for the melodic bus: the highpass leaves the low end to the kick and bass, and the high shelf takes a slight edge off.
- * Same three bands as Koala's per-pad EQ: lo highpass, mid bell, hi high shelf; each 20 Hz to 20 kHz, gain +-18 dB, Q 0.5 to 10.
- */
-export const melodicEq = (): MixerEffect =>
-  effect("EQ", { "lo freq": 150, "lo gain": 0, "lo Q": 0.7, "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, "hi freq": 8000, "hi gain": -2, "hi Q": 0.5 });
+/** CLIPPER for the kick bus. Values: preset.buses.kickClipper. */
+export const kickClipper = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect => effect("CLIPPER", { ...preset.buses.kickClipper });
 
-/**
- * Clipping on the kick bus, into the soft clip. In Koala's CLIPPER the threshold sets the shape of the curve as well as the level:
- * a threshold near 0 dB gives sharp corners, a low one a smooth S-curve. So the threshold is set low enough to stay soft (-6 dB) and the
- * input drives the kick into it (+4 dB, so a kick peaking near -1 dBFS is pushed about 9 dB over the knee). The kick comes out peaking
- * near the threshold. CLIPPER input +-36 dB, threshold about -35..0 dB, output -36..0 dB (it can only lower the level), `oversample` is HQ.
- */
-export const kickClipper = (): MixerEffect => effect("CLIPPER", { input: 4, threshold: -6, output: 0, oversample: 1 });
+/** EQ for the melodic bus (lo highpass, mid bell, hi high shelf). Values: preset.buses.melodicEq. */
+export const melodicEq = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect => effect("EQ", { ...preset.buses.melodicEq });
 
-/**
- * Heavy and warm master chain, in signal order: EQ (its low band is a highpass, the mid a bell and the high a high shelf: a bell of +2.5 dB at 70 Hz for weight, a gentle -3 dB shelf from 8 kHz for warmth, and the highpass left at 20 Hz as a rumble filter), DRIVE (parallel saturation for warmth),
- * COMPRESSOR (slow-attack glue), CLIPPER (shaves the peaks) and LIMITER (the last catch). Ranges: EQ gain +-18 dB, Q 0.5..10;
- * DRIVE drive 0..36 dB, mix 0..1, out -90..0 dB; COMPRESSOR ratio 1..100, attack 0.01..30 ms, release 10..1200 ms, makeup 0/1 (auto make-up, left off);
- * CLIPPER input +-36 dB, output -36..0 dB, threshold about -35..0 dB; LIMITER gain (input gain, pushes into the limiter) -18..18 dB, attack 1.5..6 ms, release 60..1000 ms; `oversample` is the HQ button (0 off, 1 on).
- */
-export const masterChain = (): MixerEffect[] => [
-  effect("EQ", { "lo freq": 20, "lo gain": 0, "lo Q": 0.5, "mid freq": 70, "mid gain": 2.5, "mid Q": 0.7, "hi freq": 8000, "hi gain": -3, "hi Q": 0.5 }),
-  effect("DRIVE", { drive: 6, mix: 0.3, out: 0, oversample: 1 }),
-  effect("COMPRESSOR", { threshold: -12, ratio: 2, attack: 20, release: 200, makeup: 0, visual: 0 }),
-  effect("CLIPPER", { input: 0, output: 0, threshold: -1.5, oversample: 1 }),
-  effect("LIMITER", { attack: 1.5, release: 100, gain: 3 }),
-];
+/** The master chain, in signal order. Values: preset.master. */
+export const masterChain = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect[] => preset.master.map((fx) => effect(fx.name, { ...fx.parameters }));
 
 /** Puts each effect, in order, into the first empty slot after the previous one. Returns false (and changes nothing) when they do not all fit. */
 export function fillEmptySlots(chain: MixerSlot[], effects: MixerEffect[]): boolean {

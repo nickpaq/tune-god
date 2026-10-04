@@ -7,3 +7,4 @@
 - Add pack lives in the menu; its folder input must stay mounted outside the menu (closing the menu unmounts it).
 - Remote branch deletion returns 403 in the cloud sandbox, so delete merged branches by hand.
 - Koala has two EQs: a per-pad EQ in `sampler.json` (`pad.eq`, lo highpass / mid peaking / hi highshelf) and an EQ plugin in `mixer.json`. The measured min and max values in the reference are for the mixer plugin.
+- All sound-shaping numbers (loudness trims, per-pad EQ, bus effects, master chain) live in one preset object, `src/audio/mixPresets.ts`. Add a genre by copying it; the guide is `docs/mix-presets.md`. Do not scatter new mix numbers elsewhere.

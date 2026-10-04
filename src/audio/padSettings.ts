@@ -1,12 +1,9 @@
 // Koala's per-pad playback settings, chosen by sound category: mute group (`chokeGroup`, 0 = none), one-shot
 // (`oneshot`) and release time in seconds (`release`). Categories not listed are left as they came.
 import { isDrumCategory, type CategoryId } from "./classify";
+import { ACTIVE_MIX_PRESET, type PadEq } from "./mixPresets";
 
-/** A highpass on the pad's own EQ, and optionally a gentle cut or boost of the high shelf. */
-export interface PadEq {
-  highpassHz: number;
-  highShelfDb?: number;
-}
+export type { PadEq };
 
 export interface PadPlayback {
   eq?: PadEq;
@@ -20,24 +17,8 @@ export const BASS_MUTE_GROUP = 6;
 /** A medium release for pitched sounds (seconds), so notes stop without clicking but don't chop. */
 export const MELODIC_RELEASE = 0.3;
 
-/**
- * Per-pad EQ by sound type, to keep the low end for the kick and bass: everything else is high-passed and the hats and cymbals
- * get a slight, warm cut on the high shelf. The pad EQ has the same three bands and ranges as Koala's EQ plugin (20 Hz to 20 kHz,
- * gain +-18 dB). Kicks, bass and the drum loops that carry them are left as they are.
- */
-const PAD_EQ: Partial<Record<CategoryId, PadEq>> = {
-  closedHat: { highpassHz: 300, highShelfDb: -2 },
-  openHat: { highpassHz: 300, highShelfDb: -2 },
-  cymbal: { highpassHz: 250, highShelfDb: -2 },
-  perc: { highpassHz: 200 },
-  clap: { highpassHz: 200 },
-  snare: { highpassHz: 120 },
-  vox: { highpassHz: 120 },
-  fx: { highpassHz: 200 },
-  melodic: { highpassHz: 80 },
-  melodicLoop: { highpassHz: 80 },
-  percLoop: { highpassHz: 150 },
-};
+/** Per-pad EQ by sound type comes from the active mix preset (src/audio/mixPresets.ts, `padEq`). */
+const PAD_EQ = ACTIVE_MIX_PRESET.padEq;
 
 function basePlayback(category: CategoryId): PadPlayback | undefined {
   if (category === "closedHat" || category === "openHat") return { chokeGroup: HAT_MUTE_GROUP, oneShot: true };
