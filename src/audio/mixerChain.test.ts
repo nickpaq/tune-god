@@ -91,3 +91,28 @@ describe("effect parameters", () => {
     }
   });
 });
+
+describe("kick clipping and per-pad EQ", () => {
+  it("puts a clipper on the kick bus once, and none on the others", async () => {
+    const options = { busNames: BUS_NAMES, sidechain: true } as const;
+    const mixer = await exported(await load(), options);
+    expect(mixer.buses[0].chain.filter((s: any) => s?.name === "CLIPPER")).toHaveLength(1);
+    expect(mixer.buses[0].chain.find((s: any) => s?.name === "CLIPPER").parameters).toMatchObject({ input: 3, threshold: -2, oversample: 1 });
+    expect(mixer.buses.slice(1).some((b: any) => b.chain.some((s: any) => s?.name === "CLIPPER"))).toBe(false);
+    const again = await exported(await load(mixer), options);
+    expect(again.buses[0].chain.filter((s: any) => s?.name === "CLIPPER")).toHaveLength(1);
+  });
+
+  it("high-passes a pad and cuts its high shelf while keeping its other EQ settings", async () => {
+    const project = await load();
+    const pad = project.samplerJson.pads[0];
+    pad.eq = { enabled: "true", lo: { type: "highpass", freq: 138, gain: -18, q: 1 }, mid: { type: "peaking", freq: 2000, gain: 3, q: 1 }, hi: { type: "highshelf", freq: 8000, gain: 0, q: 1 } };
+    const { blob } = await buildTunedKoala(project, [], { playback: new Map([[pad.sampleId, { eq: { highpassHz: 180, highShelfDb: -2 } }]]) });
+    const json = JSON.parse(await (await JSZip.loadAsync(await blob.arrayBuffer())).file("sampler/sampler.json")!.async("string"));
+    const eq = json.pads.find((p: any) => p.sampleId === pad.sampleId).eq;
+    expect(eq.lo).toMatchObject({ type: "highpass", freq: 180 });
+    expect(eq.hi).toMatchObject({ type: "highshelf", freq: 8000, gain: -2 });
+    expect(eq.mid).toEqual({ type: "peaking", freq: 2000, gain: 3, q: 1 });
+    expect(eq.enabled).toBe("true");
+  });
+});

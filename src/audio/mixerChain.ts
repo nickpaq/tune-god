@@ -24,6 +24,13 @@ export const bassSidechain = (): MixerEffect =>
   effect("SIDECHAIN", { source: SIDECHAIN_SOURCE_BUS, threshold: -24, release: 120, output: 0 });
 
 /**
+ * A little clipping on the kick bus: driven 3 dB into a soft clip at -2 dB, so a kick peaking near -1 dBFS has about 4 dB
+ * of its peak rounded off. That adds weight and grit to the kick without squaring it. CLIPPER input +-36 dB, threshold
+ * about -35..0 dB, output -36..0 dB, `oversample` is the HQ button.
+ */
+export const kickClipper = (): MixerEffect => effect("CLIPPER", { input: 3, threshold: -2, output: 0, oversample: 1 });
+
+/**
  * Heavy and warm master chain, in signal order: EQ (three bell bands: a little weight at 60 Hz, a broad gentle cut at 10 kHz), DRIVE (parallel saturation for warmth),
  * COMPRESSOR (slow-attack glue), CLIPPER (shaves the peaks) and LIMITER (the last catch). Ranges: EQ gain +-18 dB, Q 0.5..10;
  * DRIVE drive 0..36 dB, mix 0..1, out -90..0 dB; COMPRESSOR ratio 1..100, attack 0.01..30 ms, release 10..1200 ms, makeup 0/1 (auto make-up, left off);

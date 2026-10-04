@@ -1,9 +1,9 @@
 import { applyGainDb } from "./gain";
-import type { PadPlayback } from "./padSettings";
+import type { PadEq, PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
-import { bassSidechain, fillEmptySlots, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
+import { bassSidechain, fillEmptySlots, kickClipper, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
 
 /** A silent pad the finger-drumming layout adds: where it sits, what Koala shows on it, and its colour. */
@@ -80,6 +80,7 @@ export async function buildTunedKoala(
       // Koala writes some booleans as strings; keep whichever style the pad already uses.
       if (play.oneShot !== undefined) pad.oneshot = typeof pad.oneshot === "boolean" ? play.oneShot : String(play.oneShot);
       if (play.release !== undefined) pad.release = play.release;
+      if (play.eq) applyPadEq(pad, play.eq);
     }
     const tint = colors?.get(pad.sampleId);
     if (tint) {
@@ -112,7 +113,7 @@ export async function buildTunedKoala(
   if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
-  if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, master: masterChain });
+  if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, master: masterChain });
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
   const base = project.originalName.replace(/\.koala$/i, "");
@@ -130,15 +131,25 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/**
+ * Koala's per-pad EQ (`pad.eq`: lo highpass, mid peaking, hi highshelf). Sets the highpass frequency and, when asked, the high shelf's
+ * gain, keeping every other band setting the pad already has. A pad with no EQ gets Koala's defaults first.
+ */
+function applyPadEq(pad: any, eq: PadEq): void {
+  const base = { enabled: "true", lo: { type: "highpass", freq: 20, gain: -18, q: 1 }, mid: { type: "peaking", freq: 1000, gain: 0, q: 1 }, hi: { type: "highshelf", freq: 8000, gain: 0, q: 1 } };
+  const cur = pad.eq ?? base;
+  pad.eq = { ...base, ...cur, enabled: typeof cur.enabled === "boolean" ? true : "true", lo: { ...base.lo, ...cur.lo, freq: eq.highpassHz }, hi: { ...base.hi, ...cur.hi, ...(eq.highShelfDb !== undefined ? { gain: eq.highShelfDb } : {}) } };
+}
+
 /** A mixer strip as Koala writes it: five empty effect slots, unmuted, at 0 dB. */
 const emptyStrip = (name: string) => ({ chain: [null, null, null, null, null], mute: false, name, solo: false, volume: 0 });
 
 /**
- * Sets up the mixer in mixer.json: bus strip names, a sidechain from the kick bus onto the bass bus, and the master chain.
+ * Sets up the mixer in mixer.json: bus strip names, a sidechain from the kick bus onto the bass bus, a little clipping on the kick bus, and the master chain.
  * Each bus keeps its effects and levels, and an effect only goes into an empty slot (the master chain only into an empty
  * master strip). A project that has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
  */
-async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean }): Promise<void> {
+async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean; kickClip?: boolean }): Promise<void> {
   const entry = project.zip.file("mixer.json");
   const mixer = entry ? JSON.parse(await entry.async("string")) : { buses: [], master: emptyStrip("MAIN") };
   mixer.buses = Array.isArray(mixer.buses) ? mixer.buses : [];
@@ -149,6 +160,11 @@ async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]
     const bass = (mixer.buses[1] ??= emptyStrip(BUS_NAMES[1]));
     bass.chain = Array.isArray(bass.chain) ? bass.chain : [null, null, null, null, null];
     if (!bass.chain.some((fx: MixerSlot) => fx?.name === "SIDECHAIN")) fillEmptySlots(bass.chain, [bassSidechain()]);
+  }
+  if (setup.kickClip) {
+    const kick = (mixer.buses[0] ??= emptyStrip(BUS_NAMES[0]));
+    kick.chain = Array.isArray(kick.chain) ? kick.chain : [null, null, null, null, null];
+    if (!kick.chain.some((fx: MixerSlot) => fx?.name === "CLIPPER")) fillEmptySlots(kick.chain, [kickClipper()]);
   }
   if (setup.master) {
     const master = (mixer.master ??= emptyStrip("MAIN"));

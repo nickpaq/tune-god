@@ -83,3 +83,10 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 - EQ mid band frequency range (the user never moved it; it sat near 1 kHz in both projects). Presumably the same 20 Hz to 20 kHz as the others.
 - UTILITY `channel` values 1 and 2 (probably L only and R only); WARBLE (never changed).
 - What the app writes at present is in `src/audio/mixerChain.ts`; a test (`mixerChain.test.ts`) checks it against the two fixtures.
+
+## What the app writes
+
+- Bass bus: SIDECHAIN (source kick, threshold -24 dB, release 120 ms, output 0 dB).
+- Kick bus: CLIPPER (input +3 dB, threshold -2 dB, output 0, HQ on).
+- Master: EQ, DRIVE, COMPRESSOR, CLIPPER, LIMITER (+3 dB input gain), only into an empty master strip.
+- Per pad (with Settings by sound type): `eq.lo.freq` highpass and, on hats and cymbals, `eq.hi.gain` -2 dB.
