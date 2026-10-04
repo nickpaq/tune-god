@@ -129,31 +129,55 @@ export interface PickedSound<T = unknown> {
   category: CategoryId;
 }
 
-export interface PackSelection<T = unknown> {
-  /** In pad order: shuffled, so the sound types are scattered across the pads. */
-  picked: PickedSound<T>[];
-  /** How many files the pack held in each type, and how many of those were picked. */
+/** Hidden alternatives kept for each type, for the hot-swap menu. */
+export const PACK_ALTERNATIVES = 4;
+/** Pads taken by the finger-drumming page (bank A); the pack's other sounds fill the pads after it. */
+export const KIT_PADS = 16;
+
+export interface PackPlan<T = unknown> {
+  /** The sounds that go on pads. */
+  visible: PickedSound<T>[];
+  /** Sounds that only sit in the hot-swap menu; the export drops whichever are not chosen. */
+  hidden: PickedSound<T>[];
+  /** How many files the pack held in each type, and how many of those were picked (shown or hidden). */
   counts: Partial<Record<CategoryId, { found: number; picked: number }>>;
   /** Audio files left out because they were too large to load, or because the byte budget ran out. */
   skippedForSize: number;
   totalFiles: number;
 }
 
+/** Order the types are loaded in, so a tight memory budget runs out on loops and long sounds, not on the kit. */
+const BUDGET_TIERS: (CategoryId[] | "kit")[] = ["kit", ["bass", "melodic"], ["vox", "fx", "perc", "melodicLoop", "percLoop", "drumLoop", "other"]];
+
 /**
- * Picks the sounds for the pads. Types take turns, one file each in a freshly shuffled order every round, so the counts
- * differ by at most one and a type with few files simply drops out while the others carry on. Files within a type
- * are random. A file that would push the total past `byteBudget` (or is over `maxFileBytes`) is passed over for the
- * next one of its type, which favours smaller files only as the budget runs out.
+ * Plans what a pack contributes. The drum kit comes first: for every type the finger-drumming page has slots for,
+ * one sound per slot goes on a pad and `alternatives` more are held back, hidden, as hot-swap options. What is
+ * left of the pads after bank A is shared out evenly between the other types (bass, melodic, loops...), each with
+ * its own hidden alternatives. Types take turns within a tier of the memory budget (kit, then bass and melodic,
+ * then the rest), so the budget runs out on the longest material last. A file that would push the total past
+ * `byteBudget` (or is over `maxFileBytes`) is passed over for the next one of its type.
  */
-export function selectPackSounds<T>(
+export function planPackSounds<T>(
   files: PackFile<T>[],
   {
+    kitSlots,
     slots = PACK_SLOTS,
+    kitPads = KIT_PADS,
+    alternatives = PACK_ALTERNATIVES,
     byteBudget = PACK_BYTE_BUDGET,
     maxFileBytes = maxFileBytesFor(byteBudget),
     random = Math.random,
-  }: { slots?: number; byteBudget?: number; maxFileBytes?: number; random?: () => number } = {},
-): PackSelection<T> {
+  }: {
+    /** Real (not ghost) slots per type on the finger-drumming page. */
+    kitSlots: Partial<Record<CategoryId, number>>;
+    slots?: number;
+    kitPads?: number;
+    alternatives?: number;
+    byteBudget?: number;
+    maxFileBytes?: number;
+    random?: () => number;
+  },
+): PackPlan<T> {
   const queues = new Map<CategoryId, PackFile<T>[]>();
   const found = new Map<CategoryId, number>();
   let skippedForSize = 0;
@@ -170,30 +194,79 @@ export function selectPackSounds<T>(
   }
   for (const [category, q] of queues) queues.set(category, shuffled(q, random));
 
-  const picked: PickedSound<T>[] = [];
-  const pickedBy = new Map<CategoryId, number>();
-  let bytes = 0;
-  while (picked.length < slots) {
-    let tookAny = false;
-    for (const category of shuffled([...queues.keys()], random)) {
-      if (picked.length >= slots) break;
-      const q = queues.get(category)!;
-      // Skip over files that no longer fit; they stay skipped.
-      while (q.length && bytes + q[q.length - 1].size > byteBudget) {
-        q.pop();
-        skippedForSize++;
-      }
-      const file = q.pop();
-      if (!file) continue;
-      bytes += file.size;
-      picked.push({ file, category });
-      pickedBy.set(category, (pickedBy.get(category) ?? 0) + 1);
-      tookAny = true;
+  // How many of each type go on pads: a kit type gets its slots; the rest share the remaining pads evenly (a type with fewer files gives its share to the others).
+  const kitTypes = (Object.keys(kitSlots) as CategoryId[]).filter((c) => (kitSlots[c] ?? 0) > 0);
+  const visibleWant = new Map<CategoryId, number>();
+  for (const c of kitTypes) visibleWant.set(c, Math.min(kitSlots[c]!, queues.get(c)?.length ?? 0));
+  const others = [...queues.keys()].filter((c) => !kitTypes.includes(c));
+  let room = Math.max(0, slots - kitPads);
+  const share = new Map(others.map((c) => [c, 0]));
+  // The alternatives are set aside first, so a small type keeps some spares to swap in rather than putting every file on a pad.
+  const forPads = (c: CategoryId) => Math.max(1, queues.get(c)!.length - alternatives);
+  for (let open = others.filter((c) => queues.get(c)!.length > 0); room > 0 && open.length; ) {
+    for (const c of shuffled(open, random)) {
+      if (room <= 0) break;
+      share.set(c, share.get(c)! + 1);
+      room--;
     }
-    if (!tookAny) break;
+    open = open.filter((c) => share.get(c)! < forPads(c));
+  }
+  for (const [c, n] of share) visibleWant.set(c, n);
+
+  const visible: PickedSound<T>[] = [];
+  const hidden: PickedSound<T>[] = [];
+  const shown = new Map<CategoryId, number>();
+  const kept = new Map<CategoryId, number>();
+  let bytes = 0;
+  /** Takes the next file of a type that fits the budget, or null. */
+  const pop = (category: CategoryId): PackFile<T> | null => {
+    const q = queues.get(category);
+    while (q?.length && bytes + q[q.length - 1].size > byteBudget) {
+      q.pop();
+      skippedForSize++;
+    }
+    const file = q?.pop() ?? null;
+    if (file) bytes += file.size;
+    return file;
+  };
+
+  for (const tier of BUDGET_TIERS) {
+    const types = (tier === "kit" ? kitTypes : tier).filter((c) => queues.has(c) && (tier === "kit" || !kitTypes.includes(c)));
+    for (let progressed = true; progressed; ) {
+      progressed = false;
+      for (const category of shuffled(types, random)) {
+        const wantShown = visibleWant.get(category) ?? 0;
+        const isShown = (shown.get(category) ?? 0) < wantShown;
+        if (!isShown && (kept.get(category) ?? 0) >= alternatives) continue;
+        const file = pop(category);
+        if (!file) continue;
+        progressed = true;
+        if (isShown) {
+          visible.push({ file, category });
+          shown.set(category, (shown.get(category) ?? 0) + 1);
+        } else {
+          hidden.push({ file, category });
+          kept.set(category, (kept.get(category) ?? 0) + 1);
+        }
+      }
+    }
   }
 
-  const counts: PackSelection<T>["counts"] = {};
-  for (const [category, n] of found) counts[category] = { found: n, picked: pickedBy.get(category) ?? 0 };
-  return { picked: shuffled(picked, random), counts, skippedForSize, totalFiles: files.length };
+  // If the budget cut some types short, other types' spare files fill the pads that are left.
+  const target = slots - kitPads;
+  for (let progressed = true; progressed && visible.filter((v) => !kitTypes.includes(v.category)).length < target; ) {
+    progressed = false;
+    for (const category of shuffled(others, random)) {
+      if (visible.filter((v) => !kitTypes.includes(v.category)).length >= target) break;
+      const file = pop(category);
+      if (!file) continue;
+      progressed = true;
+      visible.push({ file, category });
+      shown.set(category, (shown.get(category) ?? 0) + 1);
+    }
+  }
+
+  const counts: PackPlan<T>["counts"] = {};
+  for (const [category, n] of found) counts[category] = { found: n, picked: (shown.get(category) ?? 0) + (kept.get(category) ?? 0) };
+  return { visible: shuffled(visible, random), hidden, counts, skippedForSize, totalFiles: files.length };
 }

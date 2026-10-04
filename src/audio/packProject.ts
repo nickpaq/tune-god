@@ -7,7 +7,7 @@ import { encodeWav } from "./wavEncode";
 import type { CategoryId } from "./classify";
 import { applyGainDb } from "./gain";
 import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
-import { AUDIO_EXTENSIONS, selectPackSounds, type PackFile, type PackSelection } from "./samplePack";
+import { AUDIO_EXTENSIONS, planPackSounds, type PackFile, type PackPlan } from "./samplePack";
 
 /** A dropped file the pack can read later. */
 export type PackSource = () => Promise<File>;
@@ -99,10 +99,15 @@ export interface PackProject {
   categories: Record<number, CategoryId>;
   /** The volume knob level (dB) written for each pad; the loudness gain itself is already in the audio. */
   knobDb: Record<number, number>;
-  selection: PackSelection<PackSource>;
+  plan: PackPlan<PackSource>;
 }
 
+/** Pads numbered from here up hold hidden hot-swap alternatives: past the 64 pads of the grid, so never on one. */
+export const HIDDEN_PAD_BASE = 64;
+
 export interface BuildOptions {
+  /** How many sounds of each type the finger-drumming page has slots for (see kitSlotCounts). */
+  kitSlots: Partial<Record<CategoryId, number>>;
   byteBudget?: number;
   random?: () => number;
   /** Where loudness is measured (a worker in the app, so long loops don't stall the screen). */
@@ -119,27 +124,28 @@ const volFromDb = (db: number) => 10 ** (db / 20);
  * sounds are ever in memory. Plain WAVs go in byte for byte; any other format is decoded and written as a 24-bit WAV.
  * Returns null when the pack held no usable audio.
  */
-export async function buildPackProject(pack: FoundPack, options: BuildOptions = {}): Promise<PackProject | null> {
+export async function buildPackProject(pack: FoundPack, options: BuildOptions): Promise<PackProject | null> {
   const { measure = async (input: BalanceInput) => balanceStats(input), onProgress } = options;
-  const selection = selectPackSounds(pack.files, options);
-  if (!selection.picked.length) return null;
+  const plan = planPackSounds(pack.files, options);
+  const picked = [...plan.visible.map((sound) => ({ sound, hidden: false })), ...plan.hidden.map((sound) => ({ sound, hidden: true }))];
+  if (!plan.visible.length) return null;
 
   // Pass 1: measure every picked sound, one at a time, keeping only its loudness and peak. The balance
   // (a common loudness with a peak ceiling) needs the whole set, so nothing can be written before this ends.
-  const readable: typeof selection.picked = [];
+  const readable: typeof picked = [];
   const stats: BalanceStats[] = [];
-  for (const sound of selection.picked) {
-    onProgress?.(`Measuring ${readable.length + 1}/${selection.picked.length}`);
+  for (const item of picked) {
+    onProgress?.(`Measuring ${readable.length + 1}/${picked.length}`);
     try {
-      const decoded = await decodeNative(await sound.file.source());
-      stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: sound.category }));
-      readable.push(sound);
+      const decoded = await decodeNative(await item.sound.file.source());
+      stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: item.sound.category }));
+      readable.push(item);
     } catch (err) {
       // An unreadable file just leaves its pad empty.
       console.error(err);
     }
   }
-  if (!readable.length) return null;
+  if (!readable.some((r) => !r.hidden)) return null;
   const balance = balanceFromStats(stats, FILE_CEILING_DB);
 
   // Pass 2: decode again, bake in the gain and write the 24-bit WAV. Only the processed sound goes into the
@@ -149,22 +155,26 @@ export async function buildPackProject(pack: FoundPack, options: BuildOptions = 
   const pads: unknown[] = [];
   const categories: Record<number, CategoryId> = {};
   const knobDb: Record<number, number> = {};
-  for (let slot = 0; slot < readable.length; slot++) {
-    const { file, category } = readable[slot];
-    onProgress?.(`Levelling ${slot + 1}/${readable.length}`);
+  let shownCount = 0;
+  let hiddenCount = 0;
+  for (let n = 0; n < readable.length; n++) {
+    const { sound: { file, category }, hidden } = readable[n];
+    // Sounds for pads take pad numbers 0 up; hot-swap alternatives are numbered from 64, off the grid.
+    const slot = hidden ? HIDDEN_PAD_BASE + hiddenCount++ : shownCount++;
+    onProgress?.(`Levelling ${n + 1}/${readable.length}`);
     const decoded = await decodeNative(await file.source());
-    const channelData = applyGainDb(decoded.channelData, balance.gainDb[slot]);
+    const channelData = applyGainDb(decoded.channelData, balance.gainDb[n]);
     const frames = channelData[0].length;
-    const id = slot + 1;
+    const id = n + 1;
     zip.file(`sampler/${id}.wav`, await encodeWav({ sampleRate: decoded.sampleRate, channelData, bitDepth: 24 }).arrayBuffer());
     samples.push({ id, metadata: { originalPath: file.name } });
-    pads.push({ pad: slot, type: "sample", sampleId: id, vol: volFromDb(balance.knobDb[slot]), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
+    pads.push({ pad: slot, type: "sample", sampleId: id, vol: volFromDb(balance.knobDb[n]), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
     categories[slot] = category;
-    knobDb[slot] = balance.knobDb[slot];
+    knobDb[slot] = balance.knobDb[n];
   }
 
   zip.file("sampler/sampler.json", JSON.stringify({ samples, pads }));
   // Audio is already compressed or dense PCM; storing it skips a slow pass over every byte.
   const blob = await zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true });
-  return { file: new File([blob], `${pack.name}.koala`, { type: "application/octet-stream" }), categories, knobDb, selection };
+  return { file: new File([blob], `${pack.name}.koala`, { type: "application/octet-stream" }), categories, knobDb, plan };
 }

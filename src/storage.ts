@@ -18,6 +18,8 @@ export interface SavedPad {
   knobDb?: number;
   /** Where the sound sits now, if the user moved it. Pads are keyed by their original slot. */
   position?: number;
+  /** The sound sits in the hot-swap menu rather than on a pad (a sample pack's spare options). */
+  hidden?: boolean;
   /** The user deleted this sound (it is left out of the export). */
   deleted?: boolean;
 }

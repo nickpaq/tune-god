@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryOfFile, categoryOfFolder, packByteBudget, selectPackSounds, type PackFile } from "./samplePack";
+import { categoryOfFile, categoryOfFolder, packByteBudget, planPackSounds, type PackFile } from "./samplePack";
 
 // A small deterministic random source so the shuffles are repeatable.
 function seeded(seed = 1) {
@@ -48,57 +48,70 @@ describe("classifying from folder names", () => {
   });
 });
 
-describe("choosing the sounds", () => {
+describe("planning the sounds", () => {
+  const KIT = { kick: 1, snare: 1, clap: 1, closedHat: 1, openHat: 1, cymbal: 2, perc: 4, fx: 2, vox: 1 };
+  const many = (folder: string, n: number, size = 1000) => Array.from({ length: n }, (_, i) => file([folder], `${folder}${i}.wav`, size));
   const pack = [
-    ...Array.from({ length: 200 }, (_, i) => file(["Kicks"], `k${i}.wav`)),
-    ...Array.from({ length: 100 }, (_, i) => file(["Snares"], `s${i}.wav`)),
-    ...Array.from({ length: 50 }, (_, i) => file(["Hats"], `h${i}.wav`)),
-    ...Array.from({ length: 6 }, (_, i) => file(["Vocals"], `v${i}.wav`)),
+    ...many("Kicks", 30), ...many("Snares", 30), ...many("Claps", 30), ...many("Closed Hats", 30), ...many("Open Hats", 30),
+    ...many("Cymbals", 30), ...many("Percussion", 30), ...many("FX", 30), ...many("Vocals", 30),
+    ...many("Bass", 30), ...many("Synths", 30), ...many("Drum Loops", 30), ...many("Melodic Loops", 30),
   ];
+  const tally = (list: { category: string }[]) => list.reduce<Record<string, number>>((n, s) => ({ ...n, [s.category]: (n[s.category] ?? 0) + 1 }), {});
 
-  it("fills 64 pads with types as even as the pack allows, small types giving up their surplus", () => {
-    const { picked, counts } = selectPackSounds(pack, { random: seeded() });
-    expect(picked).toHaveLength(64);
-    // Four types: 6 vocals is under the 16 share, so the other three split the remaining 58 as evenly as they can.
-    expect(counts.other).toBeUndefined();
-    expect(counts.vox!.picked).toBe(6);
-    const rest = [counts.kick!.picked, counts.snare!.picked, counts.closedHat!.picked].sort();
-    expect(rest[2] - rest[0]).toBeLessThanOrEqual(1);
-    expect(rest.reduce((a, b) => a + b, 0)).toBe(58);
+  it("puts one sound per kit slot on the pads and holds four alternatives of each kit type back, hidden", () => {
+    const { visible, hidden } = planPackSounds(pack, { kitSlots: KIT, random: seeded() });
+    const shown = tally(visible);
+    const spare = tally(hidden);
+    for (const [category, slots] of Object.entries(KIT)) {
+      expect(shown[category]).toBe(slots);
+      expect(spare[category]).toBe(4);
+    }
+    // No file is both on a pad and a hidden spare.
+    const names = [...visible, ...hidden].map((s) => s.file.name);
+    expect(new Set(names).size).toBe(names.length);
   });
 
-  it("picks the same number from each of a few types and spreads the remainder", () => {
-    const three = pack.filter((f) => f.folders[0] !== "Vocals");
-    const { picked, counts } = selectPackSounds(three, { random: seeded(7) });
-    expect(picked).toHaveLength(64);
-    const n = [counts.kick!.picked, counts.snare!.picked, counts.closedHat!.picked];
-    expect(Math.max(...n) - Math.min(...n)).toBeLessThanOrEqual(1);
+  it("shares the rest of the pads evenly between the other types, each with four hidden alternatives", () => {
+    const { visible, hidden } = planPackSounds(pack, { kitSlots: KIT, random: seeded(5) });
+    const others = ["bass", "melodic", "drumLoop", "melodicLoop"];
+    const shown = tally(visible.filter((s) => others.includes(s.category)));
+    const counts = others.map((c) => shown[c]);
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(64 - 16);
+    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+    for (const c of others) expect(tally(hidden)[c]).toBe(4);
+    expect(visible.length).toBeLessThanOrEqual(64);
   });
 
-  it("scatters the types over the pads instead of grouping them", () => {
-    const { picked } = selectPackSounds(pack, { random: seeded(3) });
-    const firstSixteen = new Set(picked.slice(0, 16).map((p) => p.category));
-    expect(firstSixteen.size).toBeGreaterThan(1);
+  it("keeps alternatives back for a small type instead of putting every file on a pad", () => {
+    const { visible, hidden } = planPackSounds([...many("Bass", 10), ...many("Synths", 10)], { kitSlots: KIT, random: seeded() });
+    expect(tally(visible).bass).toBe(6);
+    expect(tally(hidden).bass).toBe(4);
+    expect(tally(visible).melodic).toBe(6);
   });
 
-  it("takes everything when the pack is smaller than 64", () => {
-    const { picked } = selectPackSounds(pack.slice(0, 5), { random: seeded() });
-    expect(picked).toHaveLength(5);
+  it("gives a small type only what it has, and the kit still gets its alternatives first", () => {
+    const small = [...many("Kicks", 3), ...many("Snares", 20), ...many("Bass", 100)];
+    const { visible, hidden } = planPackSounds(small, { kitSlots: KIT, random: seeded() });
+    expect(tally(visible).kick).toBe(1);
+    expect(tally(hidden).kick).toBe(2); // only three kicks exist: one shown, two spare
+    expect(tally(visible).bass).toBe(48);
   });
 
-  it("stays inside the byte budget by passing over files that no longer fit", () => {
-    const big = Array.from({ length: 80 }, (_, i) => file([i % 2 ? "Kicks" : "Snares"], `f${i}.wav`, 10 + (i % 4) * 10));
-    const { picked, skippedForSize } = selectPackSounds(big, { byteBudget: 500, random: seeded() });
-    const total = picked.reduce((a, p) => a + p.file.size, 0);
-    expect(total).toBeLessThanOrEqual(500);
-    expect(picked.length).toBeGreaterThan(10);
-    expect(skippedForSize).toBeGreaterThan(0);
+  it("spends a tight byte budget on the kit before bass, and bass before loops", () => {
+    const sized = [...many("Kicks", 10, 100), ...many("Snares", 10, 100), ...many("Bass", 10, 100), ...many("Drum Loops", 10, 100)];
+    const { visible, hidden } = planPackSounds(sized, { kitSlots: { kick: 1, snare: 1 }, byteBudget: 1000, maxFileBytes: 1000, random: seeded() });
+    const all = [...visible, ...hidden];
+    expect(all.reduce((n, s) => n + s.file.size, 0)).toBeLessThanOrEqual(1000);
+    const t = tally(all);
+    expect(t.kick).toBe(5); // 1 shown + 4 spare
+    expect(t.snare).toBe(5);
+    expect(t.drumLoop ?? 0).toBe(0);
   });
 
-  it("never picks a file over the per-file limit", () => {
+  it("scatters the visible sounds and never picks a file over the per-file limit", () => {
     const files = [file(["Loops"], "huge.wav", 5000), file(["Loops"], "ok.wav", 10)];
-    const { picked, skippedForSize } = selectPackSounds(files, { maxFileBytes: 1000 });
-    expect(picked.map((p) => p.file.name)).toEqual(["ok.wav"]);
+    const { visible, hidden, skippedForSize } = planPackSounds(files, { kitSlots: KIT, maxFileBytes: 1000 });
+    expect([...visible, ...hidden].map((p) => p.file.name)).toEqual(["ok.wav"]);
     expect(skippedForSize).toBe(1);
   });
 });

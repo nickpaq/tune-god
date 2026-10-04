@@ -82,6 +82,13 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
   },
 ];
 
+/** How many real sounds a layout wants of each type: its slots, leaving out ghost slots (those are made from a snare or kick at export). */
+export function kitSlotCounts(layout: FingerLayout): Partial<Record<CategoryId, number>> {
+  const counts: Partial<Record<CategoryId, number>> = {};
+  for (const s of layout.slots) if (!s.ghostOf) counts[s.category] = (counts[s.category] ?? 0) + 1;
+  return counts;
+}
+
 export const DEFAULT_LAYOUT_ID = "horizontal";
 
 export function layoutById(id: string | null | undefined): FingerLayout {

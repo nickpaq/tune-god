@@ -9,8 +9,10 @@ const tone = (frames: number, level: number) =>
   Float32Array.from({ length: frames }, (_, i) => level * Math.sin((2 * Math.PI * 440 * i) / 44100));
 const wav = (frames: number, level = 0.1) => encodeWav({ sampleRate: 44100, channelData: [tone(frames, level)], bitDepth: 16 });
 
+const KIT = { kick: 1, snare: 1, closedHat: 1 };
+
 describe("sample pack project", () => {
-  it("zips an even mix of the pack's types into a project and remembers each pad's type", async () => {
+  it("zips the kit sounds and their hidden spares into a project and remembers each pad's type", async () => {
     const list: File[] = [];
     for (const folder of ["Kicks", "Snares", "Hats"]) {
       for (let i = 0; i < 40; i++) {
@@ -24,18 +26,18 @@ describe("sample pack project", () => {
     expect(pack.name).toBe("My Pack");
     expect(pack.files).toHaveLength(120);
 
-    const built = (await buildPackProject(pack))!;
+    const built = (await buildPackProject(pack, { kitSlots: KIT }))!;
     expect(built.file.name).toBe("My Pack.koala");
     const zip = await JSZip.loadAsync(await built.file.arrayBuffer());
     const json = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
-    expect(json.pads).toHaveLength(64);
-    expect(json.pads.map((p: any) => p.pad)).toEqual(Array.from({ length: 64 }, (_, i) => i));
+    // One sound per kit slot on the pads, and four spares per type numbered past the grid so they sit on no pad.
+    expect(json.pads.map((p: any) => p.pad)).toEqual([0, 1, 2, ...Array.from({ length: 12 }, (_, i) => 64 + i)]);
     for (const p of json.pads) expect(zip.file(`sampler/${p.sampleId}.wav`)).not.toBeNull();
 
-    const counts: Record<string, number> = {};
-    for (const c of Object.values(built.categories)) counts[c] = (counts[c] ?? 0) + 1;
-    expect(Object.keys(counts).sort()).toEqual(["closedHat", "kick", "snare"]);
-    expect(Math.max(...Object.values(counts)) - Math.min(...Object.values(counts))).toBeLessThanOrEqual(1);
+    const shown = Object.entries(built.categories).filter(([pad]) => Number(pad) < 64).map(([, c]) => c).sort();
+    expect(shown).toEqual(["closedHat", "kick", "snare"]);
+    const spare = Object.entries(built.categories).filter(([pad]) => Number(pad) >= 64).map(([, c]) => c);
+    for (const c of ["closedHat", "kick", "snare"]) expect(spare.filter((s) => s === c)).toHaveLength(4);
   });
 
   it("levels the sounds as it builds: gain goes into the audio, the type's mix onto the pad knob", async () => {
@@ -47,7 +49,7 @@ describe("sample pack project", () => {
       list.push(f);
     }
     const progress: string[] = [];
-    const built = (await buildPackProject(findPackInFileList(list), { onProgress: (t) => progress.push(t) }))!;
+    const built = (await buildPackProject(findPackInFileList(list), { kitSlots: { kick: 1 }, onProgress: (t) => progress.push(t) }))!;
     const zip = await JSZip.loadAsync(await built.file.arrayBuffer());
     const json = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
     const peaks = await Promise.all(
@@ -65,6 +67,6 @@ describe("sample pack project", () => {
   });
 
   it("returns null when the folder holds no audio", async () => {
-    expect(await buildPackProject({ name: "empty", files: [] })).toBeNull();
+    expect(await buildPackProject({ name: "empty", files: [] }, { kitSlots: KIT })).toBeNull();
   });
 });

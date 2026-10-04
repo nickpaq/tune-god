@@ -35,7 +35,7 @@ export function SwapList({
         <strong>{slotLabel}: swap in</strong>
       </div>
       <div className="swap-list__rows">
-        {candidates.length === 0 && <div className="swap-list__empty">No other drums in this project.</div>}
+        {candidates.length === 0 && <div className="swap-list__empty">No other sounds to swap in.</div>}
         {shown.map((pad) => {
           const bg = colorOf(pad);
           const fg = textColorOn(bg);

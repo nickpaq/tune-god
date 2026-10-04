@@ -31,7 +31,7 @@ import { SwapList } from "./components/SwapList";
 import { ClassifierDrawer } from "./components/ClassifierDrawer";
 import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming } from "./audio/fingerDrumming";
-import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
+import { FINGER_LAYOUTS, kitSlotCounts, layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
@@ -55,6 +55,7 @@ const DWELL_MS = 350;
 /** What undo/redo restores: the pad data plus the key it was tuned to. */
 interface Snapshot {
   pads: Record<number, Pad>;
+  hidden: Record<number, Pad>;
   keyPc: number | null;
   tunedTarget: number | null;
   layout: LayoutState;
@@ -134,6 +135,8 @@ function App() {
   // Read once: what the previous visit left behind.
   const saved = useRef(loadState()).current;
   const [pads, setPads] = useState<Record<number, Pad>>({});
+  /** A sample pack's spare sounds (by original slot): not on any pad, offered in the hot-swap menu, and left out of the export. */
+  const [hidden, setHidden] = useState<Record<number, Pad>>({});
   const [bank, setBank] = useState(saved.bank ?? 0);
   const [selected, setSelected] = useState<number | null>(saved.selected ?? null);
   const [keyPc, setKeyPc] = useState<number | null>(saved.keyPc ?? null);
@@ -197,8 +200,8 @@ function App() {
   const lastEdit = useRef({ key: "", time: 0 });
   const [historySize, setHistorySize] = useState({ undo: 0, redo: 0 });
   const syncHistory = () => setHistorySize({ undo: past.current.length, redo: future.current.length });
-  const latest = useRef<Snapshot>({ pads: {}, keyPc: null, tunedTarget: null, layout });
-  latest.current = { pads, keyPc, tunedTarget, layout };
+  const latest = useRef<Snapshot>({ pads: {}, hidden: {}, keyPc: null, tunedTarget: null, layout });
+  latest.current = { pads, hidden, keyPc, tunedTarget, layout };
   const projectRef = useRef<ParsedKoalaProject | null>(null);
   const packInput = useRef<HTMLInputElement>(null);
 
@@ -228,6 +231,7 @@ function App() {
         layoutOn ? Object.fromEntries((saved.layoutPlaceholders ?? []).map((ph) => [ph.index, makePlaceholderPad(ph)])) : {},
       );
       setLayout((l) => ({ on: layoutOn, id: layoutById(layoutOn ? saved.layoutId : l.id).id, pre: layoutOn ? (saved.layoutPre ?? {}) : {} }));
+      setHidden({});
       setNormalizedData({});
       setLongSamples([]);
       if (!restore) {
@@ -242,19 +246,23 @@ function App() {
       }
       setProjectName(project.originalName.replace(/\.koala$/i, ""));
 
-      const slots = project.pads.filter(
-        (p) => p.pad >= 0 && p.pad < 64 && !(restore && restorePads.current[p.pad]?.deleted),
-      );
+      // Pads numbered past the grid are a sample pack's hidden spare sounds, and on reopening the saved state says which sounds are spare.
+      const isSpare = (pad: number) => {
+        const saved = restore ? restorePads.current[pad] : undefined;
+        return saved ? !!saved.hidden : pad >= 64;
+      };
+      const slots = project.pads.filter((p) => p.pad >= 0 && !(restore && restorePads.current[p.pad]?.deleted));
       setAnalyzing(slots.length);
       const tooLong: number[] = [];
       for (const ref of slots) {
+        const spare = isSpare(ref.pad);
         const decoded = await decodeNative(await koalaPadToFile(project, ref));
         if (token !== loadToken.current) return;
         // Koala plays only between the pad's start and end points, so the preview and analysis get just that part.
         const range = trimRangeOf(project, ref.sampleId, decoded.channelData[0].length);
         if (range) decoded.channelData = decoded.channelData.map((ch) => ch.slice(range.start, range.end));
         // Pads the user moved on a previous visit go back where they were left.
-        const at = restore ? restorePads.current[ref.pad]?.position ?? ref.pad : ref.pad;
+        const at = spare ? -1 : restore ? restorePads.current[ref.pad]?.position ?? ref.pad : ref.pad;
         const pad: Pad = {
           index: at,
           origIndex: ref.pad,
@@ -268,8 +276,9 @@ function App() {
           semis: 0,
           cents: 0,
         };
-        setPads((prev) => ({ ...prev, [at]: pad }));
-        if (decoded.channelData[0].length / decoded.sampleRate > MAX_SAMPLE_SECONDS) tooLong.push(ref.pad);
+        if (spare) setHidden((prev) => ({ ...prev, [ref.pad]: pad }));
+        else setPads((prev) => ({ ...prev, [at]: pad }));
+        if (!spare && decoded.channelData[0].length / decoded.sampleRate > MAX_SAMPLE_SECONDS) tooLong.push(ref.pad);
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
@@ -277,40 +286,38 @@ function App() {
           .then(({ midi: detectedMidi, category: guessed, detail, centroid }) => {
             if (token !== loadToken.current) return;
             const category = categoryHints.current[ref.pad] ?? guessed;
+            const remembered = restorePads.current[ref.pad];
+            const cat = remembered ? rememberedCategory(remembered.category, category) : category;
+            const analysed = (cur: Pad): Pad => ({
+              ...cur,
+              detectedMidi,
+              detail,
+              centroid,
+              ...(remembered
+                ? {
+                    tune: remembered.tune,
+                    tuneLocked: remembered.tuneLocked,
+                    keyPc: remembered.keyPc,
+                    semis: remembered.semis,
+                    cents: remembered.cents,
+                    category: cat,
+                  }
+                : { category }),
+              tune: tuneDefault(
+                remembered?.tuneLocked || cur.tuneLocked,
+                remembered?.tuneLocked ? remembered.tune : cur.tune,
+                cat,
+                detectedMidi,
+                tunedTargetRef.current,
+              ),
+            });
+            // The sound may sit on a pad or in the hot-swap pool, and may have been moved, swapped or deleted while it was analysing.
             setPads((prev) => {
-              const remembered = restorePads.current[ref.pad];
-              // The pad may have been moved or deleted while it was analysing.
               const slot = Object.keys(prev).find((k) => prev[Number(k)].origIndex === ref.pad);
               if (slot === undefined) return prev;
-              const cur = prev[Number(slot)];
-              const cat = remembered ? rememberedCategory(remembered.category, category) : category;
-              return {
-                ...prev,
-                [cur.index]: {
-                  ...cur,
-                  detectedMidi,
-                  detail,
-                  centroid,
-                  ...(remembered
-                    ? {
-                        tune: remembered.tune,
-                        tuneLocked: remembered.tuneLocked,
-                        keyPc: remembered.keyPc,
-                        semis: remembered.semis,
-                        cents: remembered.cents,
-                        category: cat,
-                      }
-                    : { category }),
-                  tune: tuneDefault(
-                    remembered?.tuneLocked || cur.tuneLocked,
-                    remembered?.tuneLocked ? remembered.tune : cur.tune,
-                    cat,
-                    detectedMidi,
-                    tunedTargetRef.current,
-                  ),
-                },
-              };
+              return { ...prev, [Number(slot)]: analysed(prev[Number(slot)]) };
             });
+            setHidden((prev) => (prev[ref.pad] ? { ...prev, [ref.pad]: analysed(prev[ref.pad]) } : prev));
             setAnalyzing((n) => n - 1);
           });
       }
@@ -362,6 +369,9 @@ function App() {
         position: p.index,
       };
     }
+    for (const p of Object.values(hidden)) {
+      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, hidden: true };
+    }
     // Sounds the user deleted stay deleted when the project is reopened.
     for (const ref of projectRef.current?.pads ?? []) {
       if (!(ref.pad in out)) out[ref.pad] = { tune: false, semis: 0, cents: 0, deleted: true };
@@ -375,7 +385,7 @@ function App() {
       layoutGhosts: Object.values(pads).flatMap((p) => (p.ghost ? [{ index: p.index, kind: p.ghost.kind, sourceOrigIndex: p.ghost.sourceOrigIndex }] : [])),
       layoutPlaceholders: Object.values(pads).flatMap((p) => (p.placeholder ? [{ index: p.index, ...p.placeholder }] : [])),
     });
-  }, [pads, analyzing, loading, layout]);
+  }, [pads, hidden, analyzing, loading, layout]);
 
   /** Unloads the project and forgets it, so the app opens on the drop screen next time. Settings stay. */
   const clearProject = () => {
@@ -390,6 +400,7 @@ function App() {
     restorePads.current = {};
     setHistorySize({ undo: 0, redo: 0 });
     setPads({});
+    setHidden({});
     setLayout((l) => ({ ...l, on: false, pre: {} }));
     setNormalizedData({});
     setLongSamples([]);
@@ -418,6 +429,7 @@ function App() {
     setLoading(true);
     try {
       const built = await buildPackProject(await find(), {
+        kitSlots: kitSlotCounts(layoutById(layout.id)),
         byteBudget: packByteBudget(packMemory),
         measure: (input) => getRenderWorker().measure(input),
         onProgress: setImportStatus,
@@ -472,6 +484,7 @@ function App() {
 
   const restore = (snap: Snapshot) => {
     setPads(snap.pads);
+    setHidden(snap.hidden);
     setLayout((l) => ({ ...snap.layout, id: snap.layout.on ? snap.layout.id : l.id }));
     setKeyPc(snap.keyPc);
     setTunedTarget(snap.tunedTarget);
@@ -895,7 +908,8 @@ function App() {
   const arrangementOf = (pads: Record<number, Pad>): Map<number, number | null> | undefined => {
     const project = projectRef.current;
     if (!project) return undefined;
-    const slots = project.pads.filter((p) => p.pad >= 0 && p.pad < 64);
+    // Every sound in the project: those not on a pad (a sample pack's unchosen spares) map to null, so the export drops them.
+    const slots = project.pads.filter((p) => p.pad >= 0);
     const now = new Map(Object.values(pads).filter(isReal).map((p) => [p.origIndex, p.index]));
     if (!slots.some((r) => now.get(r.pad) !== r.pad)) return undefined;
     return new Map(slots.map((r) => [r.pad, now.get(r.pad) ?? null]));
@@ -943,16 +957,35 @@ function App() {
       }}
     />
   );
+  /** The type the selected pad's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */
+  const slotCategory = selectedPad && (layout.on && selectedPad.index < 16 ? layoutById(layout.id).slots[selectedPad.index]?.category : undefined) || selectedPad?.category;
+  /** Swaps a hidden spare onto the selected pad; the sound it replaces goes back into the hot-swap menu, so the swap can be undone by swapping again. */
+  const swapInHidden = (other: Pad, target: Pad) => {
+    recordEdit();
+    const incoming: Pad = { ...other, index: target.index, tune: tuneDefault(other.tuneLocked, other.tune, other.category, other.detectedMidi, tunedTarget) };
+    setPads((prev) => ({ ...prev, [target.index]: incoming }));
+    setHidden((prev) => {
+      const next = { ...prev };
+      delete next[other.origIndex];
+      if (isReal(target)) next[target.origIndex] = { ...target, index: -1 };
+      return next;
+    });
+  };
   const swapList = selectedPad && (
     <SwapList
       slotLabel={selectedPad.ghost ? `${GHOST_LABEL[selectedPad.ghost.kind]} (made on export unless filled)` : `PAD ${(selectedPad.index % 16) + 1}`}
       candidates={sortForSlot(
-        Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index >= 16 && p.index !== selectedPad.index),
-        layoutById(layout.id).slots[selectedPad.index % 16]?.category ?? selectedPad.category,
+        [
+          // A pack's hidden spares: the same type as the slot, or for a drum slot any drum.
+          ...Object.values(hidden).filter((p) => (isKitCategory(slotCategory) ? isKitCategory(p.category) : p.category === slotCategory)),
+          ...Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index >= 16 && p.index !== selectedPad.index && isKitCategory(slotCategory)),
+        ],
+        slotCategory,
       )}
       colorOf={colorOfPad}
       audioOf={audioOf}
       onSwap={(other) => {
+        if (hidden[other.origIndex]) return swapInHidden(other, selectedPad);
         recordEdit();
         setPads((prev) => (selectedPad.ghost ? fillGhostSlot(prev, selectedPad.index, other.index) : movePad(prev, selectedPad.index, other.index)));
       }}

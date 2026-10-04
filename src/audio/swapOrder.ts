@@ -18,6 +18,7 @@ const NEAREST: Partial<Record<CategoryId, CategoryId[]>> = {
 export function sortForSlot<T extends { category?: CategoryId; index: number }>(sounds: T[], slot: CategoryId | undefined): T[] {
   const order = (slot && NEAREST[slot]) || [];
   const rank = (c: CategoryId | undefined) => {
+    if (slot && c === slot) return -1; // the slot's own type always leads, kit or not
     const at = order.indexOf(c ?? "other");
     return at >= 0 ? at : order.length + categoryIndex(c ?? "other");
   };
