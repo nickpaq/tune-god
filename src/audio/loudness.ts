@@ -48,7 +48,11 @@ const MAX_CREST_DB = 8;
 
 /** Extra dB a category sits above the common loudness, and extra peak room to get there (hip-hop: the kick leads). */
 const LOUDNESS_BONUS_DB: Partial<Record<CategoryId, number>> = { kick: 3 };
-const CREST_BONUS_DB: Partial<Record<CategoryId, number>> = { kick: 5 };
+/**
+ * Hats and cymbals get less peak room than the 8 dB everyone else has: they are so short and bright that the loudness meter reads them
+ * low and would lift them until their peaks matched the snare's, which sounds piercing. This keeps their peaks a few dB under it.
+ */
+const CREST_BONUS_DB: Partial<Record<CategoryId, number>> = { kick: 5, closedHat: -5, openHat: -4, cymbal: -4 };
 
 type Biquad = { b0: number; b1: number; b2: number; a1: number; a2: number };
 
