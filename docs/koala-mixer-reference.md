@@ -69,6 +69,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 ## Confirmed
 
+- `LIMITER.gain` is **input gain** (-18 to +18 dB) into the limiter, per the user. The app writes +3 dB so the master is pushed gently into it.
 - Plugin names and every parameter name above.
 - `SIDECHAIN.source` is a bus number (the dropdown named bus 0 "kick").
 - `oversample` is the HQ button: 0 off, 1 on (DRIVE seen both ways; CLIPPER is the same control).
@@ -78,7 +79,6 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 ## Still not confirmed
 
-- LIMITER `gain`: input gain or output ceiling. Both extremes (-18 and +18 dB) were seen and the meters do not say. The app writes 0, which is neutral if it is input gain.
 - SIDECHAIN `output`: -12 to +12 dB, almost certainly an output gain after ducking, so the app writes 0. Duck depth is not a control.
 - EQ mid band frequency range (the user never moved it; it sat near 1 kHz in both projects). Presumably the same 20 Hz to 20 kHz as the others.
 - UTILITY `channel` values 1 and 2 (probably L only and R only); WARBLE (never changed).
