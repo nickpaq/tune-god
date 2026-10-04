@@ -516,9 +516,9 @@
 .pads {
   /*
    * the gap between pads, top to bottom: one unit between the lit edges, as side to side (the 8.1px is the pad's lit edge),
-   * plus 0.85cqw so the caption printed under each pad has air below it as well as above (it sits close to its own pad).
+   * plus 0.5cqw so the caption printed under each pad has air below it as well as above (it sits close to its own pad).
    */
-  --row-gap: calc(var(--u) + 0.85cqw + 8.1px);
+  --row-gap: calc(var(--u) + 0.5cqw + 8.1px);
   /*
    * Pad size (set here, not on .phone, because cq units must resolve against the chassis): a square a quarter of the row
    * (one unit between pads and at both sides), unless the chassis is too short. Then the four pad rows take what is left of
@@ -596,7 +596,7 @@
 
 /* the caption is printed on the plate, so it stays put while the pad sinks */
 .pad:active .pad__number {
-  top: calc(100% + 8.1px + 0.4cqw - 1.5px);
+  top: calc(100% + 8.1px + 0.3cqw - 1.5px);
 }
 
 /* The sound type's symbol, small in the pad's top left corner, pressed into the rubber: dark grey with a faint lip of light underneath. */
@@ -670,7 +670,7 @@
   left: 0.6cqw;
   right: 0;
   /* small, under the pad's lit edge, close to its own pad (the gap below it, to the next row, is the larger one) */
-  top: calc(100% + 8.1px + 0.4cqw);
+  top: calc(100% + 8.1px + 0.3cqw);
   font-size: 1.8cqw;
   line-height: 1;
   letter-spacing: 0.06em;
