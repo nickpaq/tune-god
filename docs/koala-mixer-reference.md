@@ -46,6 +46,21 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 - **EQ:** a graph with three draggable nodes (low, mid, high; the low and high nodes sit at the graph's edges, the high one read 12.6 kHz at -18 dB). The graph's frequency axis runs from about 20 Hz past 10 kHz.
 - **Mixer screen:** buses kick, bass, drums, melodic and MAIN, five slots each. In the file, bass has STEREOIZER in slot 4 and SIDECHAIN in slot 5, drums UTILITY and WARBLE, melodic PLATE, METER, LIMITER, FREEVERB in slots 2 to 5, and MAIN EQ, DRIVE, COMP, CLIPPER, BITCOOKER.
 
+## Read from screenshots of the maximum project
+
+- **STEREOIZER:** SPREAD 100 %, LOW CUT 500 Hz (the display shows two coloured circles that separate as spread rises).
+- **SIDECHAIN:** SOURCE still "kick", THRESHOLD 0 dB, RELEASE 1000 ms, OUTPUT +12.0 dB. Threshold runs -60 to 0 dB.
+- **UTILITY:** CHANNEL **STEREO** (`channel` 0), GAIN +18 dB, PAN "R 100%" (`pan` 1; 0.5 is "C"), flip phase on. So `channel` 0 = STEREO and 3 = L+R MONO.
+- **PLATE REVERB:** TIME 30.0 s, SIZE 30 m, PRE-DELAY 250 ms, BRIGHTNESS 1.0, DRY/WET 100 %.
+- **LIMITER:** GAIN +18.0 dB, ATTACK 6.0 ms, RELEASE 1000 ms. The G/R meter looks the same at both extremes (a full bar), so it does not reveal what GAIN does.
+- **FREEVERB:** SIZE 1.0, TONE 1.0, DRY/WET 100 %, **stereo** button off (`stereo` 0). The minimum project had it on.
+- **EQ:** gain -18 dB on all bands, Q 10. The curve shows three bell (peaking) bands: narrow notches at about 1 kHz and at the two edge nodes (about 31 Hz and 12.6 kHz), with sharp resonant peaks beside the outer ones. The earlier EQ screenshot (-18 dB, Q 0.5) shows the same bands broad. The graph's frequency axis runs from about 20 Hz to a little past 12.6 kHz, and all three nodes sit at the bottom of the +-18 dB range.
+- **DRIVE:** DRIVE 36 dB, MIX 100 %, OUT 0 dB, HQ lit (on).
+- **COMPRESSOR:** THRESHOLD -1.7 dB, RATIO 100, ATTACK 30 ms, RELEASE 1200 ms, **makeup** lit (on), KNEE view.
+- **CLIPPER:** INPUT +36 dB, THRESH -0.08 dB, OUTPUT 0 dB, HQ button not lit (so `oversample` 0 here is "off"; the control is the same kind as DRIVE's lit HQ button).
+- **BITCOOKER:** SAMPLERATE 44.0 kHz, BIT DEPTH 24, JITTER 100 %, MIX 100 %.
+- **Mixer layout screenshot:** matches the files (bass has STEREOIZER in slot 4 and SIDECHAIN in slot 5, and so on).
+
 ## Confirmed
 
 - Plugin names and every parameter name above.
@@ -57,8 +72,8 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 ## Still not confirmed
 
-- SIDECHAIN `output`: a symmetric -12 to +12 dB range suggests output gain after ducking, so the app writes 0. How deep the duck goes is not a control; it follows threshold and the plugin's own ratio.
-- LIMITER `gain`: input gain or output ceiling. The app writes 0, which is neutral if it is input gain.
-- EQ band frequency ranges (exact low, mid and high limits) and the EQ's Q and gain readouts in Hz and dB. The user can supply them.
-- UTILITY `channel` values 1 and 2; WARBLE (never changed).
+- LIMITER `gain`: input gain or output ceiling. Both extremes (-18 and +18 dB) were seen and the meters do not say. The app writes 0, which is neutral if it is input gain.
+- SIDECHAIN `output`: -12 to +12 dB, almost certainly an output gain after ducking, so the app writes 0. Duck depth is not a control.
+- EQ band types are bells; exact frequency limits per band are only known from the graph (low node reaches about 20 Hz, high node at least 12.6 kHz).
+- UTILITY `channel` values 1 and 2 (probably L only and R only); WARBLE (never changed).
 - What the app writes at present is in `src/audio/mixerChain.ts`; a test (`mixerChain.test.ts`) checks it against the two fixtures.

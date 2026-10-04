@@ -24,13 +24,13 @@ export const bassSidechain = (): MixerEffect =>
   effect("SIDECHAIN", { source: SIDECHAIN_SOURCE_BUS, threshold: -24, release: 120, output: 0 });
 
 /**
- * Heavy and warm master chain, in signal order: EQ (a little weight, the top tucked back), DRIVE (parallel saturation for warmth),
+ * Heavy and warm master chain, in signal order: EQ (three bell bands: a little weight at 60 Hz, a broad gentle cut at 10 kHz), DRIVE (parallel saturation for warmth),
  * COMPRESSOR (slow-attack glue), CLIPPER (shaves the peaks) and LIMITER (the last catch). Ranges: EQ gain +-18 dB, Q 0.5..10;
  * DRIVE drive 0..36 dB, mix 0..1, out -90..0 dB; COMPRESSOR ratio 1..100, attack 0.01..30 ms, release 10..1200 ms, makeup 0/1 (auto make-up, left off);
  * CLIPPER input +-36 dB, output -36..0 dB, threshold about -35..0 dB; LIMITER attack 1.5..6 ms, release 60..1000 ms; `oversample` is the HQ button (0 off, 1 on).
  */
 export const masterChain = (): MixerEffect[] => [
-  effect("EQ", { "lo freq": 60, "lo gain": 2, "lo Q": 0.7, "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, "hi freq": 10000, "hi gain": -2.5, "hi Q": 0.7 }),
+  effect("EQ", { "lo freq": 60, "lo gain": 2, "lo Q": 0.7, "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, "hi freq": 10000, "hi gain": -3, "hi Q": 0.5 }),
   effect("DRIVE", { drive: 6, mix: 0.3, out: 0, oversample: 1 }),
   effect("COMPRESSOR", { threshold: -12, ratio: 2, attack: 20, release: 200, makeup: 0, visual: 0 }),
   effect("CLIPPER", { input: 0, output: 0, threshold: -1.5, oversample: 1 }),
