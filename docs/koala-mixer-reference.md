@@ -29,19 +29,36 @@ Range is minimum-file value to maximum-file value. "Same in both files" means th
 - **CLIPPER** (in the files: master slot 3): `input` -35.982 to 36; `output` -36 to 0; `oversample` 0 (same in both files); `threshold` -34.5537 to -0.0846
 - **BITCOOKER** (in the files: master slot 4): `bit depth` 3 to 24; `jitter` 0.0067 to 1; `mix` 0 to 1; `samplerate` 800 to 43970.2
 
+## Read from screenshots of the minimum project
+
+Screens of every plugin in the all-minimum project. They show how each stored value is labelled in Koala.
+
+- **SIDECHAIN:** SOURCE is a dropdown listing the buses by name, and it showed "kick" with `source` 0, so `source` is the bus number (0 = A). THRESHOLD -60 dB, RELEASE 10.0 ms, OUTPUT -12.0 dB.
+- **CLIPPER:** INPUT -36 dB, THRESH -35 dB, OUTPUT -36 dB, and an **HQ** button (off, `oversample` 0). The transfer curve is a soft clip.
+- **DRIVE:** DRIVE 0 dB, MIX 0.03 % (`mix` is a 0 to 1 fraction), OUT -90 dB, **HQ** button (off, `oversample` 0; the maximum file has 1, so 1 is HQ on).
+- **COMPRESSOR:** THRESHOLD -42 dB, RATIO 1.0, ATTACK 0.010 ms, RELEASE 10.0 ms. **makeup** is an on/off button (auto make-up gain), not a knob: `makeup` 0 = off, 1 = on. **KNEE / GRAPH** is a view switch (`visual` 0 = KNEE).
+- **LIMITER:** GAIN -18.0 dB, ATTACK 1.5 ms, RELEASE 60 ms, with IN, G/R and OUT meters. The screen does not say whether GAIN is input gain or an output ceiling.
+- **UTILITY:** CHANNEL is a dropdown, `channel` 3 = **L+R MONO** (0 in the maximum file, probably stereo; 1 and 2 not seen). GAIN -18 dB, PAN shows "C" at 0.5, **flip phase** button.
+- **STEREOIZER:** SPREAD 0 %, LOW CUT 90 Hz.
+- **PLATE REVERB:** TIME 100 ms (stored as 0.1, so `time` is in **seconds**, up to 30), SIZE 2.0 m (metres, 2 to 30), PRE-DELAY 0 ms, BRIGHTNESS 0, DRY/WET 0 %.
+- **FREEVERB:** SIZE 0, TONE 0, DRY/WET 0 %, and a **stereo** button (lit, `stereo` 1 = on).
+- **BITCOOKER:** SAMPLERATE 800 Hz, BIT DEPTH 3, JITTER 0.67 %, MIX 0 %.
+- **EQ:** a graph with three draggable nodes (low, mid, high; the low and high nodes sit at the graph's edges, the high one read 12.6 kHz at -18 dB). The graph's frequency axis runs from about 20 Hz past 10 kHz.
+- **Mixer screen:** buses kick, bass, drums, melodic and MAIN, five slots each. In the file, bass has STEREOIZER in slot 4 and SIDECHAIN in slot 5, drums UTILITY and WARBLE, melodic PLATE, METER, LIMITER, FREEVERB in slots 2 to 5, and MAIN EQ, DRIVE, COMP, CLIPPER, BITCOOKER.
+
 ## Confirmed
 
 - Plugin names and every parameter name above.
-- The SIDECHAIN plugin sat on the bass bus with `source` 0 in both files. The user placed it there as the kick-to-bass sidechain, so `source` is taken to be a bus number (0 = bus A, the kick bus).
-- Ranges for gains, Q, ratio, times, mix and the like, from the two files.
+- `SIDECHAIN.source` is a bus number (the dropdown named bus 0 "kick").
+- `oversample` is the HQ button: 0 off, 1 on (DRIVE seen both ways; CLIPPER is the same control).
+- `COMPRESSOR.makeup` is an on/off auto make-up button; `visual` is the KNEE/GRAPH view.
+- Units: times in ms except PLATE REVERB `time` in seconds, gains and thresholds in dB, `mix`/`dry/wet`/`spread`/`jitter` as 0 to 1 fractions, `UTILITY.channel` 3 = L+R MONO.
+- Ranges for gains, Q, ratio, times and the like, from the two files.
 
-## Not confirmed (user will supply screenshots)
+## Still not confirmed
 
-- SIDECHAIN `output`: gain after ducking, or duck depth? The app writes 0.
-- LIMITER `gain`: input gain or output ceiling? The app writes 0.
-- COMPRESSOR `makeup`: units (0 to 1 here). The app writes 0.
-- SIDECHAIN `source` as a bus number: inferred, not read from a screen.
-- EQ `lo freq`, `mid freq`, `hi freq` ranges: those knobs were not moved between the files (values 20 to 31.7, about 1016 to 1047, 9236 to 12599 are knob positions, not limits).
-- CLIPPER `oversample` is 0 in both files, so only 0 is known to be valid. DRIVE `oversample` is 0 to 1.
-- UTILITY `channel` (3 in the min file, 0 in the max file) and WARBLE (identical in both) are not understood.
+- SIDECHAIN `output`: a symmetric -12 to +12 dB range suggests output gain after ducking, so the app writes 0. How deep the duck goes is not a control; it follows threshold and the plugin's own ratio.
+- LIMITER `gain`: input gain or output ceiling. The app writes 0, which is neutral if it is input gain.
+- EQ band frequency ranges (exact low, mid and high limits) and the EQ's Q and gain readouts in Hz and dB. The user can supply them.
+- UTILITY `channel` values 1 and 2; WARBLE (never changed).
 - What the app writes at present is in `src/audio/mixerChain.ts`; a test (`mixerChain.test.ts`) checks it against the two fixtures.

@@ -80,6 +80,11 @@ describe("effect parameters", () => {
     expect(Object.keys(fx.parameters).sort()).toEqual(Object.keys(a).sort());
     for (const [key, value] of Object.entries(fx.parameters)) {
       if (key.endsWith(" freq")) continue;
+      // HQ and auto make-up are on/off buttons: 0 or 1.
+      if (key === "oversample" || key === "makeup") {
+        expect([0, 1], `${name} ${key}`).toContain(value);
+        continue;
+      }
       const [min, max] = [Math.min(a[key], b[key]), Math.max(a[key], b[key])];
       expect(value, `${name} ${key}`).toBeGreaterThanOrEqual(min - 1e-6);
       expect(value, `${name} ${key}`).toBeLessThanOrEqual(max + 1e-6);
