@@ -23,7 +23,6 @@ import { emptyPadInBank, movePad, nextEmptyPad, removePad, replaceMisfit } from 
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { LayoutPicker } from "./components/LayoutPicker";
-import { ViewToggle, type PadView } from "./components/ViewToggle";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import { extraDrumCount, fillGhostSlot, withoutExtraDrums, type ExtraDrums } from "./audio/extraDrums";
@@ -168,8 +167,12 @@ function App() {
   const [drawerAfter, setDrawerAfter] = useState(false);
   /** Set while the export is waiting for the answer about drums the layout has no slot for. */
   const [extraPrompt, setExtraPrompt] = useState(false);
-  /** On the finger-drumming page, whether the top box shows the drum swap list or the tuning controls. */
-  const [padView, setPadView] = useState<PadView>("swap");
+  /**
+   * Tuning mode, switched by the tuning fork: the key drawer comes down with the pitch trim slider beneath it. Sliding the
+   * drawer shut leaves the full tuning panel (waveform and all); pressing the fork again ends tuning mode, and the
+   * hot-swap list comes back.
+   */
+  const [tuning, setTuning] = useState(false);
   /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
@@ -406,6 +409,7 @@ function App() {
     setNormalizedData({});
     setLongSamples([]);
     setDrawer(null);
+    setTuning(false);
     setSelected(null);
     setKeyPc(null);
     setTunedTarget(null);
@@ -605,7 +609,6 @@ function App() {
     const pad = pads[index];
     if (!pad) return;
     setSelected(index);
-    setPadView(pad.tune ? "tune" : "swap");
     if (pad.placeholder) return; // silent: nothing to play
     holdVoice.current?.release();
     holdVoice.current = null;
@@ -983,7 +986,6 @@ function App() {
         ],
         slotCategory,
       )}
-      colorOf={colorOfPad}
       audioOf={audioOf}
       onSwap={(other) => {
         if (hidden[other.origIndex]) return swapInHidden(other, selectedPad);
@@ -994,9 +996,22 @@ function App() {
   );
 
   const keyDrawerDrag = useDrawerDrag(() => setDrawer(null));
+  /** Whether the screen shows the tuning panel (rather than the hot-swap list): in tuning mode, or always when there is no layout to swap in. */
+  const tuneShown = !!selectedPad && isReal(selectedPad) && (tuning || !layout.on);
   const toggleDrawer = (which: "keys" | "types") => {
     setDrawerAfter(drawer !== null && drawer !== which);
     setDrawer((d) => (d === which ? null : which));
+  };
+  /** The tuning fork: into tuning mode with the key drawer open, or out of it (closing the drawer) and back to hot-swapping. */
+  const toggleTuning = () => {
+    if (tuning) {
+      setTuning(false);
+      if (drawer === "keys") setDrawer(null);
+      return;
+    }
+    setTuning(true);
+    setDrawerAfter(drawer !== null);
+    setDrawer("keys");
   };
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
   /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
@@ -1156,7 +1171,7 @@ function App() {
         {/* Controls: the two drawers on the left, the four banks in the middle and the menu on the right, mirrored around the banks. */}
         <div className="controls">
           <div className="controls__side">
-            <button className="icon-button" aria-label="Key" aria-expanded={drawer === "keys"} onClick={() => toggleDrawer("keys")}>
+            <button className="icon-button" aria-label="Key" aria-pressed={tuning} onClick={toggleTuning}>
               <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
                 <path d="M7.5 2.5v8a4.5 4.5 0 0 0 9 0v-8M12 15v6.5" />
               </svg>
@@ -1194,21 +1209,26 @@ function App() {
         </div>
 
         <div className="screen-wrap">
-          <section className={`screen${drawer === "keys" ? " screen--keys" : ""}`}>
+          <section className={`screen${tuneShown ? " screen--tune" : ""}${drawer === "keys" ? " screen--keys" : ""}`}>
             {selectedPad?.placeholder && !layout.on ? (
               <div className="screen__message">
                 <strong>{selectedPad.placeholder.label}</strong>
                 <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
               </div>
             ) : selectedPad ? (
-              layout.on && !(drawer === "keys" && isReal(selectedPad)) ? (
-                <div className="screen__stack">
-                  <ViewToggle view={padView} onChange={setPadView} />
-                  {padView === "swap" || selectedPad.placeholder || selectedPad.ghost ? swapList : panel}
-                </div>
-              ) : (
-                panel
-              )
+              <>
+                {/* The hot-swap list and the tuning panel share the screen: one fades out as the other comes in. */}
+                {layout.on && (
+                  <div className="screen__layer screen__layer--swap" inert={tuneShown}>
+                    {swapList}
+                  </div>
+                )}
+                {(!layout.on || isReal(selectedPad)) && (
+                  <div className="screen__layer screen__layer--tune" inert={!tuneShown}>
+                    {panel}
+                  </div>
+                )}
+              </>
             ) : hasProject ? (
               <div className="screen__message">
                 <strong>{projectName}</strong>

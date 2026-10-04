@@ -1,61 +1,61 @@
-import { useEffect, useState } from "react";
-import { textColorOn } from "../audio/palettes";
+import { useEffect, useRef } from "react";
+import { cleanSampleName } from "../audio/sampleName";
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
 
 /**
- * Hot-swap list for the finger-drumming page: every other drum in the project, each row in its own colour,
- * with a play button and a swap button that trades places with the slot the user tapped.
+ * Hot-swap list: the sounds that can take the tapped pad's place, drawn on the LCD like the other screens (no colour
+ * coding), one slim row each with the sound's name, a play button and a swap button. The list scrolls on its own.
  */
-const PAGE_SIZE = 4;
-
 export function SwapList({
   slotLabel,
   candidates,
-  colorOf,
   audioOf,
   onSwap,
 }: {
   /** Name of the tapped slot, e.g. "PAD 3". */
   slotLabel: string;
   candidates: Pad[];
-  colorOf: (pad: Pad) => string;
   audioOf: (pad: Pad) => Float32Array[];
   onSwap: (pad: Pad) => void;
 }) {
   const preview = useSoundPreview();
-  const [page, setPage] = useState(0);
-  const pages = Math.max(1, Math.ceil(candidates.length / PAGE_SIZE));
-  const at = Math.min(page, pages - 1);
-  useEffect(() => setPage(0), [slotLabel]);
-  const shown = candidates.slice(at * PAGE_SIZE, (at + 1) * PAGE_SIZE);
+  const rows = useRef<HTMLDivElement>(null);
+  // A different pad starts its list from the top, and stops any sound still playing.
+  useEffect(() => {
+    if (rows.current) rows.current.scrollTop = 0;
+    preview.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotLabel]);
   return (
     <div className="swap-list">
       <div className="swap-list__head">
         <strong>{slotLabel}: swap in</strong>
+        <span>{candidates.length}</span>
       </div>
-      <div className="swap-list__rows">
+      <div className="swap-list__rows" ref={rows}>
         {candidates.length === 0 && <div className="swap-list__empty">No other sounds to swap in.</div>}
-        {shown.map((pad) => {
-          const bg = colorOf(pad);
-          const fg = textColorOn(bg);
+        {candidates.map((pad) => {
+          const name = cleanSampleName(pad.name);
           return (
-            <div key={pad.origIndex} className="swap-row" style={{ background: bg, color: fg }}>
+            <div key={pad.origIndex} className="swap-row">
+              <span className="swap-row__name" title={pad.name}>
+                {name}
+              </span>
               <button
-                className="swap-row__btn"
-                onPointerDown={() => preview.toggle(pad.origIndex, audioOf(pad), pad.sampleRate)}
-                aria-label={`${preview.playing === pad.origIndex ? "Stop" : "Play"} ${pad.name}`}
+                className={`swap-row__btn${preview.playing === pad.origIndex ? " swap-row__btn--on" : ""}`}
+                onClick={() => preview.toggle(pad.origIndex, audioOf(pad), pad.sampleRate)}
+                aria-label={`${preview.playing === pad.origIndex ? "Stop" : "Play"} ${name}`}
               >
                 {preview.playing === pad.origIndex ? "■" : "▶"}
               </button>
-              <span className="swap-row__name">{pad.name}</span>
               <button
                 className="swap-row__btn"
                 onClick={() => {
                   preview.stop();
                   onSwap(pad);
                 }}
-                aria-label={`Swap in ${pad.name}`}
+                aria-label={`Swap in ${name}`}
               >
                 ↻
               </button>
@@ -63,19 +63,6 @@ export function SwapList({
           );
         })}
       </div>
-      {pages > 1 && (
-        <div className="swap-list__pager">
-          <button onClick={() => setPage(at - 1)} disabled={at === 0} aria-label="Previous page">
-            ◀
-          </button>
-          <span>
-            {at + 1} / {pages}
-          </span>
-          <button onClick={() => setPage(at + 1)} disabled={at >= pages - 1} aria-label="Next page">
-            ▶
-          </button>
-        </div>
-      )}
     </div>
   );
 }
