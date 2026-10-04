@@ -2,12 +2,12 @@ import { CATEGORIES } from "../audio/classify";
 import { PALETTES, colorFor } from "../audio/palettes";
 import { PLATES } from "./typePlates";
 
-/** Every sound type in the order the sound type drawer lays them out: five columns, drums on the top two rows. */
+/** Every sound type in the order the sound type keys lays them out: five columns, drums on the top two rows. */
 const TYPES = PLATES.flatMap((plate) => plate.ids);
 const LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.label]));
 
 /**
- * Centered popup listing every palette. Each one is previewed as the sound type drawer's 5 x 3 grid, so you see each
+ * Centered popup listing every palette. Each one is previewed as the sound type keys's 5 x 3 grid, so you see each
  * colour where it will land; tap one to choose it.
  */
 export function PalettePicker({

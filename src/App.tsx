@@ -1175,7 +1175,7 @@ function App() {
     return pad.category;
   };
   const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : pad.category ? autoColorOf(pad) : "#b3a6f2");
-  /** The note marked in the key drawer: the project key, or in "Tune one" the selected pad's own key. */
+  /** The note marked under the keys: the project key, or in "Tune one" the selected pad's own key. */
   const shownKey = tuneAll ? keyPc : selectedPad?.tune ? (selectedPad.keyPc ?? keyPc) : null;
 
   return (
@@ -1188,6 +1188,19 @@ function App() {
       }}
     >
       <div className="phone">
+        {/* Outside the menu: closing the menu unmounts it, and an input that is gone never reports the folder that was picked. */}
+        <input
+          ref={addPackInput}
+          type="file"
+          hidden
+          // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
+          webkitdirectory=""
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length) void addPack(() => findPackInFileList(files));
+          }}
+        />
         {menuOpen && (
           <div className="menu">
             <button
@@ -1284,18 +1297,6 @@ function App() {
             >
               {addPackStatus || "Add pack"}
             </button>
-            <input
-              ref={addPackInput}
-              type="file"
-              hidden
-              // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
-              webkitdirectory=""
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                e.target.value = "";
-                if (files.length) void addPack(() => findPackInFileList(files));
-              }}
-            />
             <label className="menu__a4">
               A4 reference (Hz)
               <input

@@ -197,7 +197,7 @@
   border-radius: 0.5cqw;
   background: #000;
   color: var(--oled);
-  font: 400 6.15cqw/1 "Silkscreen", monospace;
+  font: 400 5.6cqw/1 "Silkscreen", monospace;
   text-shadow: 0 0 6px var(--oled-glow);
   text-transform: uppercase;
   -webkit-font-smoothing: none;
@@ -273,10 +273,11 @@
 }
 
 .type-readout__name {
-  font-size: 12.3cqw;
+  font-size: 8.4cqw;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .type-readout__sample {
@@ -307,7 +308,7 @@
 
 .pad-panel__note {
   min-width: 22cqw;
-  font-size: 18.5cqw;
+  font-size: 15cqw;
   line-height: 0.85;
   white-space: nowrap;
 }
@@ -781,10 +782,10 @@
   top: 1.5cqw;
   right: 1.5cqw;
   overflow: hidden;
-  font-size: 2.6cqw;
+  font-size: 2.4cqw;
   font-weight: 700;
   line-height: 3.1cqw;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1244,11 +1245,11 @@
   letter-spacing: 0.04em;
   text-align: center;
   text-transform: uppercase;
-  color: rgba(70, 64, 48, 0.75);
+  color: var(--ink3);
   overflow-wrap: anywhere;
 }
 
-/* ---- classifier drawer and long-sample list ---- */
+/* ---- long-sample list ---- */
 .sound-row {
   flex: none;
   display: flex;
