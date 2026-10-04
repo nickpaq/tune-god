@@ -15,3 +15,28 @@ export function cleanSampleName(fileName: string): string {
     .trim();
   return cleaned || base.replace(/_+/g, " ").trim() || fileName;
 }
+
+/** A pack tag in front of the name: "Rio - Bell Perc" has the tag "Rio". */
+const TAGGED = /^(.+?)\s+[-–—]\s+(.+)$/;
+
+/**
+ * The tags (lower case) that many sounds in the project start with, such as the pack's name in "Rio - Bell Perc". A tag counts
+ * once at least four sounds and 30% of all of them carry it; shorter runs are just part of those names.
+ */
+export function packTags(fileNames: string[]): Set<string> {
+  const counts = new Map<string, number>();
+  for (const name of fileNames) {
+    const tag = cleanSampleName(name).match(TAGGED)?.[1].toLowerCase();
+    if (tag) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+  const common = new Set<string>();
+  for (const [tag, n] of counts) if (n >= 4 && n >= fileNames.length * 0.3) common.add(tag);
+  return common;
+}
+
+/** A sound's name for the swap list: cleaned (see cleanSampleName), and without a pack tag the project's sounds share. */
+export function displayName(fileName: string, tags: Set<string>): string {
+  const cleaned = cleanSampleName(fileName);
+  const m = cleaned.match(TAGGED);
+  return m && tags.has(m[1].toLowerCase()) ? m[2] : cleaned;
+}

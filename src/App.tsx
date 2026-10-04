@@ -3,6 +3,7 @@ import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { appendPackToProject, buildPackProject, entriesOfDrop, findPackInEntries, findPackInFileList, type FoundPack } from "./audio/packProject";
 import { assignFill, fillPlan, missingSlots } from "./audio/packFill";
+import { displayName, packTags } from "./audio/sampleName";
 import { packByteBudget, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
@@ -1109,6 +1110,8 @@ function App() {
       return next;
     });
   };
+  /** Pack tags the project's sounds share ("Rio - ..."), left out of the names in the swap list. */
+  const tags = packTags([...Object.values(pads).filter(isReal), ...Object.values(hidden)].map((p) => p.name));
   const swapList = selectedPad && (
     <SwapList
       slotLabel={selectedPad.ghost ? `${GHOST_LABEL[selectedPad.ghost.kind]} (made on export unless filled)` : `PAD ${(selectedPad.index % 16) + 1}`}
@@ -1121,6 +1124,7 @@ function App() {
         slotCategory,
       ).sort((a, b) => (slotCategory === "bass" ? Number(!!a.is808 !== !!selectedPad.is808) - Number(!!b.is808 !== !!selectedPad.is808) : 0))}
       audioOf={audioOf}
+      nameOf={(p) => displayName(p.name, tags)}
       onSwap={(other) => {
         if (hidden[other.origIndex]) return swapInHidden(other, selectedPad);
         recordEdit();

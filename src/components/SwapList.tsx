@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { cleanSampleName } from "../audio/sampleName";
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
 
@@ -11,12 +10,15 @@ export function SwapList({
   slotLabel,
   candidates,
   audioOf,
+  nameOf,
   onSwap,
 }: {
   /** Identifies the tapped slot; the list starts from the top again when it changes. */
   slotLabel: string;
   candidates: Pad[];
   audioOf: (pad: Pad) => Float32Array[];
+  /** How a sound is named in the list. */
+  nameOf: (pad: Pad) => string;
   onSwap: (pad: Pad) => void;
 }) {
   const preview = useSoundPreview();
@@ -33,7 +35,7 @@ export function SwapList({
       <div className="swap-list__rows" ref={rows}>
         {candidates.length === 0 && <div className="swap-list__empty">No other sounds to swap in.</div>}
         {candidates.map((pad) => {
-          const name = cleanSampleName(pad.name);
+          const name = nameOf(pad);
           return (
             <div key={pad.origIndex} className="swap-row">
               <span className="swap-row__name" title={pad.name}>
