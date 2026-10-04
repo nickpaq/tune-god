@@ -118,7 +118,7 @@ const NAME_RULES: [CategoryId | "hat", RegExp][] = [
   ["closedHat", /\b(closed ?hat|closed ?hh|chat|chh|pedal)\b/],
   ["hat", /\b(hi ?hat|hh|hat|hats)\b/],
   ["vox", /\b(vocal|vocals|vox|voice|choir|acapella|chant|breath|adlib|ad-lib)\b/],
-  ["fx", /\b(fx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone)\b/],
+  ["fx", /\b(fx|sfx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone|zap|laser|siren|reverse|reversed|rev|scratch|vinyl|crackle|static|stinger|sting|boom|rumble|burst|effect|effects|sci ?fi|explosion|bomb)\b/],
   ["perc", /\b(tom|toms|perc|percussion|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro|drum)\b/],
   ["bass", /\b(808|bass|sub|reese)\b/],
   ["melodic", /\b(piano|keys|key|bell|bells|pluck|guitar|harp|mallet|marimba|kalimba|rhodes|epiano|stab|vibraphone|glock|glockenspiel|celesta|chime|pad|synth|lead|chord|chords|strings|string|organ|arp|saw|brass|horn|flute)\b/],
@@ -139,11 +139,23 @@ const LOOP_OF: Partial<Record<CategoryId, CategoryId>> = {
 
 /** Decay (seconds to fall 20 dB) at which a hat with no open/closed keyword counts as open. */
 const OPEN_HAT_DECAY = 0.3;
-/** Decay at which an unnamed hat rings so long it is a cymbal. */
+/** Decay at which a sound with no name at all rings so long it is a cymbal. */
 const CYMBAL_DECAY = 1.0;
 
+/** A sound named a hat is open or closed, never a cymbal, however long its tail measures. */
+function namedHatByDecay(decay: number): CategoryId {
+  return decay >= OPEN_HAT_DECAY ? "openHat" : "closedHat";
+}
+
 function hatByDecay(decay: number): CategoryId {
-  return decay >= CYMBAL_DECAY ? "cymbal" : decay >= OPEN_HAT_DECAY ? "openHat" : "closedHat";
+  return decay >= CYMBAL_DECAY ? "cymbal" : namedHatByDecay(decay);
+}
+
+/** Whether a (normalised, lower-case) name says "open" or "closed" next to a hat word: "open hi hat", "hh open", "hat o", "hat c". */
+export function hatOpenness(name: string): "openHat" | "closedHat" | null {
+  if (/\b(open|opened|oh|ohh|o)\b/.test(name)) return "openHat";
+  if (/\b(closed|close|ch|chh|c|pedal)\b/.test(name)) return "closedHat";
+  return null;
 }
 
 /** Whether a file or folder name says 808 ("808 Kick", "Sub_808_01", "808s"): the long, tuned sub kicks bass pads keep apart from ordinary bass. */
@@ -160,6 +172,7 @@ export function classifyByName(fileName: string): CategoryId | "hat" | null {
   const isLoop = /\b(loop|loops)\b/.test(name);
   for (const [id, re] of NAME_RULES) {
     if (!re.test(name)) continue;
+    if (id === "hat" && !isLoop) return hatOpenness(name) ?? "hat";
     return isLoop && id !== "hat" ? (LOOP_OF[id] ?? id) : isLoop ? "drumLoop" : id;
   }
   return null;
@@ -304,7 +317,7 @@ export function classifySample(
   if (byName && byName !== "hat") return byName;
 
   const f = extractFeatures(mono, sampleRate);
-  if (byName === "hat") return f ? hatByDecay(f.decay) : "closedHat";
+  if (byName === "hat") return f ? namedHatByDecay(f.decay) : "closedHat";
   if (!f) return "other";
   const pitched = detectedMidi != null;
 
@@ -319,6 +332,8 @@ export function classifySample(
     if (f.centroid > 6500 && f.high > 0.5) return hatByDecay(f.decay);
     if (f.low > 0.45 && f.centroid < 500) return "kick";
     if (f.flatness > 0.15 && f.centroid > 1500) return "snare";
+    return "other";
   }
-  return "other";
+  // Long but not a loop and with no pitch: a bright wash is a cymbal, anything else (risers, sweeps, impacts) is an effect.
+  return f.centroid > 6500 && f.high > 0.5 ? "cymbal" : "fx";
 }

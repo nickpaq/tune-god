@@ -11,6 +11,24 @@ function seeded(seed = 1) {
 
 const file = (folders: string[], name: string, size = 1000): PackFile<null> => ({ folders, name, size, source: null });
 
+describe("hats and effects the names only hint at", () => {
+  it("reads open and closed from separate words next to a hat word", () => {
+    for (const name of ["open hi-hat 3.wav", "HH Open 01.wav", "Hat_O_01.wav", "Hihat Open.wav"]) expect(categoryOfFile(["Pack"], name)).toBe("openHat");
+    for (const name of ["closed hihat 2.wav", "HH_Closed_01.wav", "Hat_C_01.wav", "Hihat Closed.wav"]) expect(categoryOfFile(["Pack"], name)).toBe("closedHat");
+  });
+
+  it("splits a combined hats and cymbals folder by file name", () => {
+    expect(categoryOfFolder("Hats & Cymbals")).toBe("hat");
+    expect(categoryOfFile(["Hats & Cymbals"], "Crash 1.wav")).toBe("cymbal");
+    expect(categoryOfFile(["Hats & Cymbals"], "Open Hat 1.wav")).toBe("openHat");
+    expect(categoryOfFile(["Hats & Cymbals"], "Closed Hat 1.wav")).toBe("closedHat");
+  });
+
+  it("recognises more effect names", () => {
+    for (const name of ["Zap 1.wav", "Laser_02.wav", "Siren.wav"]) expect(categoryOfFile(["Pack"], name)).toBe("fx");
+  });
+});
+
 describe("classifying from folder names", () => {
   it("folds plural and loosely named folders into the existing types", () => {
     expect(categoryOfFolder("Kicks")).toBe("kick");
@@ -42,7 +60,7 @@ describe("classifying from folder names", () => {
   });
 
   it("lets a hats folder's file names say open, and calls the rest closed", () => {
-    expect(categoryOfFile(["Hats"], "open_01.wav")).toBe("closedHat" /* "open" alone is no keyword */);
+    expect(categoryOfFile(["Hats"], "open_01.wav")).toBe("openHat");
     expect(categoryOfFile(["Hats"], "open hat 01.wav")).toBe("openHat");
     expect(categoryOfFile(["Hats"], "hat 01.wav")).toBe("closedHat");
   });

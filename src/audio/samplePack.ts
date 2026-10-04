@@ -2,7 +2,7 @@
 // each file is classified from its folder names, then up to one pad bank's worth are picked so every
 // sound type is as evenly represented as the pack allows, within a memory budget. All of this works on
 // file names and sizes only; no audio is read until a file has been picked.
-import { classifyByName, is808Name, type CategoryId } from "./classify";
+import { classifyByName, hatOpenness, is808Name, type CategoryId } from "./classify";
 
 const MB = 1024 * 1024;
 /** Total file size a pack import may load when nothing better is known. Decoded audio takes about three times this in memory. */
@@ -62,7 +62,7 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["cymbal", /\b(cymbals?|crash(es)?|rides?|chinas?|splash(es)?)\b/],
   ["hat", /\b(hi ?hats?|hats?|hh)\b/],
   ["vox", /\b(vocals?|vox|voices?|choirs?|acapellas?|chants?|breaths?|ad ?libs?|speech|shouts?)\b/],
-  ["fx", /\b(fx|sfx|effects?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|FX|booms?)\b/],
+  ["fx", /\b(fx|sfx|effects?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|booms?|zaps?|lasers?|sirens?|reverses?|reversed|scratch(es)?|vinyl|crackles?|stingers?|stings?|rumbles?|bursts?|explosions?|sci ?fi)\b/],
   ["perc", /\b(toms?|perc|percs|percussions?|congas?|bongos?|tamb(ourines?)?|cowbells?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
   ["bass", /\b(808s?|bass(es)?|subs?|reese)\b/],
   ["melodic", /\b(pianos?|keys?|keyboards?|bells?|plucks?|guitars?|harps?|mallets?|marimbas?|kalimbas?|rhodes|epianos?|stabs?|vibraphones?|glock(enspiel)?s?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|organs?|brass|horns?|flutes?|melod(y|ic|ies)|instruments?|tonal)\b/],
@@ -83,6 +83,8 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
   const isLoop = /\bloops?\b/.test(name);
   for (const [id, re] of FOLDER_RULES) {
     if (!re.test(name)) continue;
+    // "Hats & Cymbals" holds both: the file name decides, as in any hats folder.
+    if (id === "cymbal" && /\b(hi ?hats?|hats?|hh)\b/.test(name)) return "hat";
     if (!isLoop) return id;
     // A "loops" folder holds loops of its type.
     if (id === "perc" || id === "percLoop") return "percLoop";
@@ -103,7 +105,9 @@ export function categoryOfFile(folders: string[], fileName: string): CategoryId 
     if (byFolder === "hat") {
       // A hats folder does not say open or closed, so the file name gets to.
       const hat = classifyByName(fileName);
-      return hat === "openHat" || hat === "cymbal" ? hat : "closedHat";
+      if (hat === "openHat" || hat === "cymbal") return hat;
+      // Inside a hats folder a bare "open" or "closed" in the file name is enough ("Open_01").
+      return hatOpenness(tidy(fileName.replace(/\.[a-z0-9]+$/i, ""))) ?? "closedHat";
     }
     if (byFolder) return byFolder;
   }
