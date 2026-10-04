@@ -29,8 +29,8 @@ import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import { extraDrumCount, fillGhostSlot, withoutExtraDrums, type ExtraDrums } from "./audio/extraDrums";
 import { SwapList } from "./components/SwapList";
-import { ClassifierDrawer } from "./components/ClassifierDrawer";
-import { useDrawerDrag } from "./components/useDrawerDrag";
+import { TypeKeys } from "./components/TypeKeys";
+import { Waveform } from "./components/Waveform";
 import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming, EMPTY_PAD_LABEL } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, kitSlotCounts, layoutById } from "./audio/fingerLayouts";
@@ -40,11 +40,18 @@ import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadSymbol } from "./components/PadSymbol";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
-import { A4_REFERENCE_RANGE, clampA4Reference, referenceOffsetSemitones, semitonesToRatio } from "./audio/theory";
+import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, trimCents } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import "./App.css";
 
 const BANKS = ["A", "B", "C", "D"];
+/** What the screen and the deck under it are doing: hot-swapping the selected pad's sound, choosing its sound type, or tuning. */
+type Mode = "tune" | "type" | "swap";
+const MODES: { id: Mode; label: string; aria: string }[] = [
+  { id: "tune", label: "Tune", aria: "Tune mode" },
+  { id: "type", label: "Type", aria: "Sound type mode" },
+  { id: "swap", label: "Swap", aria: "Hot swap mode" },
+];
 /** How many edits undo can step back through. */
 const MAX_HISTORY = 100;
 /** Slider drags on the same control within this window count as one undo step. */
@@ -163,18 +170,10 @@ function App() {
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
-  /** The drawer open under the key bar: the keyboard (tuning key), the sound classifier, or neither. */
-  const [drawer, setDrawer] = useState<"keys" | "types" | null>(null);
-  /** Set when one drawer replaces another, so the new one waits for the old one to slide shut. */
-  const [drawerAfter, setDrawerAfter] = useState(false);
   /** Set while the export is waiting for the answer about drums the layout has no slot for. */
   const [extraPrompt, setExtraPrompt] = useState(false);
-  /**
-   * Tuning mode, switched by the tuning fork: the key drawer comes down with the pitch trim slider beneath it. Sliding the
-   * drawer shut leaves the full tuning panel (waveform and all); pressing the fork again ends tuning mode, and the
-   * hot-swap list comes back.
-   */
-  const [tuning, setTuning] = useState(false);
+  /** The mode keys: what the screen and the deck show. Swap is the resting mode; it needs the finger-drumming layout (see shownMode). */
+  const [mode, setMode] = useState<Mode>("swap");
   /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
@@ -214,6 +213,7 @@ function App() {
   /** What the Add pack button says while a pack is being added. */
   const [addPackStatus, setAddPackStatus] = useState("");
   const packInput = useRef<HTMLInputElement>(null);
+  const addPackInput = useRef<HTMLInputElement>(null);
 
   /** The sound type a dropped pack gave each pad (by pad number), used in place of the classifier's guess. */
   const categoryHints = useRef<Record<number, CategoryId>>({});
@@ -417,8 +417,6 @@ function App() {
     setLayout((l) => ({ ...l, on: false, pre: {} }));
     setNormalizedData({});
     setLongSamples([]);
-    setDrawer(null);
-    setTuning(false);
     setSelected(null);
     setKeyPc(null);
     setTunedTarget(null);
@@ -1107,14 +1105,21 @@ function App() {
     .sort((a, b) => a.index - b.index);
   const selectedPad = selected !== null ? pads[selected] : undefined;
 
+  /** Hot swap only exists with the finger-drumming layout; without it the screen starts on Tune. */
+  const shownMode: Mode = mode === "swap" && !layout.on ? "tune" : mode;
+  /** The note a pad is tuned to, or "--" when its tuning is off or there is no key yet. */
+  const keyNameOf = (pad: Pad) => {
+    const pc = pad.tune ? (pad.keyPc ?? keyPc) : null;
+    return pc === null ? "--" : NOTE_NAMES[pc];
+  };
+  const padName = (pad: Pad) => `${BANKS[Math.floor(pad.index / 16)]}${(pad.index % 16) + 1}`;
   const panel = selectedPad && !selectedPad.placeholder && !selectedPad.ghost && (
     <PadPanel
       pad={selectedPad}
-      autoColor={autoColor}
+      keyName={keyNameOf(selectedPad)}
       autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4)}
       onChange={(patch) => {
         if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
-        else if (patch.category) classifyPad(selectedPad, patch.category);
         else patchPad(selectedPad.index, patch);
       }}
     />
@@ -1156,24 +1161,6 @@ function App() {
     />
   );
 
-  const keyDrawerDrag = useDrawerDrag(() => setDrawer(null));
-  /** Whether the screen shows the tuning panel (rather than the hot-swap list): in tuning mode, or always when there is no layout to swap in. */
-  const tuneShown = !!selectedPad && isReal(selectedPad) && (tuning || !layout.on);
-  const toggleDrawer = (which: "keys" | "types") => {
-    setDrawerAfter(drawer !== null && drawer !== which);
-    setDrawer((d) => (d === which ? null : which));
-  };
-  /** The tuning fork: into tuning mode with the key drawer open, or out of it (closing the drawer) and back to hot-swapping. */
-  const toggleTuning = () => {
-    if (tuning) {
-      setTuning(false);
-      if (drawer === "keys") setDrawer(null);
-      return;
-    }
-    setTuning(true);
-    setDrawerAfter(drawer !== null);
-    setDrawer("keys");
-  };
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
   /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
   const captionOf = (pad: Pad | undefined): string => {
@@ -1286,6 +1273,29 @@ function App() {
             >
               Layouts
             </button>
+            <button
+              className="menu__button"
+              disabled={!hasProject || !layout.on || analyzing > 0 || !!addPackStatus}
+              title="Choose another sample pack folder. It only fills slots that are still missing a sound; everything you have stays as it is."
+              onClick={() => {
+                addPackInput.current?.click();
+                setMenuOpen(false);
+              }}
+            >
+              {addPackStatus || "Add pack"}
+            </button>
+            <input
+              ref={addPackInput}
+              type="file"
+              hidden
+              // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
+              webkitdirectory=""
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                if (files.length) void addPack(() => findPackInFileList(files));
+              }}
+            />
             <label className="menu__a4">
               A4 reference (Hz)
               <input
@@ -1329,150 +1339,133 @@ function App() {
           </div>
         )}
 
-        {/* Controls: the two drawers on the left, the four banks in the middle and the menu on the right, mirrored around the banks. */}
+        <div className="upper">
+        {/* Header: the mode keys on the left, the four banks in the middle and the menu on the right, each key in a tray. */}
         <div className="controls">
-          <div className="controls__side">
-            <button className="icon-button" aria-label="Key" aria-pressed={tuning} onClick={toggleTuning}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
-                <path d="M7.5 2.5v8a4.5 4.5 0 0 0 9 0v-8M12 15v6.5" />
-              </svg>
-            </button>
-            <button className="icon-button" aria-label="Sound type" aria-expanded={drawer === "types"} onClick={() => toggleDrawer("types")}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
-                <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-                <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
-                <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
-                <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
-              </svg>
-            </button>
-          </div>
-          <div className="banks">
-            {BANKS.map((name, i) => {
-              const hasSamples = Object.keys(pads).some((index) => Math.floor(Number(index) / 16) === i);
-              const cls = ["bank", shownBank === i && "bank--active", !hasSamples && "bank--empty", hover === `bank:${i}` && "bank--target"]
-                .filter(Boolean)
-                .join(" ");
+          <div className="tray">
+            {MODES.map((m) => {
+              const on = shownMode === m.id;
               return (
-                <button key={name} className={cls} data-drop="bank" data-index={i} onClick={() => setBank(i)}>
-                  {name}
+                <button
+                  key={m.id}
+                  className={`cap cap--mode${on ? " cap--on" : ""}`}
+                  aria-label={m.aria}
+                  aria-pressed={on}
+                  disabled={m.id === "swap" && !layout.on}
+                  title={m.id === "swap" && !layout.on ? "Hot swap needs the finger drumming layout (menu)" : undefined}
+                  onClick={() => setMode(m.id)}
+                >
+                  <span className="cap__led" />
+                  <span className="cap__legend">{m.label}</span>
                 </button>
               );
             })}
           </div>
-          <div className="controls__side">
-            <button className="icon-button icon-button--wide" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-button__glyph">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-              Menu
-            </button>
+          <div className="tray">
+            {BANKS.map((name, i) => {
+              const hasSamples = Object.keys(pads).some((index) => Math.floor(Number(index) / 16) === i);
+              const cls = ["cap", "cap--bank", shownBank === i && "cap--on", !hasSamples && "cap--empty", hover === `bank:${i}` && "cap--target"]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <button key={name} className={cls} aria-label={`Bank ${name}`} aria-pressed={shownBank === i} data-drop="bank" data-index={i} onClick={() => setBank(i)}>
+                  <span className="cap__led" />
+                  <span className="cap__legend">{name}</span>
+                </button>
+              );
+            })}
           </div>
+          <button className="cap cap--menu" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+            <svg viewBox="0 0 14 10" aria-hidden="true" className="cap--menu__glyph">
+              <path d="M1 1h12M1 5h12M1 9h12" />
+            </svg>
+            <span className="cap__legend">Menu</span>
+          </button>
         </div>
 
-        <div className="screen-wrap">
-          <section className={`screen${tuneShown ? " screen--tune" : ""}${drawer === "keys" ? " screen--keys" : ""}`}>
-            {selectedPad?.placeholder && !layout.on ? (
-              <div className="screen__message">
-                <strong>{selectedPad.placeholder.label}</strong>
-                <span>{selectedPad.placeholder.kind === "missing" ? "Silent placeholder: drag a sound here" : "Silent placeholder"}</span>
-              </div>
-            ) : selectedPad ? (
-              <>
-                {/* The hot-swap list and the tuning panel share the screen: one fades out as the other comes in. */}
-                {layout.on && (
-                  <div className="screen__layer screen__layer--swap" inert={tuneShown}>
-                    {swapList}
+        {/* The screen: a black OLED in Silkscreen, with a title bar in inverse video. It grows over the deck's place in Swap mode. */}
+        <div className={`screen-wrap screen-wrap--${shownMode}`}>
+          <section className="screen" aria-label={`Display: ${shownMode}`}>
+            <div className="oled">
+              {selectedPad && (
+                <div className="oled__head">
+                  <span>{shownMode === "swap" ? "Hot swap" : shownMode === "type" ? "Sound type" : "Tune"}</span>
+                  <span>{shownMode === "tune" && tuneAll ? "All pads" : shownMode === "tune" ? `Pad ${padName(selectedPad)}` : padName(selectedPad)}</span>
+                </div>
+              )}
+              {!hasProject ? (
+                <label className="dropzone">
+                  <svg className="dropzone__ants" aria-hidden="true">
+                    <rect className="dropzone__ants-base" pathLength="280" />
+                    <rect className="dropzone__ants-dash" pathLength="280" />
+                  </svg>
+                  <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
+                  <input
+                    type="file"
+                    hidden
+                    // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
+                    webkitdirectory=""
+                    ref={packInput}
+                    onChange={(e) => {
+                      const list = Array.from(e.target.files ?? []);
+                      e.target.value = "";
+                      if (list.length) void loadPack(() => findPackInFileList(list));
+                    }}
+                  />
+                  <strong>{loading ? importStatus || "Loading…" : "Drop a .koala project"}</strong>
+                  <span>or a sample pack folder</span>
+                  <span>or tap to choose one</span>
+                  <button
+                    type="button"
+                    className="dropzone__pack"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      packInput.current?.click();
+                    }}
+                  >
+                    Choose a pack folder
+                  </button>
+                </label>
+              ) : !selectedPad ? (
+                <div className="screen__message">
+                  <strong>{projectName}</strong>
+                  <span>{analyzing > 0 ? "Analyzing pads…" : "Tap a pad"}</span>
+                </div>
+              ) : shownMode === "swap" ? (
+                swapList
+              ) : !isReal(selectedPad) ? (
+                <div className="screen__message">
+                  <strong>{labelOf(selectedPad)}</strong>
+                  <span>
+                    {selectedPad.ghost
+                      ? "Made on export unless filled"
+                      : selectedPad.placeholder?.kind === "missing"
+                        ? "Silent placeholder: drag a sound here"
+                        : "Silent placeholder"}
+                  </span>
+                </div>
+              ) : shownMode === "tune" ? (
+                panel
+              ) : (
+                <div className="type-readout">
+                  <div className="type-readout__name">{selectedPad.category ? CATEGORIES[categoryIndex(selectedPad.category)].label : "Analyzing…"}</div>
+                  <div className="type-readout__sample">{displayName(selectedPad.name, tags)}</div>
+                  <div className="type-readout__line">
+                    <span>Key {keyNameOf(selectedPad)}</span>
+                    <span>
+                      {(() => {
+                        const shift = selectedPad.tune ? shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4) + trimCents(selectedPad.semis, selectedPad.cents) / 100 : 0;
+                        return `${shift < 0 ? "-" : "+"}${Math.abs(shift).toFixed(2)}st`;
+                      })()}
+                    </span>
                   </div>
-                )}
-                {(!layout.on || isReal(selectedPad)) && (
-                  <div className="screen__layer screen__layer--tune" inert={!tuneShown}>
-                    {panel}
-                  </div>
-                )}
-              </>
-            ) : hasProject ? (
-              <div className="screen__message">
-                <strong>{projectName}</strong>
-                <span>{analyzing > 0 ? "Analyzing pads…" : "Tap a pad"}</span>
-              </div>
-            ) : (
-              <label className="dropzone">
-                <svg className="dropzone__ants" aria-hidden="true">
-                  <rect className="dropzone__ants-base" pathLength="280" />
-                  <rect className="dropzone__ants-dash" pathLength="280" />
-                </svg>
-                <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
-                <input
-                  type="file"
-                  hidden
-                  // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
-                  webkitdirectory=""
-                  ref={packInput}
-                  onChange={(e) => {
-                    const list = Array.from(e.target.files ?? []);
-                    e.target.value = "";
-                    if (list.length) void loadPack(() => findPackInFileList(list));
-                  }}
-                />
-                <strong>{loading ? importStatus || "Loading…" : "Drop a .koala project"}</strong>
-                <span>or a sample pack folder</span>
-                <span>or tap to choose one</span>
-                <button
-                  type="button"
-                  className="dropzone__pack"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    packInput.current?.click();
-                  }}
-                >
-                  Choose a pack folder
-                </button>
-              </label>
-            )}
+                  <Waveform channelData={selectedPad.channelData} />
+                </div>
+              )}
+            </div>
           </section>
 
-          {/* The drawers slide down out of a slot along the top of the screen and cover all of it; both stay mounted so they can slide shut too. */}
-          <div className={`drawer-slot${drawer ? " drawer-slot--open" : ""}${drawer === "keys" ? " drawer-slot--keys" : ""}`} onClick={(e) => e.target === e.currentTarget && setDrawer(null)}>
-            <div
-              className={`drawer drawer--keys${drawer === "keys" ? " drawer--open" : ""}${drawerAfter ? " drawer--after" : ""}`}
-              role="region"
-              aria-label="Key"
-              inert={drawer !== "keys"}
-            >
-              <div className="drawer__head">
-                <span>Key</span>
-                <span>{tuneAll ? "All pads" : selectedPad ? `Pad ${(selectedPad.index % 16) + 1}` : "Tap a pad"}</span>
-              </div>
-              <Keyboard selected={shownKey} onSelect={selectKey} />
-              <div className="drawer__foot">
-                <button className="switch" role="switch" aria-checked={tuneAll} onClick={() => setTuneAll((on) => !on)}>
-                  <span className="switch__track">
-                    <span className="switch__knob" />
-                  </span>
-                  {tuneAll ? "Tune all" : "Tune one"}
-                </button>
-                <button className={`tone${toneOn ? " tone--on" : ""}`} aria-pressed={toneOn} onClick={() => setToneOn((on) => !on)}>
-                  Tone
-                </button>
-              </div>
-              <button className="drawer__handle" aria-label="Close key drawer" {...keyDrawerDrag} />
-            </div>
-            <ClassifierDrawer
-              open={drawer === "types"}
-              after={drawerAfter}
-              pad={selectedPad && isReal(selectedPad) ? selectedPad : null}
-              palette={palette}
-              onClassify={classifyPad}
-              onClose={() => setDrawer(null)}
-              addPack={{
-                busy: addPackStatus,
-                // Gaps are defined by the finger-drumming layout, so there has to be one.
-                disabled: !hasProject || !layout.on || analyzing > 0 || !!addPackStatus,
-                onFiles: (files) => void addPack(() => findPackInFileList(files)),
-              }}
-            />
-          </div>
           {drag && !expanded && (
             <div className={`hold-zone${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
               HOLD
@@ -1490,6 +1483,36 @@ function App() {
           )}
         </div>
 
+        {/* The deck under the screen: the sound type keys, or the piano with its two keys. Hot swap has none, its list takes the room. */}
+        {shownMode === "type" && (
+          <div className="deck">
+            <TypeKeys pad={selectedPad && isReal(selectedPad) ? selectedPad : null} palette={palette} onClassify={classifyPad} />
+          </div>
+        )}
+        {shownMode === "tune" && (
+          <div className="deck deck--tune">
+            <Keyboard selected={shownKey} onSelect={selectKey} />
+            <div className="deck__side">
+              <button
+                className={`cap cap--side${tuneAll ? " cap--on" : ""}`}
+                aria-pressed={tuneAll}
+                aria-label="Tune all pads or the selected pad only"
+                onClick={() => setTuneAll((on) => !on)}
+              >
+                <span className="cap__led" />
+                <span className="cap__legend">{tuneAll ? "All" : "One"}</span>
+              </button>
+              <button className={`cap cap--side${toneOn ? " cap--on" : ""}`} aria-pressed={toneOn} onClick={() => setToneOn((on) => !on)}>
+                <span className="cap__led" />
+                <span className="cap__legend">Tone</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        </div>
+
+        <div className="lower">
         <div className="padzone">
           <div className="pads">
             {Array.from({ length: 16 }, (_, slot) => {
@@ -1518,19 +1541,13 @@ function App() {
                   onContextMenu={(e) => e.preventDefault()}
                   aria-label={`Pad ${slot + 1}`}
                 >
-                  {padSymbols && symbolOf(pad) && <PadSymbol category={symbolOf(pad)!} />}
-                  {selected === index && (
-                    <svg className="pad__ants" aria-hidden="true">
-                      <rect className="pad__ants-base" pathLength="280" />
-                      <rect className="pad__ants-dash" pathLength="280" />
-                    </svg>
-                  )}
                   <span className="pad__number">
                     <span key={captionOf(pad)}>
                       {slot + 1}
                       {captionOf(pad) && ` ${captionOf(pad)}`}
                     </span>
                   </span>
+                  {padSymbols && symbolOf(pad) && <PadSymbol category={symbolOf(pad)!} />}
                 </button>
               );
             })}
@@ -1569,19 +1586,24 @@ function App() {
           )}
         </div>
 
-        {/* Transport row, MPC style, under the thumbs: undo, redo, record and play. Record and play are placeholders. */}
+        {/* Undo and redo on the left, the name plate on the right. */}
         <div className="transport">
-          <button className="transport__button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" />
+          <button className="cap cap--transport" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M5 3L2 6l3 3M2 6h7.5a4 4 0 0 1 0 8H6" />
             </svg>
           </button>
-          <button className="transport__button" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo} aria-label="Redo">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z" />
+          <button className="cap cap--transport" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo} aria-label="Redo">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M11 3l3 3-3 3M14 6H6.5a4 4 0 0 0 0 8H10" />
             </svg>
           </button>
-          {/* Record and play are hidden for now. */}
+          <div className="nameplate">
+            <div className="nameplate__name">KoalaTune</div>
+            <div className="nameplate__sub">16 pads · 4 banks</div>
+          </div>
+        </div>
+
         </div>
 
         {layoutPickerOpen && (

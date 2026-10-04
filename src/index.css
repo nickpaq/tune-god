@@ -1,25 +1,33 @@
 :root {
-  /* Putty: a beige MPC-style chassis, grey rubber pads and a green LCD. */
-  --stage: #bcb5a1;
-  --chassis1: #d3cdbb;
-  --chassis2: #bcb5a1;
-  --hi: #efeadb;
-  --edge: #8b8573;
-  --ink: #38342b;
-  --ink3: #625d4f;
-  --well: #a39d8b;
-  --btn: #e4dfcd;
-  --accent: #e8412a;
+  /* Graphite: a dark chassis with grey keycaps, a black OLED and one orange accent. The names are the old chassis ones, so
+     the menu and the modals pick the palette up too. */
+  --stage: #1a1b1d;
+  --chassis1: #2a2b2e;
+  --chassis2: #222326;
+  --hi: #3a3c40;
+  --edge: #121314;
+  --ink: #dcd8cc;
+  --ink3: #9a968b;
+  --well: #18191b;
+  --btn: #3c3e43;
+  --accent: #ff5b24;
   --accent-ink: #fff;
-  --lcd: #93a98a;
-  --lcd-edge: #5d6e56;
-  --lcd-ink: #1f2a1c;
-  --lcd-ink2: #3b4a37;
-  --bezel: #8a8473;
-  color-scheme: light;
+  /* keycaps */
+  --key: #3c3e43;
+  --key-hi: #4a4c52;
+  --key-edge: #141517;
+  --key-ink: #dcd8cc;
+  --led-off: #3a3b40;
+  --seam-d: #121314;
+  --seam-l: #3a3c40;
+  /* the OLED: bright pixels on black */
+  --oled: #eef2ec;
+  --oled-glow: rgba(238, 242, 236, 0.33);
+  --bezel: #0b0b0c;
+  color-scheme: dark;
   color: var(--ink);
   background: var(--stage);
-  font: 16px/1.3 "DIN Alternate", "Archivo Narrow", "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  font: 16px/1.3 "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

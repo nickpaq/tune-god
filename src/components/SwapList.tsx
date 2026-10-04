@@ -2,8 +2,24 @@ import { useEffect, useRef } from "react";
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
 
+const PlayGlyph = () => (
+  <svg viewBox="0 0 8 8" aria-hidden="true">
+    <path d="M2 1v6l5-3z" />
+  </svg>
+);
+const StopGlyph = () => (
+  <svg viewBox="0 0 8 8" aria-hidden="true">
+    <path d="M2 2h4v4H2z" />
+  </svg>
+);
+const SwapGlyph = () => (
+  <svg viewBox="0 0 8 8" aria-hidden="true">
+    <path d="M1 3h5V1l2 2.5L6 6V4H1zM7 5H2v2L0 4.5 2 2" fill="none" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round" />
+  </svg>
+);
+
 /**
- * Hot-swap list: the sounds that can take the tapped pad's place, drawn on the LCD like the other screens (no colour
+ * Hot-swap list: the sounds that can take the tapped pad's place, drawn on the OLED like the other screens (no colour
  * coding), one slim row each with the sound's name, a play button and a swap button. The list scrolls on its own.
  */
 export function SwapList({
@@ -31,9 +47,8 @@ export function SwapList({
   }, [slotLabel]);
   return (
     <div className="swap-list">
-      <div className="swap-list__head">Hot swap</div>
       <div className="swap-list__rows" ref={rows}>
-        {candidates.length === 0 && <div className="swap-list__empty">No other sounds to swap in.</div>}
+        {candidates.length === 0 && <div className="swap-list__empty">No other sounds to swap in</div>}
         {candidates.map((pad) => {
           const name = nameOf(pad);
           return (
@@ -46,7 +61,7 @@ export function SwapList({
                 onClick={() => preview.toggle(pad.origIndex, audioOf(pad), pad.sampleRate)}
                 aria-label={`${preview.playing === pad.origIndex ? "Stop" : "Play"} ${name}`}
               >
-                {preview.playing === pad.origIndex ? "■" : "▶"}
+                {preview.playing === pad.origIndex ? <StopGlyph /> : <PlayGlyph />}
               </button>
               <button
                 className="swap-row__btn"
@@ -56,12 +71,13 @@ export function SwapList({
                 }}
                 aria-label={`Swap in ${name}`}
               >
-                ↻
+                <SwapGlyph />
               </button>
             </div>
           );
         })}
       </div>
+      {candidates.length > 0 && <div className="swap-list__foot">{candidates.length} sounds</div>}
     </div>
   );
 }

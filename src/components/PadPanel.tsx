@@ -1,6 +1,6 @@
 import { PrecisionSlider } from "./PrecisionSlider";
 import { Waveform } from "./Waveform";
-import { CATEGORIES, type CategoryId } from "../audio/classify";
+import type { CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
 import type { GhostKind } from "../audio/ghost";
 import { formatTrim, splitTrim, trimCents } from "../audio/theory";
@@ -47,66 +47,45 @@ export interface Pad {
   cents: number;
 }
 
-/** What the screen shows for the selected pad: tune toggle and the two trim sliders. */
+/** What the OLED shows for the selected pad in Tune mode: the key it follows, the tune switch, the shift, the waveform and the trim slider. */
 export function PadPanel({
   pad,
   autoShift,
-  autoColor,
+  keyName,
   onChange,
 }: {
   pad: Pad;
   /** Semitones the automatic tuning moves this pad; the panel adds the manual trim for display. */
   autoShift: number;
-  /** Shows the sound-category dropdown. */
-  autoColor: boolean;
-  onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "category">>) => void;
+  /** The note the pad is tuned to ("C#"), or "--" when tuning is off. */
+  keyName: string;
+  onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
   const total = autoShift + trim / 100;
-  // While tuning is off the button already says so, so the line under the title names the sound type instead.
-  const status = pad.tune
-    ? `Tuned ${total >= 0 ? "+" : "−"}${Math.abs(total).toFixed(2)} st`
-    : (CATEGORIES.find((c) => c.id === pad.category)?.label ?? "");
 
   return (
     <div className="pad-panel">
-      <div className="pad-panel__head">
-        <div>
-          <div className="pad-panel__title">PAD {(pad.index % 16) + 1}</div>
-          <div className="pad-panel__sub">{status}</div>
+      <div className="pad-panel__top">
+        <div className="pad-panel__note" aria-label="Tuned to">
+          {keyName}
         </div>
-        <button
-          className={`tune-toggle${pad.tune ? " tune-toggle--on" : ""}`}
-          onClick={() => onChange({ tune: !pad.tune })}
-          aria-pressed={pad.tune}
-        >
-          {pad.tune ? "Tune: on" : "Tune: off"}
-        </button>
+        <div className="pad-panel__lines">
+          <button
+            className={`tune-toggle${pad.tune ? " tune-toggle--on" : ""}`}
+            onClick={() => onChange({ tune: !pad.tune })}
+            aria-pressed={pad.tune}
+          >
+            {pad.tune ? "Tune on" : "Tune off"}
+          </button>
+          <div>Shift {pad.tune ? `${total >= 0 ? "+" : "-"}${Math.abs(total).toFixed(2)}` : "0.00"}st</div>
+          <div>Trim {formatTrim(trim)}st</div>
+        </div>
       </div>
 
       <Waveform channelData={pad.channelData} />
 
-      {autoColor && (
-        <label className="pad-panel__category">
-          <span>Sound type</span>
-          <select
-            value={pad.category ?? "other"}
-            onChange={(e) => onChange({ category: e.target.value as CategoryId })}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
       <div className={`pad-panel__slider${pad.tune ? "" : " pad-panel__slider--off"}`}>
-        <div className="pad-panel__label">
-          <span>Pitch trim</span>
-          <span>{formatTrim(trim)} st</span>
-        </div>
         <PrecisionSlider
           min={-TRIM_RANGE_CENTS}
           max={TRIM_RANGE_CENTS}
@@ -121,6 +100,10 @@ export function PadPanel({
           valueLabel={formatTrim}
           title="Pitch trim. Drag down to slow the scrub: at the bottom of the screen the whole track is one semitone. Double-tap to reset."
         />
+        <div className="pad-panel__scale">
+          <span>-12st</span>
+          <span>+12st</span>
+        </div>
       </div>
     </div>
   );
