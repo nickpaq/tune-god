@@ -514,8 +514,11 @@
 }
 
 .pads {
-  /* the gap between pads, top to bottom: one unit between the lit edges, as side to side (the 8.1px is the pad's lit edge) */
-  --row-gap: calc(var(--u) + 8.1px);
+  /*
+   * the gap between pads, top to bottom: one unit between the lit edges, as side to side (the 8.1px is the pad's lit edge),
+   * plus 0.85cqw so the caption printed above each pad has air above it as well as below (it sits close to its own pad).
+   */
+  --row-gap: calc(var(--u) + 0.85cqw + 8.1px);
   /*
    * Pad size (set here, not on .phone, because cq units must resolve against the chassis): a square a quarter of the row
    * (one unit between pads and at both sides), unless the chassis is too short. Then the four pad rows take what is left of
@@ -567,10 +570,10 @@
 }
 
 .pad--loaded {
-  --wt: color-mix(in srgb, var(--c) 34%, #6a6a70);
-  --wb: color-mix(in srgb, var(--c) 40%, #dcdce2);
-  /* just a slight bloom of the edge colour below the pad */
-  --glow: 0 9px 7px -3px color-mix(in srgb, var(--c) 35%, transparent);
+  --wt: color-mix(in srgb, var(--c) 58%, #5d5d64);
+  --wb: color-mix(in srgb, var(--c) 78%, #e4e4ea);
+  /* the edge colour blooms below the pad: a tight bright halo and a wide soft one */
+  --glow: 0 9px 9px -2px color-mix(in srgb, var(--c) 75%, transparent), 0 12px 22px 2px color-mix(in srgb, var(--c) 48%, transparent);
 }
 
 /*
