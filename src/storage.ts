@@ -31,6 +31,7 @@ export interface SavedState {
   spread?: boolean;
   autoColor?: boolean;
   routeBuses?: boolean;
+  masterChain?: boolean;
   autoPlayback?: boolean;
   /** Show a grey sound-type symbol on each pad. */
   padSymbols?: boolean;

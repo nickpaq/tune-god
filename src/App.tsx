@@ -166,6 +166,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
   const [routeBuses, setRouteBuses] = useState(saved.routeBuses ?? false);
+  const [masterChain, setMasterChain] = useState(saved.masterChain ?? true);
   const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
   const [packMemory, setPackMemory] = useState<PackMemory>(saved.packMemory ?? "auto");
   const [autoPlayback, setAutoPlayback] = useState(saved.autoPlayback ?? false);
@@ -363,8 +364,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ normalize, spread, autoColor, routeBuses, autoPlayback, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
-  }, [normalize, spread, autoColor, routeBuses, autoPlayback, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
+    saveState({ normalize, spread, autoColor, routeBuses, masterChain, autoPlayback, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
+  }, [normalize, spread, autoColor, routeBuses, masterChain, autoPlayback, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -1056,7 +1057,7 @@ function App() {
           if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: routeBuses, masterChain, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -1098,7 +1099,7 @@ function App() {
     (arrangement !== undefined ||
       placeholderList.length > 0 ||
       Object.values(pads).some((p) => p.ghost) ||
-      (normalize || autoColor || routeBuses || autoPlayback ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
+      (normalize || autoColor || routeBuses || masterChain || autoPlayback ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
     analyzing === 0 &&
     !exporting;
   const hasProject = Object.keys(pads).length > 0;
@@ -1234,7 +1235,11 @@ function App() {
             </label>
             <label>
               <input type="checkbox" checked={routeBuses} onChange={(e) => setRouteBuses(e.target.checked)} />
-              Route pads to buses by sound type
+              Route pads to buses by sound type (sidechains bass to kick)
+            </label>
+            <label>
+              <input type="checkbox" checked={masterChain} onChange={(e) => setMasterChain(e.target.checked)} />
+              Heavy, warm master chain
             </label>
             <label>
               <input type="checkbox" checked={padSymbols} onChange={(e) => setPadSymbols(e.target.checked)} />

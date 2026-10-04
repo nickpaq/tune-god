@@ -3,6 +3,8 @@ import type { PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
+import { bassSidechain, fillEmptySlots, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
+import { BUS_NAMES } from "./routing";
 
 /** A silent pad the finger-drumming layout adds: where it sits, what Koala shows on it, and its colour. */
 export interface PlaceholderPad {
@@ -42,7 +44,7 @@ export interface TunedSample {
  * retimed pad's trim points are reset to the new file length and its pitch
  * knob zeroed (the tuning is baked into the audio now). Samples that were only
  * gain-adjusted keep their trim points. `vols` maps sampleId to the pad's
- * volume knob (`vol`, linear: 1 = 0 dB), written to every pad using that sample, replaced or not. `arrangement` maps each pad's original slot to its new slot, or null when the user deleted it; it renumbers the pads, remaps recorded sequence notes and drops deleted sounds' audio. `buses` maps sampleId to a bus index (see BUS_MAIN and friends in routing.ts). `colors` maps sampleId to the hex colour and label that replace the pad's own. `pans` maps sampleId to a Koala pan value
+ * volume knob (`vol`, linear: 1 = 0 dB), written to every pad using that sample, replaced or not. `arrangement` maps each pad's original slot to its new slot, or null when the user deleted it; it renumbers the pads, remaps recorded sequence notes and drops deleted sounds' audio. `sidechain` and `masterChain` add the bass-bus sidechain and the master chain (see mixerChain.ts). `buses` maps sampleId to a bus index (see BUS_MAIN and friends in routing.ts). `colors` maps sampleId to the hex colour and label that replace the pad's own. `pans` maps sampleId to a Koala pan value
  * (0..1, 0.5 = centre) written to every pad using that sample.
  */
 export async function buildTunedKoala(
@@ -52,13 +54,15 @@ export async function buildTunedKoala(
     vols,
     buses,
     busNames,
+    sidechain,
+    masterChain,
     arrangement,
     pans,
     colors,
     playback,
     placeholders,
     ghosts,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[] } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[] } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -108,7 +112,7 @@ export async function buildTunedKoala(
   if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
-  if (busNames) await renameBuses(project, busNames);
+  if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, master: masterChain });
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
   const base = project.originalName.replace(/\.koala$/i, "");
@@ -130,16 +134,27 @@ export function downloadBlob(blob: Blob, filename: string): void {
 const emptyStrip = (name: string) => ({ chain: [null, null, null, null, null], mute: false, name, solo: false, volume: 0 });
 
 /**
- * Sets the bus strip names in mixer.json, keeping each bus's effects and levels. A project that
- * has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
+ * Sets up the mixer in mixer.json: bus strip names, a sidechain from the kick bus onto the bass bus, and the master chain.
+ * Each bus keeps its effects and levels, and an effect only goes into an empty slot (the master chain only into an empty
+ * master strip). A project that has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
  */
-async function renameBuses(project: ParsedKoalaProject, names: string[]): Promise<void> {
+async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean }): Promise<void> {
   const entry = project.zip.file("mixer.json");
   const mixer = entry ? JSON.parse(await entry.async("string")) : { buses: [], master: emptyStrip("MAIN") };
   mixer.buses = Array.isArray(mixer.buses) ? mixer.buses : [];
-  names.forEach((name, i) => {
+  setup.names?.forEach((name, i) => {
     mixer.buses[i] = { ...(mixer.buses[i] ?? emptyStrip(name)), name };
   });
+  if (setup.sidechain) {
+    const bass = (mixer.buses[1] ??= emptyStrip(BUS_NAMES[1]));
+    bass.chain = Array.isArray(bass.chain) ? bass.chain : [null, null, null, null, null];
+    if (!bass.chain.some((fx: MixerSlot) => fx?.name === "SIDECHAIN")) fillEmptySlots(bass.chain, [bassSidechain()]);
+  }
+  if (setup.master) {
+    const master = (mixer.master ??= emptyStrip("MAIN"));
+    master.chain = Array.isArray(master.chain) ? master.chain : [null, null, null, null, null];
+    if (master.chain.every((fx: MixerSlot) => !fx)) fillEmptySlots(master.chain, masterChainEffects());
+  }
   project.zip.file("mixer.json", JSON.stringify(mixer));
 }
 

@@ -1,0 +1,190 @@
+{
+	"buses": [
+		{
+			"chain": [
+				null,
+				null,
+				null,
+				null,
+				null
+			],
+			"mute": false,
+			"name": "kick",
+			"solo": false,
+			"volume": 0.0
+		},
+		{
+			"chain": [
+				null,
+				null,
+				null,
+				{
+					"bypass": false,
+					"name": "STEREOIZER",
+					"parameters": {
+						"low cut": 500.0,
+						"spread": 1.0
+					}
+				},
+				{
+					"bypass": false,
+					"name": "SIDECHAIN",
+					"parameters": {
+						"output": 12.0,
+						"release": 1000.0,
+						"source": 0.0,
+						"threshold": 0.0
+					}
+				}
+			],
+			"mute": false,
+			"name": "bass",
+			"solo": false,
+			"volume": 0.0
+		},
+		{
+			"chain": [
+				null,
+				null,
+				null,
+				{
+					"bypass": false,
+					"name": "UTILITY",
+					"parameters": {
+						"channel": 0.0,
+						"flip phase": 1.0,
+						"gain": 18.0,
+						"pan": 1.0
+					}
+				},
+				{
+					"bypass": false,
+					"name": "WARBLE",
+					"parameters": {
+						"amount": 0.0,
+						"flut speed": 7.0,
+						"stop": 0.0,
+						"wow speed": 0.20000000298023224,
+						"wow/flutter": 0.4000000059604645
+					}
+				}
+			],
+			"mute": false,
+			"name": "drums",
+			"solo": false,
+			"volume": 0.0
+		},
+		{
+			"chain": [
+				null,
+				{
+					"bypass": false,
+					"name": "PLATE REVERB",
+					"parameters": {
+						"brightness": 1.0,
+						"dry/wet": 1.0,
+						"pre-delay": 250.0,
+						"size": 30.0,
+						"time": 30.0
+					}
+				},
+				{
+					"bypass": false,
+					"name": "METER",
+					"parameters": {
+						"channel": 0.0,
+						"zoom": 1.0
+					}
+				},
+				{
+					"bypass": false,
+					"name": "LIMITER",
+					"parameters": {
+						"attack": 6.0,
+						"gain": 18.0,
+						"release": 1000.0
+					}
+				},
+				{
+					"bypass": false,
+					"name": "FREEVERB",
+					"parameters": {
+						"dry/wet": 1.0,
+						"size": 1.0,
+						"stereo": 0.0,
+						"tone": 1.0
+					}
+				}
+			],
+			"mute": false,
+			"name": "melodic",
+			"solo": false,
+			"volume": 0.0
+		}
+	],
+	"master": {
+		"chain": [
+			{
+				"bypass": false,
+				"name": "EQ",
+				"parameters": {
+					"hi Q": 10.0,
+					"hi freq": 12599.2099609375,
+					"hi gain": -18.0,
+					"lo Q": 10.0,
+					"lo freq": 31.748023986816406,
+					"lo gain": -18.0,
+					"mid Q": 10.0,
+					"mid freq": 1046.9755859375,
+					"mid gain": -18.0
+				}
+			},
+			{
+				"bypass": false,
+				"name": "DRIVE",
+				"parameters": {
+					"drive": 36.0,
+					"mix": 1.0,
+					"out": 0.0,
+					"oversample": 1.0
+				}
+			},
+			{
+				"bypass": false,
+				"name": "COMPRESSOR",
+				"parameters": {
+					"attack": 30.0,
+					"makeup": 1.0,
+					"ratio": 100.0,
+					"release": 1200.0,
+					"threshold": -1.6921806335449219,
+					"visual": 0.0
+				}
+			},
+			{
+				"bypass": false,
+				"name": "CLIPPER",
+				"parameters": {
+					"input": 36.0,
+					"output": 0.0,
+					"oversample": 0.0,
+					"threshold": -0.08461380004882813
+				}
+			},
+			{
+				"bypass": false,
+				"name": "BITCOOKER",
+				"parameters": {
+					"bit depth": 24.0,
+					"jitter": 1.0,
+					"mix": 1.0,
+					"samplerate": 43970.23046875
+				}
+			}
+		],
+		"mute": false,
+		"name": "MAIN",
+		"solo": false,
+		"volume": 0.0
+	}
+}
