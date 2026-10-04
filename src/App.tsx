@@ -42,6 +42,7 @@ import { PadSymbol } from "./components/PadSymbol";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
 import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, trimCents } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
+import { useOledCell } from "./components/useOledCell";
 import "./App.css";
 
 const BANKS = ["A", "B", "C", "D"];
@@ -141,6 +142,7 @@ function tuneDefault(locked: boolean | undefined, current: boolean, category: Ca
 }
 
 function App() {
+  useOledCell();
   // Read once: what the previous visit left behind.
   const saved = useRef(loadState()).current;
   const [pads, setPads] = useState<Record<number, Pad>>({});
