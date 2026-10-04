@@ -15,14 +15,14 @@ export default defineConfig({
       // Precache everything so the app works fully offline after the first load.
       workbox: {
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
-        globPatterns: ["**/*.{js,css,html,wasm,svg,png,ico}"],
+        globPatterns: ["**/*.{js,css,html,wasm,svg,png,ico,woff2}"],
       },
       manifest: {
         name: "KoalaTune",
         short_name: "KoalaTune",
         description: "Tune a Koala project's pads to a key — on-device.",
-        theme_color: "#bcb5a1",
-        background_color: "#bcb5a1",
+        theme_color: "#222326",
+        background_color: "#222326",
         display: "standalone",
         start_url: "/",
         scope: "/",

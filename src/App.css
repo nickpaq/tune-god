@@ -16,13 +16,13 @@
   --r-key: 1.2cqw;
   --g: var(--u);
   /* a moulded key cap: lit from above, a hard contact edge and a soft shadow onto the panel */
-  --cap: linear-gradient(#f3eee0, #dbd5c2);
-  --cap-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -1px 0 rgba(0, 0, 0, 0.08), 0 1.5px 0 #7f7967, 0 2.5px 4px rgba(0, 0, 0, 0.3);
+  --cap: linear-gradient(#4a4c52, #3c3e43);
+  --cap-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.2), 0 1.5px 0 #141517, 0 2.5px 4px rgba(0, 0, 0, 0.45);
   /* the same cap pushed in: the contact edge and shadow collapse */
-  --cap-down: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0.5px 0 #7f7967, 0 1px 1px rgba(0, 0, 0, 0.2);
+  --cap-down: inset 0 1px 2px rgba(0, 0, 0, 0.45), 0 0.5px 0 #141517, 0 1px 1px rgba(0, 0, 0, 0.3);
   /* a lit legend: the colour of an LED behind a translucent cap */
-  --led: #ff4b2b;
-  --led-glow: 0 0 1.2cqw rgba(255, 75, 43, 0.65);
+  --led: #ff5b24;
+  --led-glow: 0 0 1.2cqw rgba(255, 91, 36, 0.65);
   position: relative;
   width: min(100vw, calc(var(--app-h, 100dvh) * 9 / 17.6));
   height: 100%;
@@ -33,7 +33,7 @@
   padding: max(var(--u), env(safe-area-inset-top)) var(--u) calc(max(var(--u), env(safe-area-inset-bottom)) + 8cqw);
   /* matte ABS plastic: fine moulded grain, faint light speckle and a soft sheen across the top */
   background-color: var(--chassis2);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .45 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(165deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 38%), linear-gradient(var(--chassis1), var(--chassis2));
   box-shadow: inset 0 2px 0 var(--hi), inset 0 0 0 1px var(--edge);
   /* size containment so cqh is the chassis height: the pads shrink to fit it (see .pads) */
   container-type: size;
@@ -60,7 +60,7 @@
   padding: 1.2cqw;
   border-radius: calc(var(--r-key) + 1.2cqw);
   background: var(--well);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .icon-button,
@@ -110,7 +110,7 @@
 .bank--active,
 .tone--on {
   transform: translateY(1px);
-  background: linear-gradient(#e9e3d3, #d6d0bd);
+  background: linear-gradient(#303236, #2a2c2f);
   box-shadow: var(--cap-down);
   color: var(--led);
   text-shadow: var(--led-glow);
@@ -159,19 +159,19 @@
   border: 1.4cqw solid var(--bezel);
   border-radius: var(--radius);
   /* an evenly backlit panel, a little brighter in the middle, sunk under the bezel */
-  background: radial-gradient(120% 90% at 50% 45%, #9db394, var(--lcd) 70%);
-  box-shadow: inset 0 0 0 1px var(--lcd-edge), inset 0 1.2cqw 2.4cqw rgba(0, 0, 0, 0.28), inset 0 0 14px #4e6147;
+  background: var(--lcd);
+  box-shadow: inset 0 0 0 1px var(--lcd-edge);
   color: var(--lcd-ink);
   /* inside the LCD, the "ink" is LCD ink */
   --ink: var(--lcd-ink);
   --ink3: var(--lcd-ink2);
   --edge: var(--lcd-ink2);
-  --btn: #a7bb9d;
-  --accent: #26391f;
-  --accent-ink: #cfe3c3;
-  --track: rgba(31, 42, 28, 0.25);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-weight: 500;
+  --btn: #1d1e20;
+  --accent: #eef2ec;
+  --accent-ink: #000;
+  --track: rgba(238, 242, 236, 0.25);
+  font-family: "Silkscreen", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-weight: 400;
   overflow: hidden;
 }
 
@@ -180,7 +180,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 38%);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 38%);
   pointer-events: none;
 }
 
@@ -499,7 +499,7 @@
   isolation: isolate;
   margin-inline: calc(-1 * var(--u));
   padding: var(--u) var(--u) 0;
-  background: linear-gradient(#a3adb4, #8f9aa2);
+  background: linear-gradient(#1c1d1f, #151618);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 3px 4px -2px rgba(0, 0, 0, 0.3), 0 -1px 0 #6c767d, 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
@@ -756,7 +756,7 @@
   gap: var(--u);
   padding: var(--u) var(--u) 5cqw;
   border-radius: var(--radius);
-  background: linear-gradient(#b5af9c, #a29c8a);
+  background: linear-gradient(#303236, #27282b);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 0 0 1px var(--edge), 0 1.6cqw 3.2cqw rgba(0, 0, 0, 0.45);
   transform: translateY(calc(-100% - 5cqw));
   visibility: hidden;
@@ -860,7 +860,7 @@
   border-radius: calc(var(--r-key) + 1.2cqw);
   background: linear-gradient(#232220, #161514);
   /* a thin brushed-gold trim around each panel */
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 0 0.35cqw #bfae7f, 0 0 0 0.5cqw rgba(0, 0, 0, 0.35), 0 1px 0 0.5cqw rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 0 0.35cqw #4a4c52, 0 0 0 0.5cqw rgba(0, 0, 0, 0.35), 0 1px 0 0.5cqw rgba(255, 255, 255, 0.3);
 }
 
 .faceplate:last-child {
@@ -947,7 +947,7 @@
 }
 
 .switch[aria-checked="false"] .switch__track {
-  background: #7f7868;
+  background: #3a3b40;
 }
 
 .switch__knob {
@@ -996,9 +996,9 @@
 }
 
 .key--sharp {
-  background: linear-gradient(#8a8473, #6f6a5b);
-  color: #efebdd;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1.5px 0 #34312a, 0 2.5px 4px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(#26272b, #141517);
+  color: #bdb9ae;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1.5px 0 #0b0b0c, 0 2.5px 4px rgba(0, 0, 0, 0.45);
 }
 
 /* The chosen key is held down and lit from inside. */
@@ -1216,7 +1216,7 @@
   padding: 2cqw;
   border-radius: 1.6cqw;
   /* the blue-grey plate the real pads sit on */
-  background: linear-gradient(#a3adb4, #8f9aa2);
+  background: linear-gradient(#1c1d1f, #151618);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 2px 3px -1px rgba(0, 0, 0, 0.3);
 }
 
@@ -1298,7 +1298,7 @@
   border: 0;
   border-radius: var(--radius);
   background: var(--chassis1);
-  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #a49e8c;
+  box-shadow: 0 2px 0 var(--edge), inset 0 0 0 1px #5a5c62;
   color: var(--ink);
   font-size: 3.6cqw;
 }
