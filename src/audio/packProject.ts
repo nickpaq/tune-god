@@ -7,6 +7,8 @@ import { encodeWav } from "./wavEncode";
 import type { CategoryId } from "./classify";
 import { applyGainDb } from "./gain";
 import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
+import type { ParsedKoalaProject } from "./koalaProject";
+import type { FillPlan } from "./packFill";
 import { AUDIO_EXTENSIONS, planPackSounds, type PackFile, type PackPlan } from "./samplePack";
 
 /** A dropped file the pack can read later. */
@@ -181,4 +183,85 @@ export async function buildPackProject(pack: FoundPack, options: BuildOptions): 
   // Audio is already compressed or dense PCM; storing it skips a slow pass over every byte.
   const blob = await zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true });
   return { file: new File([blob], `${pack.name}.koala`, { type: "application/octet-stream" }), categories, knobDb, is808, plan };
+}
+
+/** One sound added to an existing project. */
+export interface AppendedSound {
+  /** Its pad number in the project (past the grid; the export renumbers it if it ends up on a pad). */
+  pad: number;
+  sampleId: number;
+  fileName: string;
+  category: CategoryId;
+  /** Chosen for a missing slot (true) or kept hidden as a hot-swap spare (false). */
+  forSlot: boolean;
+  is808: boolean;
+  knobDb: number;
+}
+
+export interface AppendResult {
+  /** The project file with the new sounds in it, to keep for the next visit. */
+  file: File;
+  sounds: AppendedSound[];
+}
+
+/**
+ * Adds a second pack to a project that is already loaded: picks only what its gaps need (see fillPlan) plus spares for the
+ * hot-swap pool, levels the new sounds against the sounds already there (`existing`, measured from the audio in memory, so
+ * the whole project sits at one loudness), and writes them into the project's zip and sampler.json. Sounds already in the
+ * project are not touched. Returns null when nothing from the pack was wanted or readable.
+ */
+export async function appendPackToProject(
+  project: ParsedKoalaProject,
+  pack: FoundPack,
+  options: FillPlan & Omit<BuildOptions, "kitSlots"> & { existing: BalanceInput[] },
+): Promise<AppendResult | null> {
+  const { measure = async (input: BalanceInput) => balanceStats(input), onProgress, existing } = options;
+  const plan = planPackSounds(pack.files, options);
+  const picked = [...plan.visible.map((sound) => ({ sound, forSlot: true })), ...plan.hidden.map((sound) => ({ sound, forSlot: false }))];
+  if (!picked.length) return null;
+
+  // Existing sounds are measured first so the common loudness is the one the whole project is already at.
+  const stats: BalanceStats[] = [];
+  for (const [n, input] of existing.entries()) {
+    onProgress?.(`Reading project ${n + 1}/${existing.length}`);
+    stats.push(await measure(input));
+  }
+  const readable: typeof picked = [];
+  for (const item of picked) {
+    onProgress?.(`Measuring ${readable.length + 1}/${picked.length}`);
+    try {
+      const decoded = await decodeNative(await item.sound.file.source());
+      stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: item.sound.category }));
+      readable.push(item);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+  if (!readable.length) return null;
+  const balance = balanceFromStats(stats, FILE_CEILING_DB);
+
+  const json = project.samplerJson;
+  const samples: any[] = (json.samples = Array.isArray(json.samples) ? json.samples : []);
+  const pads: any[] = (json.pads = Array.isArray(json.pads) ? json.pads : []);
+  const base = project.padBase;
+  let nextId = Math.max(0, ...samples.map((x) => Number(x.id) || 0), ...pads.map((x) => Number(x.sampleId) || 0)) + 1;
+  let nextPad = Math.max(HIDDEN_PAD_BASE - 1, ...pads.map((x) => Number(x.pad) - base)) + 1;
+  const sounds: AppendedSound[] = [];
+  for (const [n, { sound: { file, category, is808: eight08 }, forSlot }] of readable.entries()) {
+    onProgress?.(`Levelling ${n + 1}/${readable.length}`);
+    const decoded = await decodeNative(await file.source());
+    const channelData = applyGainDb(decoded.channelData, balance.gainDb[existing.length + n]);
+    const frames = channelData[0].length;
+    const sampleId = nextId++;
+    const pad = nextPad++;
+    const knobDb = balance.knobDb[existing.length + n];
+    project.zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: decoded.sampleRate, channelData, bitDepth: 24 }).arrayBuffer());
+    samples.push({ id: sampleId, metadata: { originalPath: file.name } });
+    pads.push({ pad: pad + base, type: "sample", sampleId, vol: volFromDb(knobDb), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
+    project.pads.push({ pad, sampleId, fileName: file.name });
+    sounds.push({ pad, sampleId, fileName: file.name, category, forSlot, is808: !!eight08, knobDb });
+  }
+  project.zip.file("sampler/sampler.json", JSON.stringify(json));
+  const blob = await project.zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true });
+  return { file: new File([blob], project.originalName, { type: "application/octet-stream" }), sounds };
 }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
-import { buildPackProject, entriesOfDrop, findPackInEntries, findPackInFileList, type FoundPack } from "./audio/packProject";
+import { appendPackToProject, buildPackProject, entriesOfDrop, findPackInEntries, findPackInFileList, type FoundPack } from "./audio/packProject";
+import { assignFill, fillPlan, missingSlots } from "./audio/packFill";
 import { packByteBudget, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
@@ -207,6 +208,10 @@ function App() {
   const latest = useRef<Snapshot>({ pads: {}, hidden: {}, keyPc: null, tunedTarget: null, layout });
   latest.current = { pads, hidden, keyPc, tunedTarget, layout };
   const projectRef = useRef<ParsedKoalaProject | null>(null);
+  /** The project file as last saved (its size counts against the memory budget when a pack is added). */
+  const projectFile = useRef<File | null>(null);
+  /** What the Add pack button says while a pack is being added. */
+  const [addPackStatus, setAddPackStatus] = useState("");
   const packInput = useRef<HTMLInputElement>(null);
 
   /** The sound type a dropped pack gave each pad (by pad number), used in place of the classifier's guess. */
@@ -223,6 +228,7 @@ function App() {
       const project = await parseKoalaProject(file);
       if (token !== loadToken.current) return;
       projectRef.current = project;
+      projectFile.current = file;
       categoryHints.current = pack?.categories ?? {};
       packSetup.current = !restore && !!pack;
       past.current = [];
@@ -462,6 +468,104 @@ function App() {
     future.current = [];
     syncHistory();
   });
+
+  /**
+   * Adds another sample pack to the project already loaded. Everything the user has stays exactly where it is; the new pack
+   * only fills slots that are still missing a sound (placeholders and gaps in banks A to C, never bank D) and tops up the
+   * hot-swap pool, all levelled against what is already in the project.
+   */
+  const addPack = async (find: () => Promise<FoundPack> | FoundPack) => {
+    const project = projectRef.current;
+    if (!project || !layout.on) return;
+    const token = loadToken.current;
+    setAddPackStatus("Reading…");
+    try {
+      const found = await find();
+      const cur = latest.current;
+      const lay = layoutById(layout.id);
+      const missing = missingSlots(cur.pads, lay);
+      const fill = fillPlan(missing, lay, Object.values(cur.hidden));
+      const existing = [...Object.values(cur.pads).filter(isReal), ...Object.values(cur.hidden)].map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category }));
+      const result = await appendPackToProject(project, found, {
+        ...fill,
+        byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
+        measure: (input) => getRenderWorker().measure(input),
+        onProgress: setAddPackStatus,
+        existing,
+      });
+      if (token !== loadToken.current) return;
+      if (!result) {
+        window.alert("Nothing in that folder was needed: every slot is filled and the swap lists are stocked, or it holds no usable audio.");
+        return;
+      }
+      projectFile.current = result.file;
+      void saveProjectFile(result.file);
+      const forSlot = result.sounds.filter((x) => x.forSlot);
+      const slotOf = assignFill(missing, lay, forSlot);
+      // A sound chosen for a slot that no gap could take (say, a snare when no snare slot is open) joins the hot-swap pool instead.
+      const placed = new Map<number, number>();
+      for (const [slot, at] of slotOf) placed.set(forSlot[at].pad, slot);
+      setAnalyzing((n) => n + result.sounds.length);
+      for (const sound of result.sounds) {
+        const ref = { pad: sound.pad, sampleId: sound.sampleId, fileName: sound.fileName };
+        const slot = placed.get(sound.pad);
+        const decoded = await decodeNative(await koalaPadToFile(project, ref));
+        if (token !== loadToken.current) return;
+        const pad: Pad = {
+          index: slot ?? -1,
+          origIndex: sound.pad,
+          name: sound.fileName,
+          sampleId: sound.sampleId,
+          sampleRate: decoded.sampleRate,
+          channelData: decoded.channelData,
+          knobDb: sound.knobDb,
+          is808: sound.is808 || undefined,
+          category: sound.category,
+          tune: false,
+          semis: 0,
+          cents: 0,
+        };
+        categoryHints.current = { ...categoryHints.current, [sound.pad]: sound.category };
+        if (slot === undefined) setHidden((prev) => ({ ...prev, [sound.pad]: pad }));
+        else setPads((prev) => ({ ...prev, [slot]: pad }));
+        nextAnalysisWorker()
+          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, sound.fileName)
+          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined }))
+          .then(({ midi: detectedMidi, detail, centroid }) => {
+            if (token !== loadToken.current) return;
+            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
+            setPads((prev) => {
+              const at = Object.keys(prev).find((k) => prev[Number(k)].origIndex === sound.pad);
+              return at === undefined ? prev : { ...prev, [Number(at)]: analysed(prev[Number(at)]) };
+            });
+            setHidden((prev) => (prev[sound.pad] ? { ...prev, [sound.pad]: analysed(prev[sound.pad]) } : prev));
+            setAnalyzing((n) => n - 1);
+          });
+      }
+      // A ghost snare or soft kick slot that was waiting for its source sound gets its copy now that one has arrived.
+      setPads((prev) => {
+        const next = { ...prev };
+        lay.slots.forEach((slotDef, i) => {
+          if (!slotDef.ghostOf || (next[i] && !next[i].placeholder)) return;
+          const source = lay.slots
+            .map((s, j) => ({ s, j }))
+            .filter(({ s, j }) => !s.ghostOf && s.category === slotDef.ghostOf && next[j] && isReal(next[j]))
+            .map(({ j }) => next[j])[0];
+          if (source) next[i] = makeGhostPad(i, slotDef.ghostOf === "snare" ? "ghostSnare" : "softKick", source);
+        });
+        return next;
+      });
+      // The new sounds are part of the project now; undo would only be able to take them away again.
+      past.current = [];
+      future.current = [];
+      syncHistory();
+    } catch (err) {
+      console.error(err);
+      window.alert("That pack could not be added.");
+    } finally {
+      setAddPackStatus("");
+    }
+  };
 
   /** A drop: a .koala file loads as a project, a folder as a sample pack. */
   const handleDrop = (data: DataTransfer) => {
@@ -1334,6 +1438,12 @@ function App() {
               palette={palette}
               onClassify={classifyPad}
               onClose={() => setDrawer(null)}
+              addPack={{
+                busy: addPackStatus,
+                // Gaps are defined by the finger-drumming layout, so there has to be one.
+                disabled: !hasProject || !layout.on || analyzing > 0 || !!addPackStatus,
+                onFiles: (files) => void addPack(() => findPackInFileList(files)),
+              }}
             />
           </div>
           {drag && !expanded && (

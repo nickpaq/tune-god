@@ -146,7 +146,7 @@ export const C_808_PADS = 2;
 export const BANK_C_REST_PADS = 12;
 
 /** What the planner counts as a type: the categories, with 808s apart from the other bass sounds. */
-type PlanKey = CategoryId | "808";
+export type PlanKey = CategoryId | "808";
 const categoryOfKey = (key: PlanKey): CategoryId => (key === "808" ? "bass" : key);
 
 export interface PackPlan<T = unknown> {
@@ -179,7 +179,10 @@ export function planPackSounds<T>(
   {
     kitSlots,
     bankB = BANK_B_QUOTA,
+    bassPads = BASS_PADS,
+    pads808 = C_808_PADS,
     restPads = BANK_C_REST_PADS,
+    have = {},
     alternatives = PACK_ALTERNATIVES,
     otherAlternatives = PACK_OTHER_ALTERNATIVES,
     byteBudget = PACK_BYTE_BUDGET,
@@ -189,7 +192,12 @@ export function planPackSounds<T>(
     /** Real (not ghost) slots per type on the finger-drumming page. */
     kitSlots: Partial<Record<CategoryId, number>>;
     bankB?: Partial<Record<CategoryId, number>>;
+    /** Bank C's ordinary-bass and 808 pads to fill, and the rest of bank C. */
+    bassPads?: number;
+    pads808?: number;
     restPads?: number;
+    /** Spares (by type) the project already holds in the hot-swap pool, which count toward the alternatives wanted. A type listed with 0 slots still gets topped up. */
+    have?: Partial<Record<PlanKey, number>>;
     alternatives?: number;
     otherAlternatives?: number;
     byteBudget?: number;
@@ -216,23 +224,23 @@ export function planPackSounds<T>(
   const available = (k: PlanKey) => queues.get(k)?.length ?? 0;
 
   // How many of each type go on pads. Kit types get their slots, bank B's types their quotas and bank C two bass and two 808, files permitting.
-  const kitTypes = (Object.keys(kitSlots) as CategoryId[]).filter((c) => (kitSlots[c] ?? 0) > 0);
-  const bankBTypes = (Object.keys(bankB) as CategoryId[]).filter((c) => (bankB[c] ?? 0) > 0 && !kitTypes.includes(c));
+  const kitTypes = (Object.keys(kitSlots) as CategoryId[]).filter((c) => kitSlots[c] !== undefined);
+  const bankBTypes = (Object.keys(bankB) as CategoryId[]).filter((c) => bankB[c] !== undefined && !kitTypes.includes(c));
   const bassKeys: PlanKey[] = kitTypes.includes("bass") || bankBTypes.includes("bass") ? [] : ["bass", "808"];
   const restTypes = [...queues.keys()].filter((k) => !kitTypes.includes(k as CategoryId) && !bankBTypes.includes(k as CategoryId) && !bassKeys.includes(k));
   const planned = new Set<PlanKey>([...kitTypes, ...bankBTypes, ...bassKeys, ...restTypes]);
-  const altsFor = (k: PlanKey) => (kitTypes.includes(k as CategoryId) ? alternatives : otherAlternatives);
+  const altsFor = (k: PlanKey) => Math.max(0, (kitTypes.includes(k as CategoryId) ? alternatives : otherAlternatives) - (have[k] ?? 0));
 
   const visibleWant = new Map<PlanKey, number>();
   for (const c of kitTypes) visibleWant.set(c, Math.min(kitSlots[c]!, available(c)));
   for (const c of bankBTypes) visibleWant.set(c, Math.min(bankB[c]!, available(c)));
   if (bassKeys.length) {
     // Two basses and two 808s; when there are too few of one kind the other makes up the four.
-    let w808 = Math.min(C_808_PADS, available("808"));
-    let wBass = Math.min(BASS_PADS, available("bass"));
-    const extra808 = Math.min(BASS_PADS + C_808_PADS - w808 - wBass, available("808") - w808);
+    let w808 = Math.min(pads808, available("808"));
+    let wBass = Math.min(bassPads, available("bass"));
+    const extra808 = Math.min(bassPads + pads808 - w808 - wBass, available("808") - w808);
     w808 += extra808;
-    wBass += Math.min(BASS_PADS + C_808_PADS - w808 - wBass, available("bass") - wBass);
+    wBass += Math.min(bassPads + pads808 - w808 - wBass, available("bass") - wBass);
     visibleWant.set("808", w808);
     visibleWant.set("bass", wBass);
   }

@@ -1,6 +1,9 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import { buildPackProject, findPackInFileList } from "./packProject";
+import { appendPackToProject, buildPackProject, findPackInFileList } from "./packProject";
+import { fillPlan } from "./packFill";
+import { layoutById } from "./fingerLayouts";
+import type { ParsedKoalaProject } from "./koalaProject";
 import { parseWav } from "./decode";
 import { encodeWav } from "./wavEncode";
 
@@ -68,5 +71,51 @@ describe("sample pack project", () => {
 
   it("returns null when the folder holds no audio", async () => {
     expect(await buildPackProject({ name: "empty", files: [] }, { kitSlots: KIT })).toBeNull();
+  });
+});
+
+describe("adding a pack to a project", () => {
+  const filesIn = (folder: string, n: number) =>
+    Array.from({ length: n }, (_, i) => {
+      const f = new File([wav(2000 + i)], `${folder}-${i}.wav`);
+      Object.defineProperty(f, "webkitRelativePath", { value: `Other/${folder}/${f.name}` });
+      return f;
+    });
+
+  it("appends only what the gaps need, past the grid, and leaves the existing sounds alone", async () => {
+    const base = (await buildPackProject(findPackInFileList(filesIn("Kicks", 3)), { kitSlots: { kick: 1 } }))!;
+    const zip = await JSZip.loadAsync(await base.file.arrayBuffer());
+    const samplerJson = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
+    const pads = samplerJson.pads.map((p: any) => ({ pad: p.pad, sampleId: p.sampleId, fileName: `${p.sampleId}.wav` }));
+    const project: ParsedKoalaProject = { zip, samplerJson, originalName: "Base.koala", pads, padBase: 0 };
+    const before = await zip.file(`sampler/${pads[0].sampleId}.wav`)!.async("uint8array");
+    const padsBefore = samplerJson.pads.length;
+
+    // Two melodic slots are missing on bank B.
+    const fill = fillPlan([24, 25], layoutById("horizontal"), []);
+    const result = (await appendPackToProject(project, findPackInFileList(filesIn("Synths", 10)), { ...fill, existing: [] }))!;
+
+    const forSlot = result.sounds.filter((x) => x.forSlot);
+    expect(forSlot).toHaveLength(2);
+    expect(forSlot.every((x) => x.category === "melodic")).toBe(true);
+    expect(result.sounds.filter((x) => !x.forSlot).length).toBeGreaterThan(0); // spares for the hot-swap pool
+    expect(result.sounds.every((x) => x.pad >= 64)).toBe(true);
+    expect(new Set(result.sounds.map((x) => x.pad)).size).toBe(result.sounds.length);
+    expect(project.samplerJson.pads).toHaveLength(padsBefore + result.sounds.length);
+    // The sounds already in the project are byte for byte as they were.
+    expect(await project.zip.file(`sampler/${pads[0].sampleId}.wav`)!.async("uint8array")).toEqual(before);
+    // The returned file is a project with the new sounds in it.
+    const reread = await JSZip.loadAsync(await result.file.arrayBuffer());
+    for (const x of result.sounds) expect(reread.file(`sampler/${x.sampleId}.wav`)).not.toBeNull();
+  });
+
+  it("returns null when nothing was wanted", async () => {
+    const base = (await buildPackProject(findPackInFileList(filesIn("Kicks", 2)), { kitSlots: { kick: 1 } }))!;
+    const zip = await JSZip.loadAsync(await base.file.arrayBuffer());
+    const samplerJson = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
+    const project: ParsedKoalaProject = { zip, samplerJson, originalName: "Base.koala", pads: [], padBase: 0 };
+    const fill = fillPlan([], layoutById("horizontal"), []);
+    const nothing = await appendPackToProject(project, { name: "x", files: [] }, { ...fill, existing: [] });
+    expect(nothing).toBeNull();
   });
 });
