@@ -51,3 +51,18 @@ export function dragStep(v: GrabbedView, dx: number, width: number, span: number
   const moved = (across - v.across) * span;
   return { frame: v.frame + moved, across, span };
 }
+
+/** How long a marker takes to slide back to the finger after a pause: the time constant of the exponential approach, in milliseconds. */
+export const SETTLE_TAU_MS = 70;
+/** Minimum travel (px) down from where the play button was pressed before releasing it keeps playback going. */
+export const LATCH_DRAG_PX = 48;
+
+/** Moves `value` toward `target`: the share of the distance left covered in `dtMs` follows an exponential, so it never overshoots and frame rate does not matter. */
+export function approach(value: number, target: number, dtMs: number, tauMs = SETTLE_TAU_MS): number {
+  return value + (target - value) * (1 - Math.exp(-Math.max(0, dtMs) / tauMs));
+}
+
+/** The same for a span, approached by ratio so zooming out feels as even as zooming in. */
+export function approachSpan(span: number, target: number, dtMs: number, tauMs = SETTLE_TAU_MS): number {
+  return span * Math.pow(target / span, 1 - Math.exp(-Math.max(0, dtMs) / tauMs));
+}

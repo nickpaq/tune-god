@@ -46,6 +46,8 @@ export interface PadHandle {
   setShift: (semitones: number) => void;
   /** Moves the reference tone's pitch, in cents from its note, without restarting it. No-op without a tone. */
   setToneOffset: (cents: number) => void;
+  /** Where the sound is now, in seconds from the start of the audio (the start offset plus the time it has played). */
+  position: () => number;
   /** Slides the pad to `semitones` and the tone to `toneCents` over `seconds`, in a straight line in pitch. */
   glide: (semitones: number, toneCents: number, seconds: number) => void;
 }
@@ -102,6 +104,8 @@ export function startPad(
   onEnd?: () => void,
   /** The pad knob's level in dB (0 or below): the sound itself already holds its loudness gain, the mix sits on the knob. */
   levelDb = 0,
+  /** Seconds into the audio to start from. */
+  startSeconds = 0,
 ): PadHandle {
   const ctx = readyContext();
   activePads.get(pad)?.stop(0, CUT_FADE);
@@ -132,7 +136,8 @@ export function startPad(
     osc.connect(toneGain).connect(gain);
     osc.start();
   }
-  source.start();
+  const startedAt = ctx.currentTime;
+  source.start(0, startSeconds);
 
   let stopped = false;
   const finish = () => {
@@ -178,6 +183,7 @@ export function startPad(
       if (mode !== "oneshot") voice.stop(RELEASE_HOLD, RELEASE_FADE);
     },
     cut: () => voice.stop(0, CUT_FADE),
+    position: () => startSeconds + (ctx.currentTime - startedAt) * source.playbackRate.value,
     setShift: (semitones) =>
       source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
     setToneOffset: (cents) => osc?.detune.setTargetAtTime(cents, ctx.currentTime, 0.005),
@@ -219,4 +225,9 @@ export function startSine(pitchClass: number): () => void {
     gain.gain.linearRampToValueAtTime(0, t + 0.06);
     osc.stop(t + 0.08);
   };
+}
+
+/** Builds the audio buffer for a sound ahead of time, so the first press of play does not wait for it. */
+export function prepareBuffer(channelData: Float32Array[], sampleRate: number): void {
+  bufferFor(getAudioContext(), channelData, sampleRate);
 }

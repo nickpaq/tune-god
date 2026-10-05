@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultSpan, dragStep, MIN_SPAN_FRAMES, spanAt, viewStart, zoomDepth, zoomRoom } from "./zoom";
+import { approach, approachSpan, defaultSpan, dragStep, MIN_SPAN_FRAMES, spanAt, viewStart, zoomDepth, zoomRoom } from "./zoom";
 
 describe("spanAt", () => {
   const resting = 4_000_000;
@@ -73,5 +73,30 @@ describe("defaultSpan", () => {
   it("is about half the song", () => {
     expect(defaultSpan(10_000_000)).toBe(5_000_000);
     expect(defaultSpan(100)).toBe(MIN_SPAN_FRAMES);
+  });
+});
+
+describe("approach", () => {
+  it("moves toward the target without overshooting, however the time is split into frames", () => {
+    let a = 0;
+    for (let i = 0; i < 10; i++) a = approach(a, 1, 10);
+    const b = approach(0, 1, 100);
+    expect(a).toBeCloseTo(b, 9);
+    expect(approach(0, 1, 70)).toBeCloseTo(1 - Math.exp(-1), 9);
+    expect(approach(0.5, 0.9, 0)).toBe(0.5);
+    expect(approach(0.5, 0.9, 10_000)).toBeCloseTo(0.9, 6);
+  });
+
+  it("zooms a span out by the same ratio each step", () => {
+    const target = 4_000_000;
+    let span = 400;
+    const ratios: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const next = approachSpan(span, target, 16);
+      ratios.push(Math.log(target / next) / Math.log(target / span));
+      span = next;
+    }
+    for (const r of ratios) expect(r).toBeCloseTo(ratios[0], 9);
+    expect(approachSpan(400, target, 100_000)).toBeCloseTo(target, 0);
   });
 });

@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
-import { getAudioContext } from "../audio/decode";
 import { mixToMono, snapToAttack, type SongAnalysis } from "../audio/song/beats";
 import { barsBefore, gridStart, planSections, SECTION_BARS, sectionSeconds, settleCut } from "../audio/song/chop";
 import { buildPyramid } from "../audio/song/waveform";
@@ -69,8 +68,6 @@ export function SongChopModal({
   const [keyPc, setKeyPc] = useState(0);
   const [minor, setMinor] = useState(false);
   const [useKey, setUseKey] = useState(true);
-  const [playing, setPlaying] = useState(false);
-  const stopPlaying = useRef<(() => void) | null>(null);
 
   const applyBpm = useCallback((value: number) => {
     const next = Math.min(MAX_BPM, Math.max(MIN_BPM, value));
@@ -100,8 +97,6 @@ export function SongChopModal({
     // the analysis runs once, for the song as it was opened
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => () => stopPlaying.current?.(), []);
 
   const grid = useMemo(() => ({ bpm, beatsPerBar, downbeatFrame, sampleRate, shifts, bars }), [bpm, beatsPerBar, downbeatFrame, sampleRate, shifts, bars]);
   const plans = useMemo(() => planSections(totalFrames, grid), [totalFrames, grid]);
@@ -165,60 +160,6 @@ export function SongChopModal({
       const { [plan.index]: _gone, ...rest } = prev;
       return rest;
     });
-  };
-
-  /** Plays the song from a cut with a click on every beat (higher on the bar's first), so the grid can be heard against the music. */
-  const playFrom = (startFrame: number) => {
-    stopPlaying.current?.();
-    const ctx = getAudioContext();
-    if (ctx.state === "suspended") void ctx.resume();
-    const beat = 60 / bpm;
-    const bars = 2;
-    const seconds = bars * beatsPerBar * beat + 0.3;
-    const frames = Math.round(seconds * sampleRate);
-    const buffer = ctx.createBuffer(pad.channelData.length, frames, sampleRate);
-    pad.channelData.forEach((data, ch) => {
-      const slice = data.subarray(Math.max(0, startFrame), Math.min(data.length, startFrame + frames));
-      buffer.copyToChannel(slice as Float32Array<ArrayBuffer>, ch, Math.max(0, -startFrame));
-    });
-    const t0 = ctx.currentTime + 0.05;
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start(t0);
-    const clicks: OscillatorNode[] = [];
-    for (let i = 0; i < bars * beatsPerBar; i++) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.value = i % beatsPerBar === 0 ? 1600 : 1000;
-      gain.gain.setValueAtTime(0.25, t0 + i * beat);
-      gain.gain.exponentialRampToValueAtTime(0.001, t0 + i * beat + 0.04);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(t0 + i * beat);
-      osc.stop(t0 + i * beat + 0.05);
-      clicks.push(osc);
-    }
-    setPlaying(true);
-    const done = () => {
-      stopPlaying.current = null;
-      setPlaying(false);
-    };
-    source.onended = done;
-    stopPlaying.current = () => {
-      try {
-        source.stop();
-      } catch {
-        /* already ended */
-      }
-      for (const osc of clicks) {
-        try {
-          osc.stop();
-        } catch {
-          /* already ended */
-        }
-      }
-      done();
-    };
   };
 
   const confidenceNote = !analysis
@@ -288,9 +229,6 @@ export function SongChopModal({
             </button>
           </div>
           <div className="chop__row">
-            <button className="chop__btn" onClick={() => (playing ? stopPlaying.current?.() : plan && playFrom(plan.start))}>
-              {playing ? "Stop" : "Play with clicks"}
-            </button>
             <button className="chop__btn" disabled={!plan || plan.index < 1} onClick={fitTempo} title="Sets the tempo so that every cut lines up with bar 1 and this cut">
               Fit tempo to this cut
             </button>
@@ -374,7 +312,6 @@ export function SongChopModal({
           className="chop__go"
           disabled={status === "listening" || plans.length === 0 || fits === 0}
           onClick={() => {
-            stopPlaying.current?.();
             onConfirm({ bpm, beatsPerBar, downbeatFrame, shifts, bars, keyPc: useKey ? keyPc : null });
           }}
         >
