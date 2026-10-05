@@ -172,16 +172,27 @@ export function SongChopModal({
     return () => cancelAnimationFrame(raf);
   }, [playing, frameNow, totalFrames]);
 
-  /** Where the line was when Play was pressed (on a grid line, if it had snapped to one): pausing puts it back there. */
-  const playedFrom = useRef(0);
+  /** Pausing leaves the line where the song was and glides it onto the nearest bar line. */
   const togglePlay = () => {
     if (player.playing) {
       player.stop();
-      timeline.current?.setCursor(playedFrom.current);
+      timeline.current?.snap();
       return;
     }
-    playedFrom.current = timeline.current?.cursor() ?? 0;
-    player.start(playedFrom.current);
+    player.start(timeline.current?.cursor() ?? 0);
+  };
+
+  /** Whether the song was playing when a finger started scrubbing: letting go then carries on playing from the line, with no snap. */
+  const scrubbedPlaying = useRef(false);
+  const scrubStart = () => {
+    scrubbedPlaying.current = player.playing;
+    player.stop();
+  };
+  const scrubEnd = (): boolean => {
+    if (!scrubbedPlaying.current) return false;
+    scrubbedPlaying.current = false;
+    player.start(timeline.current?.cursor() ?? 0);
+    return true;
   };
 
   /** Jumps the line `bars` bars back or forward (`direction` -1 or 1) along the bar lines, and carries on playing from there if the song was playing. */
@@ -197,7 +208,6 @@ export function SongChopModal({
     const frame = Math.min(totalFrames, Math.max(0, lineFrame(grid, line)));
     timeline.current?.setCursor(frame);
     if (player.playing) {
-      playedFrom.current = frame;
       player.start(frame);
     }
   };
@@ -281,7 +291,7 @@ export function SongChopModal({
           <p className="chop__note">{note}</p>
 
           <div className="chop__screen">
-            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} onScrub={player.stop} />
+            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} onScrub={scrubStart} onScrubEnd={scrubEnd} />
             <div className="chop__readout">
               <span>{bpmText}</span>
               <span>{readoutTwo}</span>

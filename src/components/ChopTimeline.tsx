@@ -24,6 +24,8 @@ export interface ChopTimelineHandle {
   cursor: () => number;
   /** Moves the waveform so the cursor is on a frame. */
   setCursor: (frame: number) => void;
+  /** Glides the line onto the nearest bar line (does nothing with the magnet off). */
+  snap: () => void;
 }
 
 function formatTime(seconds: number): string {
@@ -54,13 +56,15 @@ export const ChopTimeline = forwardRef<
     magnetOn: boolean;
     /** A finger started scrubbing. */
     onScrub: () => void;
+    /** The finger let go after scrubbing. Returns true when playback carries on from where the line is, which skips the snap. */
+    onScrubEnd: () => boolean;
   }
->(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, magnetOn, onScrub }, ref) {
+>(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd }, ref) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const time = useRef<HTMLSpanElement>(null);
   const total = pyramid.totalFrames;
   const latest = useRef({ grid, chops, downbeats, oneOne, sections, magnetOn, onScrub });
-  latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub };
+  latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd };
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
   const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number; span: number } | null>(null);
@@ -218,6 +222,9 @@ export const ChopTimeline = forwardRef<
         cancelAnimationFrame(settling.current);
         setCursor(frame);
       },
+      snap: () => {
+        if (latest.current.magnetOn) settle();
+      },
     }),
     [setCursor],
   );
@@ -301,7 +308,9 @@ export const ChopTimeline = forwardRef<
     const d = drag.current;
     if (d?.id !== e.pointerId) return;
     drag.current = null;
-    if (d.moved && latest.current.magnetOn) settle();
+    if (!d.moved) return;
+    const resumed = latest.current.onScrubEnd();
+    if (!resumed && latest.current.magnetOn) settle();
   };
 
   useEffect(() => () => cancelAnimationFrame(settling.current), []);
