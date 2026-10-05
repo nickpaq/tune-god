@@ -373,7 +373,8 @@
 .waveform {
   flex: 1 1 0;
   height: 0;
-  min-height: calc(var(--cell) * 8);
+  /* the waveform gives way first on a short screen, so the text above and below it never has to change size */
+  min-height: calc(var(--cell) * 2);
   width: 100%;
   display: block;
   /* the one thing on the screen that is not drawn on the pixel grid, so it sits above it */

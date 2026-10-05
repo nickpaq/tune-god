@@ -1,7 +1,5 @@
 import { useEffect } from "react";
 
-/** The smallest cell the fit may go down to, as a share of the width-based one (below that the pixel font is too small to read). */
-const MIN_CELL_SHARE = 0.6;
 /** The hot-swap list's cell as a share of the screen's cell. */
 const SWAP_CELL_SHARE = 0.8;
 
@@ -55,10 +53,8 @@ export function clippedOledText(oled: HTMLElement): string[] {
  * screen itself starts on a device pixel. `--c` (one cell) and `--cl` (the grid line) are set on the root, everything on
  * the OLED is sized in cells, and the screen is nudged by the sub-pixel remainder of where the layout put it.
  *
- * The cell starts from the phone's width, but the screen's height depends on the phone's height and on what else is on
- * the chassis, so the text could outgrow a short screen and be cut off. So after every layout the text is checked
- * (`clippedOledText`) and the cell is stepped down a device pixel at a time until all of it fits; it grows back as soon
- * as there is room. Nothing on the screen can be cut off by its size, whatever is added to it.
+ * The cell comes from the phone's width alone and never changes with what is on the screen: one consistent text size.
+ * (It used to be stepped down until nothing was cut off, which made the text jump between sizes; that is gone.)
  */
 export function useOledCell() {
   useEffect(() => {
@@ -94,14 +90,8 @@ export function useOledCell() {
       const box = oled.getBoundingClientRect();
       const key = `${base}|${ratio}|${box.width.toFixed(1)}x${box.height.toFixed(1)}|${oled.textContent}`;
       if (key !== lastKey) {
-        const floor = Math.max(2, Math.round(base * MIN_CELL_SHARE));
-        let cell = base;
-        setCell(cell, ratio);
-        while (cell > floor && clippedOledText(oled).length > 0) setCell(--cell, ratio);
-        if (cell === floor) {
-          const left = clippedOledText(oled);
-          if (left.length) console.warn("OLED text still cut off at the smallest cell:", left);
-        }
+        // One size, always: the text is never stepped down or grown to fit, so it looks the same on every screen and in every mode.
+        setCell(base, ratio);
         const after = oled.getBoundingClientRect();
         lastKey = `${base}|${ratio}|${after.width.toFixed(1)}x${after.height.toFixed(1)}|${oled.textContent}`;
       }
