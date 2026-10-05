@@ -293,7 +293,9 @@ async function addPlaceholderPads(project: ParsedKoalaProject, samplerJson: any,
   const base = project.padBase;
   const ids = [...samples.map((s) => s.id), ...pads.map((p) => p.sampleId)].filter((id) => typeof id === "number");
   const sampleId = Math.max(0, ...ids) + 1;
-  const padTemplate = pads.find((p) => p.type === "sample");
+  // With no real pad left in the project (a chopped song's own pads are deleted), a placeholder still needs every field Koala reads: a bare pad
+  // fails to load ("type must be number, but is null").
+  const padTemplate = pads.find((p) => p.type === "sample") ?? defaultPad();
   const sampleTemplate = samples[0];
 
   const silence = encodeWav({ sampleRate: PLACEHOLDER_SAMPLE_RATE, channelData: [new Float32Array(PLACEHOLDER_FRAMES)], bitDepth: 16 });
@@ -359,6 +361,16 @@ async function addGhostPads(project: ParsedKoalaProject, samplerJson: any, ghost
     taken.add(g.index);
   }
   pads.sort((a, b) => Number(a.pad) - Number(b.pad));
+}
+
+/** A pad as Koala writes a fresh one (read from a project it saved), for when the project has no pad to copy. */
+function defaultPad(): any {
+  return {
+    attack: 0.00011000000085914508, bus: -1, channel: 0, chokeGroup: 0, cyclicPeriod: 20, end: 0, hasLoopPoint: "false", loopPoint: -1, looping: "false", muted: false,
+    oneshot: "true", pad: "0", pan: 0.5, pingpong: "false", pitch: 0, release: 0, reverse: "false", sampleId: 0, start: 0, stretch: 1, stretchLength: 0, stretching: false,
+    tone: 0, type: "sample", vol: 1, xfade: 200, zoomEnd: 0, zoomStart: 0,
+    eq: { enabled: "false", hi: { freq: 8000, gain: 0, q: 1, type: "highshelf" }, lo: { freq: 100, gain: 0, q: 1, type: "lowshelf" }, mid: { freq: 1000, gain: 0, q: 1, type: "peaking" } },
+  };
 }
 
 /** The names of the effects already on a project's master strip: the master chain would wipe them out. */
