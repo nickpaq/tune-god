@@ -3,14 +3,12 @@ import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
 import { approach, isDrag, spanAfterDrag, viewUnderFinger, zoomRate, zoomRoom, zoomTravel } from "../audio/song/zoom";
 import { MAX_SECTION_BARS, isBarLine, lineFrame, linesBetween, type TapGrid } from "../audio/song/tapGrid";
 
-/** Lines closer together than this (CSS pixels) are not drawn (beats first, then bars). */
-const MIN_LINE_PX = 7;
 /** Height (CSS pixels) of the strip along the top that carries the chop flags, and of the one along the bottom that carries the downbeat flags. */
 const FLAG_H = 14;
 /** The closest view, in seconds across. */
 const MIN_SPAN_SECONDS = 0.25;
-/** A bar narrower than this on the screen (CSS pixels) is too small to snap to alone: the magnet then takes every fourth bar. */
-const MAGNET_BAR_PX = 30;
+/** A bar narrower than this on the screen (CSS pixels) is too small to be a line of its own: the grid then shows (and the snap takes) every fourth bar, and at the widest views every sixteenth. */
+const MIN_BAR_PX = 30;
 /** How much of the song the first view shows, in seconds. */
 const START_SECONDS = 12;
 
@@ -71,17 +69,15 @@ export const ChopTimeline = forwardRef<
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
 
   /**
-   * The lines shown at this zoom: every beat, or when the beats are too close together only the bars, then every fourth bar, and at the widest views
-   * every sixteenth bar (the longest a section may be), so there are always lines to see.
+   * The grid lines for this zoom, which are both the lines drawn and the lines the snap goes to: bar lines only, never anything finer. Every bar when a
+   * bar is wide enough on the screen to tell apart, otherwise every fourth bar, and at the widest views every sixteenth (the longest a section may be).
+   * They are counted from the grid's first bar.
    */
-  const shownLines = (g: TapGrid, start: number, span: number, widthPx: number): number[] => {
-    const beatPx = (g.segments[0].beatFrames * widthPx) / span;
-    const lines = linesBetween(g, Math.max(0, start), Math.min(total, start + span));
-    if (beatPx >= MIN_LINE_PX) return lines;
-    const barPx = beatPx * g.beatsPerBar;
-    const every = barPx >= MIN_LINE_PX ? 1 : barPx * 4 >= MIN_LINE_PX ? 4 : MAX_SECTION_BARS;
+  const gridLines = (g: TapGrid, from: number, to: number, span: number, widthPx: number): number[] => {
+    const barPx = (g.segments[0].beatFrames * g.beatsPerBar * widthPx) / span;
+    const every = barPx >= MIN_BAR_PX ? 1 : barPx * 4 >= MIN_BAR_PX ? 4 : MAX_SECTION_BARS;
     const ref = g.downbeats[0] ?? 0;
-    return lines.filter((n) => isBarLine(g, n) && ((((n - ref) / g.beatsPerBar) % every) + every) % every === 0);
+    return linesBetween(g, Math.max(0, from), Math.min(total, to)).filter((n) => isBarLine(g, n) && ((((n - ref) / g.beatsPerBar) % every) + every) % every === 0);
   };
 
   const draw = useCallback(() => {
@@ -138,11 +134,10 @@ export const ChopTimeline = forwardRef<
 
     // The grid's lines: beats light, the first beat of each bar stronger. Too close together and the beats go first, then the bars.
     if (g) {
-      for (const n of shownLines(g, start, span, w / ratio)) {
-        const bar = isBarLine(g, n);
+      for (const n of gridLines(g, start, start + span, span, w / ratio)) {
         ctx.fillStyle = ink;
-        ctx.globalAlpha = bar ? 0.6 : 0.2;
-        const thick = bar ? Math.max(2, Math.round(1.5 * ratio)) : one;
+        ctx.globalAlpha = 0.6;
+        const thick = Math.max(2, Math.round(1.5 * ratio));
         ctx.fillRect(Math.round(xOf(lineFrame(g, n))) - Math.floor(thick / 2), flag, thick, bottom - flag);
       }
       ctx.globalAlpha = 1;
@@ -241,21 +236,15 @@ export const ChopTimeline = forwardRef<
     drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span, y0: e.clientY, room: zoomRoom(e.clientY, window.innerHeight) };
   };
 
-  /**
-   * The grid lines the magnet pulls toward: bar lines only, every bar when a bar is wide enough on the screen to tell apart, otherwise every fourth bar
-   * (counted from the first bar of the grid). Never finer than a bar.
-   */
+  /** The drawn grid line just before a frame and the one just after it (infinite where there is none): where the snap can go. */
   const bounds = (frame: number, span: number): { before: number; after: number } => {
     const g = latest.current.grid;
     let before = -Infinity;
     let after = Infinity;
     if (!g) return { before, after };
-    const barFrames = g.segments[0].beatFrames * g.beatsPerBar;
-    const every = (barFrames * canvas.current!.clientWidth) / span >= MAGNET_BAR_PX ? 1 : 4;
-    const reach = Math.max(span * 2, barFrames * every * 3);
-    const ref = g.downbeats[0] ?? 0;
-    for (const n of linesBetween(g, Math.max(0, frame - reach), Math.min(total, frame + reach))) {
-      if (!isBarLine(g, n) || ((((n - ref) / g.beatsPerBar) % every) + every) % every !== 0) continue;
+    // far enough either side to find a neighbour at the coarsest step
+    const reach = Math.max(span * 2, g.segments[0].beatFrames * g.beatsPerBar * MAX_SECTION_BARS * 3);
+    for (const n of gridLines(g, frame - reach, frame + reach, span, canvas.current!.clientWidth)) {
       const t = lineFrame(g, n);
       if (t <= frame && t > before) before = t;
       if (t > frame && t < after) after = t;

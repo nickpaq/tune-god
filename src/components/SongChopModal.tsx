@@ -172,9 +172,16 @@ export function SongChopModal({
     return () => cancelAnimationFrame(raf);
   }, [playing, frameNow, totalFrames]);
 
+  /** Where the line was when Play was pressed (on a grid line, if it had snapped to one): pausing puts it back there. */
+  const playedFrom = useRef(0);
   const togglePlay = () => {
-    if (player.playing) return player.stop();
-    player.start(timeline.current?.cursor() ?? 0);
+    if (player.playing) {
+      player.stop();
+      timeline.current?.setCursor(playedFrom.current);
+      return;
+    }
+    playedFrom.current = timeline.current?.cursor() ?? 0;
+    player.start(playedFrom.current);
   };
 
   /** Jumps the line `bars` bars back or forward (`direction` -1 or 1) along the bar lines, and carries on playing from there if the song was playing. */
@@ -189,7 +196,10 @@ export function SongChopModal({
     const line = near + direction * grid.beatsPerBar * (ahead ? bars - 1 : bars);
     const frame = Math.min(totalFrames, Math.max(0, lineFrame(grid, line)));
     timeline.current?.setCursor(frame);
-    if (player.playing) player.start(frame);
+    if (player.playing) {
+      playedFrom.current = frame;
+      player.start(frame);
+    }
   };
 
   // ---- markers ----
