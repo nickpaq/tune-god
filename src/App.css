@@ -1130,8 +1130,7 @@
   }
 }
 
-.focus__close,
-.focus__skip {
+.focus__close {
   flex: none;
   height: 11.3cqw;
   border: 0;
@@ -1160,9 +1159,6 @@
   stroke-linecap: round;
 }
 
-.focus__skip {
-  padding: 0 4cqw;
-}
 
 .focus__text {
   flex: 1;
@@ -1225,6 +1221,57 @@
 .focus__actions .menu__button {
   flex: 1;
   font-size: 3.2cqw;
+}
+
+.screen-wrap--focus {
+  z-index: 31;
+}
+
+/* Over the whole display while sorting: delete on the left half, skip on the right. */
+.screen__sort {
+  position: absolute;
+  inset: 2cqw 2.8cqw;
+  z-index: 2;
+  display: flex;
+  gap: 2cqw;
+}
+
+.screen__sort-key {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2cqw;
+  border: 0;
+  border-radius: 1.8cqw;
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 var(--key-edge), 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  color: var(--key-ink);
+  font: inherit;
+  font-size: 3.4cqw;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.screen__sort-key:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), 0 1px 0 var(--key-edge);
+}
+
+.screen__sort-key:disabled {
+  opacity: 0.4;
+}
+
+.screen__sort-key svg {
+  width: 9cqw;
+  height: 9cqw;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .deck--focus,

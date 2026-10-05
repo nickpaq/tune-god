@@ -38,8 +38,10 @@ const TONE_FADE = 0.15;
 const MAX_TONE_GAIN = 0.7;
 
 export interface PadHandle {
-  /** Holds briefly, then fades the pad (and tone) out. */
+  /** Holds briefly, then fades the pad (and tone) out. A "oneshot" pad ignores it and plays to its end. */
   release: () => void;
+  /** Stops the pad now with a short fade, whatever its mode. */
+  cut: () => void;
   /** Retunes the playing pad immediately, without restarting it. */
   setShift: (semitones: number) => void;
 }
@@ -74,8 +76,8 @@ function rms(channelData: Float32Array[]): number {
   return count ? Math.sqrt(sum / count) : 0;
 }
 
-/** How a pad previews: "loop" repeats while held (melodic sounds); "hold" plays once and is cut on release. */
-export type PadMode = "loop" | "hold";
+/** How a pad previews: "loop" repeats while held (melodic sounds); "hold" plays once and is cut on release; "oneshot" plays all the way through whatever the finger does. */
+export type PadMode = "loop" | "hold" | "oneshot";
 
 /**
  * Starts a pad for as long as it is held, cutting off any earlier hit of the same pad (monophonic).
@@ -168,7 +170,10 @@ export function startPad(
   };
   activePads.set(pad, voice);
   return {
-    release: () => voice.stop(RELEASE_HOLD, RELEASE_FADE),
+    release: () => {
+      if (mode !== "oneshot") voice.stop(RELEASE_HOLD, RELEASE_FADE);
+    },
+    cut: () => voice.stop(0, CUT_FADE),
     setShift: (semitones) =>
       source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
   };

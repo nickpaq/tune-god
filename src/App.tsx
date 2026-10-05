@@ -816,7 +816,7 @@ function App() {
         pad.sampleRate,
         shiftFor(pad, tunedTarget, a4),
         pad.tune && toneOn ? (pad.keyPc ?? keyPc) : null,
-        padMode(pad),
+        focus?.started ? "oneshot" : padMode(pad),
         undefined,
         normalize ? pad.knobDb : undefined,
       ),
@@ -973,8 +973,6 @@ function App() {
     setSelected(pad.index);
     setBank(Math.floor(pad.index / 16));
     pressPad(pad.index);
-    const timer = window.setTimeout(() => liftPad(pad.index), 1500);
-    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.started, focus?.pos]);
 
@@ -1030,11 +1028,30 @@ function App() {
     setOrganize(false);
   };
 
+  /** Stops whatever is still playing, with a short fade (sorting plays each sound through, so an answer has to cut it). */
+  const cutAll = () => {
+    for (const handle of releasePad.current.values()) handle.cut();
+    releasePad.current.clear();
+  };
+
   /** Next unknown sound, or the end of the sorting. */
   const nextFocus = () => {
     if (!focus) return;
+    cutAll();
     if (focus.pos + 1 < focus.queue.length) setFocus({ ...focus, pos: focus.pos + 1 });
     else finishOrganize();
+  };
+
+  /** The trash key: the sound is deleted (undo brings it back) and the next one plays. */
+  const trashFocused = (pad: Pad) => {
+    deletePad(pad);
+    nextFocus();
+  };
+
+  /** The skip key: the sound is marked as the unknown type ("Other") and the next one plays. */
+  const skipFocused = (pad: Pad) => {
+    classifyPad(pad, "other");
+    nextFocus();
   };
 
   /** The cross: leave the sorting early. The sounds already sorted keep their types; Organize and Drum layouts stay off until it is done. */
@@ -1045,6 +1062,7 @@ function App() {
       )
     )
       return;
+    cutAll();
     setFocus(null);
     setOrganize(false);
   };
@@ -1519,8 +1537,24 @@ function App() {
         </div>
 
         {/* The screen: a black OLED in Silkscreen, with a title bar in inverse video. It grows over the deck's place in Swap mode. */}
-        <div className={`screen-wrap screen-wrap--${shownMode}`}>
+        <div className={`screen-wrap screen-wrap--${shownMode}${focus?.started ? " screen-wrap--focus" : ""}`}>
           <section className="screen" aria-label={`Display: ${shownMode}`}>
+            {focus?.started && (
+              <div className="screen__sort">
+                <button className="screen__sort-key" aria-label="Delete this sound" disabled={!selectedPad} onClick={() => selectedPad && trashFocused(selectedPad)}>
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4" />
+                  </svg>
+                  <span>Delete</span>
+                </button>
+                <button className="screen__sort-key" aria-label="Skip: mark this sound as unknown" disabled={!selectedPad} onClick={() => selectedPad && skipFocused(selectedPad)}>
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M3 3.5l6 4.5-6 4.5zM12.5 3v10" />
+                  </svg>
+                  <span>Skip</span>
+                </button>
+              </div>
+            )}
             <div className="oled">
               {selectedPad && (
                 <div className="oled__head">
@@ -1737,7 +1771,7 @@ function App() {
               <div className="focus__title">Let's sort your sounds</div>
               <p>
                 {focus.queue.length === 1 ? "One sound has a name" : `${focus.queue.length} sounds have names`} that don't say what{" "}
-                {focus.queue.length === 1 ? "it is" : "they are"}. Each one will play once. Tap the sound type that fits and the next one plays. Tap or hold its pad to hear it again.
+                {focus.queue.length === 1 ? "it is" : "they are"}. Each one plays all the way through. Tap the sound type that fits and the next one plays. Tap or hold its pad to hear it again.
               </p>
               <div className="focus__actions">
                 <button className="menu__button" onClick={cancelIntro}>
@@ -1764,9 +1798,6 @@ function App() {
                 {focus.pos + 1} of {focus.queue.length}
               </div>
             </div>
-            <button className="focus__skip" onClick={nextFocus}>
-              Skip
-            </button>
           </div>
         )}
         {notice && <div className="notice">{notice}</div>}
