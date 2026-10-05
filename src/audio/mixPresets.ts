@@ -153,8 +153,8 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
     { name: "CLIPPER", parameters: { input: 0, output: 0, threshold: -1.5, oversample: 1 } },
     // LIMITER: gain is INPUT gain into the limiter, -18 to +18 dB, so this is the master loudness knob. attack 1.5 to 6 ms, release 60 to 1000 ms.
     // Reference: the gold-standard mix has a 12 dB peak-to-loudness ratio (its absolute loudness is not known: it came through YouTube). At +3 dB our groove had 8.9 dB and at -1 dB 13.5 dB (round 3c) with the limiter idle (peak -4.65 dBFS). Gain moves peak and loudness together until a peak reaches the ceiling, so the ratio only
-    // falls once the limiter works: +4.65 dB reaches the ceiling, about 1.3 dB more of limiting gives 12.2, so +6 dB (about -12.5 LUFS) is the estimate. Tune it until a rendered groove measures about 12 dB (scripts/analyzeMixRender.py). Lower = more dynamics, higher = louder.
-    { name: "LIMITER", parameters: { attack: 1.5, release: 100, gain: 6 } },
+    // falls once the limiter works: +4.65 dB reaches the ceiling, about 1.3 dB more of limiting gives 12.2, so +6 dB (about -12.5 LUFS) was the estimate. The target is now -9 LUFS integrated (user choice; the ratio falls to about 9 dB as a result), so +9 dB, to be corrected from the next render. Tune it until a rendered groove measures about 12 dB (scripts/analyzeMixRender.py). Lower = more dynamics, higher = louder.
+    { name: "LIMITER", parameters: { attack: 1.5, release: 100, gain: 9 } },
   ],
 };
 
