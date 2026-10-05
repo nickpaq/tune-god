@@ -3,7 +3,8 @@
 
 Usage: python3 scripts/analyzeReference.py audio.(wav|mp4|m4a|mp3) [start_seconds]
 Anything ffmpeg can read works (a screen recording is fine). Pass a start time to skip an intro. Needs ffmpeg, numpy and scipy.
-A streaming service may have turned the track down: if its peak is near 0 dBFS it was not, and the loudness is the master's own.
+A track from a streaming service has had its level changed (and may be re-encoded), so its LUFS is not the master's: use the peak-to-loudness ratio,
+crest, band balance and stereo numbers, which a plain gain change does not alter, and not the loudness itself.
 """
 import subprocess, sys, tempfile, wave
 import numpy as np

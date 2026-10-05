@@ -116,16 +116,15 @@ Export the updated calibration project from KoalaTune with **Heavy, warm master 
 
 ## Reference mix (the user's gold standard)
 
-A 9-second screen recording of a streamed phonk track (`scripts/analyzeReference.py` repeats this). Its peak is -0.19 dBFS, so the stream was not turned down and the loudness is the master's own. The first 3 s are a quiet intro; these are the groove from 3.0 s on.
+A 9-second screen recording of a streamed phonk track (`scripts/analyzeReference.py` repeats this). **It was delivered through YouTube, which changes the level (loudness normalisation) and re-encodes the audio, so its absolute loudness is not the master's and is not a target.** A gain change moves the peak and the loudness together, so the peak-to-loudness ratio, crest, tonal balance and stereo width are still usable, with the caveat that any dynamic processing a player adds (such as a "stable volume" setting) would also change them. The first 3 s are a quiet intro; these are the groove from 3.0 s on.
 
 | | Reference | Our round-1 groove |
 | --- | --- | --- |
-| Integrated loudness | -12.4 LUFS | -9.1 LUFS |
-| Peak | -0.19 dBFS | -0.24 dBFS |
 | Peak-to-loudness | **12.2 dB** | 8.9 dB |
 | Crest (peak - RMS) | 11.9 dB | 8.8 dB |
 | L/R correlation, side/mid | 0.95, -15.6 dB | mono sources |
+| (Integrated loudness, as recorded) | (-12.4 LUFS, not a target) | -9.1 LUFS |
 
 Tonal balance (dB re total energy): sub 20-60 Hz -1.9, bass 60-150 -5.7, low 150-300 -13.2, low-mid 300-600 -18.5, mid 600-1.2k -23.4, hi-mid 1.2-2.5k -24.0, presence 2.5-5k -22.8, brilliance 5-10k -20.6, air 10k+ -26.9. Sub and bass carry the track; the mids and presence sit about 20 dB under the total and the top end is clear but not bright. Our groove matched the sub and bass (-2.7, -3.9) but its mids were far lower, because the synthetic sounds are sines and noise bursts, so only the low end and the dynamics are comparable.
 
-What it means for the preset: the master should be about 3 LU quieter than the round-1 chain with correspondingly less limiting (peak-to-loudness about 12 dB, not 9), and melodic content should keep a moderate stereo width (side about 15 dB under mid), not mono. LIMITER input gain went from +3 to -1 dB for this. More references can be added the same way.
+What it means for the preset: our master was more squashed than the reference (peak-to-loudness 9 dB against 12), so the limiter is driven less hard. LIMITER input gain went from +3 to -1 dB for this, which is a guess at how much less. The target is the 12 dB ratio, not a loudness: measure the next groove render's peak-to-loudness with `analyzeMixRender.py` and adjust the gain until it is about 12 dB. Melodic content should keep a moderate stereo width (side about 15 dB under mid), not mono. A reference that did not go through a streaming service would also fix an absolute loudness target.
