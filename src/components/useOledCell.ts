@@ -2,6 +2,8 @@ import { useEffect } from "react";
 
 /** The smallest cell the fit may go down to, as a share of the width-based one (below that the pixel font is too small to read). */
 const MIN_CELL_SHARE = 0.6;
+/** The hot-swap list's cell as a share of the screen's cell. */
+const SWAP_CELL_SHARE = 0.8;
 
 /**
  * Every piece of text on the OLED that is drawn outside the screen or cut off by a box it sits in. Text that is cut on purpose with an
@@ -34,7 +36,9 @@ export function clippedOledText(oled: HTMLElement): string[] {
       const r = box.getBoundingClientRect();
       const ellipsis = style.textOverflow === "ellipsis" || getComputedStyle(parent).textOverflow === "ellipsis";
       const slack = 0.5;
-      const vertical = text.top < r.top - slack || text.bottom > r.bottom + slack;
+      // A box that scrolls (the hot-swap list) only shows part of its content on purpose, so it never cuts text off vertically.
+      const scrolls = style.overflowY === "auto" || style.overflowY === "scroll";
+      const vertical = !scrolls && (text.top < r.top - slack || text.bottom > r.bottom + slack);
       const horizontal = !ellipsis && (text.left < r.left - slack || text.right > r.right + slack);
       if (vertical || horizontal) {
         out.push(`"${node.textContent.trim().slice(0, 24)}" in .${parent.className || parent.tagName}`);
@@ -65,6 +69,8 @@ export function useOledCell() {
     const setCell = (cell: number, ratio: number) => {
       const root = document.documentElement.style;
       root.setProperty("--c", `${cell / ratio}px`);
+      // The hot-swap list's own cell, between the full cell and the smallest the fit goes to, the same on every bank.
+      root.setProperty("--c-swap", `${Math.max(2, Math.round(cell * SWAP_CELL_SHARE)) / ratio}px`);
       root.setProperty("--cl", `${Math.max(1, Math.round(cell / 4)) / ratio}px`);
     };
 

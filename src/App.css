@@ -469,6 +469,8 @@
 
 /* ---- Swap screen ---- */
 .swap-list {
+  /* its own cell (set by useOledCell), so the list reads the same however many sounds it holds */
+  --cell: var(--c-swap, var(--c, 2.6px));
   display: flex;
   flex-direction: column;
 }
