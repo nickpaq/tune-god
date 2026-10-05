@@ -21,6 +21,8 @@ const HANDLE_W = 28;
 /** Two taps this close together in time (ms) and place (px) are a double tap. */
 const DOUBLE_TAP_MS = 380;
 const DOUBLE_TAP_PX = 30;
+/** The colour of the "tap from here" markers, apart from the screen's ink and from the palette's colours. */
+const DRIFT_COLOR = "#ff8a3d";
 
 export type TimelineMode = "view" | "select" | "adjust";
 
@@ -108,13 +110,19 @@ export const GridTimeline = forwardRef<
     onHandleRelease: (which: "start" | "end") => void;
     /** The section being picked was double tapped. */
     onDoubleTap: () => void;
+    /** The lines after which the audio no longer confirms the grid: each gets a "tap from here" marker pointing at it. */
+    driftLines: number[];
+    /** A "tap from here" marker was tapped. */
+    onDriftTap: (line: number) => void;
   }
->(function GridTimeline({ pyramid, sampleRate, grid, showGrid, sections, selection, selectionColor, maxBeats, selectedLine, mode, taps, startFrame, onLine, onSelect, onHandleRelease, onDoubleTap }, ref) {
+>(function GridTimeline({ pyramid, sampleRate, grid, showGrid, sections, selection, selectionColor, maxBeats, selectedLine, mode, taps, startFrame, onLine, onSelect, onHandleRelease, onDoubleTap, driftLines, onDriftTap }, ref) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const range = useRef<HTMLSpanElement>(null);
   const total = pyramid.totalFrames;
-  const latest = useRef({ grid, showGrid, sections, selection, selectionColor, maxBeats, selectedLine, mode, taps, onLine, onSelect, onHandleRelease, onDoubleTap });
-  latest.current = { grid, showGrid, sections, selection, selectionColor, maxBeats, selectedLine, mode, taps, onLine, onSelect, onHandleRelease, onDoubleTap };
+  const latest = useRef({ grid, showGrid, sections, selection, selectionColor, maxBeats, selectedLine, mode, taps, onLine, onSelect, onHandleRelease, onDoubleTap, driftLines, onDriftTap });
+  /** Where the "tap from here" markers are on the screen (CSS pixels), for tapping them. */
+  const pills = useRef<{ x0: number; y0: number; x1: number; y1: number; line: number }[]>([]);
+  latest.current = { grid, showGrid, sections, selection, selectionColor, maxBeats, selectedLine, mode, taps, onLine, onSelect, onHandleRelease, onDoubleTap, driftLines, onDriftTap };
   const initialSpan = Math.min(total, grid.segments[0].beatFrames * grid.beatsPerBar * 8);
   const view = useRef({ start: startFrame - initialSpan / 2, span: initialSpan });
   const playhead = useRef<{ frame: number } | null>(null);
@@ -150,7 +158,7 @@ export const GridTimeline = forwardRef<
     const ctx = el.getContext("2d");
     if (!ctx) return;
     const ink = getComputedStyle(el).color;
-    const { grid: g, sections: bin, selection: picked, selectionColor: pickColor, selectedLine: chosen, taps: marks } = latest.current;
+    const { grid: g, sections: bin, selection: picked, selectionColor: pickColor, selectedLine: chosen, taps: marks, driftLines: drift } = latest.current;
     const { start, span } = view.current;
     el.dataset.start = String(Math.round(start));
     el.dataset.span = String(Math.round(span));
@@ -225,6 +233,31 @@ export const GridTimeline = forwardRef<
     };
     bin.forEach((s, i) => flagAt(lineFrame(g, s.first), String(i + 1), s.color));
     for (const n of g.downbeats) flagAt(lineFrame(g, n), "1.1.1", ink);
+
+    // "Tap from here": a marker on the last line the audio confirmed, with an arrow pointing at it.
+    pills.current = [];
+    for (const n of drift) {
+      const x = xOf(lineFrame(g, n));
+      if (x < inset - 2 || x > inset + inner + 2) continue;
+      const label = "TAP FROM HERE";
+      const pw = ctx.measureText(label).width + 10 * ratio;
+      const ph = 15 * ratio;
+      const tip = 7 * ratio;
+      const py = plotTop + 6 * ratio;
+      ctx.fillStyle = DRIFT_COLOR;
+      ctx.globalAlpha = 1;
+      ctx.fillRect(Math.round(x) - one, plotTop, 2 * one, bottom - plotTop);
+      ctx.beginPath();
+      ctx.moveTo(x, py + ph / 2);
+      ctx.lineTo(x + tip, py);
+      ctx.lineTo(x + tip, py + ph);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(x + tip, py, pw, ph);
+      ctx.fillStyle = "#000";
+      ctx.fillText(label, x + tip + 5 * ratio, py + ph / 2 + ratio);
+      pills.current.push({ x0: (x - 4 * ratio) / ratio, y0: py / ratio, x1: (x + tip + pw) / ratio, y1: (py + ph) / ratio, line: n });
+    }
 
     if (chosen !== null) {
       const x = xOf(lineFrame(g, chosen));
@@ -448,6 +481,10 @@ export const GridTimeline = forwardRef<
     if (cancelled) return;
     if (d.kind === "handle") return latest.current.onHandleRelease(d.which);
     if (d.moved) return;
+    // A tap on a "tap from here" marker goes to tapping there.
+    const g0 = geometry(e);
+    const pill = pills.current.find((p) => g0.x >= p.x0 && g0.x <= p.x1 && g0.y >= p.y0 - 4 && g0.y <= p.y1 + 4);
+    if (pill) return latest.current.onDriftTap(pill.line);
     // A tap. Twice in a row on the section being picked puts it in the list; otherwise it picks the line it landed near.
     const g = geometry(e);
     const { selection: picked, grid: gr } = latest.current;

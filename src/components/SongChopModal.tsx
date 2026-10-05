@@ -4,6 +4,7 @@ import { nextAnalysisWorker } from "../workers/workerClient";
 import { getAudioContext } from "../audio/decode";
 import type { Palette } from "../audio/palettes";
 import { mixToMono, snapToAttack } from "../audio/song/beats";
+import { attackEnvelope, findDriftMarkers } from "../audio/song/drift";
 import type { SectionPlan } from "../audio/song/chop";
 import { startMicTaps, type MicTaps } from "../audio/song/micTap";
 import {
@@ -153,6 +154,15 @@ export function SongChopModal({
   }, [phase, locked, estimate, sampleRate, beatsPerBar]);
   const edit = grid !== null && phase === "edit";
 
+  // Where the audio stops confirming the grid: a "tap from here" marker points at each. Worked out a moment after the grid last changed.
+  const envelope = useMemo(() => attackEnvelope(mono), [mono]);
+  const [driftLines, setDriftLines] = useState<number[]>([]);
+  useEffect(() => {
+    if (!grid || phase !== "edit") return setDriftLines([]);
+    const timer = window.setTimeout(() => setDriftLines(findDriftMarkers(envelope, grid, totalFrames)), 250);
+    return () => window.clearTimeout(timer);
+  }, [grid, phase, envelope, totalFrames]);
+
   const gridRef = useRef(grid);
   gridRef.current = grid;
   const clickLines = useCallback((from: number, to: number) => {
@@ -197,9 +207,25 @@ export function SongChopModal({
     },
     [player, sampleRate],
   );
-  const tapRef = useRef(registerTap);
-  tapRef.current = registerTap;
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  /**
+   * A knock on the microphone. While the song plays it is a tap. While the microphone is armed and the song is stopped, the first one above the
+   * threshold starts the song (from the middle of the view, as Play does) and is the first tap; the taps after it carry on until Stop is pressed.
+   */
+  const micTap = (secondsAgo: number) => {
+    if (player.playing) return registerTap(secondsAgo);
+    const from = Math.max(0, timeline.current?.centre() ?? 0);
+    player.start(from);
+    const frame = player.frameNow() ?? from;
+    // Starting from before the taps made means starting over: they belong to another run of the song.
+    setTaps((prev) => [...(prev.length > 0 && frame / sampleRate < Math.max(...prev) ? [] : prev), frame / sampleRate]);
+    setFlash(true);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(false), 90);
+  };
+  const micTapRef = useRef(micTap);
+  micTapRef.current = micTap;
 
   const onTapDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -230,7 +256,7 @@ export function SongChopModal({
       mic.current = await startMicTaps(
         getAudioContext(),
         sensitivityRef.current,
-        (secondsAgo) => tapRef.current(secondsAgo),
+        (secondsAgo) => micTapRef.current(secondsAgo),
         (peak) => {
           micLevel.current = Math.max(micLevel.current * 0.9, peak);
         },
@@ -249,7 +275,12 @@ export function SongChopModal({
   useEffect(() => () => mic.current?.stop(), []);
 
   const play = () => {
-    if (player.playing) return player.stop();
+    if (player.playing) {
+      player.stop();
+      // Stop ends an armed run: the microphone is let go.
+      if (mic.current) stopMic();
+      return;
+    }
     const from = Math.max(0, timeline.current?.centre() ?? 0);
     // Playing from before the taps made means starting over: they belong to another run of the song.
     if ((phase === "tap" || tapOn) && sorted.length > 0 && from / sampleRate < sorted[sorted.length - 1]) setTaps([]);
@@ -306,6 +337,16 @@ export function SongChopModal({
   // ---- editing the grid ----
 
   const setGridEdit = (next: TapGrid) => setLocked(next);
+
+  /** A "tap from here" marker was tapped: tap tempo opens with the view on that line, to play from there and tap along. */
+  const tapFromHere = (line: number) => {
+    if (!grid) return;
+    player.stop();
+    setTaps([]);
+    setTapOn(true);
+    setSelectedLine(line);
+    timeline.current?.centreOn(lineFrame(grid, line));
+  };
 
   const nudge = (frames: number) => {
     if (!grid || !edit) return;
@@ -408,8 +449,8 @@ export function SongChopModal({
         {player.playing ? "Tap" : "Press play, then tap"}
       </button>
       <div className="chop__row">
-        <button className="chop__btn chop__toggle" aria-pressed={micOn} onClick={toggleMic} title="Knock on the back of the phone instead of pressing the button: the microphone hears it">
-          Mic {micOn ? "on" : "off"}
+        <button className="chop__btn chop__toggle" aria-pressed={micOn} onClick={toggleMic} title="Arm the microphone, then knock on the back of the phone: the first knock starts the song and is the first tap, the rest are taps until Stop">
+          {micOn ? "Armed" : "Arm mic"}
         </button>
         <label className="chop__grow">
           Sensitivity
@@ -420,7 +461,7 @@ export function SongChopModal({
         <span className="chop__meter" aria-hidden="true">
           <span style={{ width: `${Math.min(100, Math.sqrt(level) * 140)}%` }} />
         </span>
-        <span className="chop__hint">{micError || (micOn ? "Knock close to the microphone. Headphones keep the song out of it." : "Mic off")}</span>
+        <span className="chop__hint">{micError || (micOn ? (player.playing ? "Listening for knocks. Stop ends it." : "Armed: the first knock starts the song and is the first tap.") : "Arm it, then knock close to the microphone. Headphones keep the song out of it.")}</span>
       </div>
     </>
   );
@@ -455,6 +496,8 @@ export function SongChopModal({
             onSelect={setSelection}
             onHandleRelease={onHandleRelease}
             onDoubleTap={addSelection}
+            driftLines={edit ? driftLines : []}
+            onDriftTap={tapFromHere}
           />
 
           <div className="chop__readout">
