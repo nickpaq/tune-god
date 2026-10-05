@@ -65,7 +65,7 @@ Written, in order, into an empty master strip when "Heavy, warm master chain" is
 | DRIVE | `drive`, `mix`, `out`, `oversample` | 0 to 36 dB, 0 to 1, -90 to 0 dB, 0/1 | 6 dB at a 30% mix, HQ on: parallel saturation. Raise `mix` for more |
 | COMPRESSOR | `threshold`, `ratio`, `attack`, `release`, `makeup` | about -42 to -1.7 dB, 1 to 100, 0.01 to 30 ms, 10 to 1200 ms, 0/1 | -12 dB, 2:1, 20 ms attack, 200 ms release, auto make-up off: slow glue |
 | CLIPPER | `input`, `threshold`, `output`, `oversample` | see section 3 | -1.5 dB threshold, no drive: shaves peaks before the limiter |
-| LIMITER | `gain`, `attack`, `release` | +-18 dB (input gain), 1.5 to 6 ms, 60 to 1000 ms | +3 dB into the limiter: the master loudness knob |
+| LIMITER | `gain`, `attack`, `release` | +-18 dB (input gain), 1.5 to 6 ms, 60 to 1000 ms | -1 dB into the limiter: the master loudness knob (+3 dB made the groove -9.1 LUFS and too squashed against the reference) |
 
 Other plugins Koala has that a preset could use (parameters in the reference): STEREOIZER, UTILITY, WARBLE, PLATE REVERB, METER, FREEVERB, BITCOOKER.
 

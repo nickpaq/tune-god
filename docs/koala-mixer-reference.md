@@ -70,7 +70,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 ## Confirmed
 
 - `CLIPPER.threshold` controls the shape of the clip curve as well as the level (user): near 0 dB the corners are sharp, a low threshold is a smooth S-curve (seen at -35 dB). `output` only attenuates (-36 to 0 dB).
-- `LIMITER.gain` is **input gain** (-18 to +18 dB) into the limiter, per the user. The app writes +3 dB so the master is pushed gently into it.
+- `LIMITER.gain` is **input gain** (-18 to +18 dB) into the limiter, per the user. The app writes -1 dB (see the reference mix below).
 - Plugin names and every parameter name above.
 - `SIDECHAIN.source` is a bus number (the dropdown named bus 0 "kick").
 - `oversample` is the HQ button: 0 off, 1 on (DRIVE seen both ways; CLIPPER is the same control).
@@ -90,7 +90,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 - Bass bus: SIDECHAIN (source kick, threshold -14 dB, release 80 ms, output 0 dB).
 - Kick bus: CLIPPER (input +4 dB, threshold -6 dB, output 0, HQ on).
 - Melodic bus: EQ (lo highpass 150 Hz, hi shelf -2 dB at 8 kHz).
-- Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (+3 dB input gain), only into an empty master strip.
+- Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (-1 dB input gain), only into an empty master strip.
 - Per pad (with Settings by sound type): `eq.lo.freq` highpass (80 to 300 Hz by type) and, on hats and cymbals, `eq.hi.gain` -2 dB.
 
 ## Sequence notes (read from a project with recorded patterns)
@@ -113,3 +113,19 @@ From `mix-calibration.koala` exported by the app, saved by Koala, and rendered a
 ### Next render
 
 Export the updated calibration project from KoalaTune with **Heavy, warm master chain OFF**, route to buses ON and **Settings by sound type ON**, save it from Koala, and render the 6 patterns again. With the master chain off the limiter no longer hides the kick bus clipper or the sidechain, and the per-pad EQ is exercised. Run `python3 scripts/analyzeMixRender.py render.wav exported.koala`.
+
+## Reference mix (the user's gold standard)
+
+A 9-second screen recording of a streamed phonk track (`scripts/analyzeReference.py` repeats this). Its peak is -0.19 dBFS, so the stream was not turned down and the loudness is the master's own. The first 3 s are a quiet intro; these are the groove from 3.0 s on.
+
+| | Reference | Our round-1 groove |
+| --- | --- | --- |
+| Integrated loudness | -12.4 LUFS | -9.1 LUFS |
+| Peak | -0.19 dBFS | -0.24 dBFS |
+| Peak-to-loudness | **12.2 dB** | 8.9 dB |
+| Crest (peak - RMS) | 11.9 dB | 8.8 dB |
+| L/R correlation, side/mid | 0.95, -15.6 dB | mono sources |
+
+Tonal balance (dB re total energy): sub 20-60 Hz -1.9, bass 60-150 -5.7, low 150-300 -13.2, low-mid 300-600 -18.5, mid 600-1.2k -23.4, hi-mid 1.2-2.5k -24.0, presence 2.5-5k -22.8, brilliance 5-10k -20.6, air 10k+ -26.9. Sub and bass carry the track; the mids and presence sit about 20 dB under the total and the top end is clear but not bright. Our groove matched the sub and bass (-2.7, -3.9) but its mids were far lower, because the synthetic sounds are sines and noise bursts, so only the low end and the dynamics are comparable.
+
+What it means for the preset: the master should be about 3 LU quieter than the round-1 chain with correspondingly less limiting (peak-to-loudness about 12 dB, not 9), and melodic content should keep a moderate stereo width (side about 15 dB under mid), not mono. LIMITER input gain went from +3 to -1 dB for this. More references can be added the same way.

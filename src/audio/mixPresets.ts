@@ -151,8 +151,10 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
     // CLIPPER: shaves the peaks before the limiter. input -36 to 36 dB, threshold about -35 to 0 dB (also the curve's softness),
     // output -36 to 0 dB, oversample 1 = HQ
     { name: "CLIPPER", parameters: { input: 0, output: 0, threshold: -1.5, oversample: 1 } },
-    // LIMITER: gain is INPUT gain into the limiter, -18 to +18 dB, so this is the master loudness knob. attack 1.5 to 6 ms, release 60 to 1000 ms
-    { name: "LIMITER", parameters: { attack: 1.5, release: 100, gain: 3 } },
+    // LIMITER: gain is INPUT gain into the limiter, -18 to +18 dB, so this is the master loudness knob. attack 1.5 to 6 ms, release 60 to 1000 ms.
+    // Reference: the gold-standard mix is -12.4 LUFS integrated with a 12 dB peak-to-loudness ratio; at +3 dB our groove was -9.1 LUFS and 8.9 dB, too loud and
+    // too squashed, so the gain is pulled back. Lower it for more dynamics, raise it for loudness.
+    { name: "LIMITER", parameters: { attack: 1.5, release: 100, gain: -1 } },
   ],
 };
 
