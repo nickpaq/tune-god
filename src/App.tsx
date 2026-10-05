@@ -191,7 +191,7 @@ function App() {
   /** Every sound's type is settled (by file name or by the user): Drum layouts unlocks. A project that already had its layout on counts. */
   const [organized, setOrganized] = useState(saved.organized ?? !!saved.layoutOn);
   /** While sorting the unknown sounds: their original slots in order and which one is up. The screen shows only that sound and the type keys. */
-  const [focus, setFocus] = useState<{ queue: number[]; pos: number } | null>(null);
+  const [focus, setFocus] = useState<{ queue: number[]; pos: number; started: boolean } | null>(null);
   /** A short message over the screen ("Sounds organized..."). */
   const [notice, setNotice] = useState("");
   /** Pre-rendered normalized audio per pad (by original slot, so it follows a moved pad); only used for playback while Normalize is on. */
@@ -967,7 +967,7 @@ function App() {
 
   // Sorting: bring each unknown sound's pad up and play it once, so the user hears what they are naming.
   useEffect(() => {
-    if (!focus) return;
+    if (!focus?.started) return;
     const pad = Object.values(latest.current.pads).find((p) => isReal(p) && p.origIndex === focus.queue[focus.pos]);
     if (!pad) return;
     setSelected(pad.index);
@@ -976,7 +976,7 @@ function App() {
     const timer = window.setTimeout(() => liftPad(pad.index), 1500);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus]);
+  }, [focus?.started, focus?.pos]);
 
   useEffect(() => {
     if (!notice) return;
@@ -1013,12 +1013,21 @@ function App() {
     if (plan.ask.length === 0) return finishOrganize();
     setMenuOpen(false);
     setMode("type");
-    setFocus({ queue: plan.ask, pos: 0 });
+    setFocus({ queue: plan.ask, pos: 0, started: false });
   };
 
   const toggleOrganize = (on: boolean) => {
     setOrganize(on);
     if (on && !organized) startOrganize();
+  };
+
+  /** The introduction was read: the first sound plays. */
+  const beginSorting = () => setFocus((f) => (f ? { ...f, started: true } : f));
+
+  /** "Not now" on the introduction: nothing is sorted, Organize goes back off. */
+  const cancelIntro = () => {
+    setFocus(null);
+    setOrganize(false);
   };
 
   /** Next unknown sound, or the end of the sorting. */
@@ -1612,13 +1621,13 @@ function App() {
 
         {/* The deck under the screen: the sound type keys, or the piano with its two keys. Hot swap has none, its list takes the room. */}
         {shownMode === "type" && (
-          <div className={`deck${focus ? " deck--focus" : ""}`}>
+          <div className={`deck${focus?.started ? " deck--focus" : ""}`}>
             <TypeKeys
               pad={selectedPad && isReal(selectedPad) ? selectedPad : null}
               palette={palette}
               onClassify={(pad, category) => {
                 classifyPad(pad, category);
-                if (focus) nextFocus();
+                if (focus?.started) nextFocus();
               }}
             />
           </div>
@@ -1647,8 +1656,8 @@ function App() {
         </div>
 
         <div className="lower">
-        <div className={`padzone${focus ? " padzone--focus" : ""}`}>
-          <div className={`pads${focus ? " pads--focus" : ""}`}>
+        <div className={`padzone${focus?.started ? " padzone--focus" : ""}`}>
+          <div className={`pads${focus?.started ? " pads--focus" : ""}`}>
             {Array.from({ length: 16 }, (_, slot) => {
               const index = shownBank * 16 + slot;
               const pad = pads[index];
@@ -1658,7 +1667,7 @@ function App() {
                 pad?.placeholder && "pad--placeholder",
                 pad?.tune && "pad--tuned",
                 selected === index && "pad--selected",
-                focus && selected === index && "pad--focus",
+                focus?.started && selected === index && "pad--focus",
                 drag?.from === index && "pad--dragging",
                 hover === `pad:${index}` && "pad--target",
               ]
@@ -1722,7 +1731,26 @@ function App() {
         </div>
         </div>
 
-        {focus && (
+        {focus && !focus.started && (
+          <div className="focus focus--intro" role="dialog" aria-label="Sort your sounds">
+            <div className="focus__card">
+              <div className="focus__title">Let's sort your sounds</div>
+              <p>
+                {focus.queue.length === 1 ? "One sound has a name" : `${focus.queue.length} sounds have names`} that don't say what{" "}
+                {focus.queue.length === 1 ? "it is" : "they are"}. Each one will play once. Tap the sound type that fits and the next one plays. Tap or hold its pad to hear it again.
+              </p>
+              <div className="focus__actions">
+                <button className="menu__button" onClick={cancelIntro}>
+                  Not now
+                </button>
+                <button className="menu__button menu__button--primary" onClick={beginSorting}>
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {focus?.started && (
           <div className="focus" role="dialog" aria-label="Sort your sounds">
             <button className="focus__close" aria-label="Leave sorting" onClick={leaveOrganize}>
               <svg viewBox="0 0 12 12" aria-hidden="true">
