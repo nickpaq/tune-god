@@ -50,7 +50,9 @@ describe("a chopped song in the export", () => {
     // 24-bit file of exactly that many frames
     const wav = await zip.file(`sampler/${added[2].sampleId}.wav`)!.async("uint8array");
     expect(wav.length).toBe(44 + 600 * 3);
-    expect(sampler.samples.find((s: any) => s.id === added[0].sampleId).metadata.bpm).toBe(75);
+    // the section's sample keeps the stem's own metadata: no tempo is written to it
+    const template = project.samplerJson.samples.find((s: any) => s.id === project.samplerJson.pads[0].sampleId);
+    expect(sampler.samples.find((s: any) => s.id === added[0].sampleId).metadata.bpm).toBe(template.metadata.bpm);
   });
 
   it("writes one pattern per section: that pad held for the whole 8 bars, and the song's tempo", async () => {
@@ -119,10 +121,11 @@ describe("a chopped song in the export", () => {
       const pattern = sequence.sequences[firstFree + i].noteSequence.pattern;
       expect(pad.stretchLength).toBe(stretchLengthFor(pattern.numBars, sequence.beatsPerBar));
     });
-    expect(added.map((p: any) => p.stretchLength)).toEqual(STRETCH_LENGTH_UNIT === "bars" ? [8, 3, 8] : [32, 12, 32]);
-    // the stretch mode and the sample's own tempo are left as they were or set to the song's
+    // Koala counts the stretch length in beats: 8 bars of 4/4 is 32, 3 bars is 12
+    expect(STRETCH_LENGTH_UNIT).toBe("beats");
+    expect(added.map((p: any) => p.stretchLength)).toEqual([32, 12, 32]);
+    // the stretch mode is left as it was
     expect(added.every((p: any) => p.stretch === 1)).toBe(true);
-    expect(sampler.samples.find((s: any) => s.id === added[0].sampleId).metadata.bpm).toBe(75);
   });
 
   it("writes stretch in the style the template pad uses (a string when it holds booleans as strings)", async () => {
@@ -134,9 +137,22 @@ describe("a chopped song in the export", () => {
   });
 });
 
+describe("stretch, against a real Koala project", () => {
+  it("writes what Koala wrote for a pad stretched over 5 bars in 4/4: stretching on, stretch 1, stretchLength 20 (beats)", async () => {
+    const zip = await JSZip.loadAsync(readFileSync(new URL("../../docs/calibration/stretch-5-bars.koala", import.meta.url)));
+    const pad = JSON.parse(await zip.file("sampler/sampler.json")!.async("string")).pads[0];
+    const sequence = JSON.parse(await zip.file("sequence.json")!.async("string"));
+    expect(sequence.beatsPerBar).toBe(4);
+    expect(pad.stretching).toBe(true);
+    expect(pad.stretch).toBe(1);
+    expect(stretchLengthFor(5, sequence.beatsPerBar)).toBe(pad.stretchLength);
+    expect(pad.stretchLength).toBe(20);
+  });
+});
+
 describe("stretchLengthFor", () => {
-  it("is the bars, or the beats in them if the unit is beats", () => {
-    expect(stretchLengthFor(8, 4)).toBe(STRETCH_LENGTH_UNIT === "bars" ? 8 : 32);
-    expect(stretchLengthFor(3, 7)).toBe(STRETCH_LENGTH_UNIT === "bars" ? 3 : 21);
+  it("is the beats in the bars: 8 bars of 4/4 is 32, 3 bars of 7/4 is 21", () => {
+    expect(stretchLengthFor(8, 4)).toBe(32);
+    expect(stretchLengthFor(3, 7)).toBe(21);
   });
 });

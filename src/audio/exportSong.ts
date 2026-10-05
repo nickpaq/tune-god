@@ -8,11 +8,11 @@ export const TICKS_PER_BEAT = 4096;
 const SEQUENCE_SLOTS = 32;
 
 /**
- * How Koala stores the length a stretched pad is stretched from, in `pad.stretchLength`: UNVERIFIED. The projects this app has been tested with
- * never have stretch on (`stretching: false`, `stretch: 1`, `stretchLength: 0`), so the unit is a guess: bars, as Koala's own stretch panel counts.
- * If a chopped pad shows the wrong number of bars in Koala's stretch panel, this is the one place to change (see docs/koala-mixer-reference.md).
+ * How Koala stores the length a stretched pad is stretched to, in `pad.stretchLength`: in BEATS, not bars. Read from a project with one pad set to
+ * 5 bars of stretch in a 4/4 project: `stretchLength` was 20.0 (docs/calibration/stretch-5-bars.koala). The beats in a bar are the project's
+ * (checked for 4/4 only; other time signatures are assumed to count the same way).
  */
-export const STRETCH_LENGTH_UNIT: "bars" | "beats" = "bars";
+export const STRETCH_LENGTH_UNIT: "bars" | "beats" = "beats";
 
 /** The value written to `stretchLength` for a section of `bars` bars. */
 export function stretchLengthFor(bars: number, beatsPerBar: number): number {
@@ -102,7 +102,8 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
     samples.push({
       ...(sourceSample ? JSON.parse(JSON.stringify(sourceSample)) : {}),
       id: sampleId,
-      metadata: { ...(sourceSample?.metadata ?? {}), originalPath: `${section.label}.wav`, bpm: song.bpm },
+      // The stem's own metadata stays as it is (Koala does not need a sample tempo to stretch: the reference project's is 0.0 with stretch on).
+      metadata: { ...(sourceSample?.metadata ?? {}), originalPath: `${section.label}.wav` },
     });
     const pad = source ? JSON.parse(JSON.stringify(source)) : { type: "sample" };
     pad.pad = typeof source?.pad === "string" ? String(section.index + base) : section.index + base;

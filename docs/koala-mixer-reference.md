@@ -175,10 +175,18 @@ Depth grows about 3.5 dB per dB of threshold (-14: 2 to 3 dB, -16: 7, -20: 14 at
 
 **Loudness target (user): -9 LUFS integrated on the full groove.** The limiter gain is +9 dB (estimate from +6 giving about -12.5 LUFS); this squashes the groove to a peak-to-loudness ratio of about 9 dB instead of the reference 12. Correct the gain from the next full render, about 1 dB of gain per dB of loudness error.
 
-## Stretch (pad fields; the units are UNVERIFIED)
+## Stretch, attack, release and tone (pad fields)
 
-Every pad in `sampler.json` carries `stretching` (a boolean, the on/off switch), `stretch` (an integer, `1` by default: from its type and the other integer fields (`channel`, `xfade`, `cyclicPeriod`) probably a mode, not a bar count) and `stretchLength` (a float, `0.0` by default: probably the musical length the pad is stretched from). The sample entry's `metadata.bpm` is its own tempo (`0.0` when unknown). All the projects in this repo and `docs/calibration/` have stretch off, so **nothing here has been seen with stretch on**.
+Read from `docs/calibration/stretch-5-bars.koala`: one pad of a 1 s sample (47872 frames at 48 kHz) in a 110 BPM, 4/4 project, with stretch switched on and set to **5 bars**, and the attack, release and tone knobs turned. Compared with a default pad, the fields that changed are exactly:
 
-The chopped vocal pads (`docs/song-chop.md`) are written with `stretching: true` and `stretchLength` set to the number of bars in the pad's pattern, with `metadata.bpm` set to the song's tempo, so that if the project tempo changes (or the pad is moved) the vocals stretch to stay in time, and at the song's own tempo they are not altered. **The unit of `stretchLength` (bars, as assumed, or beats) is a guess**, kept in one place: `STRETCH_LENGTH_UNIT` in `src/audio/exportSong.ts`.
+| field | default | in the project | meaning |
+|---|---|---|---|
+| `stretching` | `false` (a real boolean) | `true` | stretch on |
+| `stretchLength` | `0.0` | `20.0` | the length the pad is stretched to, in **beats**: 5 bars x 4 beats. Not bars. |
+| `attack` | `0.00011` | `0.2037` | the attack knob (the knob's own scale; the display value was not recorded) |
+| `release` | `0.0` | `0.3325` | the release knob (same) |
+| `tone` | `0.0` | `0.0838` | the tone knob (same) |
 
-To settle it: in Koala turn stretch on for a pad, set its length to 8 bars (and another to 4), save the project and compare `sampler.json` with the one before. The changed fields give the unit, and whether `stretch` or `stretchLength` holds the bars.
+`stretch` stayed `1`: a mode, not a length. The sample's `metadata.bpm` stayed `0.0` with stretch on, so Koala does not need a sample tempo to stretch to a length: the pad is simply stretched so that it lasts `stretchLength` beats at the project tempo. The chopped vocal pads (`docs/song-chop.md`) are written this way, with `stretchLength` = the pattern's bars x the project's beats per bar (`stretchLengthFor`, `src/audio/exportSong.ts`; checked against that file for 4/4, assumed to count the same way in other time signatures), so that if the project tempo changes, or the pad is moved, the vocals stretch to stay in time, and at the song's own tempo they are not altered.
+
+The pad's EQ in that project has its low band as a **low shelf** at 100 Hz, 0 dB (the older projects here have a highpass at 138 Hz, -18 dB): the low band's type can differ between Koala versions or settings, so read `eq.lo.type` before assuming a highpass.
