@@ -867,15 +867,30 @@ function App() {
   const chopSong = (song: Pad, vocals: Pad, settings: ChopSettings) => {
     // The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
     const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
-    recordEdit();
-    // As the last step the stem and the full song are deleted, and bank A becomes the drum layout (the MPC one unless a layout is already on),
-    // empty and waiting for a drum pack to be dropped in.
+    // Nothing is deleted until every section has been cut and checked: the new pad grid is built on the side and only swapped in at the end.
     const rest = removePad(removePad(pads, vocals.index), song.index);
     const layoutId = layout.on ? layout.id : FINGER_LAYOUTS[0].id;
     const next = layout.on ? { ...rest } : arrangeInto(rest, layoutId);
     // Sections from an earlier chop are not part of the arrangement: they stay where they were.
     for (const p of Object.values(rest)) if (p.section && !next[p.index]) next[p.index] = p;
-    const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(next), palette.colors);
+    let sections: Pad[];
+    try {
+      sections = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(next), palette.colors).pads;
+    } catch (err) {
+      console.error(err);
+      window.alert("The chop failed, so nothing was changed: the song and its vocals are still there.");
+      return;
+    }
+    const wanted = Math.min(plans.length, freeSongSlots(next).length);
+    // A quiet section is fine (a break), but a result that is all silence or has an empty file means the cut went wrong.
+    const rendered = sections.every((s) => s.channelData.length > 0 && s.channelData[0].length > 0) && sections.some((s) => s.channelData.some((ch) => ch.some((v) => v !== 0)));
+    if (sections.length === 0 || sections.length < wanted || !rendered) {
+      window.alert("The chop did not produce every section (a cut came out empty), so nothing was changed: the song and its vocals are still there.");
+      return;
+    }
+    recordEdit();
+    // Only now, with the sections made, are the stem and the full song deleted, and bank A becomes the drum layout (the MPC one unless a
+    // layout is already on), empty and waiting for a drum pack to be dropped in.
     for (const section of sections) next[section.index] = section;
     if (!layout.on) setLayout({ on: true, id: layoutId, pre: Object.fromEntries(Object.values(rest).filter(isReal).map((p) => [p.origIndex, p.index])) });
     setPads(next);
