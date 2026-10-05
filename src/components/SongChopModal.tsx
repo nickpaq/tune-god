@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
 import { mixToMono, snapToAttack, type SongAnalysis } from "../audio/song/beats";
-import { cutFrame, effectiveBpm, planSections, SECTION_BARS, sectionSeconds, settleCut, withoutAnchor } from "../audio/song/chop";
+import { cutFrame, effectiveBpm, planSections, SECTION_BARS, sectionSeconds, settleCut, snapCut, snapEdit, withoutAnchor } from "../audio/song/chop";
 import { buildPyramid } from "../audio/song/waveform";
 import { NOTE_NAMES } from "../audio/theory";
 import { ChopTimeline } from "./ChopTimeline";
@@ -70,6 +70,8 @@ export function SongChopModal({
   const [anchors, setAnchors] = useState<Record<number, number>>({});
   const [bars, setBars] = useState<Record<number, number>>({});
   const [selected, setSelected] = useState(0);
+  /** With snapping on, a marker dragged snaps to the nearest bar line of the grid and nothing refines the tempo; with it off a marker is placed freely and every one placed refines the grid. */
+  const [snapOn, setSnapOn] = useState(false);
   /** What the last drag did to the song's structure, shown in the note slot. */
   const [structureNote, setStructureNote] = useState("");
   const [keyPc, setKeyPc] = useState(0);
@@ -168,6 +170,30 @@ export function SongChopModal({
     [plans, grid],
   );
 
+  /** Where a cut dragged to a frame snaps to (the marker is drawn there while it is dragged). */
+  const snapFrame = useCallback(
+    (at: number, frame: number) => {
+      const target = plans[at];
+      return target && target.index >= 1 ? snapCut(grid, target.index, frame).frame : frame;
+    },
+    [plans, grid],
+  );
+
+  /** A marker let go on a bar line: the section before it gains or loses the bars it moved across, and the tempo is not touched (see snapEdit). */
+  const commitSnap = useCallback(
+    (at: number, frame: number) => {
+      const target = plans[at];
+      if (!target) return;
+      if (target.index < 1) return placeCut(at, frame);
+      const edit = snapEdit(grid, target.index, frame);
+      setAnchors(edit.anchors);
+      setBars(edit.bars);
+      const now = edit.bars[target.index - 1] ?? SECTION_BARS;
+      setStructureNote(edit.barChange === 0 ? "" : `Section ${at} is now ${now} bar${now === 1 ? "" : "s"}. The cuts after it follow, and the tempo is unchanged.`);
+    },
+    [plans, grid, placeCut],
+  );
+
   const nudge = (frames: number) => plan && placeCut(chosen, plan.start + frames);
   const nudgeMs = (ms: number) => nudge(Math.round((ms * sampleRate) / 1000));
 
@@ -247,8 +273,10 @@ export function SongChopModal({
             selected={chosen}
             beatFrames={beatFrames}
             beatLines={beatLines}
+            snapFrame={snapOn ? snapFrame : undefined}
             onMoveCut={placeCut}
             onReleaseCut={releaseCut}
+            onSnapCommit={snapOn ? commitSnap : undefined}
             onSelect={setSelected}
           />
 
@@ -257,6 +285,12 @@ export function SongChopModal({
             <span>{detail}</span>
           </div>
 
+          <div className="chop__row">
+            <button className="chop__btn chop__toggle" aria-pressed={snapOn} onClick={() => setSnapOn((on) => !on)} title="On: a marker you drag snaps to the grid's bar lines, so a section's length can change without touching the tempo. Off: a marker goes where you put it, and refines the grid after it.">
+              Snap {snapOn ? "on" : "off"}
+            </button>
+            <span className="chop__hint">{snapOn ? "Markers snap to bar lines" : "Markers refine the grid"}</span>
+          </div>
           <div className="chop__row">
             <button className="chop__btn" onClick={() => nudgeMs(-10)}>
               -10 ms

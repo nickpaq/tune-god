@@ -36,6 +36,8 @@ interface TabDrag {
   /** The marker, held at `grab.across` of the way across the view for as long as the drag lasts, which `home` remembers. */
   grab: GrabbedView;
   home: number;
+  /** Where the marker would be with no snapping: the finger's own path, which snapping only reads from. */
+  raw: number;
 }
 
 /** The waveform dragged with no marker held: it scrubs and zooms under the finger and no marker changes. */
@@ -90,8 +92,10 @@ export function ChopTimeline({
   selected,
   beatFrames,
   beatLines,
+  snapFrame,
   onMoveCut,
   onReleaseCut,
+  onSnapCommit,
   onSelect,
 }: {
   pyramid: PeakPyramid;
@@ -103,15 +107,22 @@ export function ChopTimeline({
   beatFrames: number;
   /** The beats of the grid between two frames (the grid is refined by the cuts, so they are not simply evenly spaced): for the beat lines and the clicks. */
   beatLines: (from: number, to: number) => { frame: number; bar: boolean }[];
+  /**
+   * With snapping on: where a marker dragged to a frame snaps to. The marker is drawn there while it is dragged, and nothing is placed until it is let go
+   * (`onSnapCommit`). With snapping off this is left out, and a marker is placed freely, live (`onMoveCut`).
+   */
+  snapFrame?: (cut: number, frame: number) => number;
   onMoveCut: (cut: number, frame: number) => void;
   /** A tab was let go: the cut is final for this drag. */
   onReleaseCut: (cut: number) => void;
+  /** With snapping on: a marker was let go (or stopped playing) on this frame, one `snapFrame` gave. */
+  onSnapCommit?: (cut: number, frame: number) => void;
   onSelect: (cut: number) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const range = useRef<HTMLSpanElement>(null);
-  const latest = useRef({ cuts, selected, beatFrames, beatLines, onMoveCut, onReleaseCut, onSelect });
-  latest.current = { cuts, selected, beatFrames, beatLines, onMoveCut, onReleaseCut, onSelect };
+  const latest = useRef({ cuts, selected, beatFrames, beatLines, snapFrame, onMoveCut, onReleaseCut, onSnapCommit, onSelect });
+  latest.current = { cuts, selected, beatFrames, beatLines, snapFrame, onMoveCut, onReleaseCut, onSnapCommit, onSelect };
   const total = pyramid.totalFrames;
   const resting = defaultSpan(total);
   const view = useRef({ start: 0, span: resting });
@@ -344,15 +355,16 @@ export function ChopTimeline({
     setPlayState("idle");
     const d = drag.current;
     if (p.grabbed) {
-      // The marker was the playhead: it keeps the place it got to.
-      latest.current.onMoveCut(p.cut, frame);
+      // The marker was the playhead: it keeps the place it got to, on a bar line if snapping is on.
+      const snap = latest.current.snapFrame && latest.current.onSnapCommit;
+      const kept = snap ? latest.current.snapFrame!(p.cut, frame) : frame;
+      if (snap) latest.current.onSnapCommit!(p.cut, kept);
+      else latest.current.onMoveCut(p.cut, frame);
       if (d && d.kind === "tab" && d.cut === p.cut) {
         d.moved = true;
-        settleUnderFinger(d, frame);
-      }
-      else {
-        latest.current.onReleaseCut(p.cut);
-      }
+        d.raw = kept;
+        settleUnderFinger(d, kept);
+      } else if (!snap) latest.current.onReleaseCut(p.cut);
     } else {
       const saved = p.saved;
       animateView(() => saved);
@@ -478,6 +490,7 @@ export function ChopTimeline({
         startSpan: span,
         grab: { frame: cutList[hit], across: (cutList[hit] - start) / span, span },
         home: (cutList[hit] - start) / span,
+        raw: cutList[hit],
       };
     } else {
       playMode.current = "center";
@@ -532,11 +545,15 @@ export function ChopTimeline({
     }
     // Down zooms in and up zooms out (once past a dead zone), about the marker, which stays where it was grabbed. Sideways, the waveform follows the finger under the marker, and a pixel covers less time the closer in the view is.
     const span = spanFor(d);
-    const next = moveMarker(d.grab, e.clientX - d.lastX, width, span, total);
+    const moved = moveMarker({ ...d.grab, frame: d.raw }, e.clientX - d.lastX, width, span, total);
+    d.raw = moved.frame;
     d.lastX = e.clientX;
+    // With snapping on the marker sits on the nearest bar line and the waveform moves in steps with it; nothing is placed until it is let go.
+    const snap = latest.current.snapFrame;
+    const next = snap ? { ...moved, frame: snap(d.cut, moved.frame) } : moved;
     d.grab = next;
     view.current = { start: viewStart(next), span };
-    latest.current.onMoveCut(d.cut, Math.round(next.frame));
+    if (!snap) latest.current.onMoveCut(d.cut, Math.round(next.frame));
     draw();
   };
 
@@ -552,7 +569,8 @@ export function ChopTimeline({
     // A tap: the point has not moved. It is the chosen one now, and the view brings it to the middle.
     if (!d.moved) return centreOn(d.cut);
     // Let go: the marker is placed and the view stays exactly as it is, zoom included.
-    latest.current.onReleaseCut(d.cut);
+    if (latest.current.snapFrame && latest.current.onSnapCommit) latest.current.onSnapCommit(d.cut, Math.round(d.grab.frame));
+    else latest.current.onReleaseCut(d.cut);
   };
 
   /** The arrows: choose the previous or the next chop point and bring it to the middle. */

@@ -112,24 +112,23 @@ function positions(grid: SongGrid) {
     while (cumulative.length <= k) cumulative.push(cumulative[cumulative.length - 1] + barsOf(grid, cumulative.length - 1));
     return cumulative[k];
   };
-  /** Where section `k` starts, exact: where it was put, or worked out from the cuts placed around it. */
-  const frame = (k: number): number => {
-    const placed = byK.get(k);
-    if (placed) return placed.frame;
-    const at = bars(k);
+  /** Where the grid puts a point `at` bars from bar 1, exact: between the cuts placed around it, or on from the last one at the fitted tempo. */
+  const frameAtBars = (at: number): number => {
     let before = list[0];
     let after: Anchor | undefined;
     for (const a of list) {
-      if (a.k < k) before = a;
-      else if (a.k > k) {
+      if (a.bars < at) before = a;
+      else if (a.bars > at) {
         after = a;
         break;
-      }
+      } else return a.frame;
     }
     if (after) return before.frame + ((after.frame - before.frame) * (at - before.bars)) / (after.bars - before.bars);
     return before.frame + bar * (at - before.bars);
   };
-  return { frame, bar };
+  /** Where section `k` starts, exact: where it was put, or worked out from the cuts placed around it. */
+  const frame = (k: number): number => byK.get(k)?.frame ?? frameAtBars(bars(k));
+  return { frame, frameAtBars, bar };
 }
 
 /** Where section `k` (0-based) starts, to a fraction of a frame: where it was put by hand, or where the grid puts it. */
@@ -204,6 +203,48 @@ export function settleCut(grid: SongGrid, k: number, frame: number): CutEdit {
     return { anchors, bars, barChange: whole };
   }
   return { anchors, bars, barChange: 0 };
+}
+
+export interface Snap {
+  /** The frame of the bar line the cut snapped to. */
+  frame: number;
+  /** Bars the previous section gained (negative: lost) if the cut snapped to a different bar line than the one the grid had it on; 0 for the same one. */
+  barChange: number;
+}
+
+/**
+ * Where a cut dragged to `raw` snaps to: the nearest bar line of the grid as the other cuts have refined it. The bar lines are the cut's own place
+ * and the places one to seven bars either side, which is a section of that many bars fewer or more before it: so snapping is how a section is made
+ * 5 bars, say, without touching the tempo. Bar 1 does not snap: it is where the grid starts.
+ */
+export function snapCut(grid: SongGrid, k: number, raw: number): Snap {
+  if (k < 1) return { frame: Math.round(raw), barChange: 0 };
+  const others = withoutAnchor(grid, k);
+  const { frameAtBars } = positions(others);
+  const base = barsBefore(others, k);
+  const previous = barsOf(others, k - 1);
+  let best: Snap = { frame: frameAtBars(base), barChange: 0 };
+  for (let j = -MAX_STRUCTURE_BARS; j <= MAX_STRUCTURE_BARS; j++) {
+    if (j === 0 || previous + j < 1 || previous + j > MAX_SECTION_BARS) continue;
+    const frame = frameAtBars(base + j);
+    if (Math.abs(frame - raw) < Math.abs(best.frame - raw)) best = { frame, barChange: j };
+  }
+  return { frame: Math.round(best.frame), barChange: best.barChange };
+}
+
+/**
+ * What snapping a cut does to the grid: the section before it gains or loses the bars it snapped across, and the cut stops being an anchor, because
+ * it sits exactly on a bar line of the grid and says nothing new about the tempo. Only the structure changes.
+ */
+export function snapEdit(grid: SongGrid, k: number, raw: number): CutEdit {
+  const { barChange } = snapCut(grid, k, raw);
+  const anchors = { ...withoutAnchor(grid, k).anchors };
+  const bars = { ...grid.bars };
+  if (barChange !== 0) {
+    bars[k - 1] = barsOf(grid, k - 1) + barChange;
+    if (bars[k - 1] === SECTION_BARS) delete bars[k - 1];
+  }
+  return { anchors, bars, barChange };
 }
 
 /** The same grid on audio at another sample rate (the vocal stem need not be at the song's rate): every frame position scales with it. */

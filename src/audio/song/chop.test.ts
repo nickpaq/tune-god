@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cutFrame, effectiveBpm, framesPerBarOf, planSections, scaleGrid, sectionSeconds, settleCut, sliceSection, withoutAnchor, type SongGrid } from "./chop";
+import { cutFrame, effectiveBpm, framesPerBarOf, planSections, scaleGrid, sectionSeconds, settleCut, sliceSection, snapCut, snapEdit, withoutAnchor, type SongGrid } from "./chop";
 
 const grid = (over: Partial<SongGrid> = {}): SongGrid => ({ bpm: 120, beatsPerBar: 4, downbeatFrame: 0, sampleRate: 48000, ...over });
 // 120 BPM, 4/4, 48 kHz: one bar is 96000 frames, 8 bars 768000
@@ -238,5 +238,81 @@ describe("scaleGrid", () => {
     expect(cutFrame(scaled, 2) / 44100).toBeCloseTo(cutFrame(g, 2) / 48000, 9);
     expect(cutFrame(scaled, 5) / 44100).toBeCloseTo(cutFrame(g, 5) / 48000, 9);
     expect(effectiveBpm(scaled)).toBeCloseTo(effectiveBpm(g), 9);
+  });
+});
+
+describe("how the grid copes with sections of unusual length", () => {
+  it("a section of 5 bars placed on the beat leaves the tempo exactly as it was, and the cuts after it are just the grid moved", () => {
+    const edit = settleCut(grid(), 3, 21 * BAR);
+    const after = { ...grid(), ...edit };
+    expect(edit.bars).toEqual({ 2: 5 });
+    expect(effectiveBpm(after)).toBeCloseTo(120, 6);
+    expect(cutFrame(after, 4)).toBeCloseTo(29 * BAR, 3);
+  });
+
+  it("a cut not near a whole number of bars refines the tempo rather than changing a bar count", () => {
+    const edit = settleCut(grid(), 3, 16 * BAR + 4.6 * BAR);
+    expect(edit.bars).toEqual({});
+    expect(effectiveBpm({ ...grid(), ...edit })).toBeGreaterThan(120);
+  });
+
+  it("cuts laid at the start and one at the end make every cut between and beyond almost perfectly accurate", () => {
+    const trueBar = BAR * 1.0037;
+    const truth = (k: number) => 4_800 + k * 8 * trueBar;
+    const g = grid({ downbeatFrame: truth(0), anchors: { 1: truth(1), 2: truth(2), 16: truth(16) } });
+    let worst = 0;
+    for (let k = 0; k <= 22; k++) worst = Math.max(worst, Math.abs(cutFrame(g, k) - truth(k)));
+    expect(worst).toBeLessThan(1);
+    expect(effectiveBpm(g)).toBeCloseTo(120 / 1.0037, 4);
+  });
+
+  it("with the first cuts a few frames off, one placed at the end still pulls the cuts between to within those few frames", () => {
+    const trueBar = BAR * 1.0037;
+    const truth = (k: number) => 4_800 + k * 8 * trueBar;
+    const jitter = [0, 90, -140, 60];
+    const g = grid({ downbeatFrame: truth(0), anchors: { 1: truth(1) + jitter[1], 2: truth(2) + jitter[2], 3: truth(3) + jitter[3], 16: truth(16) } });
+    for (let k = 4; k < 16; k++) expect(Math.abs(cutFrame(g, k) - truth(k))).toBeLessThan(150);
+  });
+});
+
+describe("snapCut", () => {
+  it("snaps to the nearest bar line of the grid", () => {
+    expect(snapCut(grid(), 3, 3 * SECTION + 30000)).toEqual({ frame: 3 * SECTION, barChange: 0 });
+    // a little under 1 bar early: the bar line one bar before the grid's, which makes the section before it 7 bars
+    expect(snapCut(grid(), 3, 3 * SECTION - BAR + 20000)).toEqual({ frame: 3 * SECTION - BAR, barChange: -1 });
+    expect(snapCut(grid(), 3, 3 * SECTION - 3 * BAR - 30000)).toEqual({ frame: 3 * SECTION - 3 * BAR, barChange: -3 });
+    expect(snapCut(grid(), 3, 3 * SECTION + 2 * BAR + 10000)).toEqual({ frame: 3 * SECTION + 2 * BAR, barChange: 2 });
+  });
+
+  it("follows the grid as the other cuts have refined it", () => {
+    // cut 4 placed 1% late: the bar lines before it are 1% further apart than the base grid's
+    const g = grid({ anchors: { 4: 4 * SECTION * 1.01 } });
+    const snapped = snapCut(g, 2, 2 * SECTION * 1.01 - BAR * 1.01 + 900);
+    expect(snapped.barChange).toBe(-1);
+    expect(snapped.frame).toBeCloseTo(2 * SECTION * 1.01 - BAR * 1.01, -1);
+  });
+
+  it("does not snap bar 1, and does not snap a section shorter than a bar or longer than 16", () => {
+    expect(snapCut(grid(), 0, 12345).frame).toBe(12345);
+    const short = grid({ bars: { 2: 1 } });
+    expect(snapCut(short, 3, cutFrame(short, 3) - BAR).barChange).toBe(0);
+  });
+});
+
+describe("snapEdit", () => {
+  it("changes only the structure: the section before gains or loses the bars, the cut stops being an anchor, and the tempo is untouched", () => {
+    const g = grid({ anchors: { 3: 3 * SECTION + 20000 } });
+    const edit = snapEdit(g, 3, 3 * SECTION - BAR + 5000);
+    expect(edit.barChange).toBe(-1);
+    expect(edit.bars).toEqual({ 2: 7 });
+    expect(edit.anchors).toEqual({});
+    expect(effectiveBpm({ ...g, ...edit })).toBeCloseTo(120, 6);
+  });
+
+  it("snapping back to where the grid had it restores the usual 8 bars", () => {
+    const g = grid({ bars: { 2: 7 } });
+    const edit = snapEdit(g, 3, cutFrame(g, 3) + BAR);
+    expect(edit.barChange).toBe(1);
+    expect(edit.bars).toEqual({});
   });
 });
