@@ -24,8 +24,8 @@ export interface ChopTimelineHandle {
   cursor: () => number;
   /** Moves the waveform so the cursor is on a frame. */
   setCursor: (frame: number) => void;
-  /** Glides the line onto the nearest bar line (does nothing with the magnet off). */
-  snap: () => void;
+  /** Glides the line onto the nearest bar line and returns that line's frame (null with the magnet off or no line to go to). */
+  snap: () => number | null;
 }
 
 function formatTime(seconds: number): string {
@@ -222,9 +222,7 @@ export const ChopTimeline = forwardRef<
         cancelAnimationFrame(settling.current);
         setCursor(frame);
       },
-      snap: () => {
-        if (latest.current.magnetOn) settle();
-      },
+      snap: () => (latest.current.magnetOn ? settle() : null),
     }),
     [setCursor],
   );
@@ -260,13 +258,13 @@ export const ChopTimeline = forwardRef<
   };
 
   /** Letting go with the magnet on: the line glides onto the nearest bar line. */
-  const settle = () => {
+  const settle = (): number | null => {
     cancelAnimationFrame(settling.current);
     const { span } = view.current;
     const { before, after } = bounds(view.current.cursor, span);
     const here = view.current.cursor;
     const target = Math.abs(here - before) <= Math.abs(after - here) ? before : after;
-    if (!Number.isFinite(target)) return;
+    if (!Number.isFinite(target)) return null;
     let last = performance.now();
     const step = (now: number) => {
       const next = approach(view.current.cursor, target, now - last);
@@ -276,6 +274,7 @@ export const ChopTimeline = forwardRef<
       if (!done) settling.current = requestAnimationFrame(step);
     };
     settling.current = requestAnimationFrame(step);
+    return target;
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {

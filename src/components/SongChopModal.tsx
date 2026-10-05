@@ -172,19 +172,25 @@ export function SongChopModal({
     return () => cancelAnimationFrame(raf);
   }, [playing, frameNow, totalFrames]);
 
-  /** Pausing leaves the line where the song was and glides it onto the nearest bar line. */
+  /** The bar line the last pause snapped to: Play starts from it even if pressed while the line is still gliding there. */
+  const pausedAt = useRef<number | null>(null);
+  /** Pausing leaves the line where the song was and glides it onto the nearest bar line; Play then starts from that line. */
   const togglePlay = () => {
     if (player.playing) {
       player.stop();
-      timeline.current?.snap();
+      pausedAt.current = timeline.current?.snap() ?? null;
       return;
     }
-    player.start(timeline.current?.cursor() ?? 0);
+    const from = pausedAt.current ?? timeline.current?.cursor() ?? 0;
+    pausedAt.current = null;
+    timeline.current?.setCursor(from);
+    player.start(from);
   };
 
   /** Whether the song was playing when a finger started scrubbing: letting go then carries on playing from the line, with no snap. */
   const scrubbedPlaying = useRef(false);
   const scrubStart = () => {
+    pausedAt.current = null;
     scrubbedPlaying.current = player.playing;
     player.stop();
   };
@@ -198,6 +204,7 @@ export function SongChopModal({
   /** Jumps the line `bars` bars back or forward (`direction` -1 or 1) along the bar lines, and carries on playing from there if the song was playing. */
   const jump = (direction: number, bars: number) => {
     if (!grid) return;
+    pausedAt.current = null;
     const cursor = timeline.current?.cursor() ?? 0;
     const near = barLineNear(grid, cursor);
     const nearFrame = lineFrame(grid, near);
