@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { getAudioContext } from "../audio/decode";
 import { prepareBuffer, startPad, type PadHandle } from "../audio/player";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
-import { approach, approachSpan, centredStart, clampViewStart, defaultSpan, dragStep, isDrag, LATCH_DRAG_PX, spanAt, viewStart, zoomDepth, zoomRoom, type GrabbedView } from "../audio/song/zoom";
+import { approach, centredStart, clampViewStart, defaultSpan, isDrag, LATCH_DRAG_PX, moveMarker, spanAfterDrag, viewStart, zoomRate, zoomRoom, type GrabbedView } from "../audio/song/zoom";
 
 /** Size of a chop point's tab, in CSS pixels: wide enough for a thumb, and its top comes to a point. */
 const TAB_WIDTH = 28;
@@ -31,9 +31,11 @@ interface TabDrag {
   fingerX: number;
   fingerY: number;
   room: number;
-  /** The span the view had when the tab was grabbed: the zoom a drag goes in from and a release returns to. */
-  resting: number;
+  /** The span the view had when the tab was grabbed: dragging down zooms in from it and up zooms out from it. */
+  startSpan: number;
+  /** The marker, held at `grab.across` of the way across the view for as long as the drag lasts, which `home` remembers. */
   grab: GrabbedView;
+  home: number;
 }
 
 interface PanDrag {
@@ -253,15 +255,8 @@ export function ChopTimeline({
     if (chosenFrame < start || chosenFrame > start + span) centreRef.current(selected);
   }, [selected, chosenFrame]);
 
-  /** Where the finger holding a marker is across the view (0 = left edge, 1 = right). */
-  const fingerAcross = (d: TabDrag) => {
-    const rect = canvas.current?.getBoundingClientRect();
-    if (!rect) return d.grab.across;
-    return Math.min(0.98, Math.max(0.02, (d.fingerX - rect.left - INSET) / Math.max(1, rect.width - 2 * INSET)));
-  };
-
-  /** The span a held marker's finger asks for: the further down the finger is from where it grabbed, the closer in. */
-  const spanFor = (d: TabDrag) => spanAt(zoomDepth(d.fingerY - d.startY, d.room), d.resting);
+  /** The span a held marker's finger asks for: down from where it grabbed zooms in, up zooms out, from the zoom the view had then. */
+  const spanFor = (d: TabDrag) => spanAfterDrag(d.startSpan, d.fingerY - d.startY, zoomRate(resting, d.room), total);
 
   /** The view eases from where it is to `target` (read afresh each frame, so it can be a moving thing). */
   const animateView = (target: () => { start: number; span: number }) => {
@@ -280,10 +275,6 @@ export function ChopTimeline({
     returning.current = requestAnimationFrame(step);
   };
 
-  /** The point stays where it was put; the view eases back out around it, keeping it at the same place across the screen. */
-  const easeBackOut = (grab: GrabbedView, restingSpan: number) =>
-    animateView(() => ({ start: clampStart(grab.frame - grab.across * restingSpan, restingSpan), span: restingSpan }));
-
   /** The view eases to put a cut in the middle, at the zoom it has now. */
   const centreOn = (cut: number) => {
     const frame = latest.current.cuts[cut];
@@ -293,14 +284,14 @@ export function ChopTimeline({
   };
   centreRef.current = centreOn;
 
-  /** After a pause: the marker slides from the middle back under the finger, carrying the waveform, then the drag carries on. */
+  /** After a pause: the marker slides from the middle back to the place across the view where it was grabbed, carrying the waveform, then the drag carries on. */
   const settleUnderFinger = (d: TabDrag, frame: number) => {
     cancelAnimationFrame(settling.current);
     d.grab = { frame, across: 0.5, span: view.current.span };
     let last = performance.now();
     const step = (now: number) => {
       if (drag.current !== d) return;
-      const target = fingerAcross(d);
+      const target = d.home;
       const span = spanFor(d);
       const across = approach(d.grab.across, target, now - last);
       last = now;
@@ -311,6 +302,8 @@ export function ChopTimeline({
       if (done) {
         settling.current = 0;
         d.lastX = d.fingerX;
+        d.startSpan = span;
+        d.startY = d.fingerY;
       } else settling.current = requestAnimationFrame(step);
     };
     settling.current = requestAnimationFrame(step);
@@ -339,7 +332,6 @@ export function ChopTimeline({
       }
       else {
         latest.current.onReleaseCut(p.cut);
-        easeBackOut({ frame, across: 0.5, span: view.current.span }, resting);
       }
     } else {
       const saved = p.saved;
@@ -398,7 +390,7 @@ export function ChopTimeline({
       if (held) {
         span = spanFor(held);
         held.grab = { frame: p.frame, across: 0.5, span };
-      } else if (p.grabbed) span = approachSpan(span, resting, now - p.last);
+      }
       p.last = now;
       view.current = { start: p.frame - span / 2, span };
       draw();
@@ -462,8 +454,9 @@ export function ChopTimeline({
         fingerX: e.clientX,
         fingerY: e.clientY,
         room: zoomRoom(e.clientY, window.innerHeight),
-        resting: span,
+        startSpan: span,
         grab: { frame: cutList[hit], across: (cutList[hit] - start) / span, span },
+        home: (cutList[hit] - start) / span,
       };
     } else drag.current = { kind: "pan", id: e.pointerId, lastX: e.clientX };
     draw();
@@ -493,13 +486,13 @@ export function ChopTimeline({
       if (!isDrag(e.clientX - d.startX, e.clientY - d.startY)) return;
       d.moved = true;
       d.lastX = e.clientX;
+      d.startY = e.clientY;
       return;
     }
-    // Further down, closer in. The point stays under the finger and a pixel of travel covers less time the closer the view is.
+    // Down zooms in and up zooms out, about the marker, which stays where it was grabbed. Sideways, the waveform moves under it, and a pixel covers less time the closer in the view is.
     const span = spanFor(d);
-    const next = dragStep(d.grab, e.clientX - d.lastX, width, span);
+    const next = moveMarker(d.grab, e.clientX - d.lastX, width, span, total);
     d.lastX = e.clientX;
-    next.frame = Math.min(total, Math.max(0, next.frame));
     d.grab = next;
     view.current = { start: viewStart(next), span };
     latest.current.onMoveCut(d.cut, Math.round(next.frame));
@@ -517,8 +510,8 @@ export function ChopTimeline({
     if (playback.current?.grabbed) return;
     // A tap: the point has not moved. It is the chosen one now, and the view brings it to the middle.
     if (!d.moved) return centreOn(d.cut);
+    // Let go: the marker is placed and the view stays exactly as it is, zoom included.
     latest.current.onReleaseCut(d.cut);
-    easeBackOut(d.grab, d.resting);
   };
 
   /** The arrows: choose the previous or the next chop point and bring it to the middle. */
