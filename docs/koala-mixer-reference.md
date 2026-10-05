@@ -87,7 +87,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 ## What the app writes
 
-- Bass bus: SIDECHAIN (source kick, threshold -30 dB (provisional), release 80 ms, output 0 dB).
+- Bass bus: SIDECHAIN (source kick, threshold -20 dB (interpolated from the round 3 sweep), release 80 ms, output 0 dB).
 - Kick bus: CLIPPER (input +4 dB, threshold -6 dB, output 0, HQ on).
 - Melodic bus: EQ (lo highpass 150 Hz, hi shelf -2 dB at 8 kHz).
 - Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (-1 dB input gain), only into an empty master strip.
@@ -144,3 +144,11 @@ The app's export and the project saved by Koala are identical again (pads, mixer
 ### Next renders
 
 Two small projects measure Koala's mixer directly (no KoalaTune export needed; load them in Koala and render with Loops export): `docs/calibration/probe-sidechain.koala` and `docs/calibration/probe-eq.koala`, timelines in `probe-timeline.md`, read with `python3 scripts/analyzeMixerProbes.py sidechain|eq <zip>`. After those, one more full run with the master chain on and the limiter at -1 dB, to tune it to a 12 dB peak-to-loudness ratio.
+
+## Round 3: probe renders (master chain off, read with `analyzeMixerProbes.py`)
+
+Both probes were rendered as one continuous file each and split at the timeline times.
+
+- **Sidechain threshold sweep (release 80 ms, output 0).** Depth is very steep in the threshold: -14 dB ducks 2 to 3 dB, -24 dB ducks about 17 dB at the deepest (bass back at 0 dB by 0.3 s), -40 dB reads deeper than 40 dB (back by 0.5 s) and -60 dB about 37 dB (still 8 dB down at 0.5 s). The very deep readings include some cancellation error from subtracting the kick-alone render, so read them as "very deep". The release time is not the recovery time: with release 80 ms the bass takes 0.3 to 0.5 s to return, longer the lower the threshold. The preset now uses -20 dB, interpolated, for a duck of roughly 8 to 10 dB. Not yet confirmed by a render at -20.
+- **Bus EQ shapes.** `lo` is a low shelf (150 Hz, -12 dB: -12 dB at 30 to 50 Hz, -6 dB at 150 Hz, flat from 500 Hz), `hi` a high shelf (8 kHz, -12 dB: -6 dB at 8 kHz, -11 dB at 16 kHz), `mid` a bell (1 kHz, -12 dB, Q 1: -11.8 dB at 1 kHz, -4 dB at 500 Hz and -3.9 at 2 kHz). Gain 0 is exactly flat, and the corner frequency of a shelf is its half-gain point. Earlier notes calling the bus `lo` band a highpass were wrong: the highpass is the per-pad EQ.
+- **Pad EQ shapes.** `lo` is a highpass: 300 Hz with gain -18 dB gives -38 dB at 30 Hz, -29 at 50, -17 at 100, -9.5 at 150, -4 at 200 and flat from 300 Hz (about 12 dB per octave, -3 dB point near 190 Hz). With `lo` gain 0 the pad is exactly flat, so gain 0 switches the highpass off. `hi` is a high shelf (8 kHz, -12 dB: -7.6 dB at 8 kHz, -12.6 at 12 kHz) and `mid` a bell like the bus one.

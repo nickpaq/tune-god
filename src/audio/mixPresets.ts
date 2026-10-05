@@ -74,7 +74,7 @@ export interface MixPreset {
       /** Level after ducking, dB, -12 to +12. Not the duck depth, which Koala does not expose. */
       output: number;
     };
-    /** EQ on the Melodic bus (bus D): lo = highpass, mid = bell, hi = high shelf. */
+    /** EQ on the Melodic bus (bus D): lo = low shelf, mid = bell, hi = high shelf (measured; gain 0 is flat). */
     melodicEq: PluginParams;
   };
   /**
@@ -127,9 +127,9 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
   },
   buses: {
     kickClipper: { input: 4, threshold: -6, output: 0, oversample: 1 }, // about 9 dB of drive into a soft clip
-    bassSidechain: { threshold: -30, release: 80, output: 0 }, // provisional: at -14 the duck measured only about 2 to 3 dB (probe-sidechain.koala sweeps -24, -40 and -60). Lower threshold = deeper duck, to be read from that sweep
+    bassSidechain: { threshold: -20, release: 80, output: 0 }, // measured (probe-sidechain, master chain off): -14 ducks 2 to 3 dB, -24 about 17 dB (back in 0.3 s), -40 deeper than 40 dB (back in 0.5 s), -60 about 37 dB and still 8 dB down after 0.5 s. -20 is interpolated for a duck of roughly 8 to 10 dB; raise it for less, lower it for more
     melodicEq: {
-      "lo freq": 150, "lo gain": 0, "lo Q": 0.7, // highpass: leaves the low end to the kick and bass
+      "lo freq": 150, "lo gain": -6, "lo Q": 0.7, // low SHELF (measured; it is not a highpass, and gain 0 is flat): -6 dB below 150 Hz leaves the low end to the kick and bass
       "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, // untouched
       "hi freq": 8000, "hi gain": -2, "hi Q": 0.5, // slight shelf cut: warmer
     },

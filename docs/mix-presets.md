@@ -27,7 +27,7 @@ Not in the preset: `FILE_CEILING_DB` in `loudness.ts` (the -1 dBFS peak ceiling 
 
 ## 2. Per-pad EQ (`padEq`)
 
-Written under Settings by sound type. Koala's per-pad EQ is the same design as its EQ plugin: low band highpass, mid bell, high band high shelf, each 20 Hz to 20 kHz and +-18 dB.
+Written under Settings by sound type. Koala's per-pad EQ has a low band that is a highpass (measured: on at gain -18, off at gain 0), a mid bell and a high shelf; the EQ plugin's low band is a low shelf instead, each 20 Hz to 20 kHz and +-18 dB.
 
 | Field | What it does | Range | Move it to |
 | --- | --- | --- | --- |
@@ -49,7 +49,7 @@ Written when "Route pads to buses" is on. Bus A is Kick, B Bass, C Drums, D Melo
 | `bassSidechain.threshold` | Bass bus SIDECHAIN | Kick level that makes the bass duck. At -14 dB it ducked only about 2 to 3 dB; the sweep in `probe-sidechain.koala` measures -24, -40 and -60 | -60 to 0 dB | Lower is a deeper duck |
 | `bassSidechain.release` | same | Time for the bass to return | 10 to 1000 ms | Short is tight, long pumps |
 | `bassSidechain.output` | same | Level after ducking, not the depth | -12 to +12 dB | Rarely changed |
-| `melodicEq` | Melodic bus EQ | lo highpass, mid bell, hi shelf (freq, gain, Q for each) | freq 20 to 20000 Hz, gain +-18 dB, Q 0.5 to 10 | Raise `lo freq` to clear more low end, lower `hi gain` to darken |
+| `melodicEq` | Melodic bus EQ | lo low shelf, mid bell, hi shelf (freq, gain, Q for each) | freq 20 to 20000 Hz, gain +-18 dB, Q 0.5 to 10 | Lower `lo gain` to clear more low end, lower `hi gain` to darken |
 
 The sidechain source (the kick bus) is fixed by the bus layout in `routing.ts` (`CATEGORY_BUS`, `BUS_NAMES`), which also decides which sound types go on which bus.
 
