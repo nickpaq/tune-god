@@ -24,6 +24,9 @@
   --oled: #eef2ec;
   --oled-glow: rgba(238, 242, 236, 0.33);
   --bezel: #0b0b0c;
+  /* the safe areas: the top one as reported; the bottom one is corrected in useSafeArea.ts */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   color-scheme: dark;
   color: var(--ink);
   background: var(--stage);

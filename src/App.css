@@ -32,7 +32,7 @@
   display: flex;
   flex-direction: column;
   gap: 2.6cqw;
-  padding: max(3cqw, env(safe-area-inset-top)) 4.1cqw 3cqw;
+  padding: max(3cqw, var(--safe-top)) 4.1cqw 3cqw;
   background: var(--chassis1);
   border-bottom: 1px solid var(--seam-d);
 }
@@ -42,7 +42,7 @@
   display: flex;
   flex-direction: column;
   gap: 2cqw;
-  padding: 3cqw 4.1cqw calc(max(var(--u), env(safe-area-inset-bottom)) + 3cqw);
+  padding: 3cqw 4.1cqw calc(max(var(--u), var(--safe-bottom)) + 3cqw);
   box-shadow: inset 0 1px 0 var(--seam-l);
 }
 
@@ -719,7 +719,8 @@
 
 .pads {
   /* canvas size, shrinking only when the chassis is short (it keeps room for a 45cqw screen and the deck) */
-  --pad-h: min(20.5cqw, calc((100cqh - 3cqw - 11.3cqw - 5 * 2.6cqw - 45cqw - 30.8cqw - 3cqw - 4.5cqw - 10.3cqw - 8cqw) / 4));
+  /* the space the rest of the chassis needs, with the top safe area and the bottom padding counted as .upper and .lower really use them */
+  --pad-h: min(20.5cqw, calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - 45cqw - 30.8cqw - 3cqw - 4.5cqw - 10.3cqw - (6cqw + max(var(--u), var(--safe-bottom)))) / 4));
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-rows: var(--pad-h);
@@ -1011,11 +1012,11 @@
 .menu {
   position: absolute;
   /* just under the menu button */
-  --menu-top: calc(max(3cqw, env(safe-area-inset-top)) + 11.3cqw + 1.2cqw);
+  --menu-top: calc(max(3cqw, var(--safe-top)) + 11.3cqw + 1.2cqw);
   top: var(--menu-top);
   right: 4.1cqw;
   /* from there to just above the bottom safe area, so the menu scrolls inside the screen instead of running past it */
-  max-height: calc(100cqh - var(--menu-top) - max(var(--u), env(safe-area-inset-bottom)) - 1.5cqw);
+  max-height: calc(100cqh - var(--menu-top) - max(var(--u), var(--safe-bottom)) - 1.5cqw);
   overflow-y: auto;
   z-index: 18;
   display: flex;

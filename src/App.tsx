@@ -43,6 +43,7 @@ import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveStat
 import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, trimCents } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
+import { useSafeArea } from "./components/useSafeArea";
 import { ACTIVE_MIX_PRESET } from "./audio/mixPresets";
 import "./App.css";
 
@@ -144,6 +145,7 @@ function tuneDefault(locked: boolean | undefined, current: boolean, category: Ca
 
 function App() {
   useOledCell();
+  useSafeArea();
   // Read once: what the previous visit left behind.
   const saved = useRef(loadState()).current;
   const [pads, setPads] = useState<Record<number, Pad>>({});
