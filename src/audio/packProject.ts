@@ -9,7 +9,7 @@ import { applyGainDb } from "./gain";
 import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
 import type { ParsedKoalaProject } from "./koalaProject";
 import type { FillPlan } from "./packFill";
-import { AUDIO_EXTENSIONS, planPackSounds, type PackFile, type PackPlan } from "./samplePack";
+import { AUDIO_EXTENSIONS, planPackSounds, type PackFile, type PackMode, type PackPlan } from "./samplePack";
 
 /** A dropped file the pack can read later. */
 export type PackSource = () => Promise<File>;
@@ -107,6 +107,8 @@ export const HIDDEN_PAD_BASE = 64;
 export interface BuildOptions {
   /** How many sounds of each type the finger-drumming page has slots for (see kitSlotCounts). */
   kitSlots: Partial<Record<CategoryId, number>>;
+  /** Which kinds of sound to take from the pack (see PackMode). */
+  mode?: PackMode;
   byteBudget?: number;
   random?: () => number;
   /** Where loudness is measured (a worker in the app, so long loops don't stall the screen). */

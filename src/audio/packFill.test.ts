@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignFill, fillPlan, missingSlots, zoneOf, type FillPad } from "./packFill";
+import { assignFill, fillPlan, missingSlots, standInSlots, zoneOf, type FillPad } from "./packFill";
 import { layoutById } from "./fingerLayouts";
 import type { CategoryId } from "./classify";
 
@@ -61,5 +61,23 @@ describe("assigning new sounds to the gaps", () => {
     const a = assignFill([32, 33], layout, [{ category: "bass", is808: true }]);
     expect(a.get(32)).toBe(0);
     expect(a.has(33)).toBe(false);
+  });
+});
+
+describe("stand-ins in the kit", () => {
+  it("lets a snare replace a clap that stood in for it, but not a clap the layout wanted", () => {
+    const layout = layoutById("horizontal");
+    const pads = { 13: { index: 13, category: "clap" as const }, 10: { index: 10, category: "clap" as const }, 12: { index: 12, category: "kick" as const } };
+    const standIns = standInSlots(pads, layout);
+    expect(standIns).toEqual([13]);
+    const got = assignFill(standIns, layout, [{ category: "clap" }, { category: "snare" }], new Set(standIns));
+    expect(got.get(13)).toBe(1);
+    expect(assignFill(standIns, layout, [{ category: "clap" }], new Set(standIns)).size).toBe(0);
+  });
+
+  it("limits the gaps to the kit for drums and to the rest for melodic", () => {
+    const layout = layoutById("horizontal");
+    expect(missingSlots({}, layout, "drums").every((i) => i < 16)).toBe(true);
+    expect(missingSlots({}, layout, "melodic").every((i) => i >= 16)).toBe(true);
   });
 });

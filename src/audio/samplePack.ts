@@ -2,7 +2,7 @@
 // each file is classified from its folder names, then up to one pad bank's worth are picked so every
 // sound type is as evenly represented as the pack allows, within a memory budget. All of this works on
 // file names and sizes only; no audio is read until a file has been picked.
-import { classifyByName, hatOpenness, is808Name, MELODIC_NAME, type CategoryId } from "./classify";
+import { classifyByName, hatOpenness, is808Name, isKitCategory, MELODIC_NAME, type CategoryId } from "./classify";
 
 const MB = 1024 * 1024;
 /** Total file size a pack import may load when nothing better is known. Decoded audio takes about three times this in memory. */
@@ -193,6 +193,19 @@ export const BANK_C_REST_PADS = 12;
 export type PlanKey = CategoryId | "808";
 const categoryOfKey = (key: PlanKey): CategoryId => (key === "808" ? "bass" : key);
 
+/**
+ * What a pack import may take from the folder: "drums" only the kit sounds (kick, snare, clap, hats, cymbals, perc, vox, fx), never a
+ * melodic sound, bass or loop; "melodic" only melodic one-shots, bass and loops, never a drum; "all" everything (the old behaviour).
+ */
+export type PackMode = "drums" | "melodic" | "all";
+
+/** Whether a mode takes a sound of this type. */
+export function modeTakes(mode: PackMode, category: CategoryId): boolean {
+  if (mode === "all") return true;
+  if (mode === "drums") return isKitCategory(category);
+  return category === "melodic" || category === "melodicLoop" || category === "drumLoop" || category === "percLoop" || category === "bass";
+}
+
 export interface PackPlan<T = unknown> {
   /** The sounds that go on pads. */
   visible: PickedSound<T>[];
@@ -234,7 +247,10 @@ export function planPackSounds<T>(
     byteBudget = PACK_BYTE_BUDGET,
     maxFileBytes = maxFileBytesFor(byteBudget),
     random = Math.random,
+    mode = "all",
   }: {
+    /** Which kinds of sound to take; see PackMode. */
+    mode?: PackMode;
     /** Real (not ghost) slots per type on the finger-drumming page. */
     kitSlots: Partial<Record<CategoryId, number>>;
     bankB?: Partial<Record<CategoryId, number>>;
@@ -251,6 +267,15 @@ export function planPackSounds<T>(
     random?: () => number;
   },
 ): PackPlan<T> {
+  // A drums import never fills bank B or C; a melodic one never fills the kit.
+  if (mode === "drums") {
+    bankB = {};
+    bassPads = 0;
+    pads808 = 0;
+    restPads = 0;
+  } else if (mode === "melodic") {
+    kitSlots = {};
+  }
   const queues = new Map<PlanKey, PackFile<T>[]>();
   const found = new Map<CategoryId, number>();
   let skippedForSize = 0;
@@ -262,6 +287,12 @@ export function planPackSounds<T>(
     // An unlabelled file in a folder full of instrument names is a melodic one-shot.
     if (category === "other" && melodicFolders.has(folderKey(file.folders))) category = "melodic";
     found.set(category, (found.get(category) ?? 0) + 1);
+    if (!modeTakes(mode, category)) continue;
+    // A melodic one-shot has to be named like an instrument; a folder name alone is not enough.
+    if (category === "melodic" && !MELODIC_NAME.test(tidy(file.name.replace(/\.[a-z0-9]+$/i, "").replace(/\d+/g, " $& ")))) {
+      skippedMelodicNames++;
+      continue;
+    }
     if (category === "melodic" && !melodicPossible) {
       skippedMelodicNames++;
       continue;

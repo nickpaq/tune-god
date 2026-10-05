@@ -3,7 +3,7 @@
 import { isKitCategory, type CategoryId } from "./classify";
 import { SUBSTITUTE_GROUP } from "./fingerDrumming";
 import type { FingerLayout } from "./fingerLayouts";
-import { BANK_B_QUOTA, type PlanKey } from "./samplePack";
+import { BANK_B_QUOTA, type PackMode, type PlanKey } from "./samplePack";
 
 /** The part of a pad that matters here. */
 export interface FillPad {
@@ -34,13 +34,29 @@ export function zoneOf(index: number, layout: FingerLayout): Zone | null {
   return null;
 }
 
-/** Slots in banks A to C that hold no sound: nothing at all, or a silent placeholder. */
-export function missingSlots(pads: Record<number, FillPad | undefined>, layout: FingerLayout): number[] {
+/** Slots in banks A to C that hold no sound: nothing at all, or a silent placeholder. `mode` limits them to the kit ("drums") or to everything else ("melodic"). */
+export function missingSlots(pads: Record<number, FillPad | undefined>, layout: FingerLayout, mode: PackMode = "all"): number[] {
   const out: number[] = [];
   for (let i = 0; i < BANK * 3; i++) {
-    if (!zoneOf(i, layout)) continue;
+    const zone = zoneOf(i, layout);
+    if (!zone || (mode === "drums" && zone.kind !== "kit") || (mode === "melodic" && zone.kind === "kit")) continue;
     const pad = pads[i];
     if (!pad || pad.placeholder) out.push(i);
+  }
+  return out;
+}
+
+/**
+ * Kit slots held by a stand-in: a real sound of another type (a clap in a snare slot, put there because no snare was
+ * found). A sound of the slot's own type may replace it; the stand-in then goes to the hot-swap pool.
+ */
+export function standInSlots(pads: Record<number, (FillPad & { section?: unknown }) | undefined>, layout: FingerLayout): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < BANK; i++) {
+    const zone = zoneOf(i, layout);
+    const pad = pads[i];
+    if (zone?.kind !== "kit" || !pad || pad.placeholder || pad.ghost || pad.section || !pad.category) continue;
+    if (pad.category !== zone.category) out.push(i);
   }
   return out;
 }
@@ -85,9 +101,9 @@ export interface FillSound {
 /**
  * Which new sound goes into which missing slot (slot -> index into `sounds`). A slot takes a sound of its own kind; a bass
  * slot with no ordinary bass takes an 808 and the other way round; the rest of bank C takes any type that has no place of
- * its own. Slots with no sound for them are left as they were.
+ * its own. Slots with no sound for them are left as they were. A slot in `exact` already holds a stand-in, so it takes only a sound of its own type.
  */
-export function assignFill(missing: number[], layout: FingerLayout, sounds: FillSound[]): Map<number, number> {
+export function assignFill(missing: number[], layout: FingerLayout, sounds: FillSound[], exact: ReadonlySet<number> = new Set()): Map<number, number> {
   const taken = new Set<number>();
   const out = new Map<number, number>();
   const take = (ok: (s: FillSound) => boolean) => {
@@ -106,7 +122,7 @@ export function assignFill(missing: number[], layout: FingerLayout, sounds: Fill
     else if (zone.kind === "808") at = take((s) => s.category === "bass" && !!s.is808);
     else at = take((s) => !hasOwnPlace(s));
     // A kit slot with no sound of its type takes one of the same family (any hat for a hat slot, a clap for a snare).
-    if (at < 0 && zone.kind === "kit") at = take((s) => SUBSTITUTE_GROUP[s.category] !== undefined && SUBSTITUTE_GROUP[s.category] === SUBSTITUTE_GROUP[zone.category]);
+    if (at < 0 && zone.kind === "kit" && !exact.has(i)) at = take((s) => SUBSTITUTE_GROUP[s.category] !== undefined && SUBSTITUTE_GROUP[s.category] === SUBSTITUTE_GROUP[zone.category]);
     if (at < 0 && (zone.kind === "bass" || zone.kind === "808")) at = take((s) => s.category === "bass");
     if (at >= 0) out.set(i, at);
   }

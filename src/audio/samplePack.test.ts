@@ -238,3 +238,28 @@ describe("melodic one-shots are not mistaken for percussion", () => {
     expect([...plan.visible, ...plan.hidden].filter((p) => p.category === "melodic").length).toBe(2);
   });
 });
+
+describe("pack modes", () => {
+  const KIT = { kick: 1, snare: 1 };
+  const many = (folder: string, n: number, name = folder) => Array.from({ length: n }, (_, i) => file([folder], `${name} ${i}.wav`));
+  const all = [...many("Kicks", 5), ...many("Snares", 5), ...many("Synths", 20), ...many("Melodic Loops", 20), ...many("Drum Loops", 20), ...many("Bass", 20)];
+  const cats = (sounds: { category: string }[]) => new Set(sounds.map((s) => s.category));
+
+  it("a drums import takes only kit sounds, never melodic sounds, basses or loops", () => {
+    const { visible, hidden } = planPackSounds(all, { kitSlots: KIT, mode: "drums", random: seeded() });
+    for (const c of [...cats(visible), ...cats(hidden)]) expect(["kick", "snare"]).toContain(c);
+    expect(visible.some((v) => v.category === "snare")).toBe(true);
+  });
+
+  it("a melodic import takes no drums", () => {
+    const { visible, hidden } = planPackSounds(all, { kitSlots: KIT, mode: "melodic", random: seeded() });
+    for (const c of [...cats(visible), ...cats(hidden)]) expect(["melodic", "melodicLoop", "drumLoop", "percLoop", "bass"]).toContain(c);
+    expect(visible.some((v) => v.category === "melodic")).toBe(true);
+  });
+
+  it("a melodic one-shot has to be named like an instrument", () => {
+    const files = [...many("One Shots", 6, "Piano"), ...many("One Shots", 6, "Hit")];
+    const { visible } = planPackSounds(files, { kitSlots: {}, mode: "melodic", random: seeded() });
+    expect(visible.every((v) => v.file.name.startsWith("Piano"))).toBe(true);
+  });
+});

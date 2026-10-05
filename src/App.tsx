@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { appendPackToProject, buildPackProject, entriesOfDrop, findPackInEntries, findPackInFileList, type FoundPack } from "./audio/packProject";
-import { assignFill, fillPlan, missingSlots } from "./audio/packFill";
+import { assignFill, fillPlan, missingSlots, standInSlots } from "./audio/packFill";
 import { displayName, packTags } from "./audio/sampleName";
-import { packByteBudget, type PackMemory } from "./audio/samplePack";
+import { packByteBudget, type PackMemory, type PackMode } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
 import {
@@ -294,6 +294,7 @@ function App() {
   const [addPackStatus, setAddPackStatus] = useState("");
   const packInput = useRef<HTMLInputElement>(null);
   const addPackInput = useRef<HTMLInputElement>(null);
+  const addMelodicInput = useRef<HTMLInputElement>(null);
 
   /** The sound type a dropped pack gave each pad (by pad number), used in place of the classifier's guess. */
   const categoryHints = useRef<Record<number, CategoryId>>({});
@@ -525,11 +526,12 @@ function App() {
   };
 
   /** Turns a sample pack into a project (a mix of its sound types across the pads) and loads it like any other. */
-  const loadPack = async (find: () => Promise<FoundPack> | FoundPack) => {
+  const loadPack = async (find: () => Promise<FoundPack> | FoundPack, mode: PackMode = "drums") => {
     setLoading(true);
     try {
       const built = await buildPackProject(await find(), {
         kitSlots: kitSlotCounts(layoutById(layout.id)),
+        mode,
         byteBudget: packByteBudget(packMemory),
         measure: (input) => getRenderWorker().measure(input),
         onProgress: setImportStatus,
@@ -564,7 +566,7 @@ function App() {
    * only fills slots that are still missing a sound (placeholders and gaps in banks A to C, never bank D) and tops up the
    * hot-swap pool, all levelled against what is already in the project.
    */
-  const addPack = async (find: () => Promise<FoundPack> | FoundPack) => {
+  const addPack = async (find: () => Promise<FoundPack> | FoundPack, mode: PackMode = "drums") => {
     const project = projectRef.current;
     if (!project) return;
     const token = loadToken.current;
@@ -573,11 +575,14 @@ function App() {
       const found = await find();
       const cur = latest.current;
       const lay = layoutById(layout.id);
-      const missing = missingSlots(cur.pads, lay);
+      // Kit slots filled by a stand-in (a clap where no snare was found) are open to a sound of their own type.
+      const standIns = mode === "melodic" ? [] : standInSlots(cur.pads, lay);
+      const missing = [...missingSlots(cur.pads, lay, mode), ...standIns];
       const fill = fillPlan(missing, lay, Object.values(cur.hidden));
       const existing = [...Object.values(cur.pads).filter(isReal), ...Object.values(cur.hidden)].map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category }));
       const result = await appendPackToProject(project, found, {
         ...fill,
+        mode,
         byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
         measure: (input) => getRenderWorker().measure(input),
         onProgress: setAddPackStatus,
@@ -591,10 +596,20 @@ function App() {
       projectFile.current = result.file;
       void saveProjectFile(result.file);
       const forSlot = result.sounds.filter((x) => x.forSlot);
-      const slotOf = assignFill(missing, lay, forSlot);
+      const slotOf = assignFill(missing, lay, forSlot, new Set(standIns));
       // A sound chosen for a slot that no gap could take (say, a snare when no snare slot is open) joins the hot-swap pool instead.
       const placed = new Map<number, number>();
       for (const [slot, at] of slotOf) placed.set(forSlot[at].pad, slot);
+      // A stand-in that was replaced by a sound of its own type is kept as a hot-swap spare.
+      const displaced = [...placed.values()].filter((slot) => standIns.includes(slot)).map((slot) => cur.pads[slot]);
+      if (displaced.length) {
+        setHidden((prev) => ({ ...prev, ...Object.fromEntries(displaced.map((p) => [p.origIndex, { ...p, index: -1 }])) }));
+        setPads((prev) => {
+          const next = { ...prev };
+          for (const p of displaced) if (next[p.index]?.origIndex === p.origIndex) delete next[p.index];
+          return next;
+        });
+      }
       setAnalyzing((n) => n + result.sounds.length);
       for (const sound of result.sounds) {
         const ref = { pad: sound.pad, sampleId: sound.sampleId, fileName: sound.fileName };
@@ -1663,7 +1678,19 @@ function App() {
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
             e.target.value = "";
-            if (files.length) void addPack(() => findPackInFileList(files));
+            if (files.length) void addPack(() => findPackInFileList(files), "drums");
+          }}
+        />
+        <input
+          ref={addMelodicInput}
+          type="file"
+          hidden
+          // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
+          webkitdirectory=""
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length) void addPack(() => findPackInFileList(files), "melodic");
           }}
         />
         {menuOpen && (
@@ -1754,13 +1781,24 @@ function App() {
             <button
               className="menu__button"
               disabled={!hasProject || analyzing > 0 || !!addPackStatus}
-              title="Choose another sample pack folder. It only fills slots that are still missing a sound; everything you have stays as it is."
+              title="Choose a folder of drum sounds. Only drums go to the kit, and only into slots that are missing a sound; no melodic sounds or loops are added."
               onClick={() => {
                 addPackInput.current?.click();
                 setMenuOpen(false);
               }}
             >
-              {addPackStatus || "Add pack"}
+              {addPackStatus || "Load drums"}
+            </button>
+            <button
+              className="menu__button"
+              disabled={!hasProject || analyzing > 0 || !!addPackStatus}
+              title="Choose a folder of melodic one-shots, basses or loops. Only these go on the pads after the kit; no drums are added."
+              onClick={() => {
+                addMelodicInput.current?.click();
+                setMenuOpen(false);
+              }}
+            >
+              {addPackStatus || "Load melodic & loops"}
             </button>
             <Switch label="Show symbols on pads" on={padSymbols} onChange={setPadSymbols} />
             <label className="menu__a4">
