@@ -36,6 +36,9 @@ import { arrangeFingerDrumming, EMPTY_PAD_LABEL } from "./audio/fingerDrumming";
 import { FINGER_LAYOUTS, kitSlotCounts, layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
+import { freeSongSlots, makeSectionPads } from "./audio/songPads";
+import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
+import { projectTimeSignature } from "./audio/koalaProject";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadSymbol } from "./components/PadSymbol";
@@ -112,13 +115,14 @@ function shiftFor(pad: Pad, projectKey: number | null, a4: number): number {
 }
 
 /** A sound from the project itself: not a silent placeholder and not a ghost copy the layout made. */
-const isReal = (p: Pad) => !p.placeholder && !p.ghost;
+const isReal = (p: Pad) => !p.placeholder && !p.ghost && !p.section;
 
 /**
  * Preview only (the project's own play settings are untouched). Every pad plays while held and fades
  * out smoothly on release; bass, melodic and melodic loops also loop for as long as they are held.
  */
 function padMode(pad: Pad): PadMode {
+  if (pad.section) return "oneshot"; // a song section plays through, like it will in Koala
   return isTunedCategory(pad.category) ? "loop" : "hold";
 }
 
@@ -830,6 +834,29 @@ function App() {
     patchPad(pad.index, pad.tuneLocked ? { category } : { category, tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) });
   };
 
+  /** The song being chopped into 8-bar sections (with the project's beats per bar), while the chop editor is open. */
+  const [chop, setChop] = useState<{ pad: Pad; beatsPerBar: number } | null>(null);
+  const openChop = async (pad: Pad) => {
+    const project = projectRef.current;
+    const { beatsPerBar } = project ? await projectTimeSignature(project) : { beatsPerBar: 4 };
+    setChop({ pad, beatsPerBar });
+  };
+
+  /** Replaces the song's pad with its 8-bar sections (on free pads, fourth bank first). The export writes the pads, their patterns and the tempo. */
+  const chopSong = (song: Pad, settings: ChopSettings) => {
+    const { pads: sections } = makeSectionPads(song, { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate }, freeSongSlots(removePad(pads, song.index)));
+    recordEdit();
+    setPads((prev) => {
+      const next = removePad(prev, song.index);
+      for (const section of sections) next[section.index] = section;
+      return next;
+    });
+    if (settings.keyPc !== null) applyProjectKey(settings.keyPc);
+    setSelected(sections[0]?.index ?? null);
+    if (sections[0]) setBank(Math.floor(sections[0].index / 16));
+    setChop(null);
+  };
+
   const deletePad = (pad: Pad) => {
     recordEdit();
     setPads((prev) => removePad(prev, pad.index));
@@ -1285,6 +1312,17 @@ function App() {
         });
       }
       rendered.length = 0;
+      const sectionPads = Object.values(pads).filter((p) => p.section).sort((a, b) => a.section!.number - b.section!.number);
+      const songExport = sectionPads.length
+        ? {
+            bpm: sectionPads[0].section!.bpm,
+            beatsPerBar: sectionPads[0].section!.beatsPerBar,
+            sampleRate: sectionPads[0].sampleRate,
+            sourceSampleId: sectionPads[0].section!.sourceSampleId,
+            bars: 8,
+            sections: sectionPads.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData })),
+          }
+        : undefined;
       const buses = new Map<number, number>();
       if (routeBuses) {
         for (const p of allPads) buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
@@ -1303,7 +1341,7 @@ function App() {
           if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: routeBuses, masterChain, masterStyle, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: routeBuses, masterChain, masterStyle, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports, song: songExport });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -1333,7 +1371,7 @@ function App() {
     return p.ghost ? shade(base, 2) : base;
   };
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
-  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : padLabel(p));
+  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? `Section ${p.section.number}` : padLabel(p));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
   const placeholdersOf = (from: Record<number, Pad>) =>
@@ -1344,7 +1382,7 @@ function App() {
   const canExport =
     (arrangement !== undefined ||
       placeholderList.length > 0 ||
-      Object.values(pads).some((p) => p.ghost) ||
+      Object.values(pads).some((p) => p.ghost || p.section) ||
       (normalize || autoColor || routeBuses || masterChain || autoPlayback ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
     analyzing === 0 &&
     !exporting;
@@ -1419,7 +1457,7 @@ function App() {
   /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
   const captionOf = (pad: Pad | undefined): string => {
     if (!pad) return "";
-    if (pad.placeholder || pad.ghost) return labelOf(pad);
+    if (pad.placeholder || pad.ghost || pad.section) return labelOf(pad);
     return isReal(pad) && pad.category ? CATEGORIES[categoryIndex(pad.category)].short : "";
   };
   /** The sound type a pad's symbol shows: real sounds and ghosts have one, silent placeholders none. */
@@ -1721,7 +1759,9 @@ function App() {
                 <div className="screen__message">
                   <strong>{labelOf(selectedPad)}</strong>
                   <span>
-                    {selectedPad.ghost
+                    {selectedPad.section
+                      ? `${selectedPad.section.bpm.toFixed(2)} BPM, one-shot`
+                      : selectedPad.ghost
                       ? "Made on export unless filled"
                       : selectedPad.placeholder?.kind === "missing"
                         ? "Silent placeholder: drag a sound here"
@@ -1930,7 +1970,17 @@ function App() {
         )}
 
         {longPads.length > 0 && (
-          <LongSamplesModal pads={longPads} maxSeconds={MAX_SAMPLE_SECONDS} onDelete={deletePad} onClose={() => setLongSamples([])} />
+          <LongSamplesModal pads={longPads} maxSeconds={MAX_SAMPLE_SECONDS} onDelete={deletePad} onChop={openChop} onClose={() => setLongSamples([])} />
+        )}
+
+        {chop && (
+          <SongChopModal
+            pad={chop.pad}
+            beatsPerBar={chop.beatsPerBar}
+            freeSlots={freeSongSlots(pads).length}
+            onConfirm={(settings) => chopSong(chop.pad, settings)}
+            onClose={() => setChop(null)}
+          />
         )}
 
         {extraPrompt && (

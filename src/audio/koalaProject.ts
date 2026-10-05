@@ -82,3 +82,16 @@ export function trimRangeOf(project: ParsedKoalaProject, sampleId: number, total
   if (start === 0 && end === totalFrames) return null;
   return { start, end };
 }
+
+/** The project's tempo and time signature, from its sequence settings (4/4 at 120 when it has none). */
+export async function projectTimeSignature(project: ParsedKoalaProject): Promise<{ bpm: number; beatsPerBar: number }> {
+  try {
+    const entry = project.zip.file("sequence.json");
+    const sequence = entry ? JSON.parse(await entry.async("string")) : null;
+    const beatsPerBar = Math.round(Number(sequence?.beatsPerBar));
+    const bpm = Number(sequence?.bpm);
+    return { bpm: bpm > 0 ? bpm : 120, beatsPerBar: beatsPerBar >= 1 && beatsPerBar <= 16 ? beatsPerBar : 4 };
+  } catch {
+    return { bpm: 120, beatsPerBar: 4 };
+  }
+}

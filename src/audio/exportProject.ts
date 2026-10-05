@@ -6,6 +6,7 @@ import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
 import type { MasterStyle } from "./mixPresets";
 import { appendAfterExisting, bassSidechain, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
+import { addSongSections, songTemplate, type SongExport } from "./exportSong";
 
 /** A silent pad the finger-drumming layout adds: where it sits, what Koala shows on it, and its colour. */
 export interface PlaceholderPad {
@@ -64,7 +65,8 @@ export async function buildTunedKoala(
     playback,
     placeholders,
     ghosts,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[] } = {},
+    song,
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[]; song?: SongExport } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -111,9 +113,12 @@ export async function buildTunedKoala(
     project.zip.file(`sampler/${t.sampleId}.wav`, encodeWav({ sampleRate: t.sampleRate, channelData, bitDepth: 24 }));
     t.channelData = []; // the WAV holds it now; let the floats go
   }
+  // The song's own pad is usually deleted by the arrangement, so its settings are taken before that.
+  const template = song ? songTemplate(samplerJson, song.sourceSampleId) : undefined;
   if (arrangement) await applyArrangement(project, samplerJson, arrangement);
   if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
+  if (song?.sections.length) await addSongSections(project, samplerJson, song, template);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
   if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, melodicEq: sidechain, master: masterChain, masterStyle });
 

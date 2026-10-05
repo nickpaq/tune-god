@@ -12,12 +12,15 @@ export function LongSamplesModal({
   pads,
   maxSeconds,
   onDelete,
+  onChop,
   onClose,
 }: {
   /** The long sounds still in the project. */
   pads: Pad[];
   maxSeconds: number;
   onDelete: (pad: Pad) => void;
+  /** Opens the chop editor for a song: its 8-bar sections become pads with a pattern each. */
+  onChop: (pad: Pad) => void;
   onClose: () => void;
 }) {
   const preview = useSoundPreview();
@@ -49,6 +52,16 @@ export function LongSamplesModal({
                   <span className="sound-row__pad">{pad.index + 1}</span> {pad.name}
                 </span>
                 <span className="sound-row__duration">{formatDuration(pad.channelData[0].length / pad.sampleRate)}</span>
+                <button
+                  className="sound-row__chop"
+                  onClick={() => {
+                    if (preview.playing === pad.origIndex) preview.stop();
+                    onChop(pad);
+                  }}
+                  aria-label={`Chop ${pad.name} to patterns for acapella`}
+                >
+                  Chop to patterns for acapella
+                </button>
                 <button
                   className="sound-row__icon sound-row__icon--delete"
                   onClick={() => {
