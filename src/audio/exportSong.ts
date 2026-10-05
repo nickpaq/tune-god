@@ -7,6 +7,18 @@ import type { ParsedKoalaProject } from "./koalaProject";
 export const TICKS_PER_BEAT = 4096;
 const SEQUENCE_SLOTS = 32;
 
+/**
+ * How Koala stores the length a stretched pad is stretched from, in `pad.stretchLength`: UNVERIFIED. The projects this app has been tested with
+ * never have stretch on (`stretching: false`, `stretch: 1`, `stretchLength: 0`), so the unit is a guess: bars, as Koala's own stretch panel counts.
+ * If a chopped pad shows the wrong number of bars in Koala's stretch panel, this is the one place to change (see docs/koala-mixer-reference.md).
+ */
+export const STRETCH_LENGTH_UNIT: "bars" | "beats" = "bars";
+
+/** The value written to `stretchLength` for a section of `bars` bars. */
+export function stretchLengthFor(bars: number, beatsPerBar: number): number {
+  return STRETCH_LENGTH_UNIT === "bars" ? bars : bars * beatsPerBar;
+}
+
 export interface SongSectionExport {
   /** The grid slot the section's pad goes on. */
   index: number;
@@ -100,6 +112,10 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
     // Koala writes some booleans as strings; keep whichever style the pad already uses.
     pad.oneshot = typeof source?.oneshot === "boolean" ? true : "true";
     pad.looping = typeof source?.looping === "boolean" ? false : "false";
+    // Stretch on, for as many bars as the section's pattern: if the project tempo changes (or the pad is moved), the vocals stretch to stay in time,
+    // and at the song's own tempo (which the export sets) they are not altered at all.
+    pad.stretching = typeof source?.stretching === "string" ? "true" : true;
+    pad.stretchLength = stretchLengthFor(section.bars ?? song.bars, beatsPerBar);
     Object.assign(pad, { start: 0, zoomStart: 0, end: frames, zoomEnd: frames, pitch: 0, vol: 1, pan: 0.5 });
     if ("loopPoint" in pad) pad.loopPoint = -1;
     pads.push(pad);

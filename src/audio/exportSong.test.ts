@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
 import type { ParsedKoalaProject } from "./koalaProject";
-import { TICKS_PER_BEAT } from "./exportSong";
+import { STRETCH_LENGTH_UNIT, stretchLengthFor, TICKS_PER_BEAT } from "./exportSong";
 
 async function load(file: string): Promise<ParsedKoalaProject> {
   const zip = await JSZip.loadAsync(readFileSync(new URL(`../../docs/calibration/${file}`, import.meta.url)));
@@ -107,5 +107,36 @@ describe("a chopped song in the export", () => {
     expect(patterns.map((p: any) => p.numBars)).toEqual([8, 3, 8]);
     expect(patterns.map((p: any) => p.notes[0].length)).toEqual([8 * 4 * TICKS_PER_BEAT, 3 * 4 * TICKS_PER_BEAT, 8 * 4 * TICKS_PER_BEAT]);
     expect(patterns.map((p: any) => p.notes[0].num)).toEqual([48, 49, 50]);
+  });
+
+  it("turns stretch on for every section pad, for as many bars as its pattern, so the vocals stay in time if the tempo changes", async () => {
+    const { sampler, sequence, before } = await run("probe-sidechain.koala", [{ ...section(48, 100), bars: 8 }, { ...section(49, 60), bars: 3 }, { ...section(50, 100), bars: 8 }]);
+    const added = sampler.pads.filter((p: any) => /^Section/.test(p.label));
+    expect(added.map((p: any) => p.stretching)).toEqual([true, true, true]);
+    // the same bars as the pattern of that pad
+    const firstFree = before.sequences.findIndex((s: any) => !s.noteSequence.pattern.notes?.length);
+    added.forEach((pad: any, i: number) => {
+      const pattern = sequence.sequences[firstFree + i].noteSequence.pattern;
+      expect(pad.stretchLength).toBe(stretchLengthFor(pattern.numBars, sequence.beatsPerBar));
+    });
+    expect(added.map((p: any) => p.stretchLength)).toEqual(STRETCH_LENGTH_UNIT === "bars" ? [8, 3, 8] : [32, 12, 32]);
+    // the stretch mode and the sample's own tempo are left as they were or set to the song's
+    expect(added.every((p: any) => p.stretch === 1)).toBe(true);
+    expect(sampler.samples.find((s: any) => s.id === added[0].sampleId).metadata.bpm).toBe(75);
+  });
+
+  it("writes stretch in the style the template pad uses (a string when it holds booleans as strings)", async () => {
+    const project = await load("probe-sidechain.koala");
+    project.samplerJson.pads[0].stretching = "false";
+    const { blob } = await buildTunedKoala(project, [], { song: { bpm: 90, sampleRate: 44100, sourceSampleId: project.samplerJson.pads[0].sampleId, sections: [section(48, 50)], bars: 8 } });
+    const out = JSON.parse(await (await JSZip.loadAsync(await blob.arrayBuffer())).file("sampler/sampler.json")!.async("string"));
+    expect(out.pads.find((p: any) => /^Section/.test(p.label)).stretching).toBe("true");
+  });
+});
+
+describe("stretchLengthFor", () => {
+  it("is the bars, or the beats in them if the unit is beats", () => {
+    expect(stretchLengthFor(8, 4)).toBe(STRETCH_LENGTH_UNIT === "bars" ? 8 : 32);
+    expect(stretchLengthFor(3, 7)).toBe(STRETCH_LENGTH_UNIT === "bars" ? 3 : 21);
   });
 });
