@@ -41,6 +41,7 @@ import { scalePlans } from "./audio/song/tapGrid";
 import { checkStems } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
+import { addSongSections, songTemplate, type SongExport } from "./audio/exportSong";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadSymbol } from "./components/PadSymbol";
@@ -872,34 +873,105 @@ function App() {
     setChop({ song: check.song, vocals: check.vocals, beatsPerBar });
   };
 
+  /** The song sections as the export writes them: their pads, audio, bars, labels, colours and the tempo. */
+  const songExportOf = (sectionPads: Pad[]): SongExport | undefined => {
+    const sorted = [...sectionPads].sort((a, b) => a.section!.number - b.section!.number);
+    if (!sorted.length) return undefined;
+    return {
+      bpm: sorted[0].section!.bpm,
+      beatsPerBar: sorted[0].section!.beatsPerBar,
+      sampleRate: sorted[0].sampleRate,
+      sourceSampleId: sorted[0].section!.sourceSampleId,
+      bars: 8,
+      sections: sorted.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColorOf(p) })),
+    };
+  };
+
   /**
-   * Cuts the vocal stem at the song's chop points, puts the sections on free pads (fourth bank first) and, as the last step, deletes both the stem and
-   * the full song. The sections keep their own label and colour and are left alone by organizing, tuning and mixing. The export writes the pads, their patterns and the tempo.
+   * Writes the sections into a fresh copy of the project, exactly as the export will (a WAV, a pad with stretch and a pattern each, and the tempo),
+   * and reads it back. Returns what went wrong, or null when every section is in. Nothing in the app or the original file is changed.
    */
-  const chopSong = (song: Pad, vocals: Pad, settings: ChopSettings) => {
-    // The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
-    const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
-    // Nothing is deleted until every section has been cut and checked: the new pad grid is built on the side and only swapped in at the end.
-    const rest = removePad(removePad(pads, vocals.index), song.index);
-    const layoutId = layout.on ? layout.id : FINGER_LAYOUTS[0].id;
-    const next = layout.on ? { ...rest } : arrangeInto(rest, layoutId);
-    const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(next), palette.colors);
-    // The song and the stem are only deleted once the sections are made; with nowhere to put them nothing is changed.
-    if (sections.length === 0) {
-      window.alert("There is no free pad for the sections, so nothing was changed: the song and its vocals are still there. Delete a few pads and chop again.");
-      return;
+  const trialWriteSections = async (sections: Pad[], sourceSampleId: number): Promise<string | null> => {
+    if (!projectFile.current) return null; // a sample pack has no project file yet; the export makes one
+    const project = await parseKoalaProject(projectFile.current);
+    const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
+    const template = songTemplate(samplerJson, sourceSampleId);
+    // The project's own pads are moved and kept by the export's arrangement, so here only the sections are checked.
+    samplerJson.pads = [];
+    const song = songExportOf(sections)!;
+    const added = await addSongSections(project, samplerJson, song, template);
+    if (added < sections.length) {
+      return `the project has room for only ${added} of the ${sections.length} patterns (Koala has 32 pattern slots; free some and chop again)`;
     }
-    recordEdit();
-    // Only now, with the sections made, are the stem and the full song deleted, and bank A becomes the drum layout (the MPC one unless a
-    // layout is already on), empty and waiting for a drum pack to be dropped in.
-    for (const section of sections) next[section.index] = section;
-    if (!layout.on) setLayout({ on: true, id: layoutId, pre: Object.fromEntries(Object.values(rest).filter(isReal).map((p) => [p.origIndex, p.index])) });
-    setPads(next);
-    if (settings.keyPc !== null) applyProjectKey(settings.keyPc);
-    setSelected(null);
-    setBank(0);
-    setChop(null);
-    setLongSamples([]);
+    const sequence = JSON.parse((await project.zip.file("sequence.json")?.async("string")) ?? "{}");
+    const base = project.padBase;
+    for (const s of song.sections) {
+      const pad = samplerJson.pads.find((p: any) => Number(p.pad) - base === s.index);
+      if (!pad || !project.zip.file(`sampler/${pad.sampleId}.wav`)) return `${s.label} was not written`;
+      const held = (sequence.sequences ?? []).some((q: any) => (q?.noteSequence?.pattern?.notes ?? []).some((n: any) => Number(n.num) === s.index + base));
+      if (!held) return `${s.label} got no pattern`;
+    }
+    return null;
+  };
+
+  /** While a chop is being made: a second press of Chop does nothing. */
+  const chopping = useRef(false);
+
+  /**
+   * The a cappella chop, in this order, and each step only once the one before it is done:
+   *  1. the vocal stem is cut at the song's chop points into section pads (on free pads, the fourth bank first);
+   *  2. the sections are written into a copy of the Koala project the way the export writes them, and checked;
+   *  3. the sections are put on their pads, and the project key is set;
+   *  4. only then are the vocal stem and the full song deleted;
+   *  5. last, the drum layout is switched on (the MPC one unless a layout is already on), bank A empty and waiting for a drum pack.
+   * If step 1 or 2 fails nothing at all is changed. The sections keep their own label and colour and are left alone by organizing, tuning and mixing.
+   */
+  const chopSong = async (song: Pad, vocals: Pad, settings: ChopSettings) => {
+    if (chopping.current) return;
+    chopping.current = true;
+    try {
+      // 1. Cut. The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
+      const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
+      const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(pads), palette.colors);
+      if (sections.length === 0) {
+        window.alert("There is no free pad for the sections, so nothing was changed: the song and its vocals are still there. Delete a few pads and chop again.");
+        return;
+      }
+      // 2. Write them into a copy of the project and check every one went in.
+      let problem: string | null;
+      try {
+        problem = await trialWriteSections(sections, vocals.sampleId);
+      } catch (err) {
+        console.error(err);
+        problem = "the project file could not be written";
+      }
+      if (problem) {
+        window.alert(`The chop could not be written into the Koala project: ${problem}. Nothing was changed: the song and its vocals are still there.`);
+        return;
+      }
+      recordEdit();
+      // 3. Fill the pads, and set the key.
+      let grid: Record<number, Pad> = { ...latest.current.pads };
+      for (const section of sections) grid[section.index] = section;
+      setPads(grid);
+      if (settings.keyPc !== null) applyProjectKey(settings.keyPc);
+      // 4. Only now delete the stem and the full song.
+      grid = removePad(removePad(grid, vocals.index), song.index);
+      setPads(grid);
+      // 5. Last, the drum layout (it keeps the sections where they are).
+      if (!layout.on) {
+        const layoutId = FINGER_LAYOUTS[0].id;
+        const pre = Object.fromEntries(Object.values(grid).filter(isReal).map((p) => [p.origIndex, p.index]));
+        setPads(arrangeInto(grid, layoutId));
+        setLayout({ on: true, id: layoutId, pre });
+      }
+      setSelected(null);
+      setBank(0);
+      setChop(null);
+      setLongSamples([]);
+    } finally {
+      chopping.current = false;
+    }
   };
 
   const deletePad = (pad: Pad) => {
@@ -1399,17 +1471,7 @@ function App() {
         });
       }
       rendered.length = 0;
-      const sectionPads = Object.values(pads).filter((p) => p.section).sort((a, b) => a.section!.number - b.section!.number);
-      const songExport = sectionPads.length
-        ? {
-            bpm: sectionPads[0].section!.bpm,
-            beatsPerBar: sectionPads[0].section!.beatsPerBar,
-            sampleRate: sectionPads[0].sampleRate,
-            sourceSampleId: sectionPads[0].section!.sourceSampleId,
-            bars: 8,
-            sections: sectionPads.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColorOf(p) })),
-          }
-        : undefined;
+      const songExport = songExportOf(Object.values(pads).filter((p) => p.section));
       const buses = new Map<number, number>();
       if (routeBuses) {
         for (const p of allPads) buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
