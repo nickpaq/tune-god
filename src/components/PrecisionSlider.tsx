@@ -205,7 +205,7 @@ export function PrecisionSlider({
         <div className="precision-slider__fill" style={fillStyle} />
         <div className="precision-slider__thumb" style={{ left: `${pct}%` }} />
         {dragging && valueLabel && (
-          <div className="precision-slider__bubble" style={{ left: `${pct}%` }}>
+          <div className="precision-slider__bubble" style={{ left: `${pct}%`, transform: `translateX(-${pct}%)` }}>
             {valueLabel(value)}
           </div>
         )}

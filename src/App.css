@@ -449,6 +449,7 @@
 .precision-slider__bubble {
   position: absolute;
   bottom: calc(100% + 3cqw);
+  /* the component sets the shift (0 % at the left end, 100 % at the right) so the label never hangs past the track: a label cut by the screen's edge made the screen shrink its text, and the waveform grew */
   transform: translateX(-50%);
   padding: 0 calc(var(--cell) * 2);
   background: var(--oled);
