@@ -956,10 +956,8 @@ function App() {
    * The a cappella chop, in this order, and each step only once the one before it is done:
    *  1. the vocal stem is cut at the song's chop points into section pads (on free pads, the fourth bank first);
    *  2. the sections are written into a copy of the Koala project the way the export writes them, and checked;
-   *  3. the sections are put on their pads, and the project key is set;
-   *  4. only then are the vocal stem and the full song deleted;
-   *  5. last, the drum layout is switched on (the MPC one unless a layout is already on), bank A empty and waiting for a drum pack.
-   * If step 1 or 2 fails nothing at all is changed. The sections keep their own label and colour and are left alone by organizing, tuning and mixing.
+   *  3. the sections are put on their pads.
+   * Nothing else changes: the song, the vocal stem, the key and the layout stay as they were. If step 1 or 2 fails nothing at all is changed. The sections keep their own label and colour and are left alone by organizing, tuning and mixing.
    */
   const chopSong = async (song: Pad, vocals: Pad, settings: ChopSettings) => {
     if (chopping.current) return;
@@ -985,21 +983,10 @@ function App() {
         return;
       }
       recordEdit();
-      // 3. Fill the pads, and set the key.
-      let grid: Record<number, Pad> = { ...latest.current.pads };
+      // 3. Fill the pads. The song, its vocals, the key and the drum layout are left as they were.
+      const grid: Record<number, Pad> = { ...latest.current.pads };
       for (const section of sections) grid[section.index] = section;
       setPads(grid);
-      if (settings.keyPc !== null) applyProjectKey(settings.keyPc);
-      // 4. Only now delete the stem and the full song.
-      grid = removePad(removePad(grid, vocals.index), song.index);
-      setPads(grid);
-      // 5. Last, the drum layout (it keeps the sections where they are).
-      if (!layout.on) {
-        const layoutId = FINGER_LAYOUTS[0].id;
-        const pre = Object.fromEntries(Object.values(grid).filter(isReal).map((p) => [p.origIndex, p.index]));
-        setPads(arrangeInto(grid, layoutId));
-        setLayout({ on: true, id: layoutId, pre });
-      }
       setSelected(null);
       setBank(0);
       setChop(null);

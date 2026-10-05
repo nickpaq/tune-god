@@ -22,7 +22,6 @@ import {
 } from "../audio/song/chopMarks";
 import { bpmAt, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
 import { buildPyramid } from "../audio/song/waveform";
-import { NOTE_NAMES } from "../audio/theory";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
 import { Knob } from "./Knob";
 import { useSongPlayer } from "./useSongPlayer";
@@ -35,7 +34,6 @@ export interface ChopSettings {
   /** The sections, on the song's own frames. */
   plans: SectionPlan[];
   /** The key to tune the project to, or null to leave the project's key alone. */
-  keyPc: number | null;
 }
 
 /** What the automatic detection found: the tempo and where bar 1 starts. */
@@ -100,10 +98,6 @@ export function SongChopModal({
   /** Whether scrubbing pulls the line onto grid lines and markers; off, to place a marker exactly where the sound is. */
   const [magnetOn, setMagnetOn] = useState(true);
 
-  const [keyPc, setKeyPc] = useState(0);
-  const [minor, setMinor] = useState(false);
-  const [useKey, setUseKey] = useState(true);
-  const [keyReady, setKeyReady] = useState(false);
 
   // The song's tempo, bar 1 and key are found in the background.
   useEffect(() => {
@@ -115,9 +109,6 @@ export function SongChopModal({
         if (!alive) return;
         if (!result) return setDetected("none");
         setDetected({ bpm: result.bpm, downbeatSeconds: result.downbeatSeconds });
-        setKeyPc(result.key.pc);
-        setMinor(result.key.minor);
-        setKeyReady(true);
       })
       .catch(() => alive && setDetected("none"));
     return () => {
@@ -284,7 +275,7 @@ export function SongChopModal({
     const chosen = planSections(totalFrames, grid, picked);
     if (chosen.length === 0) return setStatus("No whole bars to chop");
     change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)) }, `Chopped by ${bars}`);
-    onConfirm({ bpm: bpmAt(grid, picked[0].first), beatsPerBar, plans: chosen, keyPc: useKey ? keyPc : null });
+    onConfirm({ bpm: bpmAt(grid, picked[0].first), beatsPerBar, plans: chosen });
   };
 
   autoChopRef.current = autoChop;
@@ -426,29 +417,9 @@ export function SongChopModal({
             )}
           </div>
 
-          <div className="chop__row">
-            <label className="chop__check">
-              <input type="checkbox" checked={useKey} onChange={(e) => setUseKey(e.target.checked)} />
-              Tune the project to the song's key
-            </label>
-          </div>
-          <div className="chop__row">
-            <select value={keyPc} onChange={(e) => setKeyPc(Number(e.target.value))} aria-label="Key">
-              {NOTE_NAMES.map((name, i) => (
-                <option key={name} value={i}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <select value={minor ? "minor" : "major"} onChange={(e) => setMinor(e.target.value === "minor")} aria-label="Major or minor">
-              <option value="major">major</option>
-              <option value="minor">minor</option>
-            </select>
-          </div>
-          {!keyReady && detected === null ? <p className="chop__note chop__note--summary">Listening for the key...</p> : null}
         </div>
 
-        <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, keyPc: useKey ? keyPc : null })}>
+        <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans })}>
           Chop into {fits} pattern{fits === 1 ? "" : "s"}
         </button>
       </div>
