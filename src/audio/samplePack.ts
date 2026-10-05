@@ -63,9 +63,11 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["hat", /\b(hi ?hats?|hats?|hh)\b/],
   ["vox", /\b(vocals?|vox|voices?|choirs?|acapellas?|chants?|breaths?|ad ?libs?|speech|shouts?)\b/],
   ["fx", /\b(fx|sfx|effects?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|booms?|zaps?|lasers?|sirens?|reverses?|reversed|scratch(es)?|vinyl|crackles?|stingers?|stings?|rumbles?|bursts?|explosions?|sci ?fi)\b/],
-  ["perc", /\b(toms?|perc|percs|percussions?|congas?|bongos?|tamb(ourines?)?|cowbells?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
+  // Named percussion instruments only; the generic "perc" words come after the melodic rule so "Melodic Percussion" or "Bells & Perc" stay melodic.
+  ["perc", /\b(toms?|congas?|bongos?|tamb(ourines?)?|cowbells?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
   ["bass", /\b(808s?|bass(es)?|subs?|reese)\b/],
-  ["melodic", /\b(pianos?|keys?|keyboards?|bells?|plucks?|guitars?|harps?|mallets?|marimbas?|kalimbas?|rhodes|epianos?|stabs?|vibraphones?|glock(enspiel)?s?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|organs?|brass|horns?|flutes?|melod(y|ic|ies)|instruments?|tonal)\b/],
+  ["melodic", /\b(pianos?|keys?|keyboards?|bells?|plucks?|guitars?|harps?|mallets?|marimbas?|kalimbas?|rhodes|epianos?|stabs?|vibraphones?|glock(enspiel)?s?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|organs?|brass|horns?|flutes?|melod(y|ic|ies)|instruments?|tonal|pitched)\b/],
+  ["perc", /\b(perc|percs|percussions?)\b/],
 ];
 
 /** Folder names that say nothing about the sound (they only group files), so the next folder out is used. */
@@ -116,6 +118,20 @@ export function categoryOfFile(folders: string[], fileName: string): CategoryId 
   return byName ?? "other";
 }
 
+/** A folder that names the one-shots without saying what type they are: "One Shots", "Drum One Shots", "Single Shots". */
+export function isOneShotFolder(folder: string): boolean {
+  return /\b(one ?shots?|single ?shots?)\b/.test(tidy(folder)) && categoryOfFolder(folder) === null;
+}
+
+/**
+ * Whether a pack can hold melodic one-shots at all: some folder is melodic ("Melodic", "Keys", "Synths", "Bells", "Plucks"...) or is a
+ * plain "One Shots" folder, which can hold anything. A pack with neither almost certainly has none, so a file whose name merely sounds
+ * melodic is not trusted and the melodic pads are left empty for another pack to fill (see planPackSounds).
+ */
+export function packHasMelodicOneShots(files: { folders: string[] }[]): boolean {
+  return files.some((f) => f.folders.some((folder) => categoryOfFolder(folder) === "melodic" || isOneShotFolder(folder)));
+}
+
 /** Fisher-Yates shuffle into a new array. `random` is injectable so tests are repeatable. */
 export function shuffled<T>(items: readonly T[], random: () => number = Math.random): T[] {
   const out = [...items];
@@ -162,6 +178,8 @@ export interface PackPlan<T = unknown> {
   counts: Partial<Record<CategoryId, { found: number; picked: number }>>;
   /** Audio files left out because they were too large to load, or because the byte budget ran out. */
   skippedForSize: number;
+  /** Files named like melodic one-shots in a pack with no melodic or one-shots folder, left out so the melodic pads stay empty. */
+  skippedMelodicNames: number;
   totalFiles: number;
 }
 
@@ -212,9 +230,15 @@ export function planPackSounds<T>(
   const queues = new Map<PlanKey, PackFile<T>[]>();
   const found = new Map<CategoryId, number>();
   let skippedForSize = 0;
+  let skippedMelodicNames = 0;
+  const melodicPossible = packHasMelodicOneShots(files);
   for (const file of files) {
     const category = categoryOfFile(file.folders, file.name);
     found.set(category, (found.get(category) ?? 0) + 1);
+    if (category === "melodic" && !melodicPossible) {
+      skippedMelodicNames++;
+      continue;
+    }
     if (file.size > maxFileBytes || file.size <= 0) {
       skippedForSize += file.size > 0 ? 1 : 0;
       continue;
@@ -305,5 +329,5 @@ export function planPackSounds<T>(
   const counts: PackPlan<T>["counts"] = {};
   const picked = (c: CategoryId) => (shown.get(c) ?? 0) + (kept.get(c) ?? 0) + (c === "bass" ? (shown.get("808") ?? 0) + (kept.get("808") ?? 0) : 0);
   for (const [category, n] of found) counts[category] = { found: n, picked: picked(category) };
-  return { visible: shuffled(visible, random), hidden, counts, skippedForSize, totalFiles: files.length };
+  return { visible: shuffled(visible, random), hidden, counts, skippedForSize, skippedMelodicNames, totalFiles: files.length };
 }

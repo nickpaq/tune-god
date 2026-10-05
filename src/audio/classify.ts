@@ -119,9 +119,12 @@ const NAME_RULES: [CategoryId | "hat", RegExp][] = [
   ["hat", /\b(hi ?hat|hh|hat|hats)\b/],
   ["vox", /\b(vocal|vocals|vox|voice|choir|acapella|chant|breath|adlib|ad-lib)\b/],
   ["fx", /\b(fx|sfx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone|zap|laser|siren|reverse|reversed|rev|scratch|vinyl|crackle|static|stinger|sting|boom|rumble|burst|effect|effects|sci ?fi|explosion|bomb)\b/],
-  ["perc", /\b(tom|toms|perc|percussion|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro|drum)\b/],
+  // Named percussion instruments only. The generic words "perc", "percussion" and "drum" come after the melodic words below, because a
+  // pitched sound is often labelled with them ("Bell Perc", "Pluck Perc", "Synth Drum") and should stay melodic.
+  ["perc", /\b(tom|toms|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro)\b/],
   ["bass", /\b(808|bass|sub|reese)\b/],
-  ["melodic", /\b(piano|keys|key|bell|bells|pluck|guitar|harp|mallet|marimba|kalimba|rhodes|epiano|stab|vibraphone|glock|glockenspiel|celesta|chime|pad|synth|lead|chord|chords|strings|string|organ|arp|saw|brass|horn|flute)\b/],
+  ["melodic", /\b(piano|keys|key|bell|bells|pluck|guitar|harp|mallet|marimba|kalimba|rhodes|epiano|stab|vibraphone|glock|glockenspiel|celesta|chime|pad|synth|lead|chord|chords|strings|string|organ|arp|saw|brass|horn|flute|melodic|melody|tonal|pitched)\b/],
+  ["perc", /\b(perc|percussion|drum)\b/],
 ];
 
 /** The loop category a sound becomes when its name says "loop": drums become drum loops, perc perc loops, bass and melodic melodic loops. */

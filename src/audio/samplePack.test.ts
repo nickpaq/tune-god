@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryOfFile, categoryOfFolder, packByteBudget, planPackSounds, type PackFile } from "./samplePack";
+import { categoryOfFile, categoryOfFolder, isOneShotFolder, packByteBudget, packHasMelodicOneShots, planPackSounds, type PackFile } from "./samplePack";
 
 // A small deterministic random source so the shuffles are repeatable.
 function seeded(seed = 1) {
@@ -174,5 +174,58 @@ describe("memory budget", () => {
     expect(packByteBudget("auto", { ios: false, deviceMemoryGb: 1 })).toBe(128 * MB);
     expect(packByteBudget("auto", { ios: false })).toBe(192 * MB);
     expect(packByteBudget("high", { ios: false, deviceMemoryGb: 8 })).toBe(1024 * MB);
+  });
+});
+
+describe("melodic one-shots are not mistaken for percussion", () => {
+  it("keeps a pitched sound melodic when its name or folder also says perc", () => {
+    for (const name of ["Rio - Bell Perc 01.wav", "Pluck Perc.wav", "Perc Synth C.wav", "Marimba Perc.wav", "Melodic Perc 03.wav"]) expect(categoryOfFile(["Pack"], name), name).toBe("melodic");
+    for (const folder of ["Melodic Percussion", "Bells & Perc", "Pitched Percussion", "Tonal Percs"]) expect(categoryOfFolder(folder), folder).toBe("melodic");
+  });
+
+  it("still calls real percussion perc", () => {
+    for (const name of ["Perc 01.wav", "Percussion Hit.wav", "Tom Low.wav", "Shaker 2.wav", "Conga Open.wav", "Drum Fill.wav"]) expect(categoryOfFile(["Pack"], name), name).toBe("perc");
+    for (const folder of ["Percussion", "Percs", "Toms", "Shakers & Tambourines"]) expect(categoryOfFolder(folder), folder).toBe("perc");
+  });
+
+  it("knows a one-shots folder that names no type", () => {
+    expect(isOneShotFolder("One Shots")).toBe(true);
+    expect(isOneShotFolder("Drum One Shots")).toBe(true);
+    expect(isOneShotFolder("Kick One Shots")).toBe(false);
+    expect(isOneShotFolder("Melodic One Shots")).toBe(false);
+    expect(isOneShotFolder("Kicks")).toBe(false);
+  });
+
+  it("allows melodic one-shots only where the pack has a melodic or one-shots folder", () => {
+    expect(packHasMelodicOneShots([file(["Kicks"], "a.wav"), file(["Snares"], "b.wav")])).toBe(false);
+    expect(packHasMelodicOneShots([file(["Melodic Loops"], "a.wav"), file(["Kicks"], "b.wav")])).toBe(false); // loops are not one-shots
+    expect(packHasMelodicOneShots([file(["Kicks"], "a.wav"), file(["Keys"], "b.wav")])).toBe(true);
+    expect(packHasMelodicOneShots([file(["One Shots"], "a.wav")])).toBe(true);
+    expect(packHasMelodicOneShots([file(["Melodic One Shots"], "a.wav")])).toBe(true);
+  });
+
+  it("leaves the melodic pads empty when the pack has no melodic folder, however a file is named", () => {
+    const files = [
+      ...Array.from({ length: 6 }, (_, i) => file(["Kicks"], `Kick ${i}.wav`)),
+      file([], "Bell Perc 01.wav"),
+      file([], "Pluck 02.wav"),
+      ...Array.from({ length: 4 }, (_, i) => file(["Percs"], `Perc ${i}.wav`)),
+    ];
+    const plan = planPackSounds(files, { kitSlots: { kick: 2, perc: 4 }, random: seeded(3) });
+    expect([...plan.visible, ...plan.hidden].some((p) => p.category === "melodic")).toBe(false);
+    expect(plan.skippedMelodicNames).toBe(2);
+  });
+
+  it("fills the melodic pads when the pack has a melodic folder", () => {
+    const files = [...Array.from({ length: 6 }, (_, i) => file(["Kicks"], `Kick ${i}.wav`)), ...Array.from({ length: 10 }, (_, i) => file(["Keys"], `Rio - Bell Perc ${i}.wav`))];
+    const plan = planPackSounds(files, { kitSlots: { kick: 2 }, random: seeded(3) });
+    expect(plan.visible.filter((p) => p.category === "melodic").length).toBeGreaterThan(0);
+    expect(plan.skippedMelodicNames).toBe(0);
+  });
+
+  it("lets names decide inside a plain one-shots folder", () => {
+    const files = [file(["One Shots"], "Kick 1.wav"), file(["One Shots"], "Bell Perc 01.wav"), file(["One Shots"], "Pluck 02.wav")];
+    const plan = planPackSounds(files, { kitSlots: { kick: 1 }, random: seeded(3) });
+    expect([...plan.visible, ...plan.hidden].filter((p) => p.category === "melodic").length).toBe(2);
   });
 });
