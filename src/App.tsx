@@ -320,7 +320,7 @@ function App() {
       // A project reopened with its layout on gets its silent placeholder pads back straight away.
       const layoutOn = restore && !!saved.layoutOn;
       setPads(
-        layoutOn ? Object.fromEntries((saved.layoutPlaceholders ?? []).map((ph) => [ph.index, makePlaceholderPad(ph)])) : {},
+        {}, // silent placeholder pads are no longer brought back on reopening
       );
       setLayout((l) => ({ on: layoutOn, id: layoutById(layoutOn ? saved.layoutId : l.id).id, pre: layoutOn ? (saved.layoutPre ?? {}) : {} }));
       setHidden({});
@@ -347,7 +347,8 @@ function App() {
         const saved = restore ? restorePads.current[pad] : undefined;
         return saved ? !!saved.hidden : pad >= 64;
       };
-      const slots = project.pads.filter((p) => p.pad >= 0 && !(restore && restorePads.current[p.pad]?.deleted));
+      // Silent placeholder pads from an earlier export (every one plays silence.wav) are not sounds: they are left out, and the next export drops them.
+      const slots = project.pads.filter((p) => p.pad >= 0 && p.fileName !== "silence.wav" && !(restore && restorePads.current[p.pad]?.deleted));
       setAnalyzing(slots.length);
       const tooLong: number[] = [];
       for (const ref of slots) {
@@ -1422,7 +1423,6 @@ function App() {
   const exportProject = async (mode: ExtraDrums = "keep") => {
     const pads = mode === "delete" ? withoutExtraDrums(padsNow) : padsNow;
     const arrangement = arrangementOf(pads);
-    const placeholderList = placeholdersOf(pads);
     if (!projectRef.current) return;
     setExporting(true);
     try {
@@ -1512,7 +1512,7 @@ function App() {
           if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: routeBuses, masterChain, masterStyle, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports, song: songExport });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: routeBuses, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -1548,15 +1548,8 @@ function App() {
   const sectionLabel = (p: Pad): string => `${CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
   const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? sectionLabel(p) : padLabel(p));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
-  /** The layout's silent pads, written into the exported project. */
-  const placeholdersOf = (from: Record<number, Pad>) =>
-    Object.values(from)
-      .filter((p) => p.placeholder)
-      .map((p) => ({ index: p.index, label: p.placeholder!.label, color: placeholderColor(p) }));
-  const placeholderList = placeholdersOf(pads);
   const canExport =
     (arrangement !== undefined ||
-      placeholderList.length > 0 ||
       Object.values(pads).some((p) => p.ghost || p.section) ||
       (normalize || autoColor || routeBuses || masterChain || autoPlayback ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
     analyzing === 0 &&
