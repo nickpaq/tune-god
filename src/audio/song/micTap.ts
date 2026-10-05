@@ -18,7 +18,8 @@ export interface MicTaps {
 export async function startMicTaps(ctx: AudioContext, sensitivity: number, onTap: (secondsAgo: number) => void, onLevel: (level: number) => void): Promise<MicTaps> {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error("This browser has no microphone access.");
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-  if (ctx.state === "suspended") void ctx.resume();
+  // A suspended context does not run the processing node at all, so no knock would ever be heard.
+  if (ctx.state !== "running") await ctx.resume();
   const detector = new TapDetector(ctx.sampleRate, { sensitivity });
   const source = ctx.createMediaStreamSource(stream);
   const node = ctx.createScriptProcessor(BLOCK, 1, 1);

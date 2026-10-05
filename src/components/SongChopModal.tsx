@@ -215,6 +215,10 @@ export function SongChopModal({
    */
   const micTap = (secondsAgo: number) => {
     if (player.playing) return registerTap(secondsAgo);
+    startWithTap();
+  };
+  /** The first hit starts the song and is the first tap: the tap button is the play button until the song is playing. */
+  const startWithTap = () => {
     const from = Math.max(0, timeline.current?.centre() ?? 0);
     player.start(from);
     const frame = player.frameNow() ?? from;
@@ -229,7 +233,8 @@ export function SongChopModal({
 
   const onTapDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
-    // The press waited in the browser's queue for a moment; the song has moved on by then.
+    // The first press starts the song (and is the first tap); the ones after it are taps. A press waited in the browser's queue for a moment: the song has moved on by then.
+    if (!player.playing) return startWithTap();
     registerTap(Math.min(0.2, Math.max(0, (performance.now() - e.timeStamp) / 1000)));
   };
 
@@ -238,7 +243,7 @@ export function SongChopModal({
   const micLevel = useRef(0);
   const [micOn, setMicOn] = useState(false);
   const [micError, setMicError] = useState("");
-  const [sensitivity, setSensitivity] = useState(0.5);
+  const [sensitivity, setSensitivity] = useState(0.6);
   const [level, setLevel] = useState(0);
   const sensitivityRef = useRef(sensitivity);
   sensitivityRef.current = sensitivity;
@@ -252,6 +257,8 @@ export function SongChopModal({
   const toggleMic = async () => {
     if (mic.current) return stopMic();
     setMicError("");
+    // Wake the audio context inside this press, before the microphone's permission question: a browser only lets a press do it.
+    void getAudioContext().resume();
     try {
       mic.current = await startMicTaps(
         getAudioContext(),
@@ -399,8 +406,8 @@ export function SongChopModal({
   const tapNote =
     taps.length === 0
       ? phase === "tap"
-        ? "Press play, then tap along to the beat with the big button, or on the back of the phone with the microphone on. Keep going until the tempo locks in."
-        : "Play from where the grid has drifted and tap along there. Then realign the grid from those taps."
+        ? "Hit the big button on the beat you want to start from: the song starts with that first tap. Keep tapping until the tempo locks in."
+        : "Hit the big button where the grid has drifted: the song starts there with your first tap. Then realign the grid."
       : !estimate
         ? "Keep tapping: it needs two taps to find a tempo."
         : estimate.locked
@@ -445,8 +452,8 @@ export function SongChopModal({
   /** The tap button, the microphone and its meter: the same for the first tapping and for tapping again later. */
   const tapControls = (
     <>
-      <button className={`chop__tap${flash ? " chop__tap--hit" : ""}`} onPointerDown={onTapDown} disabled={!player.playing} aria-label="Tap on the beat">
-        {player.playing ? "Tap" : "Press play, then tap"}
+      <button className={`chop__tap${flash ? " chop__tap--hit" : ""}`} onPointerDown={onTapDown} aria-label="Tap on the beat: the first tap starts the song">
+        {player.playing ? "Tap" : "Play + tap"}
       </button>
       <div className="chop__row">
         <button className="chop__btn chop__toggle" aria-pressed={micOn} onClick={toggleMic} title="Arm the microphone, then knock on the back of the phone: the first knock starts the song and is the first tap, the rest are taps until Stop">
