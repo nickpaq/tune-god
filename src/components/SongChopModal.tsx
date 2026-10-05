@@ -477,7 +477,7 @@ export function SongChopModal({
     <div className="palette-backdrop" onClick={onClose}>
       <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
         <div className="chop__head">
-          <span>{phase === "tap" ? "Tap the tempo" : "Pick the sections"}</span>
+          <span>{phase === "tap" ? "Tap the tempo" : "Pick the sections"} · v{__APP_VERSION__}</span>
           <button onClick={onClose} aria-label="Close">
             X
           </button>

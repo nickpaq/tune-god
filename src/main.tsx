@@ -9,12 +9,12 @@ import './index.css'
 import App from './App.tsx'
 
 // Belt and braces for iOS Safari, which can still scroll, rubber-band or pinch-zoom a page that is
-// `overflow: hidden`: cancel page-level touch moves and pinch gestures. The palette list and hot-swap list are the
+// `overflow: hidden`: cancel page-level touch moves and pinch gestures. The palette list, hot-swap list and chop editor are the
 // only places that legitimately scroll; everything else (pads, sliders, keys) uses pointer events.
 document.addEventListener(
   "touchmove",
   (e) => {
-    if (!(e.target as Element | null)?.closest?.(".palette-modal__list, .swap-list__rows")) e.preventDefault();
+    if (!(e.target as Element | null)?.closest?.(".palette-modal__list, .swap-list__rows, .chop__scroll")) e.preventDefault();
   },
   { passive: false },
 );
