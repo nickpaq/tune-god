@@ -20,7 +20,7 @@ import {
   undo,
   type Marks,
 } from "../audio/song/chopMarks";
-import { bpmAt, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, oddSections, planSections, type TapGrid } from "../audio/song/tapGrid";
+import { bpmAt, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
 import { buildPyramid } from "../audio/song/waveform";
 import { NOTE_NAMES } from "../audio/theory";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
@@ -68,7 +68,6 @@ function formatTime(seconds: number): string {
  */
 export function SongChopModal({
   pad,
-  vocalsName,
   palette,
   beatsPerBar,
   freeSlots,
@@ -77,8 +76,6 @@ export function SongChopModal({
 }: {
   /** The song: the cuts are found on it. */
   pad: Pad;
-  /** The vocal stem the sections are cut from, for the summary. */
-  vocalsName: string;
   /** The selected colour palette: sections take its colours in turn. */
   palette: Palette;
   /** The project's time signature numerator. */
@@ -139,7 +136,6 @@ export function SongChopModal({
   const plans = useMemo(() => (grid ? planSections(totalFrames, grid, sections) : []), [grid, totalFrames, sections]);
   const fits = Math.min(plans.length, freeSlots);
   const longOnes = grid ? sections.map((s, i) => (tooLong(grid, s) ? i + 1 : 0)).filter(Boolean) : [];
-  const odd = grid ? oddSections(grid, sections) : [];
   const tempo = grid ? bpmAt(grid, sections.length > 0 ? sections[0].first : 0) : 0;
 
   const gridRef = useRef(grid);
@@ -307,16 +303,6 @@ export function SongChopModal({
             </select>
           </div>
           {!keyReady && detected === null ? <p className="chop__note chop__note--summary">Listening for the key...</p> : null}
-
-          <p className="chop__note chop__note--summary">
-            {sections.length === 0
-              ? `Nothing is cut until you add chop markers. A section is never longer than ${MAX_SECTION_BARS} bars.`
-              : `The cuts are made on the song and applied to "${vocalsName}". ${plans.length} section${plans.length === 1 ? "" : "s"}.`}
-            {longOnes.length > 0 ? ` Section ${longOnes.join(", ")} ${longOnes.length === 1 ? "is" : "are"} over ${MAX_SECTION_BARS} bars: add a chop marker inside ${longOnes.length === 1 ? "it" : "them"}.` : ""}
-            {odd.length > 0 ? ` Not a whole number of bars: section ${odd.join(", ")}. It is cut where the lines are and held for the nearest whole bars.` : ""}
-            {plans.length > fits ? ` Only ${fits} fit on free pads: the last ${plans.length - fits} are dropped.` : ""}
-            {plans.length > 0 ? ` The vocal stem's own pad is replaced by the sections, and the project tempo becomes ${tempo.toFixed(2)} BPM.` : ""}
-          </p>
         </div>
 
         <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, keyPc: useKey ? keyPc : null })}>

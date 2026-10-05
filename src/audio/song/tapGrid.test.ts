@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sliceSection } from "./chop";
-import { beatFramesAt, bpmAt, gridFromTaps, inOrder, isBarLine, limitEnd, lineFrame, linesBetween, lineNear, maxBeats, nudgeLine, oddSections, placeLine, planSections, realignGrid, resetLine, scalePlans, setDownbeat, shiftGrid, type TapGrid } from "./tapGrid";
-import { estimateTempo, refineWithTransients } from "./tapTempo";
+import { beatFramesAt, bpmAt, inOrder, isBarLine, limitEnd, lineFrame, linesBetween, lineNear, maxBeats, nudgeLine, oddSections, placeLine, planSections, realignGrid, resetLine, scalePlans, setDownbeat, shiftGrid, type TapGrid } from "./tapGrid";
 
 // 120 BPM at 48 kHz: a beat is 24000 frames, a 4/4 bar 96000.
 const grid: TapGrid = { sampleRate: 48000, beatsPerBar: 4, segments: [{ line: 0, frame: 12000, beatFrames: 24000 }], offsets: {}, downbeats: [] };
@@ -13,14 +12,6 @@ describe("the grid's lines", () => {
     expect(lineFrame(grid, -1)).toBe(-12000);
     expect(bpmAt(grid, 5)).toBe(120);
     expect(maxBeats(grid)).toBe(64);
-  });
-
-  it("is made from a tap estimate", () => {
-    const taps = Array.from({ length: 16 }, (_, i) => 1.25 + i * 0.5);
-    const g = gridFromTaps(estimateTempo(taps)!, 48000, 4);
-    expect(bpmAt(g, 0)).toBeCloseTo(120, 6);
-    expect(lineFrame(g, 0)).toBeCloseTo(1.25 * 48000, 3);
-    expect(g.downbeats).toEqual([]);
   });
 
   it("lists the lines between two frames, and finds the nearest", () => {
@@ -113,35 +104,6 @@ describe("tapping again later: tempo segments", () => {
   });
 });
 
-describe("refineWithTransients", () => {
-  it("makes a finger's taps exact with the attacks near them", () => {
-    // beats at 0.037 + 0.5k exactly; the taps are up to 30 ms out; the audio's attacks are on the beats
-    const truth = (n: number) => 0.037 + 0.5 * n;
-    const jitter = [0.02, -0.03, 0.01, 0.028, -0.015, 0.0, -0.022, 0.03, -0.01, 0.012, -0.027, 0.018];
-    const taps = jitter.map((j, n) => truth(n) + j);
-    const e = estimateTempo(taps)!;
-    const snap = (frame: number, radius: number) => {
-      const n = Math.round((frame / 48000 - 0.037) / 0.5);
-      const hit = Math.round(truth(n) * 48000);
-      return Math.abs(hit - frame) <= radius ? hit : frame;
-    };
-    const refined = refineWithTransients(e, 48000, snap);
-    expect(refined.snapped).toBe(12);
-    expect(refined.period).toBeCloseTo(0.5, 6);
-    expect(Math.abs(refined.origin - 0.037)).toBeLessThan(0.0001);
-  });
-
-  it("leaves out an attack that is not on the beat, and keeps the taps' own line when too few attacks are found", () => {
-    const taps = Array.from({ length: 12 }, (_, n) => 0.1 + 0.5 * n);
-    const e = estimateTempo(taps)!;
-    const wrong = (frame: number) => frame + 9000; // every "attack" is a hat well off the beat, all the same
-    expect(refineWithTransients(e, 48000, wrong).period).toBeCloseTo(0.5, 6);
-    const scattered = refineWithTransients(e, 48000, (frame) => frame + ((frame / 7) % 11) * 800);
-    expect(scattered.snapped === 0 || scattered.snapped >= 4).toBe(true);
-    expect(refineWithTransients(e, 48000, wrong).origin).toBeGreaterThan(0.09);
-  });
-});
-
 describe("sections", () => {
   const total = 96000 * 20;
   const picked = (first: number, last: number, colorIndex = 0) => ({ first, last, colorIndex });
@@ -164,7 +126,7 @@ describe("sections", () => {
   });
 
   it("keeps a section whole where the spacing is not a whole number of frames", () => {
-    const g = gridFromTaps({ period: 23999.7 / 48000, origin: 100.4 / 48000 }, 48000, 4);
+    const g: TapGrid = { ...grid, segments: [{ line: 0, frame: 100.4, beatFrames: 23999.7 }] };
     const plans = planSections(total, g, [picked(0, 4), picked(4, 8)]);
     expect(plans[1].start).toBe(plans[0].start + plans[0].length);
   });

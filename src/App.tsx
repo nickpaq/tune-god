@@ -38,7 +38,7 @@ import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
 import { scalePlans } from "./audio/song/tapGrid";
-import { baseName, checkStems, padTitle } from "./audio/song/stems";
+import { checkStems, padTitle } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
@@ -2000,7 +2000,6 @@ function App() {
         {chop && (
           <SongChopModal
             pad={chop.song}
-            vocalsName={baseName(chop.vocals.name)}
             palette={palette}
             beatsPerBar={chop.beatsPerBar}
             freeSlots={freeSongSlots(pads).length}

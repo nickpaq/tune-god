@@ -29,17 +29,6 @@ export const MAX_SECTION_BARS = 16;
 /** The most beats a section may hold. */
 export const maxBeats = (grid: TapGrid): number => MAX_SECTION_BARS * grid.beatsPerBar;
 
-/** The grid a tap estimate says: lines on the beats that were tapped. `origin` is in seconds, `period` too. */
-export function gridFromTaps(estimate: { period: number; origin: number }, sampleRate: number, beatsPerBar: number): TapGrid {
-  return {
-    sampleRate,
-    beatsPerBar,
-    segments: [{ line: 0, frame: estimate.origin * sampleRate, beatFrames: estimate.period * sampleRate }],
-    offsets: {},
-    downbeats: [],
-  };
-}
-
 /** The segment line `n` belongs to. */
 function segmentOf(grid: TapGrid, n: number): TempoSegment {
   let found = grid.segments[0];

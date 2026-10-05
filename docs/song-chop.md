@@ -25,9 +25,7 @@ The waveform (`ChopTimeline`, `src/components/ChopTimeline.tsx`) scrolls behind 
 - Pressing either marker button where one already is **removes it** (a chop on the same bar line; a downbeat within a quarter of a beat). **Undo** and **Redo** step through everything placed (`History` in `chopMarks.ts`).
 - Markers are kept as the frames they were placed on and the grid and the cuts are worked out from them, so a downbeat marker added later re-snaps every chop to the corrected bar lines.
 
-## Left over from the tap-tempo editor
-
-The tap-the-tempo parts (`tapTempo.ts`, `micTap.ts`, `tapDetector.ts`, the drift check in `drift.ts`, and the nudge, realign and tempo-segment functions in `tapGrid.ts`) are not used by the editor any more; they are tested and kept for when they are wanted again. The tap editor is in the history at v0.8.3.
+The tap-tempo editor (tapping the beat, microphone knocks, the drift check, nudging single lines) was taken out at v0.9.1; it is in the history at v0.8.3.
 
 ## Exactness
 
