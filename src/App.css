@@ -1636,8 +1636,13 @@
   display: flex;
   flex-direction: column;
   width: 96%;
-  max-height: 94%;
+  /* a fixed size, so nothing in the editor can resize or move while a finger is dragging */
+  height: 94%;
   overflow: hidden;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   border-radius: 1cqw;
   background: #000;
   color: var(--oled);
@@ -1673,21 +1678,44 @@
   gap: calc(var(--cell) * 3);
   padding: calc(var(--cell) * 3);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
+.chop__scroll > * {
+  flex: none;
+}
+
+/* the note above the waveform is a slot of two lines whatever it says */
 .chop__note {
   margin: 0;
+  height: 2.7em;
+  overflow: hidden;
   font-size: 12px;
   line-height: 1.35;
   opacity: 0.75;
 }
 
+.chop__note--summary {
+  height: auto;
+  overflow: visible;
+}
+
+/* two lines of fixed height: the cut, then what the grid says about it */
 .chop__readout {
   display: flex;
-  justify-content: space-between;
-  gap: calc(var(--cell) * 2);
+  flex-direction: column;
+  height: calc(var(--cell) * 20);
+  overflow: hidden;
   font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
   text-transform: uppercase;
+}
+
+.chop__readout span {
+  flex: none;
+  height: calc(var(--cell) * 10);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .chop__readout span:last-child {
@@ -1780,6 +1808,7 @@
 }
 
 .chop-timeline__bar {
+  height: calc(var(--cell) * 14);
   display: flex;
   align-items: center;
   justify-content: space-between;

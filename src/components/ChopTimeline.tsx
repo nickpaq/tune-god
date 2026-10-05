@@ -88,9 +88,8 @@ export function ChopTimeline({
   sampleRate,
   cuts,
   selected,
-  gridOrigin,
   beatFrames,
-  beatsPerBar,
+  beatLines,
   onMoveCut,
   onReleaseCut,
   onSelect,
@@ -100,10 +99,10 @@ export function ChopTimeline({
   /** Every cut, in order: the frame each section starts at. */
   cuts: number[];
   selected: number;
-  /** Frame of bar 1 beat 1 and frames per beat, for the beat lines that appear as the view zooms in and the clicks. */
-  gridOrigin: number;
+  /** Frames per beat, to tell when the view is close enough for beat lines. */
   beatFrames: number;
-  beatsPerBar: number;
+  /** The beats of the grid between two frames (the grid is refined by the cuts, so they are not simply evenly spaced): for the beat lines and the clicks. */
+  beatLines: (from: number, to: number) => { frame: number; bar: boolean }[];
   onMoveCut: (cut: number, frame: number) => void;
   /** A tab was let go: the cut is final for this drag. */
   onReleaseCut: (cut: number) => void;
@@ -111,8 +110,8 @@ export function ChopTimeline({
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const range = useRef<HTMLSpanElement>(null);
-  const latest = useRef({ cuts, selected, gridOrigin, beatFrames, beatsPerBar, onMoveCut, onReleaseCut, onSelect });
-  latest.current = { cuts, selected, gridOrigin, beatFrames, beatsPerBar, onMoveCut, onReleaseCut, onSelect };
+  const latest = useRef({ cuts, selected, beatFrames, beatLines, onMoveCut, onReleaseCut, onSelect });
+  latest.current = { cuts, selected, beatFrames, beatLines, onMoveCut, onReleaseCut, onSelect };
   const total = pyramid.totalFrames;
   const resting = defaultSpan(total);
   const view = useRef({ start: 0, span: resting });
@@ -121,6 +120,8 @@ export function ChopTimeline({
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
 
   const playback = useRef<Playback | null>(null);
+  /** What playing starts from: the middle of the view once the waveform has been touched, or the marker that was last touched or chosen. */
+  const playMode = useRef<"marker" | "center">("marker");
   /** The marker sliding back under the finger after a pause. */
   const settling = useRef(0);
   const button = useRef<{ id: number; startY: number; stopsOnly: boolean } | null>(null);
@@ -143,11 +144,12 @@ export function ChopTimeline({
     const ctx = el.getContext("2d");
     if (!ctx) return;
     const ink = getComputedStyle(el).color;
-    const { cuts: cutList, selected: chosen, gridOrigin: origin, beatFrames: beat, beatsPerBar: perBar } = latest.current;
+    const { cuts: cutList, selected: chosen, beatFrames: beat, beatLines: lines } = latest.current;
     const { start, span } = view.current;
     el.dataset.start = String(Math.round(start));
     el.dataset.span = String(Math.round(span));
     el.dataset.playing = playback.current ? "true" : "false";
+    el.dataset.playMode = playMode.current;
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, w, h);
@@ -178,11 +180,10 @@ export function ChopTimeline({
     const beatPx = beat * perFrame;
     if (beat > 0 && beatPx >= 7 * ratio) {
       ctx.fillStyle = ink;
-      for (let n = Math.ceil((start - origin) / beat); origin + n * beat <= start + span; n++) {
-        const bar = ((n % perBar) + perBar) % perBar === 0;
-        if (!bar && beatPx < 12 * ratio) continue;
-        ctx.globalAlpha = bar ? 0.4 : 0.16;
-        ctx.fillRect(Math.round(inset + (origin + n * beat - start) * perFrame), 0, Math.max(1, Math.round(ratio)), plotHeight);
+      for (const line of lines(start, start + span)) {
+        if (!line.bar && beatPx < 12 * ratio) continue;
+        ctx.globalAlpha = line.bar ? 0.4 : 0.16;
+        ctx.fillRect(Math.round(inset + (line.frame - start) * perFrame), 0, Math.max(1, Math.round(ratio)), plotHeight);
       }
     }
     ctx.globalAlpha = 1;
@@ -227,11 +228,20 @@ export function ChopTimeline({
     for (let i = 0; i < cutList.length; i++) if (i !== chosen) drawTab(i);
     if (chosen >= 0 && chosen < cutList.length) drawTab(chosen);
 
-    // Playing from a marker that nobody is holding: the marker stays put and a playhead line runs along the waveform.
-    if (playing && !playing.grabbed) {
-      const x = Math.round(inset + (playing.frame - start) * perFrame);
+    // The playhead in the middle of the waveform: it is there once the waveform has been touched, and playing starts from it. A marker takes
+    // over as the playhead when it is touched; while playing from one that nobody is holding, the marker stays put and this line runs along.
+    if ((playMode.current === "center" && !playing?.grabbed) || (playing && !playing.grabbed)) {
+      const x = Math.round(inset + inner / 2);
       ctx.fillStyle = ink;
+      ctx.globalAlpha = 1;
       ctx.fillRect(x - Math.round(ratio), 0, Math.max(2, Math.round(2 * ratio)), plotHeight);
+      const half = 5 * ratio;
+      ctx.beginPath();
+      ctx.moveTo(x - half, 0);
+      ctx.lineTo(x + half, 0);
+      ctx.lineTo(x, 7 * ratio);
+      ctx.closePath();
+      ctx.fill();
     }
 
     if (range.current) range.current.textContent = `${formatTime(start / sampleRate)} - ${formatTime((start + span) / sampleRate)}`;
@@ -258,6 +268,8 @@ export function ChopTimeline({
   // Choosing a cut from outside (the nudge buttons, a new song) brings it into view, in the middle.
   const chosenFrame = cuts[selected];
   useEffect(() => {
+    // A marker chosen or moved from outside (the arrows, the nudge buttons) is the playhead now.
+    playMode.current = "marker";
     if (drag.current || playback.current || chosenFrame === undefined) return;
     const { start, span } = view.current;
     if (chosenFrame < start || chosenFrame > start + span) centreRef.current(selected);
@@ -356,34 +368,34 @@ export function ChopTimeline({
     settling.current = 0;
     const d = drag.current?.kind === "tab" ? (drag.current as TabDrag) : null;
     const cut = d ? d.cut : latest.current.selected;
-    const from = d ? d.grab.frame : latest.current.cuts[cut];
+    // From the marker in a finger's hold, else from the marker last touched, else from the middle of the view (the playhead after the waveform was touched).
+    const centre = Math.min(total, Math.max(0, view.current.start + view.current.span / 2));
+    const from = d ? d.grab.frame : playMode.current === "center" ? centre : latest.current.cuts[cut];
     if (from === undefined) return;
 
     const ctx = getAudioContext();
     if (ctx.state === "suspended") void ctx.resume();
     const handle = startPad(PLAY_VOICE, pyramid.channelData, sampleRate, 0, null, "hold", () => stopRef.current(), 0, Math.max(0, from) / sampleRate);
 
-    // Beat clicks, scheduled a little ahead of the playhead.
-    const { beatFrames: beat, gridOrigin: origin, beatsPerBar: perBar } = latest.current;
-    let next = Math.ceil((from - origin) / beat - 1e-6);
+    // Beat clicks, scheduled a little ahead of the playhead, on the grid's own beats.
+    let lastClick = from - 1;
     const clickTimer = window.setInterval(() => {
-      if (!clicksOn.current || !(beat > 0)) return;
+      if (!clicksOn.current) return;
       const now = handle.position();
-      for (;;) {
-        const at = (origin + next * beat) / sampleRate;
-        if (at > now + CLICK_AHEAD) break;
-        if (at >= now - 0.02) {
-          const when = ctx.currentTime + Math.max(0, at - now);
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.frequency.value = ((next % perBar) + perBar) % perBar === 0 ? 1600 : 1000;
-          gain.gain.setValueAtTime(0.25, when);
-          gain.gain.exponentialRampToValueAtTime(0.001, when + 0.04);
-          osc.connect(gain).connect(ctx.destination);
-          osc.start(when);
-          osc.stop(when + 0.05);
-        }
-        next++;
+      for (const line of latest.current.beatLines(now * sampleRate, (now + CLICK_AHEAD) * sampleRate)) {
+        if (line.frame <= lastClick) continue;
+        lastClick = line.frame;
+        const at = line.frame / sampleRate;
+        if (at < now - 0.02) continue;
+        const when = ctx.currentTime + Math.max(0, at - now);
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = line.bar ? 1600 : 1000;
+        gain.gain.setValueAtTime(0.25, when);
+        gain.gain.exponentialRampToValueAtTime(0.001, when + 0.04);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(when);
+        osc.stop(when + 0.05);
       }
     }, 40);
 
@@ -450,6 +462,7 @@ export function ChopTimeline({
       });
     }
     if (hit >= 0) {
+      playMode.current = "marker";
       latest.current.onSelect(hit);
       drag.current = {
         kind: "tab",
@@ -466,7 +479,8 @@ export function ChopTimeline({
         grab: { frame: cutList[hit], across: (cutList[hit] - start) / span, span },
         home: (cutList[hit] - start) / span,
       };
-    } else
+    } else {
+      playMode.current = "center";
       drag.current = {
         kind: "pan",
         id: e.pointerId,
@@ -477,6 +491,7 @@ export function ChopTimeline({
         startSpan: span,
         pivot: start + ((x - INSET) / width) * span,
       };
+    }
     draw();
   };
 

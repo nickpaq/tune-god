@@ -1,7 +1,7 @@
 // The 8-bar sections of a chopped song as pads. Like ghost and placeholder pads they have no slot in the project they were loaded
 // from: they are written into the export as new pads (see exportSong.ts), so they are not "real" pads and are left out of tuning and mixing.
 import type { Pad } from "../components/PadPanel";
-import { planSections, sliceSection, SECTION_BARS, type SongGrid } from "./song/chop";
+import { effectiveBpm, planSections, sliceSection, SECTION_BARS, type SongGrid } from "./song/chop";
 
 /** Section pads have no project slot, so their stable id sits above the placeholders' and ghosts'. */
 const SECTION_ORIG_BASE = 3000;
@@ -20,9 +20,13 @@ export interface SongChopResult {
   seconds: number;
 }
 
-/** The section pads for a song, placed on the free slots. */
+/**
+ * The section pads, placed on the free slots: `song` is the sound that is cut (the vocal stem, for the a cappella chop) and `grid` says where, at
+ * that sound's own sample rate (see `scaleGrid`). Every section's tempo is the one the grid has settled on.
+ */
 export function makeSectionPads(song: Pad, grid: SongGrid, free: number[]): SongChopResult {
   const plans = planSections(song.channelData[0].length, grid);
+  const bpm = effectiveBpm(grid);
   const pads: Pad[] = [];
   plans.slice(0, free.length).forEach((plan, n) => {
     pads.push({
@@ -36,8 +40,8 @@ export function makeSectionPads(song: Pad, grid: SongGrid, free: number[]): Song
       tune: false,
       semis: 0,
       cents: 0,
-      section: { number: n + 1, sourceSampleId: song.sampleId, bpm: grid.bpm, beatsPerBar: grid.beatsPerBar, bars: plan.bars },
+      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar: grid.beatsPerBar, bars: plan.bars },
     });
   });
-  return { pads, dropped: Math.max(0, plans.length - free.length), seconds: (SECTION_BARS * grid.beatsPerBar * 60) / grid.bpm };
+  return { pads, dropped: Math.max(0, plans.length - free.length), seconds: (SECTION_BARS * grid.beatsPerBar * 60) / bpm };
 }

@@ -37,6 +37,8 @@ import { FINGER_LAYOUTS, kitSlotCounts, layoutById } from "./audio/fingerLayouts
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
+import { scaleGrid } from "./audio/song/chop";
+import { baseName, checkStems } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
@@ -834,20 +836,35 @@ function App() {
     patchPad(pad.index, pad.tuneLocked ? { category } : { category, tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) });
   };
 
-  /** The song being chopped into 8-bar sections (with the project's beats per bar), while the chop editor is open. */
-  const [chop, setChop] = useState<{ pad: Pad; beatsPerBar: number } | null>(null);
+  /** The song being chopped (the cuts are found on it) and its vocal stem (what is cut), with the project's beats per bar, while the chop editor is open. */
+  const [chop, setChop] = useState<{ song: Pad; vocals: Pad; beatsPerBar: number } | null>(null);
+  /**
+   * Starts the a cappella chop for a long sound. It needs the song and its vocal stem from Koala's stem split, named like the song with VOCALS after
+   * it and left exactly as the split made them, so this checks for them first and says what to do if they are not right.
+   */
   const openChop = async (pad: Pad) => {
+    const check = checkStems(pad, Object.values(pads).filter(isReal));
+    if (!check.ok) {
+      window.alert(check.message);
+      return;
+    }
     const project = projectRef.current;
     const { beatsPerBar } = project ? await projectTimeSignature(project) : { beatsPerBar: 4 };
-    setChop({ pad, beatsPerBar });
+    setChop({ song: check.song, vocals: check.vocals, beatsPerBar });
   };
 
-  /** Replaces the song's pad with its 8-bar sections (on free pads, fourth bank first). The export writes the pads, their patterns and the tempo. */
-  const chopSong = (song: Pad, settings: ChopSettings) => {
-    const { pads: sections } = makeSectionPads(song, { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, shifts: settings.shifts, bars: settings.bars }, freeSongSlots(removePad(pads, song.index)));
+  /**
+   * Cuts the vocal stem at the song's chop points and replaces the stem's pad with the sections (on free pads, fourth bank first); the song stays as it is.
+   * The export writes the pads, their patterns and the tempo.
+   */
+  const chopSong = (song: Pad, vocals: Pad, settings: ChopSettings) => {
+    // The cuts were found on the song; the stem may be at another sample rate, so the grid is put on the stem's own frames.
+    const onSong = { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, anchors: settings.anchors, bars: settings.bars };
+    const grid = scaleGrid(onSong, vocals.sampleRate);
+    const { pads: sections } = makeSectionPads(vocals, grid, freeSongSlots(removePad(pads, vocals.index)));
     recordEdit();
     setPads((prev) => {
-      const next = removePad(prev, song.index);
+      const next = removePad(prev, vocals.index);
       for (const section of sections) next[section.index] = section;
       return next;
     });
@@ -855,6 +872,8 @@ function App() {
     setSelected(sections[0]?.index ?? null);
     if (sections[0]) setBank(Math.floor(sections[0].index / 16));
     setChop(null);
+    // The song stays in the project and is still a long sample, but the list has done its job.
+    setLongSamples([]);
   };
 
   const deletePad = (pad: Pad) => {
@@ -1975,10 +1994,11 @@ function App() {
 
         {chop && (
           <SongChopModal
-            pad={chop.pad}
+            pad={chop.song}
+            vocalsName={baseName(chop.vocals.name)}
             beatsPerBar={chop.beatsPerBar}
             freeSlots={freeSongSlots(pads).length}
-            onConfirm={(settings) => chopSong(chop.pad, settings)}
+            onConfirm={(settings) => chopSong(chop.song, chop.vocals, settings)}
             onClose={() => setChop(null)}
           />
         )}
