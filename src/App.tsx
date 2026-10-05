@@ -1394,6 +1394,9 @@ function App() {
                 Redo
               </button>
             </div>
+            <button className="menu__button" disabled={!hasProject && !loading} onClick={clearProject}>
+              Clear project
+            </button>
             <Switch
               label="Mix"
               hint="Balances levels, routes sounds to buses (bass ducks to the kick), sets each sound type's settings and spreads melodic pads"
@@ -1507,9 +1510,6 @@ function App() {
                 Reset to A440
               </button>
             )}
-            <button className="menu__button" disabled={!hasProject && !loading} onClick={clearProject}>
-              Clear project
-            </button>
             <button
               className="menu__button"
               onClick={() => {
