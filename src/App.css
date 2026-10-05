@@ -1631,13 +1631,19 @@
   text-transform: uppercase;
 }
 
+.chop-backdrop {
+  /* the panel sits inside the safe areas: under the status bar at the top (the page starts at the top of the screen) and clear of the home indicator */
+  box-sizing: border-box;
+  padding: calc(max(3cqw, var(--safe-top)) + 1.5cqw) 2cqw calc(max(var(--u), var(--safe-bottom)) + 1.5cqw);
+}
+
 .chop {
   --cell: var(--c, 2.6px);
   display: flex;
   flex-direction: column;
-  width: 96%;
+  width: 100%;
   /* a fixed size, so nothing in the editor can resize or move while a finger is dragging */
-  height: 94%;
+  height: 100%;
   overflow: hidden;
   overscroll-behavior: contain;
   user-select: none;

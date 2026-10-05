@@ -241,7 +241,7 @@ export function SongChopModal({
   const readoutTwo = status || `${lines.length} chop${lines.length === 1 ? "" : "s"}, ${marks.downbeats.length} downbeat${marks.downbeats.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="palette-backdrop" onClick={onClose}>
+    <div className="palette-backdrop chop-backdrop" onClick={onClose}>
       <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
         <div className="chop__head">
           <span>Chop the song · v{__APP_VERSION__}</span>

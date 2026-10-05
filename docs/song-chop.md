@@ -35,7 +35,7 @@ The tap-tempo editor (tapping the beat, microphone knocks, the drift check, nudg
 
 ## A locked layout
 
-The editor panel has a fixed size (`.chop` in `App.css`), every line of text above the controls sits in a slot of fixed size (the note is always two lines, the readout two single lines cut off rather than wrapped), and scroll chaining and text selection are off inside it, so nothing moves or resizes while a finger is on the waveform. Check this when adding to the editor.
+The editor panel has a fixed size (`.chop` in `App.css`, inside the safe areas: `.chop-backdrop` pads the top by `--safe-top` and the bottom by `--safe-bottom`, so the header clears the status bar), every line of text above the controls sits in a slot of fixed size (the note is always two lines, the readout two single lines cut off rather than wrapped), and scroll chaining and text selection are off inside it, so nothing moves or resizes while a finger is on the waveform. Check this when adding to the editor.
 
 ## Limits
 
