@@ -44,9 +44,9 @@ describe("makeSectionPads", () => {
     expect(pads.map((p) => p.channelData[0].length)).toEqual([768000, 3 * 96000, 768000]);
   });
 
-  it("classifies the sections as vocals and remembers the song's title for their labels", () => {
-    const { pads } = makeSectionPads(song, plans.slice(0, 2), 120, 4, [48, 49], "Toxic");
+  it("classifies the sections as vocals and keeps the colour each was given, as hex", () => {
+    const { pads } = makeSectionPads(song, plans.slice(0, 2), 120, 4, [48, 49], ["#111111", "#222222"]);
     expect(pads.every((p) => p.category === "vox")).toBe(true);
-    expect(pads.map((p) => p.section!.title)).toEqual(["Toxic", "Toxic"]);
+    expect(pads.map((p) => p.section!.color)).toEqual(plans.slice(0, 2).map((pl) => (pl.colorIndex === undefined ? undefined : ["#111111", "#222222"][pl.colorIndex % 2])));
   });
 });

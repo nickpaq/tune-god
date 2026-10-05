@@ -22,9 +22,9 @@ export interface SongChopResult {
 
 /**
  * The section pads, placed on the free slots: `song` is the sound that is cut (the vocal stem, for the a cappella chop) and `plans` say where, at
- * that sound's own sample rate (see `scalePlans`). `bpm` is the tempo of the tapped grid. `title` is what the song is called, for the labels.
+ * that sound's own sample rate (see `scalePlans`). `bpm` is the tempo of the tapped grid. `colors` is the palette the sections were coloured from in the chop editor: each section keeps its colour as hex.
  */
-export function makeSectionPads(song: Pad, plans: SectionPlan[], bpm: number, beatsPerBar: number, free: number[], title?: string): SongChopResult {
+export function makeSectionPads(song: Pad, plans: SectionPlan[], bpm: number, beatsPerBar: number, free: number[], colors?: string[]): SongChopResult {
   const pads: Pad[] = [];
   plans.slice(0, free.length).forEach((plan, n) => {
     pads.push({
@@ -39,7 +39,7 @@ export function makeSectionPads(song: Pad, plans: SectionPlan[], bpm: number, be
       tune: false,
       semis: 0,
       cents: 0,
-      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar, bars: plan.bars, colorIndex: plan.colorIndex, title },
+      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar, bars: plan.bars, colorIndex: plan.colorIndex, color: colors && plan.colorIndex !== undefined ? colors[plan.colorIndex % colors.length] : undefined },
     });
   });
   return { pads, dropped: Math.max(0, plans.length - free.length), seconds: plans.slice(0, free.length).reduce((sum, p) => sum + p.length, 0) / song.sampleRate };

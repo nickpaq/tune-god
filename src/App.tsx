@@ -38,7 +38,7 @@ import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
 import { scalePlans } from "./audio/song/tapGrid";
-import { checkStems, padTitle } from "./audio/song/stems";
+import { checkStems } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
@@ -563,7 +563,7 @@ function App() {
    */
   const addPack = async (find: () => Promise<FoundPack> | FoundPack) => {
     const project = projectRef.current;
-    if (!project || !layout.on) return;
+    if (!project) return;
     const token = loadToken.current;
     setAddPackStatus("Reading…");
     try {
@@ -633,7 +633,7 @@ function App() {
       setPads((prev) => {
         const next = { ...prev };
         lay.slots.forEach((slotDef, i) => {
-          if (!slotDef.ghostOf || (next[i] && !next[i].placeholder)) return;
+          if (!layout.on || !slotDef.ghostOf || (next[i] && !next[i].placeholder)) return;
           const source = lay.slots
             .map((s, j) => ({ s, j }))
             .filter(({ s, j }) => !s.ghostOf && s.category === slotDef.ghostOf && next[j] && isReal(next[j]))
@@ -855,16 +855,16 @@ function App() {
   };
 
   /**
-   * Cuts the vocal stem at the song's chop points and replaces the stem's pad with the sections (on free pads, fourth bank first); the song stays as it is.
-   * The export writes the pads, their patterns and the tempo.
+   * Cuts the vocal stem at the song's chop points, puts the sections on free pads (fourth bank first) and, as the last step, deletes both the stem and
+   * the full song. The sections keep their own label and colour and are left alone by organizing, tuning and mixing. The export writes the pads, their patterns and the tempo.
    */
   const chopSong = (song: Pad, vocals: Pad, settings: ChopSettings) => {
     // The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
     const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
-    const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(removePad(pads, vocals.index)), padTitle(song));
+    const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(removePad(removePad(pads, vocals.index), song.index)), palette.colors);
     recordEdit();
     setPads((prev) => {
-      const next = removePad(prev, vocals.index);
+      const next = removePad(removePad(prev, vocals.index), song.index);
       for (const section of sections) next[section.index] = section;
       return next;
     });
@@ -872,7 +872,6 @@ function App() {
     setSelected(sections[0]?.index ?? null);
     if (sections[0]) setBank(Math.floor(sections[0].index / 16));
     setChop(null);
-    // The song stays in the project and is still a long sample, but the list has done its job.
     setLongSamples([]);
   };
 
@@ -1339,7 +1338,7 @@ function App() {
             sampleRate: sectionPads[0].sampleRate,
             sourceSampleId: sectionPads[0].section!.sourceSampleId,
             bars: 8,
-            sections: sectionPads.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColor ? autoColorOf(p) : undefined, bus: routeBuses ? CATEGORY_BUS.vox : undefined })),
+            sections: sectionPads.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColorOf(p) })),
           }
         : undefined;
       const buses = new Map<number, number>();
@@ -1387,13 +1386,13 @@ function App() {
   /** Palette colour for a sound, by its own category. Where it sits (including on a layout's slots) never changes it. */
   const autoColorOf = (p: Pad): string => {
     // A section of a chopped song keeps the palette colour it was given when it was picked.
-    if (p.section?.colorIndex !== undefined) return palette.colors[p.section.colorIndex % palette.colors.length];
+    if (p.section) return p.section.color ?? palette.colors[(p.section.colorIndex ?? 0) % palette.colors.length];
     const base = colorFor(palette, p.category ?? "other");
     return p.ghost ? shade(base, 2) : base;
   };
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
-  /** A section of a chopped song: the song's title, the vocal label and its number, "Toxic Vox 1". */
-  const sectionLabel = (p: Pad): string => [p.section!.title, CATEGORIES[categoryIndex("vox")].label, p.section!.number].filter(Boolean).join(" ");
+  /** A section of a chopped song: the vocal label and its number, "Vox 1". */
+  const sectionLabel = (p: Pad): string => `${CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
   const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? sectionLabel(p) : padLabel(p));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
@@ -1604,7 +1603,7 @@ function App() {
             </button>
             <button
               className="menu__button"
-              disabled={!hasProject || !layout.on || analyzing > 0 || !!addPackStatus}
+              disabled={!hasProject || analyzing > 0 || !!addPackStatus}
               title="Choose another sample pack folder. It only fills slots that are still missing a sound; everything you have stays as it is."
               onClick={() => {
                 addPackInput.current?.click();
