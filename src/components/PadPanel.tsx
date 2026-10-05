@@ -3,7 +3,7 @@ import { Waveform } from "./Waveform";
 import type { CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
 import type { GhostKind } from "../audio/ghost";
-import { formatTrim, splitTrim, trimCents } from "../audio/theory";
+import { formatTrim, trimCents } from "../audio/theory";
 
 /** The trim slider reaches 12 semitones either way. */
 const TRIM_RANGE_CENTS = 1200;
@@ -52,6 +52,11 @@ export function PadPanel({
   pad,
   autoShift,
   keyName,
+  toneOffset,
+  needsKey,
+  onToneStart,
+  onToneOffset,
+  onToneEnd,
   onChange,
 }: {
   pad: Pad;
@@ -59,6 +64,14 @@ export function PadPanel({
   autoShift: number;
   /** The note the pad is tuned to ("C#"), or "--" when tuning is off. */
   keyName: string;
+  /** How far the slider has moved the reference tone, in cents. It snaps back to 0 when let go. */
+  toneOffset: number;
+  /** No key is chosen yet, so there is no tone to match: the slider is locked. */
+  needsKey: boolean;
+  onToneStart: () => void;
+  onToneOffset: (cents: number) => void;
+  /** The slider was let go: the pad moves by the opposite of the tone's offset. */
+  onToneEnd: () => void;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
@@ -93,16 +106,23 @@ export function PadPanel({
           keyStep={10}
           fineSpan={100}
           coarseStep={100}
-          value={trim}
+          value={toneOffset}
           bipolar
-          onChange={(cents) => onChange(splitTrim(cents))}
+          disabled={needsKey}
+          onChange={onToneOffset}
+          onDragStart={onToneStart}
+          onDragEnd={onToneEnd}
           onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={formatTrim}
-          title="Pitch trim. Drag down to slow the scrub: at the bottom of the screen the whole track is one semitone. Double-tap to reset."
+          title="Match the tone to the sound: hold to hear the pad loop with a tone, slide the tone until it matches. Letting go moves the pad by the opposite amount. Double-tap to reset the trim."
         />
         <div className="pad-panel__scale">
-          <span>-12st</span>
-          <span>+12st</span>
+          {needsKey ? <span>Select a key first</span> : (
+            <>
+              <span>-12st</span>
+              <span>+12st</span>
+            </>
+          )}
         </div>
       </div>
     </div>

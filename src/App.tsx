@@ -40,7 +40,7 @@ import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadSymbol } from "./components/PadSymbol";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
-import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, trimCents } from "./audio/theory";
+import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, splitTrim, trimCents } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { useSafeArea } from "./components/useSafeArea";
@@ -235,8 +235,13 @@ function App() {
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   /** Set while the export is waiting for the answer about drums the layout has no slot for. */
   const [extraPrompt, setExtraPrompt] = useState(false);
-  /** The mode keys: what the screen and the deck show. Swap is the resting mode; it needs the finger-drumming layout (see shownMode). */
-  const [mode, setMode] = useState<Mode>("swap");
+  /** The mode keys: what the screen and the deck show. Swap is the resting mode; it needs the finger-drumming layout (see shownMode). Null (a pressed key tapped again) is the plain waveform view. */
+  const [mode, setMode] = useState<Mode | null>("swap");
+  /** How far the pitch slider has moved the reference tone, in cents; it snaps back to 0 when the slider is let go. */
+  const [toneOffset, setToneOffset] = useState(0);
+  const toneOffsetRef = useRef(0);
+  /** The looping pad and moving tone that play while the pitch slider is held. */
+  const matchVoice = useRef<{ index: number; handle: PadHandle } | null>(null);
   /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
@@ -834,6 +839,7 @@ function App() {
   const pressPad = (index: number) => {
     const pad = pads[index];
     if (!pad) return;
+    endMatch(false);
     setSelected(index);
     if (pad.placeholder) return; // silent: nothing to play
     holdVoice.current?.release();
@@ -980,6 +986,53 @@ function App() {
     holdVoice.current = startPad(-2, audioOf(pad), pad.sampleRate, shiftFor(pad, tunedTarget, a4), null, "loop", undefined, normalize ? pad.knobDb : undefined);
   };
 
+  /**
+   * Pitch slider grabbed: the selected pad loops at its current tuning (bass lifted by octaves to sit near the tone)
+   * and a tone on the key plays until the slider is let go. Sliding moves the tone, never the pad.
+   */
+  const startMatch = () => {
+    const pad = selected !== null ? pads[selected] : undefined;
+    const pc = pad ? (pad.keyPc ?? keyPc) : null;
+    if (!pad || !isReal(pad) || pc === null) return;
+    holdVoice.current?.release();
+    holdVoice.current = null;
+    holdIndex.current = null;
+    releasePad.current.get(pad.index)?.release();
+    releasePad.current.delete(pad.index);
+    const shift = shiftFor(pad, tunedTarget, a4);
+    const soundsAt = pad.detectedMidi != null ? pad.detectedMidi + shift : null;
+    const lift = pad.category === "bass" && soundsAt !== null ? 12 * Math.max(0, Math.round((60 + pc - soundsAt) / 12)) : 0;
+    matchVoice.current = {
+      index: pad.index,
+      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, pc, "loop", undefined, normalize ? pad.knobDb : undefined),
+    };
+  };
+
+  const moveTone = (cents: number) => {
+    toneOffsetRef.current = cents;
+    setToneOffset(cents);
+    matchVoice.current?.handle.setToneOffset(cents);
+  };
+
+  /** Slider let go: it snaps back to 0 and, when `apply` is set, the pad moves by the opposite of what the tone moved. */
+  const endMatch = (apply: boolean) => {
+    const offset = toneOffsetRef.current;
+    toneOffsetRef.current = 0;
+    setToneOffset(0);
+    const match = matchVoice.current;
+    if (!match) return;
+    matchVoice.current = null;
+    match.handle.release();
+    const pad = latest.current.pads[match.index];
+    if (apply && pad && offset !== 0) {
+      const trim = Math.max(-1200, Math.min(1200, trimCents(pad.semis, pad.cents) - offset));
+      patchPad(match.index, splitTrim(trim));
+    }
+  };
+
+  // Leaving the pad or the Tune screen mid-hold ends the match without moving anything.
+  useEffect(() => () => endMatch(false), [selected, mode]);
+
   const liftPad = (index: number) => {
     releasePad.current.get(index)?.release();
     releasePad.current.delete(index);
@@ -1106,8 +1159,12 @@ function App() {
    */
   const selectKey = (pc: number) => {
     if (!tuneAll) return selectKeyForPad(pc);
+    applyProjectKey(pc === keyPc ? null : pc);
+  };
+
+  /** Sets the project key (null = none) for every pad. */
+  const applyProjectKey = (next: number | null) => {
     recordEdit();
-    const next = pc === keyPc ? null : pc;
     setKeyPc(next);
     setTunedTarget(next);
     tunedTargetRef.current = next;
@@ -1120,6 +1177,12 @@ function App() {
         }),
       ),
     );
+  };
+
+  /** The key a sound is in: its detected pitch to the nearest note, against the A4 reference. */
+  const matchProjectToKey = (pad: Pad) => {
+    if (pad.detectedMidi == null) return;
+    applyProjectKey((((Math.round(pad.detectedMidi - referenceOffsetSemitones(a4)) % 12) + 12) % 12));
   };
 
   /** "Tune one": the key applies to the selected pad only. Tapping that pad's key again switches its tuning off. */
@@ -1280,7 +1343,7 @@ function App() {
   const selectedPad = selected !== null ? pads[selected] : undefined;
 
   /** Hot swap only exists with the finger-drumming layout; without it the screen starts on Tune. */
-  const shownMode: Mode = focus ? "type" : mode === "swap" && !layout.on ? "tune" : mode;
+  const shownMode: Mode | null = focus ? "type" : mode === null ? null : mode === "swap" && !layout.on ? "tune" : mode;
   /** The note a pad is tuned to, or "--" when its tuning is off or there is no key yet. */
   const keyNameOf = (pad: Pad) => {
     const pc = pad.tune ? (pad.keyPc ?? keyPc) : null;
@@ -1292,6 +1355,11 @@ function App() {
       pad={selectedPad}
       keyName={keyNameOf(selectedPad)}
       autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4)}
+      toneOffset={toneOffset}
+      needsKey={(selectedPad.keyPc ?? keyPc) === null}
+      onToneStart={startMatch}
+      onToneOffset={moveTone}
+      onToneEnd={() => endMatch(true)}
       onChange={(patch) => {
         if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
         else patchPad(selectedPad.index, patch);
@@ -1544,7 +1612,7 @@ function App() {
                   aria-pressed={on}
                   disabled={m.id === "swap" && !layout.on}
                   title={m.id === "swap" && !layout.on ? "Hot swap needs the finger drumming layout (menu)" : undefined}
-                  onClick={() => setMode(m.id)}
+                  onClick={() => setMode(on ? null : m.id)}
                 >
                   <span className="cap__led" />
                   <span className="cap__legend">{m.label}</span>
@@ -1575,12 +1643,12 @@ function App() {
         </div>
 
         {/* The screen: a black OLED in Silkscreen, with a title bar in inverse video. It grows over the deck's place in Swap mode. */}
-        <div className={`screen-wrap screen-wrap--${shownMode}${focus?.started ? " screen-wrap--focus" : ""}`}>
-          <section className="screen" aria-label={`Display: ${shownMode}`}>
+        <div className={`screen-wrap screen-wrap--${shownMode ?? "swap"}${focus?.started ? " screen-wrap--focus" : ""}`}>
+          <section className="screen" aria-label={`Display: ${shownMode ?? "sample"}`}>
             <div className="oled">
               {selectedPad && (
                 <div className="oled__head">
-                  <span>{shownMode === "swap" ? "Hot swap" : shownMode === "type" ? "Sound type" : "Tune"}</span>
+                  <span>{shownMode === "swap" ? "Hot swap" : shownMode === "type" ? "Sound type" : shownMode === "tune" ? "Tune" : "Sample"}</span>
                   <span>{shownMode === "tune" && tuneAll ? "All pads" : shownMode === "tune" ? `Pad ${padName(selectedPad)}` : padName(selectedPad)}</span>
                 </div>
               )}
@@ -1664,6 +1732,11 @@ function App() {
                     </span>
                   </div>
                   <Waveform channelData={selectedPad.channelData} />
+                  {shownMode === null && selectedPad.category === "melodicLoop" && (
+                    <button className="type-readout__match" disabled={selectedPad.detectedMidi == null} onClick={() => matchProjectToKey(selectedPad)}>
+                      {selectedPad.detectedMidi == null ? "No key detected" : "Match project to key"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

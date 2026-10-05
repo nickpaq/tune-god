@@ -41,6 +41,9 @@ export function PrecisionSlider({
   value,
   onChange,
   onDoubleClick,
+  onDragStart,
+  onDragEnd,
+  disabled,
   title,
   className,
   valueLabel,
@@ -58,6 +61,12 @@ export function PrecisionSlider({
   value: number;
   onChange: (value: number) => void;
   onDoubleClick?: () => void;
+  /** A drag (or a held arrow key) began. */
+  onDragStart?: () => void;
+  /** The drag (or the held key) ended; the value is whatever the last onChange reported. */
+  onDragEnd?: () => void;
+  /** Ignores the pointer and the keyboard. */
+  disabled?: boolean;
   title?: string;
   className?: string;
   /** When set, shows a floating bubble above the thumb with this text while the slider is being dragged. */
@@ -68,6 +77,7 @@ export function PrecisionSlider({
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [dragging, setDragging] = useState(false);
+  const keyHeld = useRef(false);
 
   const snapToStep = (v: number) => {
     const stepped = Math.round(v / step) * step;
@@ -75,6 +85,7 @@ export function PrecisionSlider({
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = {
@@ -86,6 +97,7 @@ export function PrecisionSlider({
       room: Math.max(MIN_DRAG_ROOM_PX, (window.innerHeight - e.clientY) / 2),
     };
     setDragging(true);
+    onDragStart?.();
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -116,11 +128,24 @@ export function PrecisionSlider({
     if (dragRef.current?.pointerId === e.pointerId) {
       dragRef.current = null;
       setDragging(false);
+      onDragEnd?.();
     }
   };
 
+  const onKeyUp = () => {
+    if (!keyHeld.current) return;
+    keyHeld.current = false;
+    onDragEnd?.();
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
     const bigStep = keyStep * 10;
+    const moves = ["ArrowRight", "ArrowUp", "ArrowLeft", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(e.key);
+    if (moves && !keyHeld.current && !dragRef.current) {
+      keyHeld.current = true;
+      onDragStart?.();
+    }
     switch (e.key) {
       case "ArrowRight":
       case "ArrowUp":
@@ -160,7 +185,8 @@ export function PrecisionSlider({
     <div
       className={["precision-slider", className].filter(Boolean).join(" ")}
       role="slider"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={value}
@@ -172,6 +198,8 @@ export function PrecisionSlider({
       onPointerCancel={endDrag}
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
+      onBlur={onKeyUp}
     >
       <div className="precision-slider__track" ref={trackRef}>
         <div className="precision-slider__fill" style={fillStyle} />

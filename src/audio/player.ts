@@ -44,6 +44,8 @@ export interface PadHandle {
   cut: () => void;
   /** Retunes the playing pad immediately, without restarting it. */
   setShift: (semitones: number) => void;
+  /** Moves the reference tone's pitch, in cents from its note, without restarting it. No-op without a tone. */
+  setToneOffset: (cents: number) => void;
 }
 
 interface ActivePad {
@@ -176,6 +178,7 @@ export function startPad(
     cut: () => voice.stop(0, CUT_FADE),
     setShift: (semitones) =>
       source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
+    setToneOffset: (cents) => osc?.detune.setTargetAtTime(cents, ctx.currentTime, 0.005),
   };
 }
 

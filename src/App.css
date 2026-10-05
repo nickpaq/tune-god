@@ -297,6 +297,25 @@
   justify-content: space-between;
 }
 
+.type-readout__match {
+  align-self: stretch;
+  padding: calc(var(--cell) * 2);
+  border: var(--cell) solid var(--oled);
+  background: none;
+  color: var(--oled);
+  font: inherit;
+  text-transform: uppercase;
+}
+
+.type-readout__match:disabled {
+  opacity: 0.35;
+}
+
+.type-readout__match:active:not(:disabled) {
+  background: var(--oled);
+  color: #000;
+}
+
 /* ---- Tune screen ---- */
 .pad-panel {
   display: flex;
