@@ -1,8 +1,8 @@
 # Mix calibration timeline
 
-Render patterns 1 to 6 in order as one continuous WAV at 110 BPM, 4/4 (one bar is 2.1818 s). Each pattern ends with one empty bar. A pad's level is the peak in dBFS written in its name; velocity is 127 unless noted.
+Everything is one pattern (pattern 1, 58 bars); render just that pattern as one WAV at 110 BPM, 4/4 (one bar is 2.1818 s). Each pattern ends with one empty bar. A pad's level is the peak in dBFS written in its name; velocity is 127 unless noted.
 
-| # | Pattern | Starts at (s) | Bars (with the empty one) | Measures |
+| # | Section | Starts at (s) | Bars (with the empty one) | Measures |
 | --- | --- | --- | --- | --- |
 | 1 | Reference tone | 0.000 | 5 | 1 kHz at -20 dBFS held for 4 bars: master level and meter reference |
 | 2 | Level ladder | 10.909 | 24 | each sound once at velocity 127, one per bar, in pad order: its real output level |

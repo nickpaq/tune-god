@@ -7,8 +7,8 @@
                                           with different settings on Main, against a plain reference. The transfer function of each
                                           shows what the lo, mid and hi bands really are (highpass, shelf or bell) and what gain does.
 
-Load them straight into Koala (no KoalaTune export needed), render each pattern in order (Loops export gives one file per pattern),
-and run scripts/analyzeMixerProbes.py on the zip. Run: python3 scripts/generateMixerProbes.py
+Load them straight into Koala (no KoalaTune export needed), render the one long pattern as a single WAV,
+and run scripts/analyzeMixerProbes.py on it. Run: python3 scripts/generateMixerProbes.py
 """
 import importlib.util, io, json, random, sys, zipfile
 from pathlib import Path
@@ -31,7 +31,7 @@ def strip(name, fx=None):
     return {"chain": [fx] + [None] * 4 if fx else [None] * 5, "mute": False, "name": name, "solo": False, "volume": 0.0}
 
 def build(path, sounds, pad_specs, buses, patterns, template):
-    """sounds: [(file name, signal, peak dBFS)]; pad_specs: [{sound, bus, eq, looping}]; patterns: [(name, notes, bars)] (+1 empty bar added)."""
+    """sounds: [(file name, signal, peak dBFS)]; pad_specs: [{sound, bus, eq, looping}]; patterns: [(name, notes, bars)] (+1 empty bar added), all merged into one long pattern."""
     with zipfile.ZipFile(template) as t:
         song, seq = t.read("song.json"), json.loads(t.read("sequence.json")); pad0 = json.loads(t.read("sampler/sampler.json"))["pads"][0]
     z = io.BytesIO(); samples, pads = [], []
@@ -50,8 +50,10 @@ def build(path, sounds, pad_specs, buses, patterns, template):
         zf.writestr("mixer.json", json.dumps({"buses": buses, "master": strip("MAIN")}))
         zf.writestr("song.json", song)
         seq.update({"autoPlay": "next", "currSequenceId": 0, "quantizeDivision": 16, "quantizing": True, "seqSnap": "Sequence", "swing": 0.0, "bpm": float(BPM), "beatsPerBar": 4})
-        for i, (_n, notes, bars) in enumerate(patterns):
-            seq["sequences"][i]["noteSequence"]["pattern"] = {"notes": sorted(notes, key=lambda n: (n["timeOffset"], n["num"])), "numBars": bars + 1}
+        merged, at = [], 0
+        for _n, notes, bars in patterns:
+            merged += [{**n, "timeOffset": n["timeOffset"] + at * TICKS_BAR} for n in notes]; at += bars + 1
+        seq["sequences"][0]["noteSequence"]["pattern"] = {"notes": sorted(merged, key=lambda n: (n["timeOffset"], n["num"])), "numBars": at}
         zf.writestr("sequence.json", json.dumps(seq))
     Path(path).write_bytes(z.getvalue())
     bar_s = 60 / BPM * 4; at = 0; lines = []
@@ -71,13 +73,13 @@ def main():
     kick, bass = cal.kick(), cal.tone(55, 8.0)
     sounds = [("kick_-3dBFS.wav", cal.fade(kick), -3), ("bass_sustain_55Hz_-9dBFS.wav", bass, -9)]
     pads = [{"sound": 0, "bus": 0, "label": "kick on bus A"}] + [{"sound": 1, "bus": b, "label": f"bass on bus {'ABCD'[b] if b >= 0 else 'Main'}", "looping": True} for b in (1, 2, 3, -1)]
-    thresholds = [-24, -40, -60]
-    buses = [strip("kick"), strip("bass -24", sidechain(-24)), strip("bass -40", sidechain(-40)), strip("bass -60", sidechain(-60))]
+    variants = [(-16, 80), (-20, 80), (-20, 300)]  # (threshold dB, release ms) on buses B, C and D
+    buses = [strip("kick"), *[strip(f"bass {t} / {r}", sidechain(t, release=r)) for t, r in variants]]
     kicks = [note(0, bar * TICKS_BAR + b * TICKS_BEAT, STEP * 4) for bar in range(4) for b in range(4)]
     hold = lambda pad: note(pad, 0, TICKS_BAR * 4)
-    patterns = [("Kick alone", kicks, 4), ("Bass alone (Main, no sidechain)", [hold(4)], 4)] + [(f"Kick + bass, threshold {t} dB, release 80 ms, output 0 dB", kicks + [hold(p)], 4) for t, p in zip(thresholds, (1, 2, 3))]
+    patterns = [("Kick alone", kicks, 4), ("Bass alone (Main, no sidechain)", [hold(4)], 4)] + [(f"Kick + bass, threshold {t} dB, release {r} ms, output 0 dB", kicks + [hold(p)], 4) for (t, r), p in zip(variants, (1, 2, 3))]
     rows, total = build(out / "probe-sidechain.koala", sounds, pads, buses, patterns, template)
-    md = ["# Probe: sidechain", "", f"Load `probe-sidechain.koala` in Koala, render the patterns in order (110 BPM, 4/4, {total:.2f} s in all), then run `python3 scripts/analyzeMixerProbes.py sidechain <zip>`.", "", "| # | Pattern | Starts at (s) | Bars (with the empty one) |", "| --- | --- | --- | --- |", *rows, ""]
+    md = ["# Probe: sidechain", "", f"Load `probe-sidechain.koala` in Koala, render the one long pattern as a single WAV (110 BPM, 4/4, {total:.2f} s in all), then run `python3 scripts/analyzeMixerProbes.py sidechain <zip>`.", "", "| # | Section | Starts at (s) | Bars (with the empty one) |", "| --- | --- | --- | --- |", *rows, ""]
     # ---- EQ probe
     noise = white_noise(6.0)
     sounds = [("white_noise_-12dBFS.wav", noise, -12)]
@@ -94,7 +96,7 @@ def main():
               "Pad EQ lo 300 Hz gain -18 dB (what the app writes)", "Pad EQ lo 300 Hz gain 0 dB", "Pad EQ hi 8 kHz gain -12 dB", "Pad EQ mid 1 kHz gain -12 dB"]
     patterns = [(labels[i], [note(i, 0, TICKS_BAR * 2)], 2) for i in range(9)]
     rows, total = build(out / "probe-eq.koala", sounds, pads, buses, patterns, template)
-    md += ["# Probe: EQ", "", f"Load `probe-eq.koala` in Koala, render the patterns in order (110 BPM, 4/4, {total:.2f} s in all), then run `python3 scripts/analyzeMixerProbes.py eq <zip>`. Each pattern plays the same white noise (6 s long) through a different EQ; pattern 1 is the reference.", "", "| # | Pattern | Starts at (s) | Bars (with the empty one) |", "| --- | --- | --- | --- |", *rows, ""]
+    md += ["# Probe: EQ", "", f"Load `probe-eq.koala` in Koala, render the one long pattern as a single WAV (110 BPM, 4/4, {total:.2f} s in all), then run `python3 scripts/analyzeMixerProbes.py eq <zip>`. Each pattern plays the same white noise (6 s long) through a different EQ; pattern 1 is the reference.", "", "| # | Section | Starts at (s) | Bars (with the empty one) |", "| --- | --- | --- | --- |", *rows, ""]
     (out / "probe-timeline.md").write_text("\n".join(md))
     print("wrote probe-sidechain.koala, probe-eq.koala and probe-timeline.md")
 

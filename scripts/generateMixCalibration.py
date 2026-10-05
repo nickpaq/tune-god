@@ -183,16 +183,25 @@ def build_patterns():
     pats.append(("Full groove", g, 8, "kick, snare, hats, 808, melodic loop and vox together for 8 bars: overall balance and master chain"))
     return pats
 
+def merge_sections(pats):
+    """All sections as one long pattern: notes shifted by the bars before them. Returns (notes, total bars, [(start bar, bars incl. the empty one)])."""
+    notes, at, starts = [], 0, []
+    for _name, ns, bars, _what in pats:
+        starts.append((at, bars + 1))
+        notes += [{**n, "timeOffset": n["timeOffset"] + at * TICKS_BAR} for n in ns]
+        at += bars + 1
+    return notes, at, starts
+
 def sequence_json(template_seq: bytes, pats):
     seq = json.loads(template_seq)
     seq.update({"autoPlay": "next", "currSequenceId": 0, "quantizeDivision": 16, "quantizing": True, "seqSnap": "Sequence", "swing": 0.0, "bpm": float(BPM), "beatsPerBar": 4})
-    for i, (_name, notes, bars, _what) in enumerate(pats):
-        seq["sequences"][i]["noteSequence"]["pattern"] = {"notes": sorted(notes, key=lambda n: (n["timeOffset"], n["num"])), "numBars": bars + 1}
+    notes, bars, _starts = merge_sections(pats)
+    seq["sequences"][0]["noteSequence"]["pattern"] = {"notes": sorted(notes, key=lambda n: (n["timeOffset"], n["num"])), "numBars": bars}
     return json.dumps(seq)
 
 def timeline_md(pats):
     bar_s = 60 / BPM * 4
-    out = ["# Mix calibration timeline", "", f"Render patterns 1 to {len(pats)} in order as one continuous WAV at {BPM} BPM, 4/4 (one bar is {bar_s:.4f} s). Each pattern ends with one empty bar. A pad's level is the peak in dBFS written in its name; velocity is 127 unless noted.", "", "| # | Pattern | Starts at (s) | Bars (with the empty one) | Measures |", "| --- | --- | --- | --- | --- |"]
+    out = ["# Mix calibration timeline", "", f"Everything is one pattern (pattern 1, {sum(b + 1 for _n, _x, b, _w in pats)} bars); render just that pattern as one WAV at {BPM} BPM, 4/4 (one bar is {bar_s:.4f} s). Each pattern ends with one empty bar. A pad's level is the peak in dBFS written in its name; velocity is 127 unless noted.", "", "| # | Section | Starts at (s) | Bars (with the empty one) | Measures |", "| --- | --- | --- | --- | --- |"]
     at = 0
     for i, (name, _n, bars, what) in enumerate(pats):
         out.append(f"| {i + 1} | {name} | {at * bar_s:.3f} | {bars + 1} | {what} |")
@@ -237,6 +246,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "mix-calibration.koala").write_bytes(z.getvalue())
     (out_dir / "mix-calibration-timeline.md").write_text(timeline_md(build_patterns()))
+    (out_dir / "mix-calibration-sections.json").write_text(json.dumps(merge_sections(build_patterns())[2]))
     print(f"wrote {out_dir / 'mix-calibration.koala'} ({len(z.getvalue()) // 1024} KB, {len(SOUNDS)} pads)")
 
 if __name__ == "__main__":

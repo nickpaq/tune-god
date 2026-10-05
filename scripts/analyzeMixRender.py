@@ -2,11 +2,12 @@
 """Measures a render of the mix calibration project against its patterns.
 
 Usage: python3 scripts/analyzeMixRender.py render.wav exported_project.koala
-Needs numpy and scipy. The render is the six patterns rendered in order as one WAV (16 or 24 bit PCM). The project supplies the
+Needs numpy and scipy. The render is the one long pattern as one WAV (16 or 24 bit PCM). The project supplies the
 pattern layout (sequence.json) and the pad levels the app wrote (sampler.json). Prints the reference tone level, every pad's peak and
 loudness in the level ladder, the velocity curve, the hats and cymbals, the full groove and an estimate of the sidechain ducking.
 """
 import io, json, sys, wave, zipfile
+from pathlib import Path
 import numpy as np
 from scipy.signal import butter, hilbert, lfilter, sosfiltfilt
 
@@ -26,9 +27,12 @@ def main():
     if x.shape[1] == 1: x = np.repeat(x, 2, 1)
     proj = zipfile.ZipFile(sys.argv[2]); seq = json.loads(proj.read("sequence.json")); sampler = json.loads(proj.read("sampler/sampler.json"))
     names = {int(p["pad"]): p["label"] for p in sampler["pads"]}
-    pats, at = [], 0
-    for i in range(6):
-        p = seq["sequences"][i]["noteSequence"]["pattern"]; pats.append((at, p["numBars"], p["notes"] or [])); at += p["numBars"]
+    # The project is one long pattern; its sections (start bar, bars) come from the generator's sections file next to this script's docs.
+    sections = json.loads((Path(__file__).resolve().parent.parent / "docs" / "calibration" / "mix-calibration-sections.json").read_text())
+    allnotes = seq["sequences"][0]["noteSequence"]["pattern"]["notes"] or []; pats, at = [], 0
+    for start, bars in sections:
+        lo, hi = start * 4096 * 4, (start + bars) * 4096 * 4
+        pats.append((start, bars, [{**n, "timeOffset": n["timeOffset"] - lo} for n in allnotes if lo <= n["timeOffset"] < hi])); at = start + bars
     T = lambda pat, off: pats[pat][0] * BAR + off / 4096 * BEAT
     db = lambda v: 20 * np.log10(max(v, 1e-9)); peak = lambda s: db(np.abs(s).max()) if len(s) else -999
     # BS.1770 K-weighting (48 kHz coefficients; the render is expected at 48 kHz)
