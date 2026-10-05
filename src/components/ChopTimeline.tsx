@@ -9,8 +9,6 @@ const MIN_LINE_PX = 7;
 const FLAG_H = 14;
 /** The closest view, in seconds across. */
 const MIN_SPAN_SECONDS = 0.25;
-/** The cursor jumps onto a grid line or marker this close (CSS pixels) while scrubbing. */
-const MAGNET_PX = 10;
 /** How much of the song the first view shows, in seconds. */
 const START_SECONDS = 12;
 
@@ -35,7 +33,7 @@ function formatTime(seconds: number): string {
 
 /**
  * The song's waveform in the screen's colours, scrolling behind a line fixed in the middle: that line is the cursor, where markers are put and where
- * the song plays from. Dragging scrubs (the waveform follows the finger, and the line is pulled onto the nearest grid line or marker), and dragging down zooms in, up zooms out. Over it: a line for every beat (the first beat of each bar
+ * the song plays from. Dragging scrubs (the waveform follows the finger, and the line is pulled toward the nearest grid lines and markers, smoothly), and dragging down zooms in, up zooms out. Over it: a line for every beat (the first beat of each bar
  * stronger), the sections between chop markers in their colours, the chop markers (flag on top, numbered) and the downbeat markers (flag below).
  */
 export const ChopTimeline = forwardRef<
@@ -221,23 +219,25 @@ export const ChopTimeline = forwardRef<
     drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span, y0: e.clientY, room: zoomRoom(e.clientY, window.innerHeight) };
   };
 
-  /** The nearest grid line or marker to a frame, if it is within the magnet's reach at this zoom. */
+  /**
+   * The magnet: where the finger puts the line, the line is drawn at a spot pulled toward the grid line or marker on either side of it. Between two
+   * neighbours the position eases through a smoothstep, so the line lingers on each (the pull is strongest on top of it and fades gradually) and
+   * glides across the gap in the middle; it is continuous and never goes backwards, and there is no stretch of the song where nothing pulls it.
+   */
   const magnet = (frame: number, span: number): number => {
     const { grid: g, chops: cuts, downbeats: downs, oneOne: one } = latest.current;
     const widthPx = canvas.current!.clientWidth;
-    const reach = (MAGNET_PX * span) / widthPx;
     const targets = [...cuts, ...downs, ...(one === null ? [] : [one])];
     if (g) for (const n of shownLines(g, frame - span, span * 2, widthPx * 2)) targets.push(lineFrame(g, n));
-    let best = frame;
-    let distance = reach;
+    let before = -Infinity;
+    let after = Infinity;
     for (const t of targets) {
-      const d = Math.abs(t - frame);
-      if (d <= distance) {
-        distance = d;
-        best = t;
-      }
+      if (t <= frame && t > before) before = t;
+      if (t > frame && t < after) after = t;
     }
-    return best;
+    if (before === -Infinity || after === Infinity) return frame;
+    const t = (frame - before) / (after - before);
+    return before + (after - before) * (t * t * (3 - 2 * t));
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
