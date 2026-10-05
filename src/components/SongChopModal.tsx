@@ -200,7 +200,8 @@ export function SongChopModal({
     (secondsAgo: number) => {
       const frame = player.frameAgo(secondsAgo);
       if (frame === null) return;
-      setTaps((prev) => [...prev, frame / sampleRate]);
+      // A tap far before the ones made means the song was started again from earlier: they belong to another run.
+      setTaps((prev) => [...(prev.length > 0 && frame / sampleRate < Math.max(...prev) - 1 ? [] : prev), frame / sampleRate]);
       setFlash(true);
       window.clearTimeout(flashTimer.current);
       flashTimer.current = window.setTimeout(() => setFlash(false), 90);
@@ -289,8 +290,7 @@ export function SongChopModal({
       return;
     }
     const from = Math.max(0, timeline.current?.centre() ?? 0);
-    // Playing from before the taps made means starting over: they belong to another run of the song.
-    if ((phase === "tap" || tapOn) && sorted.length > 0 && from / sampleRate < sorted[sorted.length - 1]) setTaps([]);
+    // Plain playing: it enters no taps and changes nothing about the grid.
     player.start(from);
   };
 
@@ -453,7 +453,7 @@ export function SongChopModal({
   const tapControls = (
     <>
       <button className={`chop__tap${flash ? " chop__tap--hit" : ""}`} onPointerDown={onTapDown} aria-label="Tap on the beat: the first tap starts the song">
-        {player.playing ? "Tap" : "Play + tap"}
+        {player.playing ? "Tap" : "▶ Play + tap"}
       </button>
       <div className="chop__row">
         <button className="chop__btn chop__toggle" aria-pressed={micOn} onClick={toggleMic} title="Arm the microphone, then knock on the back of the phone: the first knock starts the song and is the first tap, the rest are taps until Stop">
@@ -513,7 +513,7 @@ export function SongChopModal({
           </div>
 
           <div className="chop-timeline__play">
-            <button className={`chop__play${player.playing ? " chop__play--on" : ""}`} onClick={play} aria-pressed={player.playing} aria-label="Play from the middle of the view">
+            <button className={`chop__play${player.playing ? " chop__play--on" : ""}`} onClick={play} aria-pressed={player.playing} aria-label="Play from the middle of the view, without tapping">
               <span className="chop__play-icon">{player.playing ? "■" : "▶"}</span>
               <span>{player.playing ? "Stop" : "Play"}</span>
             </button>
