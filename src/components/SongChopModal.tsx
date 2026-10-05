@@ -260,7 +260,9 @@ export function SongChopModal({
     <div className="palette-backdrop chop-backdrop" onClick={onClose}>
       <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
         <div className="chop__head">
-          <span>Chop the song · v{__APP_VERSION__}</span>
+          <span>
+            Chop the song<span className="chop__version">v{__APP_VERSION__}</span>
+          </span>
           <button onClick={onClose} aria-label="Close">
             X
           </button>
@@ -268,22 +270,24 @@ export function SongChopModal({
         <div className="chop__scroll">
           <p className="chop__note">{note}</p>
 
-          <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} onScrub={player.stop} />
+          <div className="chop__screen">
+            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} onScrub={player.stop} />
+            <div className="chop__readout">
+              <span>{bpmText}</span>
+              <span>{readoutTwo}</span>
+            </div>
+          </div>
 
-          <div className="chop__row chop__bpm">
-            <span className="chop__bpm-text">{bpmText}</span>
-            <button className="chop__btn" disabled={!grid} onClick={() => scaleTempo(0.5)} title="Half the tempo: the grid has a line for every two of its beats" aria-label="Half the tempo">
+          <div className="chop__row">
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => scaleTempo(0.5)} title="Half the tempo: the grid has a line for every two of its beats" aria-label="Half the tempo">
               ÷2
             </button>
-            <button className="chop__btn" disabled={!grid} onClick={() => scaleTempo(2)} title="Double the tempo: the grid has two lines for every one of its beats" aria-label="Double the tempo">
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => scaleTempo(2)} title="Double the tempo: the grid has two lines for every one of its beats" aria-label="Double the tempo">
               ×2
             </button>
-            <button className="chop__btn chop__magnet" aria-pressed={magnetOn} onClick={() => setMagnetOn((on) => !on)} title="When you let go, lets the line glide onto the nearest bar line when you let go (every fourth bar when zoomed out). Turn it off to place a marker exactly where the sound is.">
+            <button className="chop__btn chop__grow" aria-pressed={magnetOn} onClick={() => setMagnetOn((on) => !on)} title="When you let go, lets the line glide onto the nearest bar line (every fourth bar when zoomed out). Turn it off to place a marker exactly where the sound is.">
               Snap {magnetOn ? "on" : "off"}
             </button>
-          </div>
-          <div className="chop__readout">
-            <span>{readoutTwo}</span>
           </div>
 
           <div className="chop__row chop__transport">
@@ -308,7 +312,7 @@ export function SongChopModal({
             </div>
           </div>
 
-          <div className="chop__row">
+          <div className="chop__row chop__markers">
             <button className="chop__btn chop__grow" disabled={!grid} onClick={addChop} title="Puts a cut at the line, on the nearest bar line. On a cut already there it takes it away.">
               Chop marker
             </button>

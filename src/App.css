@@ -1617,7 +1617,7 @@
   }
 }
 
-/* ---- the song chop editor: the OLED's colours, but not its pixel grid, so the waveform is drawn at full quality ---- */
+/* ---- the song chop editor: a chassis panel like the other modals, keycap buttons, and the waveform on a small OLED screen (drawn at full quality, not on the pixel grid) ---- */
 .sound-row__chop {
   flex: 1 1 100%;
   padding: 2cqw;
@@ -1641,18 +1641,21 @@
   --cell: var(--c, 2.6px);
   display: flex;
   flex-direction: column;
+  gap: 2.5cqw;
   width: 100%;
   /* a fixed size, so nothing in the editor can resize or move while a finger is dragging */
   height: 100%;
+  padding: 3.5cqw;
   overflow: hidden;
   overscroll-behavior: contain;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-  border-radius: 1cqw;
-  background: #000;
-  color: var(--oled);
-  box-shadow: 0 0 0 var(--cell) var(--bezel), 0 1.5cqw 4cqw rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius);
+  background: var(--chassis1);
+  box-shadow: inset 0 0 0 1px var(--edge), 0 1.5cqw 4cqw rgba(0, 0, 0, 0.6);
+  color: var(--ink);
+  font-size: 3.2cqw;
 }
 
 .chop__head {
@@ -1660,20 +1663,26 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: calc(var(--cell) * 10);
-  padding: 0 var(--cell);
-  background: var(--oled);
-  color: #000;
-  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
+  font-size: 4cqw;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.chop__version {
+  margin-left: 2cqw;
+  color: var(--ink3);
+  font-size: 2.8cqw;
+  font-weight: 500;
 }
 
 .chop__head button {
   border: 0;
   background: none;
-  color: #000;
-  font: inherit;
+  color: var(--ink);
+  font-size: 5cqw;
+  line-height: 1;
 }
 
 .chop__scroll {
@@ -1681,8 +1690,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: calc(var(--cell) * 3);
-  padding: calc(var(--cell) * 3);
+  gap: 2.5cqw;
+  padding: 0 0 1cqw;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1696,9 +1705,9 @@
   margin: 0;
   height: 2.7em;
   overflow: hidden;
-  font-size: 12px;
+  color: var(--ink3);
+  font-size: 3.2cqw;
   line-height: 1.35;
-  opacity: 0.75;
 }
 
 .chop__note--summary {
@@ -1706,112 +1715,148 @@
   overflow: visible;
 }
 
-/* two lines of fixed height: the cut, then what the grid says about it */
-.chop__readout {
+/* the little OLED: the waveform with the time under it, then the tempo and what the last press did, in the pixel font */
+.chop__screen {
   display: flex;
   flex-direction: column;
+  gap: calc(var(--cell) * 2);
+  padding: 2cqw 2.8cqw;
+  border-radius: 2.6cqw;
+  background: var(--bezel);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75), 0 1px 0 var(--seam-l);
+  color: var(--oled);
+  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
+  text-shadow: 0 0 6px var(--oled-glow);
+  text-transform: uppercase;
+}
+
+.chop__readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--cell) * 3);
   height: calc(var(--cell) * 10);
   overflow: hidden;
-  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
-  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chop__readout span:first-child {
+  flex: none;
 }
 
 .chop__readout span {
-  flex: none;
-  height: calc(var(--cell) * 10);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* the tempo with its half and double buttons and the snap switch */
-.chop__bpm {
-  flex-wrap: nowrap;
-}
-
-.chop__bpm-text {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
   text-overflow: ellipsis;
-  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
-  text-transform: uppercase;
 }
 
-.chop__magnet {
-  touch-action: manipulation;
-}
-
-.chop__magnet[aria-pressed="true"] {
-  background: var(--oled);
-  color: #000;
+.chop__readout span:last-child {
+  opacity: 0.7;
 }
 
 .chop__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: calc(var(--cell) * 2);
-  font-size: 12px;
+  gap: 2cqw;
   text-transform: uppercase;
 }
 
 .chop__row label {
   display: flex;
   align-items: center;
-  gap: calc(var(--cell) * 2);
+  gap: 2cqw;
 }
 
-.chop__btn,
-.chop select,
-.chop input[type="number"] {
-  padding: calc(var(--cell) * 2) calc(var(--cell) * 3);
-  border: var(--cl, 1px) solid var(--oled);
-  border-radius: 0;
-  background: #000;
-  color: var(--oled);
+/* the marker keys are one height, whichever of them wraps its words */
+.chop__markers {
+  align-items: stretch;
+}
+
+/* keycaps, as on the rest of the app */
+.chop__btn {
+  min-width: 0;
+  padding: 2.4cqw 3cqw;
+  border: 0;
+  border-radius: 1.8cqw;
+  color: var(--key-ink);
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 var(--key-edge), 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   font: inherit;
+  font-size: 3cqw;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  touch-action: manipulation;
+  transition: box-shadow 0.1s, transform 0.08s;
 }
 
-.chop input[type="number"] {
-  width: 16cqw;
-  font-size: 16px; /* at least 16px so iOS does not zoom on focus */
+.chop__btn:active:not(:disabled),
+.chop__btn[aria-pressed="true"] {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), 0 1px 0 var(--key-edge);
+}
+
+.chop__btn[aria-pressed="true"] {
+  color: var(--accent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.chop__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .chop select {
   flex: 1;
-  font-size: 16px;
-}
-
-.chop__btn:disabled {
-  opacity: 0.35;
-}
-
-.chop__btn:active:not(:disabled) {
-  background: var(--oled);
-  color: #000;
+  min-width: 0;
+  padding: 2cqw;
+  border: 0;
+  border-radius: 1.2cqw;
+  background: var(--btn);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px; /* at least 16px so iOS does not zoom on focus */
+  text-transform: none;
 }
 
 .chop__check input {
-  width: calc(var(--cell) * 6);
-  height: calc(var(--cell) * 6);
-  accent-color: var(--oled);
+  width: 4.5cqw;
+  height: 4.5cqw;
+  accent-color: var(--accent);
+}
+
+.chop__grow {
+  flex: 1;
 }
 
 .chop__go {
   flex: none;
-  height: calc(var(--cell) * 14);
+  height: 12cqw;
   border: 0;
-  background: var(--oled);
-  color: #000;
-  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
+  border-radius: 1.8cqw;
+  background: var(--accent);
+  box-shadow: 0 3px 0 #a73a14, 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 3.8cqw;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
+.chop__go:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
 .chop__go:disabled {
-  opacity: 0.35;
+  background: var(--btn);
+  box-shadow: 0 3px 0 var(--key-edge);
+  color: var(--ink3);
+  opacity: 0.6;
 }
 
 .chop-timeline {
@@ -1834,156 +1879,50 @@
 }
 
 .chop-timeline__bar {
-  height: calc(var(--cell) * 14);
+  height: calc(var(--cell) * 10);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: calc(var(--cell) * 2);
-  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
 }
 
+/* play, the click knob and the bar jumps */
+.chop__transport {
+  flex-wrap: nowrap;
+  align-items: center;
+}
 
 .chop__play {
-  flex: 1;
+  flex: 0.9 1 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: calc(var(--cell) * 3);
-  height: calc(var(--cell) * 22);
+  gap: 2.5cqw;
   min-width: 0;
-  border: calc(var(--cell) * 0.8) solid var(--oled);
-  border-radius: 0;
-  background: #000;
-  color: var(--oled);
-  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
+  height: 15cqw;
+  border: 0;
+  border-radius: 1.8cqw;
+  color: var(--key-ink);
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 var(--key-edge), 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  font: inherit;
+  font-size: 4cqw;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  transition: box-shadow 0.1s, transform 0.08s;
 }
 
 .chop__play-icon {
-  font-size: calc(var(--cell) * 12);
+  font-size: 4.6cqw;
   line-height: 1;
 }
 
 .chop__play--on {
-  background: var(--oled);
-  color: #000;
-}
-
-
-
-
-
-
-
-
-
-
-
-.chop__grow {
-  flex: 1;
-}
-
-.chop__grow input[type="range"] {
-  flex: 1;
-  min-width: 0;
-  accent-color: var(--oled);
-}
-
-
-
-
-/* ---- the list of sections picked in the chop editor ---- */
-.chop__bin {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--cell) * 1);
-  max-height: 34cqw;
-  overflow-y: auto;
-  padding: calc(var(--cell) * 1.5);
-  border: var(--cl, 1px) solid var(--oled);
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-.chop__bin-empty {
-  margin: 0;
-  opacity: 0.6;
-  text-transform: none;
-}
-
-.chop__bin-row {
-  display: flex;
-  gap: calc(var(--cell) * 1.5);
-}
-
-.chop__bin-main {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: calc(var(--cell) * 3);
-  padding: calc(var(--cell) * 1.5) calc(var(--cell) * 2);
-  border: 0;
-  background: #000;
-  color: var(--oled);
-  font: inherit;
-  text-align: left;
-}
-
-.chop__bin-swatch {
-  flex: none;
-  width: calc(var(--cell) * 6);
-  height: calc(var(--cell) * 6);
-}
-
-.chop__bin-bars {
-  margin-left: auto;
-  opacity: 0.75;
-}
-
-/* ---- the click volume knob and the bar jumps beside the play button ---- */
-.knob {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(var(--cell) * 1);
-}
-
-.knob__dial {
-  width: calc(var(--cell) * 15);
-  height: calc(var(--cell) * 15);
-  touch-action: none;
-  cursor: ns-resize;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.knob__ring {
-  fill: #000;
-  stroke: var(--oled);
-  stroke-opacity: 0.45;
-  stroke-width: 1.5;
-}
-
-.knob__arc {
-  fill: none;
-  stroke: var(--oled);
-  stroke-width: 3;
-}
-
-.knob__tick {
-  stroke: var(--oled);
-  stroke-width: 2.5;
-  stroke-linecap: square;
-}
-
-.knob__label {
-  font: 400 calc(var(--cell) * 5) / calc(var(--cell) * 6) "Silkscreen", monospace;
-  text-transform: uppercase;
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), 0 1px 0 var(--key-edge);
+  color: var(--accent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 .chop__jumps {
@@ -1991,20 +1930,108 @@
   min-width: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: calc(var(--cell) * 1.5);
+  gap: 1.8cqw;
 }
 
 .chop__jumps .chop__btn {
-  padding: calc(var(--cell) * 2) 0;
+  padding: 2cqw 0;
   white-space: nowrap;
-  touch-action: manipulation;
 }
 
-.chop__transport {
-  flex-wrap: nowrap;
+.knob {
+  flex: none;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 0.6cqw;
 }
 
-.chop__transport .chop__play {
-  flex: 0.9 1 0;
+.knob__dial {
+  width: 11cqw;
+  height: 11cqw;
+  touch-action: none;
+  cursor: ns-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.knob__ring {
+  fill: var(--key);
+  stroke: var(--key-edge);
+  stroke-width: 2;
+}
+
+.knob__arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 2px var(--accent));
+}
+
+.knob__tick {
+  stroke: var(--key-ink);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.knob__label {
+  color: var(--ink3);
+  font-size: 2.4cqw;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* the list of sections picked in the chop editor */
+.chop__bin {
+  display: flex;
+  flex-direction: column;
+  gap: 1cqw;
+  max-height: 34cqw;
+  overflow-y: auto;
+  padding: 1.5cqw;
+  border-radius: 1.4cqw;
+  background: var(--well);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6), 0 1px 0 var(--seam-l);
+  text-transform: uppercase;
+}
+
+.chop__bin-empty {
+  margin: 0;
+  color: var(--ink3);
+  text-transform: none;
+}
+
+.chop__bin-row {
+  display: flex;
+  gap: 1.5cqw;
+}
+
+.chop__bin-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2.5cqw;
+  padding: 1.6cqw 2cqw;
+  border: 0;
+  border-radius: 1cqw;
+  background: var(--chassis1);
+  color: var(--ink);
+  font: inherit;
+  font-size: 3cqw;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+
+.chop__bin-swatch {
+  flex: none;
+  width: 4cqw;
+  height: 4cqw;
+  border-radius: 0.8cqw;
+}
+
+.chop__bin-bars {
+  margin-left: auto;
+  color: var(--ink3);
 }
