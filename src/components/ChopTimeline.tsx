@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { getAudioContext } from "../audio/decode";
 import { prepareBuffer, startPad, type PadHandle } from "../audio/player";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
-import { approach, centredStart, clampViewStart, defaultSpan, isDrag, LATCH_DRAG_PX, moveMarker, spanAfterDrag, viewStart, zoomRate, zoomRoom, zoomTravel, type GrabbedView } from "../audio/song/zoom";
+import { approach, centredStart, clampViewStart, defaultSpan, isDrag, LATCH_DRAG_PX, moveMarker, spanAfterDrag, viewStart, viewUnderFinger, zoomRate, zoomRoom, zoomTravel, type GrabbedView } from "../audio/song/zoom";
 
 /** Size of a chop point's tab, in CSS pixels: wide enough for a thumb, and its top comes to a point. */
 const TAB_WIDTH = 28;
@@ -38,10 +38,18 @@ interface TabDrag {
   home: number;
 }
 
+/** The waveform dragged with no marker held: it scrubs and zooms under the finger and no marker changes. */
 interface PanDrag {
   kind: "pan";
   id: number;
-  lastX: number;
+  startX: number;
+  startY: number;
+  /** False until the finger has gone further than a tap. */
+  moved: boolean;
+  room: number;
+  startSpan: number;
+  /** The frame of the waveform that was under the finger when it landed, which stays under it. */
+  pivot: number;
 }
 
 /** Playback from a chop point: the marker is the playhead, and the view follows it. */
@@ -458,7 +466,17 @@ export function ChopTimeline({
         grab: { frame: cutList[hit], across: (cutList[hit] - start) / span, span },
         home: (cutList[hit] - start) / span,
       };
-    } else drag.current = { kind: "pan", id: e.pointerId, lastX: e.clientX };
+    } else
+      drag.current = {
+        kind: "pan",
+        id: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        moved: false,
+        room: zoomRoom(e.clientY, window.innerHeight),
+        startSpan: span,
+        pivot: start + ((x - INSET) / width) * span,
+      };
     draw();
   };
 
@@ -469,9 +487,17 @@ export function ChopTimeline({
     const width = pointer(e).width - 2 * INSET;
     if (d.kind === "pan") {
       if (playback.current) return;
-      const { start, span } = view.current;
-      view.current = { start: clampStart(start - ((e.clientX - d.lastX) / width) * span, span), span };
-      d.lastX = e.clientX;
+      // As with a marker: nothing happens until the finger has gone further than a tap, and zoom waits for its own dead zone.
+      if (!d.moved) {
+        if (!isDrag(e.clientX - d.startX, e.clientY - d.startY)) return;
+        d.moved = true;
+        d.startY = e.clientY;
+        // Pin what is under the finger now, so the waveform does not jump to catch up with the distance the tap threshold swallowed.
+        d.pivot = view.current.start + ((pointer(e).x - INSET) / width) * view.current.span;
+      }
+      const span = spanAfterDrag(d.startSpan, zoomTravel(e.clientY - d.startY), zoomRate(resting, d.room), total);
+      const across = (pointer(e).x - INSET) / width;
+      view.current = { start: clampStart(viewUnderFinger(d.pivot, across, span), span), span };
       return draw();
     }
     d.fingerX = e.clientX;

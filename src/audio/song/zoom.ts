@@ -97,3 +97,12 @@ export function centredStart(frame: number, span: number): number {
 export function clampViewStart(start: number, span: number, totalFrames: number): number {
   return Math.min(Math.max(-span / 2, start), totalFrames - span / 2);
 }
+
+/**
+ * The view while the waveform itself is dragged (no marker held): the point of the waveform that was under the finger when it landed
+ * (`pivotFrame`) stays under the finger, wherever the finger goes sideways, and the view zooms about it as the finger goes up or down.
+ * `across` is where the finger is now across the view (0 = left edge, 1 = right). Returns the first frame in view.
+ */
+export function viewUnderFinger(pivotFrame: number, across: number, span: number): number {
+  return pivotFrame - across * span;
+}

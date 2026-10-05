@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approach, centredStart, clampViewStart, defaultSpan, isDrag, MIN_SPAN_FRAMES, moveMarker, spanAfterDrag, TAP_SLOP_PX, viewStart, ZOOM_DEAD_ZONE_PX, zoomRate, zoomRoom, zoomTravel } from "./zoom";
+import { approach, centredStart, clampViewStart, defaultSpan, isDrag, MIN_SPAN_FRAMES, moveMarker, spanAfterDrag, TAP_SLOP_PX, viewStart, viewUnderFinger, ZOOM_DEAD_ZONE_PX, zoomRate, zoomRoom, zoomTravel } from "./zoom";
 
 describe("zoomRoom", () => {
   it("is the whole way from the finger to the bottom of the screen, never less than the minimum", () => {
@@ -174,5 +174,24 @@ describe("centring a point", () => {
   it("still stops the view running further off the song than half its width", () => {
     expect(clampViewStart(-5_000_000, 2_000_000, 4_000_000)).toBe(-1_000_000);
     expect(clampViewStart(9_000_000, 2_000_000, 4_000_000)).toBe(3_000_000);
+  });
+});
+
+describe("viewUnderFinger", () => {
+  const pivot = 3_000_000;
+
+  it("keeps the point that was under the finger under it, wherever the finger goes sideways and at any zoom", () => {
+    for (const [across, span] of [[0.5, 4_000_000], [0.2, 4_000_000], [0.9, 4_000_000], [0.9, 50_000], [0.1, 360]] as const) {
+      const start = viewUnderFinger(pivot, across, span);
+      expect(start + across * span).toBeCloseTo(pivot, 6);
+    }
+  });
+
+  it("follows the finger: moving it right pulls the waveform right, so the view starts earlier", () => {
+    expect(viewUnderFinger(pivot, 0.6, 1_000_000)).toBeLessThan(viewUnderFinger(pivot, 0.5, 1_000_000));
+  });
+
+  it("zooms about the point under the finger: a finger that does not move sideways keeps that point at its place on the screen", () => {
+    for (const span of [4_000_000, 400_000, 4_000]) expect((pivot - viewUnderFinger(pivot, 0.37, span)) / span).toBeCloseTo(0.37, 9);
   });
 });
