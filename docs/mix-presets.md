@@ -46,7 +46,7 @@ Written when "Route pads to buses" is on. Bus A is Kick, B Bass, C Drums, D Melo
 | `kickClipper.threshold` | same | Clip level and softness of the curve | about -35 to 0 dB | Near 0 is a hard clip, low is a soft S-curve. Lower also lowers the kick's peak |
 | `kickClipper.output` | same | Level after the clip | -36 to 0 dB | Can only turn down |
 | `kickClipper.oversample` | same | HQ button | 0 or 1 | 1 for less aliasing |
-| `bassSidechain.threshold` | Bass bus SIDECHAIN | Kick level that makes the bass duck. The duck depth follows how far the kick is over it (measured: kick about 18 dB over gave a duck of 18 dB or more) | -60 to 0 dB | Higher is a shallower duck, lower a deeper one |
+| `bassSidechain.threshold` | Bass bus SIDECHAIN | Kick level that makes the bass duck. At -14 dB it ducked only about 2 to 3 dB; the sweep in `probe-sidechain.koala` measures -24, -40 and -60 | -60 to 0 dB | Lower is a deeper duck |
 | `bassSidechain.release` | same | Time for the bass to return | 10 to 1000 ms | Short is tight, long pumps |
 | `bassSidechain.output` | same | Level after ducking, not the depth | -12 to +12 dB | Rarely changed |
 | `melodicEq` | Melodic bus EQ | lo highpass, mid bell, hi shelf (freq, gain, Q for each) | freq 20 to 20000 Hz, gain +-18 dB, Q 0.5 to 10 | Raise `lo freq` to clear more low end, lower `hi gain` to darken |

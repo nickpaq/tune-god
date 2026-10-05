@@ -127,7 +127,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
   },
   buses: {
     kickClipper: { input: 4, threshold: -6, output: 0, oversample: 1 }, // about 9 dB of drive into a soft clip
-    bassSidechain: { threshold: -14, release: 80, output: 0 }, // the duck depth follows how far the kick is over the threshold (measured: about 18 dB over gave a duck of 18 dB or more that took about 450 ms to recover), so a higher threshold is a shallower duck
+    bassSidechain: { threshold: -30, release: 80, output: 0 }, // provisional: at -14 the duck measured only about 2 to 3 dB (probe-sidechain.koala sweeps -24, -40 and -60). Lower threshold = deeper duck, to be read from that sweep
     melodicEq: {
       "lo freq": 150, "lo gain": 0, "lo Q": 0.7, // highpass: leaves the low end to the kick and bass
       "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, // untouched

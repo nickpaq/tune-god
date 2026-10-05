@@ -239,4 +239,5 @@ def main():
     (out_dir / "mix-calibration-timeline.md").write_text(timeline_md(build_patterns()))
     print(f"wrote {out_dir / 'mix-calibration.koala'} ({len(z.getvalue()) // 1024} KB, {len(SOUNDS)} pads)")
 
-main()
+if __name__ == "__main__":
+    main()
