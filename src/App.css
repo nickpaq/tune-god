@@ -1011,9 +1011,11 @@
 .menu {
   position: absolute;
   /* just under the menu button */
-  top: calc(max(3cqw, env(safe-area-inset-top)) + 11.3cqw + 1.2cqw);
+  --menu-top: calc(max(3cqw, env(safe-area-inset-top)) + 11.3cqw + 1.2cqw);
+  top: var(--menu-top);
   right: 4.1cqw;
-  max-height: calc(100cqh - 20cqw);
+  /* from there to just above the bottom safe area, so the menu scrolls inside the screen instead of running past it */
+  max-height: calc(100cqh - var(--menu-top) - max(var(--u), env(safe-area-inset-bottom)) - 1.5cqw);
   overflow-y: auto;
   z-index: 18;
   display: flex;
@@ -1030,6 +1032,12 @@
 }
 
 .menu__version {
+  /* stays at the bottom edge of the menu while the rest scrolls, so the version is always in view */
+  position: sticky;
+  bottom: -3cqw;
+  margin: 0 -3cqw -3cqw;
+  padding: 1.5cqw 3cqw 3cqw;
+  background: var(--chassis1);
   font-size: 2.6cqw;
   line-height: 1.4;
   letter-spacing: 0.08em;
