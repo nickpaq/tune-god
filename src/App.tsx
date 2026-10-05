@@ -40,7 +40,7 @@ import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadSymbol } from "./components/PadSymbol";
 import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveState, type SavedPad } from "./storage";
-import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, splitTrim, trimCents } from "./audio/theory";
+import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, splitTrim, trimCents, bassLiftSemitones } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { useSafeArea } from "./components/useSafeArea";
@@ -56,6 +56,8 @@ const MODES: { id: Mode; label: string; aria: string }[] = [
   { id: "type", label: "Type", aria: "Sound type mode" },
   { id: "swap", label: "Swap", aria: "Hot swap mode" },
 ];
+/** How long the pad takes to slide onto its new pitch when the pitch slider is let go. */
+const MATCH_GLIDE_S = 0.3;
 /** How many edits undo can step back through. */
 const MAX_HISTORY = 100;
 /** Slider drags on the same control within this window count as one undo step. */
@@ -241,7 +243,8 @@ function App() {
   const [toneOffset, setToneOffset] = useState(0);
   const toneOffsetRef = useRef(0);
   /** The looping pad and moving tone that play while the pitch slider is held. */
-  const matchVoice = useRef<{ index: number; handle: PadHandle } | null>(null);
+  const matchVoice = useRef<{ index: number; lift: number; handle: PadHandle } | null>(null);
+  const matchFade = useRef<number | null>(null);
   /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
@@ -1001,8 +1004,10 @@ function App() {
     releasePad.current.delete(pad.index);
     const shift = shiftFor(pad, tunedTarget, a4);
     const soundsAt = pad.detectedMidi != null ? pad.detectedMidi + shift : null;
-    const lift = pad.category === "bass" && soundsAt !== null ? 12 * Math.max(0, Math.round((60 + pc - soundsAt) / 12)) : 0;
+    // The lift lives only in this preview voice, and goes with it when the match ends.
+    const lift = pad.category === "bass" && soundsAt !== null ? bassLiftSemitones(soundsAt, pc) : 0;
     matchVoice.current = {
+      lift,
       index: pad.index,
       handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, pc, "loop", undefined, normalize ? pad.knobDb : undefined),
     };
@@ -1022,12 +1027,19 @@ function App() {
     const match = matchVoice.current;
     if (!match) return;
     matchVoice.current = null;
-    match.handle.release();
+    if (matchFade.current !== null) window.clearTimeout(matchFade.current);
     const pad = latest.current.pads[match.index];
     if (apply && pad && offset !== 0) {
       const trim = Math.max(-1200, Math.min(1200, trimCents(pad.semis, pad.cents) - offset));
       patchPad(match.index, splitTrim(trim));
-    }
+      // The pad slides to its new pitch (and the tone back to its note) so the two meet, then both fade. The octave lift stays until then.
+      const next = shiftFor({ ...pad, ...splitTrim(trim) }, latest.current.tunedTarget, a4);
+      match.handle.glide(next + match.lift, 0, MATCH_GLIDE_S);
+      matchFade.current = window.setTimeout(() => {
+        matchFade.current = null;
+        match.handle.release();
+      }, (MATCH_GLIDE_S + 0.1) * 1000);
+    } else match.handle.release();
   };
 
   // Leaving the pad or the Tune screen mid-hold ends the match without moving anything.

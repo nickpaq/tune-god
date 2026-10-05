@@ -55,3 +55,12 @@ export function splitTrim(totalCents: number): { semis: number; cents: number } 
 export function formatTrim(totalCents: number): string {
   return `${totalCents > 0 ? "+" : totalCents < 0 ? "-" : ""}${(Math.abs(totalCents) / 100).toFixed(2)}`;
 }
+
+/**
+ * Whole octaves (in semitones, never negative) that lift a bass preview up next to the matching tone, which sits in the
+ * octave from middle C. Only ever added to the voice that is playing: it is never part of a pad's shift or trim, so
+ * nothing saved or exported carries it.
+ */
+export function bassLiftSemitones(soundsAtMidi: number, tonePitchClass: number): number {
+  return 12 * Math.max(0, Math.round((60 + tonePitchClass - soundsAtMidi) / 12));
+}

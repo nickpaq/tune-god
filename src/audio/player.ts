@@ -46,6 +46,8 @@ export interface PadHandle {
   setShift: (semitones: number) => void;
   /** Moves the reference tone's pitch, in cents from its note, without restarting it. No-op without a tone. */
   setToneOffset: (cents: number) => void;
+  /** Slides the pad to `semitones` and the tone to `toneCents` over `seconds`, in a straight line in pitch. */
+  glide: (semitones: number, toneCents: number, seconds: number) => void;
 }
 
 interface ActivePad {
@@ -179,6 +181,22 @@ export function startPad(
     setShift: (semitones) =>
       source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
     setToneOffset: (cents) => osc?.detune.setTargetAtTime(cents, ctx.currentTime, 0.005),
+    glide: (semitones, toneCents, seconds) => {
+      const t = ctx.currentTime;
+      const rate = source.playbackRate;
+      const from = Math.log2(rate.value) * 12;
+      // Pitch is exponential in the playback rate, so the curve is drawn in semitones to make the slide even.
+      const steps = 32;
+      const curve = new Float32Array(steps);
+      for (let i = 0; i < steps; i++) curve[i] = semitonesToRatio(from + ((semitones - from) * i) / (steps - 1));
+      rate.cancelScheduledValues(t);
+      rate.setValueCurveAtTime(curve, t, seconds);
+      if (osc) {
+        osc.detune.cancelScheduledValues(t);
+        osc.detune.setValueAtTime(osc.detune.value, t);
+        osc.detune.linearRampToValueAtTime(toneCents, t + seconds);
+      }
+    },
   };
 }
 
