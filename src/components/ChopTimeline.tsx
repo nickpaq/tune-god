@@ -1,7 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
 import { approach, isDrag, spanAfterDrag, viewUnderFinger, zoomRate, zoomRoom, zoomTravel } from "../audio/song/zoom";
-import { isBarLine, lineFrame, linesBetween, type TapGrid } from "../audio/song/tapGrid";
+import { MAX_SECTION_BARS, isBarLine, lineFrame, linesBetween, type TapGrid } from "../audio/song/tapGrid";
 
 /** Lines closer together than this (CSS pixels) are not drawn (beats first, then bars). */
 const MIN_LINE_PX = 7;
@@ -70,11 +70,18 @@ export const ChopTimeline = forwardRef<
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
 
-  /** The lines shown at this zoom: every beat, or only the bars when the beats are too close together, or none. */
+  /**
+   * The lines shown at this zoom: every beat, or when the beats are too close together only the bars, then every fourth bar, and at the widest views
+   * every sixteenth bar (the longest a section may be), so there are always lines to see.
+   */
   const shownLines = (g: TapGrid, start: number, span: number, widthPx: number): number[] => {
     const beatPx = (g.segments[0].beatFrames * widthPx) / span;
     const lines = linesBetween(g, Math.max(0, start), Math.min(total, start + span));
-    return beatPx >= MIN_LINE_PX ? lines : beatPx * g.beatsPerBar >= MIN_LINE_PX ? lines.filter((n) => isBarLine(g, n)) : [];
+    if (beatPx >= MIN_LINE_PX) return lines;
+    const barPx = beatPx * g.beatsPerBar;
+    const every = barPx >= MIN_LINE_PX ? 1 : barPx * 4 >= MIN_LINE_PX ? 4 : MAX_SECTION_BARS;
+    const ref = g.downbeats[0] ?? 0;
+    return lines.filter((n) => isBarLine(g, n) && ((((n - ref) / g.beatsPerBar) % every) + every) % every === 0);
   };
 
   const draw = useCallback(() => {
