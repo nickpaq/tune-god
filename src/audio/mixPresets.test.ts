@@ -15,8 +15,8 @@ describe.each(Object.values(MIX_PRESETS))("mix preset $name", (preset) => {
     }
   });
 
-  it("fits the master chain in the five slots of a strip", () => {
-    expect(preset.master.length).toBeLessThanOrEqual(5);
+  it.each(["dynamic", "loud"] as const)("fits the %s master chain in the five slots of a strip", (style) => {
+    expect(preset.master[style].length).toBeLessThanOrEqual(5);
   });
 
   it("is registered under its own id", () => {

@@ -1,7 +1,7 @@
 // Builds the effects the export puts on Koala's mixer strips from the active mix preset (src/audio/mixPresets.ts, where every value
 // to tweak lives): a sidechain from the kick bus onto the bass bus, clipping on the kick bus, an EQ on the melodic bus and a master
 // chain. Plugin and parameter names are Koala's own (docs/koala-mixer-reference.md). Slots that already hold a plugin are never replaced.
-import { ACTIVE_MIX_PRESET, type MixPreset } from "./mixPresets";
+import { ACTIVE_MIX_PRESET, type MasterStyle, type MixPreset } from "./mixPresets";
 
 /** One effect as Koala writes it into a strip's `chain` (five slots, an empty one is null). */
 export interface MixerEffect {
@@ -26,8 +26,8 @@ export const kickClipper = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect 
 /** EQ for the melodic bus (lo highpass, mid bell, hi high shelf). Values: preset.buses.melodicEq. */
 export const melodicEq = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect => effect("EQ", { ...preset.buses.melodicEq });
 
-/** The master chain, in signal order. Values: preset.master. */
-export const masterChain = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect[] => preset.master.map((fx) => effect(fx.name, { ...fx.parameters }));
+/** The master chain of a style, in signal order. Values: preset.master[style]. */
+export const masterChain = (style: MasterStyle = "loud", preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect[] => preset.master[style].map((fx) => effect(fx.name, { ...fx.parameters }));
 
 /** Puts each effect, in order, into the first empty slot after the previous one. Returns false (and changes nothing) when they do not all fit. */
 export function fillEmptySlots(chain: MixerSlot[], effects: MixerEffect[]): boolean {

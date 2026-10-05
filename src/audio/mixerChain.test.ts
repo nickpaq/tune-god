@@ -53,6 +53,15 @@ describe("mixer export", () => {
     expect(mixer.master.chain.map((s: any) => s.name)).toEqual(masterChain().map((s) => s.name));
   });
 
+  it("writes the chosen master style", async () => {
+    const dynamic = await exported(await load(), { masterChain: true, masterStyle: "dynamic" });
+    const loud = await exported(await load(), { masterChain: true, masterStyle: "loud" });
+    const gain = (m: any) => m.master.chain.find((s: any) => s?.name === "LIMITER").parameters.gain;
+    expect(gain(dynamic)).toBe(masterChain("dynamic").find((s) => s.name === "LIMITER")!.parameters.gain);
+    expect(gain(loud)).toBe(masterChain("loud").find((s) => s.name === "LIMITER")!.parameters.gain);
+    expect(gain(loud)).not.toBe(gain(dynamic));
+  });
+
   it("never doubles a sidechain and leaves a master chain the user already built alone", async () => {
     const strip = (name: string, chain: unknown[]) => ({ chain, mute: false, name, solo: false, volume: 0 });
     const empty = [null, null, null, null, null];
@@ -74,7 +83,7 @@ describe("effect parameters", () => {
   const hi = read("mixer-all-max.json");
   const find = (mixer: any, fxName: string) => [...mixer.buses.flatMap((b: any) => b.chain), ...mixer.master.chain].find((s: any) => s?.name === fxName);
 
-  it.each([...masterChain(), bassSidechain(), kickClipper(), melodicEq()].map((fx) => [fx.name, fx] as const))("%s uses Koala's parameter names and stays inside their range", (name, fx) => {
+  it.each([...masterChain("loud"), ...masterChain("dynamic"), bassSidechain(), kickClipper(), melodicEq()].map((fx) => [fx.name, fx] as const))("%s uses Koala's parameter names and stays inside their range", (name, fx) => {
     const a = find(lo, name).parameters;
     const b = find(hi, name).parameters;
     expect(Object.keys(fx.parameters).sort()).toEqual(Object.keys(a).sort());

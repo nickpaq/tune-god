@@ -44,7 +44,8 @@ import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemito
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { useSafeArea } from "./components/useSafeArea";
-import { ACTIVE_MIX_PRESET } from "./audio/mixPresets";
+import { ACTIVE_MIX_PRESET, MASTER_STYLES, type MasterStyle } from "./audio/mixPresets";
+import { planOrganize } from "./audio/organize";
 import "./App.css";
 
 const BANKS = ["A", "B", "C", "D"];
@@ -143,6 +144,22 @@ function tuneDefault(locked: boolean | undefined, current: boolean, category: Ca
   return target !== null && detectedMidi != null && isTunedCategory(category);
 }
 
+/** A menu switch: the same lit key as the ones under the piano, with its words (and a line of explanation) beside it. */
+function Switch({ label, hint, on, disabled, onChange }: { label: string; hint?: string; on: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className={`menu__switch${disabled ? " menu__switch--locked" : ""}`}>
+      <div className="menu__switch-words">
+        <span className="menu__switch-label">{label}</span>
+        {hint && <span className="menu__switch-hint">{hint}</span>}
+      </div>
+      <button className={`cap cap--side${on ? " cap--on" : ""}`} role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}>
+        <span className="cap__led" />
+        <span className="cap__legend">{on ? "On" : "Off"}</span>
+      </button>
+    </div>
+  );
+}
+
 function App() {
   useOledCell();
   useSafeArea();
@@ -162,17 +179,28 @@ function App() {
   const [normalizing, setNormalizing] = useState(false);
   /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
   const [exportProgress, setExportProgress] = useState("");
-  const [normalize, setNormalize] = useState(saved.normalize ?? false);
-  const [spread, setSpread] = useState(saved.spread ?? false);
+  /** The Mix switch: levels (balance loudness, settings by sound type), bus routing with the bass sidechain, and the melodic spread. */
+  const [mix, setMix] = useState(saved.mix ?? !!(saved.normalize || saved.routeBuses || saved.autoPlayback));
+  const normalize = mix;
+  const spread = mix;
+  const routeBuses = mix;
+  const autoPlayback = mix;
+  /** The Organize switch: pad colours and labels are written on export. */
+  const [organize, setOrganize] = useState(saved.organize ?? saved.autoColor ?? false);
+  const autoColor = organize;
+  /** Every sound's type is settled (by file name or by the user): Drum layouts unlocks. A project that already had its layout on counts. */
+  const [organized, setOrganized] = useState(saved.organized ?? !!saved.layoutOn);
+  /** While sorting the unknown sounds: their original slots in order and which one is up. The screen shows only that sound and the type keys. */
+  const [focus, setFocus] = useState<{ queue: number[]; pos: number } | null>(null);
+  /** A short message over the screen ("Sounds organized..."). */
+  const [notice, setNotice] = useState("");
   /** Pre-rendered normalized audio per pad (by original slot, so it follows a moved pad); only used for playback while Normalize is on. */
   const [normalizedData, setNormalizedData] = useState<Record<number, Float32Array[]>>({});
   const [menuOpen, setMenuOpen] = useState(false);
-  const [autoColor, setAutoColor] = useState(saved.autoColor ?? false);
-  const [routeBuses, setRouteBuses] = useState(saved.routeBuses ?? false);
   const [masterChain, setMasterChain] = useState(saved.masterChain ?? true);
+  const [masterStyle, setMasterStyle] = useState<MasterStyle>(saved.masterStyle ?? "loud");
   const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
   const [packMemory, setPackMemory] = useState<PackMemory>(saved.packMemory ?? "auto");
-  const [autoPlayback, setAutoPlayback] = useState(saved.autoPlayback ?? false);
   const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
@@ -252,6 +280,10 @@ function App() {
       setNormalizedData({});
       setLongSamples([]);
       if (!restore) {
+        // A new project's sounds have not been sorted yet.
+        setFocus(null);
+        setOrganized(false);
+        setOrganize(false);
         setSelected(null);
         setKeyPc(null);
         setTunedTarget(null);
@@ -367,8 +399,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ normalize, spread, autoColor, routeBuses, masterChain, autoPlayback, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
-  }, [normalize, spread, autoColor, routeBuses, masterChain, autoPlayback, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
+    saveState({ mix, organize, organized, masterStyle, masterChain, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
+  }, [mix, organize, organized, masterStyle, masterChain, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -467,9 +499,10 @@ function App() {
   useEffect(() => {
     if (!packSetup.current || loading || analyzing > 0 || Object.keys(pads).length === 0) return;
     packSetup.current = false;
-    setNormalize(true);
-    // The export writes each pad's colour and label for Koala only with this on, so a pack import turns it on.
-    setAutoColor(true);
+    setMix(true);
+    // A pack's folders already named every sound's type, so it counts as organized. The export writes each pad's colour and label for Koala only with Organize on.
+    setOrganize(true);
+    setOrganized(true);
     applyLayout(layout.id);
     past.current = [];
     future.current = [];
@@ -932,9 +965,79 @@ function App() {
 
   useEffect(() => setReferencePitch(a4), [a4]);
 
-  const toggleAutoColor = (on: boolean) => {
-    if (on && !window.confirm("Auto-color pads will replace the existing pad colors and color labels in your project when you export. Continue?")) return;
-    setAutoColor(on);
+  // Sorting: bring each unknown sound's pad up and play it once, so the user hears what they are naming.
+  useEffect(() => {
+    if (!focus) return;
+    const pad = Object.values(latest.current.pads).find((p) => isReal(p) && p.origIndex === focus.queue[focus.pos]);
+    if (!pad) return;
+    setSelected(pad.index);
+    setBank(Math.floor(pad.index / 16));
+    pressPad(pad.index);
+    const timer = window.setTimeout(() => liftPad(pad.index), 1500);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 4500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  /** Ends the sorting: every sound has a type, so Drum layouts unlocks. */
+  const finishOrganize = () => {
+    setFocus(null);
+    setOrganize(true);
+    setOrganized(true);
+    setNotice("Sounds sorted. Drum layouts is now available in the menu.");
+  };
+
+  /** Organize: file names settle the obvious sounds, then the rest are put to the user one at a time. */
+  const startOrganize = () => {
+    const list = Object.values(latest.current.pads)
+      .filter(isReal)
+      .sort((a, b) => a.index - b.index);
+    const plan = planOrganize(list.map((p) => ({ key: p.origIndex, name: p.name, known: categoryHints.current[p.origIndex] !== undefined })));
+    if (plan.byName.size > 0) {
+      recordEdit();
+      setPads((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).map(([i, p]) => {
+            const category = isReal(p) ? plan.byName.get(p.origIndex) : undefined;
+            if (!category || p.category === category) return [i, p];
+            return [i, { ...p, category, ...(p.tuneLocked ? {} : { tune: tuneDefault(false, false, category, p.detectedMidi, tunedTargetRef.current) }) }];
+          }),
+        ),
+      );
+    }
+    if (plan.ask.length === 0) return finishOrganize();
+    setMenuOpen(false);
+    setMode("type");
+    setFocus({ queue: plan.ask, pos: 0 });
+  };
+
+  const toggleOrganize = (on: boolean) => {
+    setOrganize(on);
+    if (on && !organized) startOrganize();
+  };
+
+  /** Next unknown sound, or the end of the sorting. */
+  const nextFocus = () => {
+    if (!focus) return;
+    if (focus.pos + 1 < focus.queue.length) setFocus({ ...focus, pos: focus.pos + 1 });
+    else finishOrganize();
+  };
+
+  /** The cross: leave the sorting early. The sounds already sorted keep their types; Organize and Drum layouts stay off until it is done. */
+  const leaveOrganize = () => {
+    if (
+      !window.confirm(
+        "Sorting your sounds lets KoalaTune colour and label every pad and place each one in the right spot of a drum layout. Drum layouts stays locked until all of them are sorted.\n\nSounds you have already sorted keep their type. Leave anyway?",
+      )
+    )
+      return;
+    setFocus(null);
+    setOrganize(false);
   };
 
   /**
@@ -1060,7 +1163,7 @@ function App() {
           if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
         }
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: routeBuses, masterChain, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: routeBuses, masterChain, masterStyle, arrangement, pans, colors, playback, placeholders: placeholderList, ghosts: ghostExports });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -1112,7 +1215,7 @@ function App() {
   const selectedPad = selected !== null ? pads[selected] : undefined;
 
   /** Hot swap only exists with the finger-drumming layout; without it the screen starts on Tune. */
-  const shownMode: Mode = mode === "swap" && !layout.on ? "tune" : mode;
+  const shownMode: Mode = focus ? "type" : mode === "swap" && !layout.on ? "tune" : mode;
   /** The note a pad is tuned to, or "--" when its tuning is off or there is no key yet. */
   const keyNameOf = (pad: Pad) => {
     const pc = pad.tune ? (pad.keyPc ?? keyPc) : null;
@@ -1229,64 +1332,48 @@ function App() {
                 Redo
               </button>
             </div>
-            <label>
-              <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
-              Balance loudness
-            </label>
-            <button className="menu__button" disabled={!normalize || !hasProject || normalizing} onClick={normalizeNow}>
+            <Switch
+              label="Mix"
+              hint="Balances levels, routes sounds to buses (bass ducks to the kick), sets each sound type's settings and spreads melodic pads"
+              on={mix}
+              onChange={setMix}
+            />
+            <button className="menu__button" disabled={!mix || !hasProject || normalizing} onClick={normalizeNow}>
               {normalizing ? "Normalizing…" : "Normalize now"}
             </button>
-            <label>
-              <input type="checkbox" checked={spread} onChange={(e) => setSpread(e.target.checked)} />
-              Spread melodic pads
-            </label>
-            <label>
-              <input type="checkbox" checked={autoColor} onChange={(e) => toggleAutoColor(e.target.checked)} />
-              Auto-color pads by sound type
-            </label>
-            <label>
-              <input type="checkbox" checked={routeBuses} onChange={(e) => setRouteBuses(e.target.checked)} />
-              Route to buses (bass ducks to kick)
-            </label>
-            <label>
-              <input type="checkbox" checked={masterChain} onChange={(e) => setMasterChain(e.target.checked)} />
-              Heavy, warm master chain
-            </label>
-            <label>
-              <input type="checkbox" checked={padSymbols} onChange={(e) => setPadSymbols(e.target.checked)} />
-              Show symbols on pads
-            </label>
-            <label className="menu__a4">
-              Sample pack memory
-              <select
-                className="menu__select"
-                value={packMemory}
-                onChange={(e) => setPackMemory(e.target.value as PackMemory)}
-                aria-label="Sample pack memory"
-              >
-                <option value="low">Low (96 MB)</option>
-                <option value="auto">Auto ({Math.round(packByteBudget("auto") / 1048576)} MB)</option>
-                <option value="high">High ({Math.round(packByteBudget("high") / 1048576)} MB)</option>
-              </select>
-            </label>
-            <label>
-              <input type="checkbox" checked={autoPlayback} onChange={(e) => setAutoPlayback(e.target.checked)} />
-              Settings by sound type
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={layout.on}
-                disabled={!hasProject || analyzing > 0}
-                onChange={(e) => toggleLayout(e.target.checked)}
-              />
-              Finger drumming layout
-            </label>
+            <Switch label="Master chain" hint="Heavy, warm glue, saturation and limiting on the main output" on={masterChain} onChange={setMasterChain} />
+            <select
+              className="menu__select"
+              value={masterStyle}
+              disabled={!masterChain}
+              onChange={(e) => setMasterStyle(e.target.value as MasterStyle)}
+              aria-label="Master chain style"
+            >
+              {MASTER_STYLES.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <Switch
+              label="Organize"
+              hint="Colours and labels the pads by sound type. Asks about any sound whose name does not say what it is"
+              on={organize}
+              disabled={!hasProject || analyzing > 0}
+              onChange={toggleOrganize}
+            />
+            <Switch
+              label="Drum layouts"
+              hint={organized ? "Arranges the pads for finger drumming" : "Available once Organize has sorted every sound"}
+              on={layout.on}
+              disabled={!hasProject || analyzing > 0 || (!organized && !layout.on)}
+              onChange={toggleLayout}
+            />
             <select
               className="menu__select"
               value={layout.id}
               onChange={(e) => chooseLayout(e.target.value)}
-              disabled={analyzing > 0}
+              disabled={analyzing > 0 || (!organized && !layout.on)}
               aria-label="Finger drumming layout"
             >
               {FINGER_LAYOUTS.map((l) => (
@@ -1297,6 +1384,7 @@ function App() {
             </select>
             <button
               className="menu__button"
+              disabled={!organized && !layout.on}
               onClick={() => {
                 setLayoutPickerOpen(true);
                 setMenuOpen(false);
@@ -1315,6 +1403,20 @@ function App() {
             >
               {addPackStatus || "Add pack"}
             </button>
+            <Switch label="Show symbols on pads" on={padSymbols} onChange={setPadSymbols} />
+            <label className="menu__a4">
+              Sample pack memory
+              <select
+                className="menu__select"
+                value={packMemory}
+                onChange={(e) => setPackMemory(e.target.value as PackMemory)}
+                aria-label="Sample pack memory"
+              >
+                <option value="low">Low (96 MB)</option>
+                <option value="auto">Auto ({Math.round(packByteBudget("auto") / 1048576)} MB)</option>
+                <option value="high">High ({Math.round(packByteBudget("high") / 1048576)} MB)</option>
+              </select>
+            </label>
             <label className="menu__a4">
               A4 reference (Hz)
               <input
@@ -1510,8 +1612,15 @@ function App() {
 
         {/* The deck under the screen: the sound type keys, or the piano with its two keys. Hot swap has none, its list takes the room. */}
         {shownMode === "type" && (
-          <div className="deck">
-            <TypeKeys pad={selectedPad && isReal(selectedPad) ? selectedPad : null} palette={palette} onClassify={classifyPad} />
+          <div className={`deck${focus ? " deck--focus" : ""}`}>
+            <TypeKeys
+              pad={selectedPad && isReal(selectedPad) ? selectedPad : null}
+              palette={palette}
+              onClassify={(pad, category) => {
+                classifyPad(pad, category);
+                if (focus) nextFocus();
+              }}
+            />
           </div>
         )}
         {shownMode === "tune" && (
@@ -1538,8 +1647,8 @@ function App() {
         </div>
 
         <div className="lower">
-        <div className="padzone">
-          <div className="pads">
+        <div className={`padzone${focus ? " padzone--focus" : ""}`}>
+          <div className={`pads${focus ? " pads--focus" : ""}`}>
             {Array.from({ length: 16 }, (_, slot) => {
               const index = shownBank * 16 + slot;
               const pad = pads[index];
@@ -1549,6 +1658,7 @@ function App() {
                 pad?.placeholder && "pad--placeholder",
                 pad?.tune && "pad--tuned",
                 selected === index && "pad--selected",
+                focus && selected === index && "pad--focus",
                 drag?.from === index && "pad--dragging",
                 hover === `pad:${index}` && "pad--target",
               ]
@@ -1611,6 +1721,27 @@ function App() {
           )}
         </div>
         </div>
+
+        {focus && (
+          <div className="focus" role="dialog" aria-label="Sort your sounds">
+            <button className="focus__close" aria-label="Leave sorting" onClick={leaveOrganize}>
+              <svg viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M2 2l8 8M10 2l-8 8" />
+              </svg>
+            </button>
+            <div className="focus__text">
+              <div className="focus__title">What kind of sound is this?</div>
+              <div className="focus__name">{selectedPad ? displayName(selectedPad.name, tags) : ""}</div>
+              <div className="focus__count">
+                {focus.pos + 1} of {focus.queue.length}
+              </div>
+            </div>
+            <button className="focus__skip" onClick={nextFocus}>
+              Skip
+            </button>
+          </div>
+        )}
+        {notice && <div className="notice">{notice}</div>}
 
         {layoutPickerOpen && (
           <LayoutPicker

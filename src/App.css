@@ -1068,6 +1068,162 @@
   opacity: 0.4;
 }
 
+/* ---- menu switches: the same lit key as under the piano ---- */
+.menu__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3cqw;
+}
+
+.menu__switch-words {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8cqw;
+  min-width: 0;
+}
+
+.menu__switch-label {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.menu__switch-hint {
+  font-size: 2.4cqw;
+  line-height: 1.35;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  color: var(--ink3);
+}
+
+.menu__switch .cap--side {
+  flex: none;
+  width: 15cqw;
+  height: 10.5cqw;
+}
+
+.menu__switch .cap--side .cap__legend {
+  bottom: 1.6cqw;
+  font-size: 2.4cqw;
+}
+
+.menu__switch--locked .menu__switch-label {
+  opacity: 0.45;
+}
+
+/* ---- sorting the unknown sounds: everything dark but the type keys and the pad being named ---- */
+.focus {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  gap: 3cqw;
+  padding: max(3cqw, var(--safe-top)) 4.1cqw 0;
+  background: rgba(5, 5, 6, 0.82);
+  animation: focus-in 0.2s ease-out;
+}
+
+@keyframes focus-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.focus__close,
+.focus__skip {
+  flex: none;
+  height: 11.3cqw;
+  border: 0;
+  border-radius: 1.8cqw;
+  background: var(--btn);
+  box-shadow: 0 2px 0 var(--edge);
+  color: var(--ink);
+  font: inherit;
+  font-size: 3cqw;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.focus__close {
+  width: 11.3cqw;
+  display: grid;
+  place-items: center;
+}
+
+.focus__close svg {
+  width: 4.2cqw;
+  height: 4.2cqw;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.focus__skip {
+  padding: 0 4cqw;
+}
+
+.focus__text {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+.focus__title {
+  font-size: 3.4cqw;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.focus__name {
+  margin-top: 1cqw;
+  font-size: 3cqw;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink2, var(--ink));
+}
+
+.focus__count {
+  margin-top: 0.8cqw;
+  font-size: 2.4cqw;
+  letter-spacing: 0.14em;
+  color: var(--ink3);
+}
+
+.deck--focus,
+.padzone--focus {
+  position: relative;
+  z-index: 31;
+}
+
+.pads--focus .pad:not(.pad--focus) {
+  pointer-events: none;
+  filter: brightness(0.28);
+}
+
+.notice {
+  position: absolute;
+  z-index: 15;
+  left: 50%;
+  top: calc(max(3cqw, var(--safe-top)) + 12.5cqw);
+  transform: translateX(-50%);
+  max-width: calc(100% - 8.2cqw);
+  padding: 2cqw 4cqw;
+  border-radius: 99px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 2.8cqw;
+  letter-spacing: 0.06em;
+  text-align: center;
+  box-shadow: 0 1.5cqw 4cqw rgba(0, 0, 0, 0.5);
+}
+
 /* ---- modals (palette, layouts, long samples, extra drums) ---- */
 .palette-backdrop {
   position: absolute;

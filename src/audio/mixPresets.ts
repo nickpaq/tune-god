@@ -78,11 +78,21 @@ export interface MixPreset {
     melodicEq: PluginParams;
   };
   /**
-   * Master chain written, in this order, into an empty master strip (5 slots at most). EQ bands: lo = highpass, mid = bell,
-   * hi = high shelf; freq 20 to 20000 Hz, gain -18 to +18 dB, Q 0.5 to 10.
+   * Master chains written, in this order, into an empty master strip (5 slots at most), one per MasterStyle. EQ bands: lo = highpass,
+   * mid = bell, hi = high shelf; freq 20 to 20000 Hz, gain -18 to +18 dB, Q 0.5 to 10.
    */
-  master: PluginSpec[];
+  master: Record<MasterStyle, PluginSpec[]>;
 }
+
+/**
+ * The two master chains a preset carries. "dynamic" keeps the transients (aims at the reference's 12 dB peak-to-loudness ratio);
+ * "loud" is squashed for about -9 LUFS integrated (ratio about 9 dB). The menu's Master chain switch writes the chosen one.
+ */
+export type MasterStyle = "dynamic" | "loud";
+export const MASTER_STYLES: { id: MasterStyle; name: string }[] = [
+  { id: "dynamic", name: "Dynamic (punchy, about -13 LUFS)" },
+  { id: "loud", name: "Loud (squashed, about -9 LUFS)" },
+];
 
 /** Heavy and warm hip-hop and trap: the kick and 808 lead, the top end is tucked back, the master is pushed and glued. */
 export const HEAVY_WARM_HIP_HOP: MixPreset = {
@@ -134,28 +144,45 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
       "hi freq": 8000, "hi gain": -2, "hi Q": 0.5, // slight shelf cut: warmer
     },
   },
-  master: [
-    {
-      name: "EQ",
-      parameters: {
-        "lo freq": 20, "lo gain": 0, "lo Q": 0.5, // highpass at 20 Hz: only a rumble filter, so the sub is kept
-        "mid freq": 70, "mid gain": 2.5, "mid Q": 0.7, // bell: the weight. Move freq to choose where the low end is pushed
-        "hi freq": 8000, "hi gain": -3, "hi Q": 0.5, // broad shelf cut: the warmth. More negative is darker
+  master: {
+    // DYNAMIC: transients through, a gentle glue, a limiter that only just works.
+    dynamic: [
+      {
+        name: "EQ",
+        parameters: {
+          "lo freq": 20, "lo gain": 0, "lo Q": 0.5, // rumble filter only, so the sub is kept
+          "mid freq": 70, "mid gain": 2.5, "mid Q": 0.7, // bell: the weight. Move freq to choose where the low end is pushed
+          "hi freq": 8000, "hi gain": -3, "hi Q": 0.5, // broad shelf cut: the warmth. More negative is darker
+        },
       },
-    },
-    // DRIVE: parallel saturation. drive 0 to 36 dB, mix 0 to 1, out -90 to 0 dB, oversample 1 = HQ
-    { name: "DRIVE", parameters: { drive: 6, mix: 0.3, out: 0, oversample: 1 } },
-    // COMPRESSOR: slow attack lets the transients through. threshold about -42 to -1.7 dB, ratio 1 to 100, attack 0.01 to 30 ms,
-    // release 10 to 1200 ms, makeup 0/1 (auto make-up gain), visual 0/1 (display only)
-    { name: "COMPRESSOR", parameters: { threshold: -12, ratio: 2, attack: 20, release: 200, makeup: 0, visual: 0 } },
-    // CLIPPER: shaves the peaks before the limiter. input -36 to 36 dB, threshold about -35 to 0 dB (also the curve's softness),
-    // output -36 to 0 dB, oversample 1 = HQ
-    { name: "CLIPPER", parameters: { input: 0, output: 0, threshold: -1.5, oversample: 1 } },
-    // LIMITER: gain is INPUT gain into the limiter, -18 to +18 dB, so this is the master loudness knob. attack 1.5 to 6 ms, release 60 to 1000 ms.
-    // Reference: the gold-standard mix has a 12 dB peak-to-loudness ratio (its absolute loudness is not known: it came through YouTube). At +3 dB our groove had 8.9 dB and at -1 dB 13.5 dB (round 3c) with the limiter idle (peak -4.65 dBFS). Gain moves peak and loudness together until a peak reaches the ceiling, so the ratio only
-    // falls once the limiter works: +4.65 dB reaches the ceiling, about 1.3 dB more of limiting gives 12.2, so +6 dB (about -12.5 LUFS) was the estimate. The target is now -9 LUFS integrated (user choice; the ratio falls to about 9 dB as a result), so +9 dB, to be corrected from the next render. Tune it until a rendered groove measures about 12 dB (scripts/analyzeMixRender.py). Lower = more dynamics, higher = louder.
-    { name: "LIMITER", parameters: { attack: 1.5, release: 100, gain: 9 } },
-  ],
+      // DRIVE: parallel saturation. drive 0 to 36 dB, mix 0 to 1, out -90 to 0 dB, oversample 1 = HQ
+      { name: "DRIVE", parameters: { drive: 6, mix: 0.3, out: 0, oversample: 1 } },
+      // COMPRESSOR: slow attack lets the transients through. threshold about -42 to -1.7 dB, ratio 1 to 100, attack 0.01 to 30 ms,
+      // release 10 to 1200 ms, makeup 0/1 (auto make-up gain), visual 0/1 (display only)
+      { name: "COMPRESSOR", parameters: { threshold: -12, ratio: 2, attack: 20, release: 200, makeup: 0, visual: 0 } },
+      // CLIPPER: shaves the peaks before the limiter. input -36 to 36 dB, threshold about -35 to 0 dB (also the curve's softness), output -36 to 0 dB, oversample 1 = HQ
+      { name: "CLIPPER", parameters: { input: 0, output: 0, threshold: -1.5, oversample: 1 } },
+      // LIMITER: gain is INPUT gain into the limiter, -18 to +18 dB (the master loudness knob), attack 1.5 to 6 ms, release 60 to 1000 ms.
+      // Measured (round 3c): at -1 dB the groove peaked at -4.65 dBFS with the limiter idle and a peak-to-loudness ratio of 13.5 dB. Gain moves peak and loudness
+      // together until a peak reaches the ceiling (+4.65 dB), and the reference's ratio is 12.2 dB, so +6 dB (about 1.3 dB of limiting) is the estimate. Correct it from a render.
+      { name: "LIMITER", parameters: { attack: 1.5, release: 100, gain: 6 } },
+    ],
+    // LOUD: about -9 LUFS integrated, a peak-to-loudness ratio of about 9 dB. Everything here is an estimate until a render measures it (scripts/analyzeMixRender.py).
+    loud: [
+      {
+        name: "EQ",
+        parameters: {
+          "lo freq": 20, "lo gain": 0, "lo Q": 0.5,
+          "mid freq": 70, "mid gain": 2, "mid Q": 0.7, // a little less push than dynamic: the squash adds its own weight
+          "hi freq": 8000, "hi gain": -3, "hi Q": 0.5,
+        },
+      },
+      { name: "DRIVE", parameters: { drive: 8, mix: 0.35, out: 0, oversample: 1 } }, // more saturation: it thickens and shaves peaks before the dynamics stage
+      { name: "COMPRESSOR", parameters: { threshold: -16, ratio: 3, attack: 10, release: 120, makeup: 0, visual: 0 } }, // lower, firmer and faster: it glues the groove tight and pulls the quiet parts up
+      { name: "CLIPPER", parameters: { input: 3, output: 0, threshold: -3, oversample: 1 } }, // drives the master into a harder clip, trading transient peaks for loudness
+      { name: "LIMITER", parameters: { attack: 1.5, release: 61, gain: 7 } }, // fastest release (Koala's minimum is 60.008 ms), and the clipper has already lifted the average by about 3 dB, so less gain than the dynamic chain would need for -9 LUFS (+9 with no clipper drive)
+    ],
+  },
 };
 
 /** Every preset by id, for a menu later. */

@@ -55,7 +55,7 @@ The sidechain source (the kick bus) is fixed by the bus layout in `routing.ts` (
 
 ## 4. Master chain (`master`)
 
-Written, in order, into an empty master strip when "Heavy, warm master chain" is on. Five slots at most. Each entry is a plugin name and its parameters, so a genre can reorder, drop or add plugins.
+Two chains, `master.dynamic` and `master.loud` (type `MasterStyle`), chosen by the menu's Master chain switch and its style list; the chosen one is written, in order, into an empty master strip. Five slots at most. Each entry is a plugin name and its parameters, so a genre can reorder, drop or add plugins.
 
 | Plugin | Parameter | Range | What it does in this preset |
 | --- | --- | --- | --- |
@@ -65,7 +65,7 @@ Written, in order, into an empty master strip when "Heavy, warm master chain" is
 | DRIVE | `drive`, `mix`, `out`, `oversample` | 0 to 36 dB, 0 to 1, -90 to 0 dB, 0/1 | 6 dB at a 30% mix, HQ on: parallel saturation. Raise `mix` for more |
 | COMPRESSOR | `threshold`, `ratio`, `attack`, `release`, `makeup` | about -42 to -1.7 dB, 1 to 100, 0.01 to 30 ms, 10 to 1200 ms, 0/1 | -12 dB, 2:1, 20 ms attack, 200 ms release, auto make-up off: slow glue |
 | CLIPPER | `input`, `threshold`, `output`, `oversample` | see section 3 | -1.5 dB threshold, no drive: shaves peaks before the limiter |
-| LIMITER | `gain`, `attack`, `release` | +-18 dB (input gain), 1.5 to 6 ms, 60 to 1000 ms | -1 dB into the limiter: the master loudness knob (+3 dB made the groove -9.1 LUFS and too squashed against the reference) |
+| LIMITER | `gain`, `attack`, `release` | +-18 dB (input gain), 1.5 to 6 ms, 60 to 1000 ms | The master loudness knob. Dynamic: +6 dB, ratio about 12 dB (reference 12.2), about -13 LUFS. Loud: +7 dB behind a harder clipper (input +3, threshold -3), drive 8 / mix 0.35 and a firmer, faster compressor (-16 dB, 3:1, 10 ms, 120 ms), release 61 ms, for about -9 LUFS and a ratio of about 9 dB. Both are estimates until a render measures them |
 
 Other plugins Koala has that a preset could use (parameters in the reference): STEREOIZER, UTILITY, WARBLE, PLATE REVERB, METER, FREEVERB, BITCOOKER.
 

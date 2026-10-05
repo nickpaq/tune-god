@@ -3,6 +3,7 @@ import type { PadEq, PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
+import type { MasterStyle } from "./mixPresets";
 import { bassSidechain, fillEmptySlots, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
 
@@ -56,13 +57,14 @@ export async function buildTunedKoala(
     busNames,
     sidechain,
     masterChain,
+    masterStyle,
     arrangement,
     pans,
     colors,
     playback,
     placeholders,
     ghosts,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[] } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[] } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -113,7 +115,7 @@ export async function buildTunedKoala(
   if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
-  if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, melodicEq: sidechain, master: masterChain });
+  if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, melodicEq: sidechain, master: masterChain, masterStyle });
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
   const base = project.originalName.replace(/\.koala$/i, "");
@@ -149,7 +151,7 @@ const emptyStrip = (name: string) => ({ chain: [null, null, null, null, null], m
  * Each bus keeps its effects and levels, and an effect only goes into an empty slot (the master chain only into an empty
  * master strip). A project that has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
  */
-async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean; kickClip?: boolean; melodicEq?: boolean }): Promise<void> {
+async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean; masterStyle?: MasterStyle; kickClip?: boolean; melodicEq?: boolean }): Promise<void> {
   const entry = project.zip.file("mixer.json");
   const mixer = entry ? JSON.parse(await entry.async("string")) : { buses: [], master: emptyStrip("MAIN") };
   mixer.buses = Array.isArray(mixer.buses) ? mixer.buses : [];
@@ -174,7 +176,7 @@ async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]
   if (setup.master) {
     const master = (mixer.master ??= emptyStrip("MAIN"));
     master.chain = Array.isArray(master.chain) ? master.chain : [null, null, null, null, null];
-    if (master.chain.every((fx: MixerSlot) => !fx)) fillEmptySlots(master.chain, masterChainEffects());
+    if (master.chain.every((fx: MixerSlot) => !fx)) fillEmptySlots(master.chain, masterChainEffects(setup.masterStyle));
   }
   project.zip.file("mixer.json", JSON.stringify(mixer));
 }
