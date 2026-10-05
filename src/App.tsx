@@ -144,6 +144,34 @@ function tuneDefault(locked: boolean | undefined, current: boolean, category: Ca
   return target !== null && detectedMidi != null && isTunedCategory(category);
 }
 
+/** Pixel art for the screen: each "#" is one lit icon pixel, drawn two screen cells wide so it sits on the grid. */
+const TRASH_ICON = [
+  "...###...",
+  "#########",
+  ".#######.",
+  ".#.#.#.#.",
+  ".#.#.#.#.",
+  ".#.#.#.#.",
+  ".#######.",
+];
+const SKIP_ICON = [
+  "#......#",
+  "##.....#",
+  "###....#",
+  "####...#",
+  "###....#",
+  "##.....#",
+  "#......#",
+];
+function PixelIcon({ rows }: { rows: string[] }) {
+  const cols = rows[0].length;
+  return (
+    <svg className="pixel-icon" viewBox={`0 0 ${cols} ${rows.length}`} style={{ width: `calc(var(--cell) * ${cols * 2})`, height: `calc(var(--cell) * ${rows.length * 2})` }} shapeRendering="crispEdges" aria-hidden="true">
+      {rows.flatMap((row, y) => [...row].map((ch, x) => (ch === "#" ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null)))}
+    </svg>
+  );
+}
+
 /** A menu switch: the same lit key as the ones under the piano, with its words (and a line of explanation) beside it. */
 function Switch({ label, hint, on, disabled, onChange }: { label: string; hint?: string; on: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
   return (
@@ -1539,22 +1567,6 @@ function App() {
         {/* The screen: a black OLED in Silkscreen, with a title bar in inverse video. It grows over the deck's place in Swap mode. */}
         <div className={`screen-wrap screen-wrap--${shownMode}${focus?.started ? " screen-wrap--focus" : ""}`}>
           <section className="screen" aria-label={`Display: ${shownMode}`}>
-            {focus?.started && (
-              <div className="screen__sort">
-                <button className="screen__sort-key" aria-label="Delete this sound" disabled={!selectedPad} onClick={() => selectedPad && trashFocused(selectedPad)}>
-                  <svg viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4" />
-                  </svg>
-                  <span>Delete</span>
-                </button>
-                <button className="screen__sort-key" aria-label="Skip: mark this sound as unknown" disabled={!selectedPad} onClick={() => selectedPad && skipFocused(selectedPad)}>
-                  <svg viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M3 3.5l6 4.5-6 4.5zM12.5 3v10" />
-                  </svg>
-                  <span>Skip</span>
-                </button>
-              </div>
-            )}
             <div className="oled">
               {selectedPad && (
                 <div className="oled__head">
@@ -1597,6 +1609,17 @@ function App() {
                     <span className="dropzone__short">Pick a pack folder</span>
                   </button>
                 </label>
+              ) : focus?.started ? (
+                <div className="sort-keys">
+                  <button className="sort-key" aria-label="Delete this sound" disabled={!selectedPad} onClick={() => selectedPad && trashFocused(selectedPad)}>
+                    <PixelIcon rows={TRASH_ICON} />
+                    <span>Delete</span>
+                  </button>
+                  <button className="sort-key" aria-label="Skip: mark this sound as unknown" disabled={!selectedPad} onClick={() => selectedPad && skipFocused(selectedPad)}>
+                    <PixelIcon rows={SKIP_ICON} />
+                    <span>Skip</span>
+                  </button>
+                </div>
               ) : !selectedPad ? (
                 <div className="screen__message">
                   <strong>{projectName}</strong>
