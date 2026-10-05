@@ -38,7 +38,7 @@ import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
 import { scaleGrid } from "./audio/song/chop";
-import { baseName, checkStems } from "./audio/song/stems";
+import { baseName, checkStems, padTitle } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
@@ -862,7 +862,7 @@ function App() {
     // The cuts were found on the song; the stem may be at another sample rate, so the grid is put on the stem's own frames.
     const onSong = { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, anchors: settings.anchors, bars: settings.bars };
     const grid = scaleGrid(onSong, vocals.sampleRate);
-    const { pads: sections } = makeSectionPads(vocals, grid, freeSongSlots(removePad(pads, vocals.index)));
+    const { pads: sections } = makeSectionPads(vocals, grid, freeSongSlots(removePad(pads, vocals.index)), padTitle(song));
     recordEdit();
     setPads((prev) => {
       const next = removePad(prev, vocals.index);
@@ -1340,7 +1340,7 @@ function App() {
             sampleRate: sectionPads[0].sampleRate,
             sourceSampleId: sectionPads[0].section!.sourceSampleId,
             bars: 8,
-            sections: sectionPads.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars })),
+            sections: sectionPads.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColor ? autoColorOf(p) : undefined, bus: routeBuses ? CATEGORY_BUS.vox : undefined })),
           }
         : undefined;
       const buses = new Map<number, number>();
@@ -1391,7 +1391,9 @@ function App() {
     return p.ghost ? shade(base, 2) : base;
   };
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
-  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? `Section ${p.section.number}` : padLabel(p));
+  /** A section of a chopped song: the song's title, the vocal label and its number, "Toxic Vox 1". */
+  const sectionLabel = (p: Pad): string => [p.section!.title, CATEGORIES[categoryIndex("vox")].label, p.section!.number].filter(Boolean).join(" ");
+  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? sectionLabel(p) : padLabel(p));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   /** The layout's silent pads, written into the exported project. */
   const placeholdersOf = (from: Record<number, Pad>) =>
@@ -1477,7 +1479,8 @@ function App() {
   /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
   const captionOf = (pad: Pad | undefined): string => {
     if (!pad) return "";
-    if (pad.placeholder || pad.ghost || pad.section) return labelOf(pad);
+    if (pad.section) return `${CATEGORIES[categoryIndex("vox")].short} ${pad.section.number}`;
+    if (pad.placeholder || pad.ghost) return labelOf(pad);
     return isReal(pad) && pad.category ? CATEGORIES[categoryIndex(pad.category)].short : "";
   };
   /** The sound type a pad's symbol shows: real sounds and ghosts have one, silent placeholders none. */

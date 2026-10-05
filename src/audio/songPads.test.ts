@@ -43,4 +43,10 @@ describe("makeSectionPads", () => {
     expect(pads.map((p) => p.section!.bars)).toEqual([8, 3, 8]);
     expect(pads.map((p) => p.channelData[0].length)).toEqual([768000, 3 * 96000, 768000]);
   });
+
+  it("classifies the sections as vocals and remembers the song's title for their labels", () => {
+    const { pads } = makeSectionPads(pad(0, 768000 * 2), grid, [48, 49], "Toxic");
+    expect(pads.every((p) => p.category === "vox")).toBe(true);
+    expect(pads.map((p) => p.section!.title)).toEqual(["Toxic", "Toxic"]);
+  });
 });

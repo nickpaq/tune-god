@@ -12,7 +12,7 @@ async function load(file: string): Promise<ParsedKoalaProject> {
   return { zip, samplerJson, originalName: file, pads, padBase: 0 };
 }
 
-const section = (index: number, frames: number): { index: number; label: string; channelData: Float32Array[]; bars?: number } => ({ index, label: `Section ${index - 47}`, channelData: [new Float32Array(frames).fill(0.2)] });
+const section = (index: number, frames: number): { index: number; label: string; channelData: Float32Array[]; bars?: number; color?: string; bus?: number } => ({ index, label: `Section ${index - 47}`, channelData: [new Float32Array(frames).fill(0.2)] });
 
 async function run(file: string, sections: ReturnType<typeof section>[], bpm = 75) {
   const project = await load(file);
@@ -134,6 +134,22 @@ describe("a chopped song in the export", () => {
     const { blob } = await buildTunedKoala(project, [], { song: { bpm: 90, sampleRate: 44100, sourceSampleId: project.samplerJson.pads[0].sampleId, sections: [section(48, 50)], bars: 8 } });
     const out = JSON.parse(await (await JSZip.loadAsync(await blob.arrayBuffer())).file("sampler/sampler.json")!.async("string"));
     expect(out.pads.find((p: any) => /^Section/.test(p.label)).stretching).toBe("true");
+  });
+});
+
+describe("labels, colour and bus of the sections", () => {
+  it("writes the label, and the colour and bus when the app gives them (colouring and routing on)", async () => {
+    const { sampler } = await run("probe-sidechain.koala", [
+      { ...section(48, 50), label: "Toxic Vox 1", color: "#123456", bus: 3 },
+      { ...section(49, 50), label: "Toxic Vox 2" },
+    ]);
+    const added = sampler.pads.filter((p: any) => /^Toxic Vox/.test(p.label));
+    expect(added.map((p: any) => p.label)).toEqual(["Toxic Vox 1", "Toxic Vox 2"]);
+    expect(added[0].color).toBe("#123456");
+    expect(added[0].bus).toBe(3);
+    // not asked: the stem pad's own colour and bus are kept
+    const source = sampler.pads.find((p: any) => !/^Toxic Vox/.test(p.label));
+    expect(added[1].bus).toBe(source.bus);
   });
 });
 

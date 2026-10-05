@@ -27,6 +27,10 @@ export interface SongSectionExport {
   channelData: Float32Array[];
   /** Bars in the section and in its pattern; the song's `bars` when not given. */
   bars?: number;
+  /** The pad's colour (hex), when the app is colouring pads by sound type; the stem pad's own colour is kept when not given. */
+  color?: string;
+  /** The pad's bus, when the app is routing pads to buses; the stem pad's own bus is kept when not given. */
+  bus?: number;
 }
 
 export interface SongExport {
@@ -109,6 +113,8 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
     pad.pad = typeof source?.pad === "string" ? String(section.index + base) : section.index + base;
     pad.sampleId = sampleId;
     pad.label = section.label;
+    if (section.color) pad.color = section.color;
+    if (section.bus !== undefined) pad.bus = section.bus;
     pad.chokeGroup = choke;
     // Koala writes some booleans as strings; keep whichever style the pad already uses.
     pad.oneshot = typeof source?.oneshot === "boolean" ? true : "true";

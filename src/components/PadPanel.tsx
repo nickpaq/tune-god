@@ -40,7 +40,7 @@ export interface Pad {
   /** A bass sound that is an 808 (by its name or folder); a sample pack keeps two of these and two ordinary basses on bank C. */
   is808?: boolean;
   /** Set on a pad that is one 8-bar section of a chopped song: made from the song's pad, written to the export as a new pad with a pattern of its own. */
-  section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Bars in the section: 8 unless the song drops or adds bars there. */ bars: number };
+  section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Bars in the section: 8 unless the song drops or adds bars there. */ bars: number; /** What the song is called (its label in Koala): the sections are labelled "<title> Vox 1", "<title> Vox 2", and so on. */ title?: string };
   tune: boolean;
   /** A key chosen for this pad alone ("Tune one"); it overrides the project key. */
   keyPc?: number;
