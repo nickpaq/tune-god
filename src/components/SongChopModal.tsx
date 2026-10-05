@@ -96,6 +96,15 @@ export function SongChopModal({
   onConfirm: (settings: ChopSettings) => void;
   onClose: () => void;
 }) {
+  /**
+   * Wakes the audio context. iOS only lets a finger lifting (or a click) do it, not one going down, and the tap button starts the song on going down
+   * (a tap must not wait for the finger to lift), so every touch that ends anywhere in the editor wakes it too: a song started on a hit that came first
+   * is heard from the moment it is woken, and is not silent for good.
+   */
+  const wake = () => {
+    const ctx = getAudioContext();
+    if (ctx.state !== "running") void ctx.resume();
+  };
   const sampleRate = pad.sampleRate;
   const totalFrames = pad.channelData[0].length;
   const pyramid = useMemo(() => buildPyramid(pad.channelData), [pad.channelData]);
@@ -220,6 +229,7 @@ export function SongChopModal({
   };
   /** The first hit starts the song and is the first tap: the tap button is the play button until the song is playing. */
   const startWithTap = () => {
+    wake();
     const from = Math.max(0, timeline.current?.centre() ?? 0);
     player.start(from);
     const frame = player.frameNow() ?? from;
@@ -475,7 +485,7 @@ export function SongChopModal({
 
   return (
     <div className="palette-backdrop" onClick={onClose}>
-      <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
+      <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => (wake(), e.stopPropagation())} onPointerUp={wake} onTouchEnd={wake}>
         <div className="chop__head">
           <span>{phase === "tap" ? "Tap the tempo" : "Pick the sections"} · v{__APP_VERSION__}</span>
           <button onClick={onClose} aria-label="Close">
