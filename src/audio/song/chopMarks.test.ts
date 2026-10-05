@@ -65,7 +65,7 @@ describe("chop markers", () => {
   });
 
   it("follow the grid when a downbeat marker shifts it", () => {
-    const grid = gridWithMarks(base, [3040]);
+    const grid = gridWithMarks(base, { downbeats: [3040], oneOne: null });
     expect(chopLines(grid, [3000])).toEqual([4]);
     expect(lineFrame(grid, 4)).toBe(3040);
   });
