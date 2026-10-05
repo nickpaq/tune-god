@@ -1811,7 +1811,7 @@
   height: calc(var(--cell) * 14);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: calc(var(--cell) * 2);
   font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
 }

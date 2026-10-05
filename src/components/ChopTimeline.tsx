@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
-import { isDrag, viewUnderFinger } from "../audio/song/zoom";
+import { isDrag, spanAfterDrag, viewUnderFinger, zoomRate, zoomRoom, zoomTravel } from "../audio/song/zoom";
 import { isBarLine, lineFrame, linesBetween, type TapGrid } from "../audio/song/tapGrid";
 
 /** Lines closer together than this (CSS pixels) are not drawn (beats first, then bars). */
@@ -9,6 +9,8 @@ const MIN_LINE_PX = 7;
 const FLAG_H = 14;
 /** The closest view, in seconds across. */
 const MIN_SPAN_SECONDS = 0.25;
+/** The cursor jumps onto a grid line or marker this close (CSS pixels) while scrubbing. */
+const MAGNET_PX = 10;
 /** How much of the song the first view shows, in seconds. */
 const START_SECONDS = 12;
 
@@ -33,7 +35,7 @@ function formatTime(seconds: number): string {
 
 /**
  * The song's waveform in the screen's colours, scrolling behind a line fixed in the middle: that line is the cursor, where markers are put and where
- * the song plays from. Dragging scrubs (the waveform follows the finger), the buttons zoom. Over it: a line for every beat (the first beat of each bar
+ * the song plays from. Dragging scrubs (the waveform follows the finger, and the line is pulled onto the nearest grid line or marker), and dragging down zooms in, up zooms out. Over it: a line for every beat (the first beat of each bar
  * stronger), the sections between chop markers in their colours, the chop markers (flag on top, numbered) and the downbeat markers (flag below).
  */
 export const ChopTimeline = forwardRef<
@@ -61,9 +63,16 @@ export const ChopTimeline = forwardRef<
   latest.current = { grid, chops, downbeats, oneOne, sections, onScrub };
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
-  const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number } | null>(null);
+  const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number; span: number; y0: number; room: number } | null>(null);
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
+
+  /** The lines shown at this zoom: every beat, or only the bars when the beats are too close together, or none. */
+  const shownLines = (g: TapGrid, start: number, span: number, widthPx: number): number[] => {
+    const beatPx = (g.segments[0].beatFrames * widthPx) / span;
+    const lines = linesBetween(g, Math.max(0, start), Math.min(total, start + span));
+    return beatPx >= MIN_LINE_PX ? lines : beatPx * g.beatsPerBar >= MIN_LINE_PX ? lines.filter((n) => isBarLine(g, n)) : [];
+  };
 
   const draw = useCallback(() => {
     const el = canvas.current;
@@ -119,10 +128,7 @@ export const ChopTimeline = forwardRef<
 
     // The grid's lines: beats light, the first beat of each bar stronger. Too close together and the beats go first, then the bars.
     if (g) {
-      const beatPx = (g.segments[0].beatFrames * w) / ratio / span;
-      const lines = linesBetween(g, Math.max(0, start), Math.min(total, start + span));
-      const drawn = beatPx >= MIN_LINE_PX ? lines : beatPx * g.beatsPerBar >= MIN_LINE_PX ? lines.filter((n) => isBarLine(g, n)) : [];
-      for (const n of drawn) {
+      for (const n of shownLines(g, start, span, w / ratio)) {
         const bar = isBarLine(g, n);
         ctx.fillStyle = ink;
         ctx.globalAlpha = bar ? 0.6 : 0.2;
@@ -210,7 +216,26 @@ export const ChopTimeline = forwardRef<
     e.currentTarget.setPointerCapture(e.pointerId);
     if (drag.current) return;
     const { cursor, span } = view.current;
-    drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span };
+    drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span, y0: e.clientY, room: zoomRoom(e.clientY, window.innerHeight) };
+  };
+
+  /** The nearest grid line or marker to a frame, if it is within the magnet's reach at this zoom. */
+  const magnet = (frame: number, span: number): number => {
+    const { grid: g, chops: cuts, downbeats: downs, oneOne: one } = latest.current;
+    const widthPx = canvas.current!.clientWidth;
+    const reach = (MAGNET_PX * span) / widthPx;
+    const targets = [...cuts, ...downs, ...(one === null ? [] : [one])];
+    if (g) for (const n of shownLines(g, frame - span, span * 2, widthPx * 2)) targets.push(lineFrame(g, n));
+    let best = frame;
+    let distance = reach;
+    for (const t of targets) {
+      const d = Math.abs(t - frame);
+      if (d <= distance) {
+        distance = d;
+        best = t;
+      }
+    }
+    return best;
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -221,23 +246,25 @@ export const ChopTimeline = forwardRef<
       if (!isDrag(e.clientX - d.startX, e.clientY - d.startY)) return;
       d.moved = true;
       // Pin what is under the finger now, so the waveform does not jump by the distance the tap threshold swallowed.
-      d.pivot = view.current.cursor - view.current.span / 2 + across(e.clientX) * view.current.span;
+      d.span = view.current.span;
+      d.pivot = view.current.cursor - d.span / 2 + across(e.clientX) * d.span;
+      d.y0 = e.clientY;
+      d.room = zoomRoom(e.clientY, window.innerHeight);
       latest.current.onScrub();
     }
-    // The point of the waveform that was under the finger stays under it: the cursor ends up wherever that puts the middle of the view.
-    const { span } = view.current;
+    // Ableton style: sideways drags the waveform, and the point under the finger stays under it; dragging down zooms in and up zooms out, the same
+    // ratio for every equal step, once the finger has passed a small dead zone.
+    const resting = Math.max(d.span, Math.min(total, START_SECONDS * sampleRate));
+    const rate = zoomRate(resting, d.room, minSpan);
+    const span = spanAfterDrag(d.span, zoomTravel(e.clientY - d.y0), rate, total, minSpan);
     const start = viewUnderFinger(d.pivot, across(e.clientX), span);
-    setCursor(start + span / 2);
+    // The line stays in the middle; it is pulled onto the nearest grid line or marker when one is close.
+    view.current = { cursor: view.current.cursor, span };
+    setCursor(magnet(Math.min(total, Math.max(0, start + span / 2)), span));
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (drag.current?.id === e.pointerId) drag.current = null;
-  };
-
-  const zoom = (factor: number) => {
-    const span = Math.min(total, Math.max(minSpan, view.current.span * factor));
-    view.current = { cursor: view.current.cursor, span };
-    draw();
   };
 
   return (
@@ -252,13 +279,7 @@ export const ChopTimeline = forwardRef<
         onPointerCancel={onPointerUp}
       />
       <div className="chop-timeline__bar">
-        <button className="chop__btn" onClick={() => zoom(2)} aria-label="Zoom out">
-          −
-        </button>
         <span ref={time} className="chop-timeline__range" />
-        <button className="chop__btn" onClick={() => zoom(0.5)} aria-label="Zoom in">
-          +
-        </button>
       </div>
     </div>
   );
