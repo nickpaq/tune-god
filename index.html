@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- The same viewport and web app meta tags as KoalaTune, so it installs and renders the same way. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#222326" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Viewport Test" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<title>Viewport Test</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #000; overscroll-behavior: none; -webkit-user-select: none; user-select: none; touch-action: none; }
+  /* Same as KoalaTune: fixed, pinned to the top, height from the page's own 100%. */
+  html, body { position: fixed; top: 0; left: 0; right: 0; height: 100%; overflow: hidden; }
+  /* A colour gradient down the whole fixed box: red at the top through green to blue at the bottom, so any cut-off shows as a hard edge. */
+  #sky { position: fixed; inset: 0; background: linear-gradient(180deg, #ff2d2d 0%, #ffb300 25%, #35d96a 50%, #20b6ff 75%, #5a3cff 100%); }
+  .line { position: fixed; left: 0; right: 0; height: 0; border-top: 1px solid rgba(0,0,0,.55); pointer-events: none; }
+  .line.major { border-top: 2px solid #000; }
+  .tag { position: absolute; font: 700 11px/1 ui-monospace, Menlo, monospace; color: #000; background: rgba(255,255,255,.85); padding: 1px 3px; }
+  .tag.l { left: 134px; top: 2px; }
+  .tag.r { right: 4px; top: 2px; }
+  /* bars: each is a position:fixed box from top:0 with a different way of asking for "full height" */
+  .bar { position: fixed; top: 0; width: 16px; border: 2px solid #000; pointer-events: none; }
+  .bar span { position: absolute; top: 4px; left: 50%; transform-origin: 0 0; transform: rotate(90deg) translateY(-50%); white-space: nowrap; font: 700 11px/1 ui-monospace, Menlo, monospace; color: #000; background: rgba(255,255,255,.9); padding: 1px 3px; }
+  #b-vh { left: 4px; height: 100vh; background: rgba(255,0,0,.5); }
+  #b-dvh { left: 22px; height: 100dvh; background: rgba(0,170,0,.5); }
+  #b-svh { left: 40px; height: 100svh; background: rgba(0,0,255,.5); }
+  #b-lvh { left: 58px; height: 100lvh; background: rgba(255,255,0,.6); }
+  #b-pct { left: 76px; height: 100%; background: rgba(255,255,255,.55); }
+  #b-inner { left: 94px; background: rgba(0,255,255,.55); }
+  #b-screen { left: 112px; background: rgba(255,0,255,.45); }
+  #top, #bottom { position: fixed; left: 130px; right: 0; height: 22px; font: 700 12px/22px ui-monospace, Menlo, monospace; color: #fff; text-align: center; pointer-events: none; }
+  #top { top: 0; background: #000; }
+  #bottom { bottom: 0; background: #d0007a; }
+  #panel { position: fixed; left: 6px; right: 6px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,.84); color: #fff; font: 600 11px/1.45 ui-monospace, Menlo, monospace; padding: 8px 10px; border-radius: 8px; pointer-events: none; white-space: pre; overflow: hidden; }
+  #panel b { color: #7dffb0; }
+  #hit { position: fixed; width: 44px; height: 44px; margin: -22px 0 0 -22px; border: 2px solid #fff; border-radius: 50%; display: none; pointer-events: none; }
+  #hit::after { content: ""; position: absolute; left: 50%; top: -1000px; bottom: -1000px; border-left: 1px solid #fff; }
+  #hit::before { content: ""; position: absolute; top: 50%; left: -1000px; right: -1000px; border-top: 1px solid #fff; }
+  #probe { position: fixed; visibility: hidden; left: 0; top: 0; width: 0; height: 0;
+           padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); }
+  #probe-vh, #probe-dvh, #probe-svh, #probe-lvh { position: fixed; visibility: hidden; left: 0; top: 0; width: 0; }
+  #probe-vh { height: 100vh; } #probe-dvh { height: 100dvh; } #probe-svh { height: 100svh; } #probe-lvh { height: 100lvh; }
+  #probe-bottom { position: fixed; visibility: hidden; left: 0; bottom: 0; width: 0; height: 0; }
+  #probe-right { position: fixed; visibility: hidden; top: 0; right: 0; width: 0; height: 0; }
+</style>
+</head>
+<body>
+<div id="sky"></div>
+<div id="lines"></div>
+<div class="bar" id="b-vh"><span id="t-vh"></span></div>
+<div class="bar" id="b-dvh"><span id="t-dvh"></span></div>
+<div class="bar" id="b-svh"><span id="t-svh"></span></div>
+<div class="bar" id="b-lvh"><span id="t-lvh"></span></div>
+<div class="bar" id="b-pct"><span id="t-pct"></span></div>
+<div class="bar" id="b-inner"><span id="t-inner"></span></div>
+<div class="bar" id="b-screen"><span id="t-screen"></span></div>
+<div id="top">position:fixed; top:0</div>
+<div id="bottom">position:fixed; bottom:0</div>
+<div id="panel"></div>
+<div id="hit"></div>
+<div id="probe"></div><div id="probe-vh"></div><div id="probe-dvh"></div><div id="probe-svh"></div><div id="probe-lvh"></div><div id="probe-bottom"></div><div id="probe-right"></div>
+<script>
+(function () {
+  var VERSION = "v1";
+  var lines = document.getElementById("lines");
+  var panel = document.getElementById("panel");
+  var hit = document.getElementById("hit");
+  var maxTouch = { x: 0, y: 0 }, lastTouch = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var h = function (id) { return Math.round($(id).getBoundingClientRect().height * 100) / 100; };
+
+  // Grid: a numbered line every 50 px from the top of the fixed box (left tag), plus the same line numbered from the bottom of the layout viewport (right tag).
+  function drawLines() {
+    var total = Math.max(screen.height, innerHeight) + 150, out = "";
+    for (var y = 0; y <= total; y += 50) {
+      var major = y % 100 === 0;
+      out += '<div class="line' + (major ? " major" : "") + '" style="top:' + y + 'px"><span class="tag l">' + y + '</span></div>';
+    }
+    var bottomUp = "";
+    for (var d = 0; d <= total; d += 50) {
+      bottomUp += '<div class="line" style="bottom:' + d + 'px;top:auto;border-top:0;border-bottom:1px dashed rgba(0,0,0,.6)"><span class="tag r" style="top:auto;bottom:2px">b' + d + '</span></div>';
+    }
+    lines.innerHTML = out + bottomUp;
+  }
+
+  function mode() {
+    var m = [];
+    ["fullscreen", "standalone", "minimal-ui", "browser"].forEach(function (q) { if (matchMedia("(display-mode: " + q + ")").matches) m.push(q); });
+    return m.join(",") || "none";
+  }
+
+  function update() {
+    var vv = window.visualViewport;
+    var pad = getComputedStyle($("probe"));
+    var inset = [pad.paddingTop, pad.paddingRight, pad.paddingBottom, pad.paddingLeft].map(function (v) { return parseFloat(v); }).join(" / ");
+    var sty = function (id, label, px) { $(id).textContent = label + " " + Math.round(px); };
+    $("b-inner").style.height = innerHeight + "px";
+    $("b-screen").style.height = screen.height + "px";
+    sty("t-vh", "100vh", h("probe-vh")); sty("t-dvh", "100dvh", h("probe-dvh")); sty("t-svh", "100svh", h("probe-svh")); sty("t-lvh", "100lvh", h("probe-lvh"));
+    sty("t-pct", "100% (html)", document.documentElement.getBoundingClientRect().height);
+    sty("t-inner", "innerHeight", innerHeight); sty("t-screen", "screen.height", screen.height);
+    var bottomEdge = Math.round($("probe-bottom").getBoundingClientRect().bottom * 100) / 100;
+    var rightEdge = Math.round($("probe-right").getBoundingClientRect().right * 100) / 100;
+    var bodyH = Math.round(document.body.getBoundingClientRect().height * 100) / 100;
+    var el = null; try { el = document.elementFromPoint(20, Math.max(0, Math.min(screen.height - 2, innerHeight + 30))); } catch (e) {}
+    var r2 = function (n) { return Math.round(n * 100) / 100; };
+    var lines2 = [
+      "<b>VIEWPORT TEST " + VERSION + "</b>  " + new Date().toLocaleTimeString(),
+      "<b>display-mode</b> " + mode() + "  <b>standalone</b> " + String(navigator.standalone),
+      "<b>orientation</b> " + (matchMedia("(orientation: portrait)").matches ? "portrait" : "landscape") + "  <b>dpr</b> " + devicePixelRatio,
+      "",
+      "<b>inner</b>  " + innerWidth + " x " + innerHeight + "   <b>outer</b> " + outerWidth + " x " + outerHeight,
+      "<b>html client</b> " + document.documentElement.clientWidth + " x " + document.documentElement.clientHeight + "  <b>body</b> h " + bodyH,
+      "<b>visualViewport</b> " + (vv ? r2(vv.width) + " x " + r2(vv.height) + " top " + r2(vv.offsetTop) + " x" + vv.scale : "none"),
+      "<b>screen</b> " + screen.width + " x " + screen.height + "  <b>avail</b> " + screen.availWidth + " x " + screen.availHeight,
+      "",
+      "<b>100vh/dvh/svh/lvh</b> " + h("probe-vh") + " / " + h("probe-dvh") + " / " + h("probe-svh") + " / " + h("probe-lvh"),
+      "<b>fixed bottom:0 at y</b> " + bottomEdge + "  <b>right:0 at x</b> " + rightEdge,
+      "<b>screen.h - inner.h</b> " + (screen.height - innerHeight),
+      "<b>safe area t/r/b/l</b> " + inset + " px",
+      "",
+      "<b>last touch</b> " + (lastTouch ? "x " + Math.round(lastTouch.x) + " y " + Math.round(lastTouch.y) : "tap the screen, bottom edge too"),
+      "<b>max touch y</b> " + Math.round(maxTouch.y) + "  (inner.h " + innerHeight + ")",
+      "<b>element at inner.h+30</b> " + (el ? el.id || el.tagName : "null")
+    ];
+    panel.innerHTML = lines2.join("\n");
+  }
+
+  function touch(e) {
+    var t = (e.touches && e.touches[0]) || e.changedTouches && e.changedTouches[0] || e;
+    if (!t) return;
+    lastTouch = { x: t.clientX, y: t.clientY };
+    maxTouch.x = Math.max(maxTouch.x, t.clientX); maxTouch.y = Math.max(maxTouch.y, t.clientY);
+    hit.style.display = "block"; hit.style.left = t.clientX + "px"; hit.style.top = t.clientY + "px";
+    update();
+  }
+  ["touchstart", "touchmove", "touchend", "mousedown", "mousemove"].forEach(function (n) { addEventListener(n, touch, { passive: true }); });
+  document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+
+  drawLines(); update();
+  ["resize", "orientationchange", "pageshow", "scroll"].forEach(function (n) { addEventListener(n, function () { drawLines(); update(); }); });
+  if (window.visualViewport) { visualViewport.addEventListener("resize", update); visualViewport.addEventListener("scroll", update); }
+  setInterval(update, 1000);
+})();
+</script>
+</body>
+</html>
