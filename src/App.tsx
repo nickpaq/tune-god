@@ -732,6 +732,12 @@ function App() {
       const source = real.find((p) => p.origIndex === g.sourceKey);
       if (source) next[g.index] = makeGhostPad(g.index, g.kind, source);
     }
+    // A chopped song's sections are not part of the arrangement: they keep their pad (taking it from a blank placeholder), or move to a free one.
+    for (const p of Object.values(cur)) {
+      if (!p.section) continue;
+      const at = !next[p.index] || next[p.index].placeholder?.kind === "empty" ? p.index : freeSongSlots(next)[0];
+      if (at !== undefined) next[at] = { ...p, index: at };
+    }
     return next;
   };
 
@@ -778,6 +784,12 @@ function App() {
       const wanted = cur.layout.pre[p.origIndex] ?? p.index;
       const index = next[wanted] ? (nextEmptyPad(next, 0) ?? wanted) : wanted;
       next[index] = { ...p, index };
+    }
+    // A chopped song's sections stay where they are, or move to the first free pad if a sound has gone back to theirs.
+    for (const p of Object.values(cur.pads)) {
+      if (!p.section) continue;
+      const index = next[p.index] ? nextEmptyPad(next, 0) : p.index;
+      if (index !== null) next[index] = { ...p, index };
     }
     setPads(next);
     setLayout((l) => ({ ...l, on: false, pre: {} }));
@@ -871,21 +883,10 @@ function App() {
     const rest = removePad(removePad(pads, vocals.index), song.index);
     const layoutId = layout.on ? layout.id : FINGER_LAYOUTS[0].id;
     const next = layout.on ? { ...rest } : arrangeInto(rest, layoutId);
-    // Sections from an earlier chop are not part of the arrangement: they stay where they were.
-    for (const p of Object.values(rest)) if (p.section && !next[p.index]) next[p.index] = p;
-    let sections: Pad[];
-    try {
-      sections = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(next), palette.colors).pads;
-    } catch (err) {
-      console.error(err);
-      window.alert("The chop failed, so nothing was changed: the song and its vocals are still there.");
-      return;
-    }
-    const wanted = Math.min(plans.length, freeSongSlots(next).length);
-    // A quiet section is fine (a break), but a result that is all silence or has an empty file means the cut went wrong.
-    const rendered = sections.every((s) => s.channelData.length > 0 && s.channelData[0].length > 0) && sections.some((s) => s.channelData.some((ch) => ch.some((v) => v !== 0)));
-    if (sections.length === 0 || sections.length < wanted || !rendered) {
-      window.alert("The chop did not produce every section (a cut came out empty), so nothing was changed: the song and its vocals are still there.");
+    const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(next), palette.colors);
+    // The song and the stem are only deleted once the sections are made; with nowhere to put them nothing is changed.
+    if (sections.length === 0) {
+      window.alert("There is no free pad for the sections, so nothing was changed: the song and its vocals are still there. Delete a few pads and chop again.");
       return;
     }
     recordEdit();

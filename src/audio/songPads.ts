@@ -6,10 +6,18 @@ import { sliceSection, type SectionPlan } from "./song/chop";
 /** Section pads have no project slot, so their stable id sits above the placeholders' and ghosts'. */
 const SECTION_ORIG_BASE = 3000;
 
-/** The empty pad slots sections can go on: the fourth bank first, then the others from the back. */
+/**
+ * The pad slots sections can go on: the fourth bank first, then the others from the back. A slot is free when nothing is on it or only a
+ * blank "Empty pad" placeholder (a drum layout fills every unused slot with one; the section replaces it). A "missing" placeholder (a kit slot
+ * waiting for its drum) is not free.
+ */
 export function freeSongSlots(pads: Record<number, Pad>): number[] {
   const slots: number[] = [];
-  for (let bank = 3; bank >= 0; bank--) for (let i = 0; i < 16; i++) if (!pads[bank * 16 + i]) slots.push(bank * 16 + i);
+  for (let bank = 3; bank >= 0; bank--)
+    for (let i = 0; i < 16; i++) {
+      const pad = pads[bank * 16 + i];
+      if (!pad || pad.placeholder?.kind === "empty") slots.push(bank * 16 + i);
+    }
   return slots;
 }
 

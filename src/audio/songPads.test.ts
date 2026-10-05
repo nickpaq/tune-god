@@ -13,6 +13,18 @@ describe("freeSongSlots", () => {
     expect(slots.indexOf(32)).toBe(slots.indexOf(63) + 1);
     expect(slots).not.toContain(3);
   });
+
+  it("counts a blank Empty pad placeholder as free, but not a missing kit slot (a drum layout fills every unused slot with one)", () => {
+    const empty = (index: number): Pad => ({ ...pad(index), placeholder: { kind: "empty", label: "Empty pad" } });
+    const missing = (index: number): Pad => ({ ...pad(index), placeholder: { kind: "missing", label: "add snare" } });
+    const grid: Record<number, Pad> = {};
+    for (let i = 0; i < 64; i++) grid[i] = i < 16 ? missing(i) : i === 20 ? pad(20) : empty(i);
+    const slots = freeSongSlots(grid);
+    expect(slots.slice(0, 2)).toEqual([48, 49]);
+    expect(slots).toHaveLength(47);
+    expect(slots).not.toContain(20);
+    expect(slots.some((s) => s < 16)).toBe(false);
+  });
 });
 
 describe("makeSectionPads", () => {
