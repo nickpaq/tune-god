@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approach, approachSpan, defaultSpan, dragStep, MIN_SPAN_FRAMES, spanAt, viewStart, zoomDepth, zoomRoom } from "./zoom";
+import { approach, approachSpan, centredStart, clampViewStart, defaultSpan, dragStep, isDrag, MIN_SPAN_FRAMES, spanAt, TAP_SLOP_PX, viewStart, zoomDepth, zoomRoom } from "./zoom";
 
 describe("spanAt", () => {
   const resting = 4_000_000;
@@ -98,5 +98,39 @@ describe("approach", () => {
     }
     for (const r of ratios) expect(r).toBeCloseTo(ratios[0], 9);
     expect(approachSpan(400, target, 100_000)).toBeCloseTo(target, 0);
+  });
+});
+
+describe("isDrag", () => {
+  it("is a tap until the finger has travelled the slop in any direction", () => {
+    expect(isDrag(0, 0)).toBe(false);
+    expect(isDrag(TAP_SLOP_PX - 1, 0)).toBe(false);
+    expect(isDrag(0, -(TAP_SLOP_PX - 1))).toBe(false);
+    expect(isDrag(TAP_SLOP_PX, 0)).toBe(true);
+    expect(isDrag(0, TAP_SLOP_PX)).toBe(true);
+    // diagonal: 5 and 5 is 7.07, a tap; 6 and 6 is 8.49, a drag
+    expect(isDrag(5, 5)).toBe(false);
+    expect(isDrag(6, 6)).toBe(true);
+  });
+});
+
+describe("centring a point", () => {
+  it("puts the point in the middle of the view", () => {
+    const span = 1_000;
+    const start = centredStart(5_000, span);
+    expect((5_000 - start) / span).toBe(0.5);
+  });
+
+  it("lets the very first and last frames of the song be centred, which a view held inside the song could not", () => {
+    const total = 4_000_000;
+    const span = 2_000_000;
+    // bar 1 is 1.1 s in at 44.1 kHz: centring it needs a view that starts before the song
+    expect(clampViewStart(centredStart(48510, span), span, total)).toBe(centredStart(48510, span));
+    expect(clampViewStart(centredStart(total, span), span, total)).toBe(centredStart(total, span));
+  });
+
+  it("still stops the view running further off the song than half its width", () => {
+    expect(clampViewStart(-5_000_000, 2_000_000, 4_000_000)).toBe(-1_000_000);
+    expect(clampViewStart(9_000_000, 2_000_000, 4_000_000)).toBe(3_000_000);
   });
 });

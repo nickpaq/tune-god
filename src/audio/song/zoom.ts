@@ -66,3 +66,24 @@ export function approach(value: number, target: number, dtMs: number, tauMs = SE
 export function approachSpan(span: number, target: number, dtMs: number, tauMs = SETTLE_TAU_MS): number {
   return span * Math.pow(target / span, 1 - Math.exp(-Math.max(0, dtMs) / tauMs));
 }
+
+/** A finger that has travelled less than this (px) from where it grabbed a tab has only tapped it: the tab stays exactly where it is. */
+export const TAP_SLOP_PX = 8;
+
+/** True once a finger has moved far enough from where it grabbed to be a drag and not a tap. */
+export function isDrag(dx: number, dy: number, slop = TAP_SLOP_PX): boolean {
+  return Math.hypot(dx, dy) >= slop;
+}
+
+/** The first frame in view that puts `frame` in the middle of a view `span` frames across. */
+export function centredStart(frame: number, span: number): number {
+  return frame - span / 2;
+}
+
+/**
+ * Keeps a view where something of the song is in it. The view may run past either end of the song by up to half its width, so a point at the very
+ * start or end (bar 1 is often a second in) can be brought to the middle.
+ */
+export function clampViewStart(start: number, span: number, totalFrames: number): number {
+  return Math.min(Math.max(-span / 2, start), totalFrames - span / 2);
+}

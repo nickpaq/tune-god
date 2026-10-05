@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { getAudioContext } from "../audio/decode";
 import { prepareBuffer, startPad, type PadHandle } from "../audio/player";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
-import { approach, approachSpan, defaultSpan, dragStep, LATCH_DRAG_PX, spanAt, viewStart, zoomDepth, zoomRoom, type GrabbedView } from "../audio/song/zoom";
+import { approach, approachSpan, centredStart, clampViewStart, defaultSpan, dragStep, isDrag, LATCH_DRAG_PX, spanAt, viewStart, zoomDepth, zoomRoom, type GrabbedView } from "../audio/song/zoom";
 
 /** Size of a chop point's tab, in CSS pixels: wide enough for a thumb, and its top comes to a point. */
 const TAB_WIDTH = 28;
@@ -22,8 +22,11 @@ interface TabDrag {
   id: number;
   /** Position in `cuts` of the grabbed tab. */
   cut: number;
+  startX: number;
   startY: number;
   lastX: number;
+  /** False until the finger has travelled further than a tap: until then the tab has not moved and a release only centres it. */
+  moved: boolean;
   /** Where the finger is now, kept up to date even while the marker is the playhead and not following it. */
   fingerX: number;
   fingerY: number;
@@ -117,7 +120,7 @@ export function ChopTimeline({
   const clicksOn = useRef(true);
   clicksOn.current = clicks;
 
-  const clampStart = useCallback((start: number, span: number) => Math.min(Math.max(0, start), Math.max(0, total - span)), [total]);
+  const clampStart = useCallback((start: number, span: number) => clampViewStart(start, span, total), [total]);
 
   const draw = useCallback(() => {
     const el = canvas.current;
@@ -240,16 +243,15 @@ export function ChopTimeline({
     return () => window.clearTimeout(timer);
   }, [pyramid, sampleRate]);
 
-  // Choosing a cut from outside (the nudge buttons, a new song) brings it into view.
+  const centreRef = useRef<(cut: number) => void>(() => undefined);
+
+  // Choosing a cut from outside (the nudge buttons, a new song) brings it into view, in the middle.
   const chosenFrame = cuts[selected];
   useEffect(() => {
     if (drag.current || playback.current || chosenFrame === undefined) return;
     const { start, span } = view.current;
-    if (chosenFrame < start || chosenFrame > start + span) {
-      view.current = { start: clampStart(chosenFrame - span / 2, span), span };
-      draw();
-    }
-  }, [selected, chosenFrame, clampStart, draw]);
+    if (chosenFrame < start || chosenFrame > start + span) centreRef.current(selected);
+  }, [selected, chosenFrame]);
 
   /** Where the finger holding a marker is across the view (0 = left edge, 1 = right). */
   const fingerAcross = (d: TabDrag) => {
@@ -281,6 +283,15 @@ export function ChopTimeline({
   /** The point stays where it was put; the view eases back out around it, keeping it at the same place across the screen. */
   const easeBackOut = (grab: GrabbedView, restingSpan: number) =>
     animateView(() => ({ start: clampStart(grab.frame - grab.across * restingSpan, restingSpan), span: restingSpan }));
+
+  /** The view eases to put a cut in the middle, at the zoom it has now. */
+  const centreOn = (cut: number) => {
+    const frame = latest.current.cuts[cut];
+    if (frame === undefined) return;
+    const span = view.current.span;
+    animateView(() => ({ start: clampStart(centredStart(latest.current.cuts[cut] ?? frame, span), span), span }));
+  };
+  centreRef.current = centreOn;
 
   /** After a pause: the marker slides from the middle back under the finger, carrying the waveform, then the drag carries on. */
   const settleUnderFinger = (d: TabDrag, frame: number) => {
@@ -322,7 +333,10 @@ export function ChopTimeline({
     if (p.grabbed) {
       // The marker was the playhead: it keeps the place it got to.
       latest.current.onMoveCut(p.cut, frame);
-      if (d && d.kind === "tab" && d.cut === p.cut) settleUnderFinger(d, frame);
+      if (d && d.kind === "tab" && d.cut === p.cut) {
+        d.moved = true;
+        settleUnderFinger(d, frame);
+      }
       else {
         latest.current.onReleaseCut(p.cut);
         easeBackOut({ frame, across: 0.5, span: view.current.span }, resting);
@@ -441,8 +455,10 @@ export function ChopTimeline({
         kind: "tab",
         id: e.pointerId,
         cut: hit,
+        startX: e.clientX,
         startY: e.clientY,
         lastX: e.clientX,
+        moved: false,
         fingerX: e.clientX,
         fingerY: e.clientY,
         room: zoomRoom(e.clientY, window.innerHeight),
@@ -472,6 +488,13 @@ export function ChopTimeline({
       d.lastX = e.clientX;
       return;
     }
+    // A tap must not nudge the point: nothing moves until the finger has gone further than a tap. From there it carries on from where it is.
+    if (!d.moved) {
+      if (!isDrag(e.clientX - d.startX, e.clientY - d.startY)) return;
+      d.moved = true;
+      d.lastX = e.clientX;
+      return;
+    }
     // Further down, closer in. The point stays under the finger and a pixel of travel covers less time the closer the view is.
     const span = spanFor(d);
     const next = dragStep(d.grab, e.clientX - d.lastX, width, span);
@@ -492,15 +515,19 @@ export function ChopTimeline({
     settling.current = 0;
     // Let go while the marker is the playhead: it carries on playing, and is placed when playing stops.
     if (playback.current?.grabbed) return;
+    // A tap: the point has not moved. It is the chosen one now, and the view brings it to the middle.
+    if (!d.moved) return centreOn(d.cut);
     latest.current.onReleaseCut(d.cut);
     easeBackOut(d.grab, d.resting);
   };
 
-  const page = (direction: number) => {
-    if (playback.current) return;
-    const { start, span } = view.current;
-    view.current = { start: clampStart(start + direction * span * 0.5, span), span };
-    draw();
+  /** The arrows: choose the previous or the next chop point and bring it to the middle. */
+  const step = (direction: number) => {
+    if (playback.current || drag.current) return;
+    const next = Math.min(latest.current.cuts.length - 1, Math.max(0, latest.current.selected + direction));
+    if (next === latest.current.selected && latest.current.cuts[next] !== undefined) return centreOn(next);
+    latest.current.onSelect(next);
+    centreOn(next);
   };
 
   const onPlayDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -553,11 +580,11 @@ export function ChopTimeline({
         onPointerCancel={onPointerUp}
       />
       <div className="chop-timeline__bar">
-        <button className="chop__btn" onClick={() => page(-1)} aria-label="Earlier in the song">
+        <button className="chop__btn" onClick={() => step(-1)} disabled={selected <= 0} aria-label="Previous chop point">
           ◀
         </button>
         <span ref={range} className="chop-timeline__range" />
-        <button className="chop__btn" onClick={() => page(1)} aria-label="Later in the song">
+        <button className="chop__btn" onClick={() => step(1)} disabled={selected >= cuts.length - 1} aria-label="Next chop point">
           ▶
         </button>
       </div>
