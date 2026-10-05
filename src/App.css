@@ -1020,10 +1020,13 @@
   /* from there to just above the bottom safe area, so the menu scrolls inside the screen instead of running past it */
   max-height: calc(100cqh - var(--menu-top) - max(var(--u), var(--safe-bottom)) - 1.5cqw);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   z-index: 18;
   display: flex;
   flex-direction: column;
-  gap: 3cqw;
+  gap: 2.2cqw;
   padding: 3cqw;
   border-radius: var(--radius);
   background: var(--chassis1);
@@ -1032,6 +1035,11 @@
   text-transform: uppercase;
   /* never wider than the chassis: the longest label used to push the menu off the left edge */
   max-width: calc(100% - 8.2cqw);
+}
+
+/* Rows keep their own height; when there are too many the menu scrolls instead of squashing them. */
+.menu > * {
+  flex: none;
 }
 
 .menu__version {
