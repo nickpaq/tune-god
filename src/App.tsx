@@ -541,8 +541,6 @@ function App() {
     return projectRef.current ? { project: projectRef.current, started } : null;
   };
 
-  /** What each loader is called, for the replace question. */
-  const BANK_NAME: Record<BankLoad, string> = { drums: "Bank A", loops: "the top of Bank B", bass: "the 808 and bass pads of Bank B", oneShots: "Bank C" };
   /** The bank that is shown once a loader has filled its pads. */
   const BANK_SHOWN: Record<BankLoad, number> = { drums: 0, loops: 1, bass: 1, oneShots: 2 };
 
@@ -563,7 +561,6 @@ function App() {
       }
       const zone = BANK_ZONES[bank];
       const inZone = (p: Pad) => !p.section && p.index >= zone.start && p.index < zone.end;
-      if (Object.values(latest.current.pads).some((p) => isReal(p) && inZone(p)) && !window.confirm(`Replace the sounds on ${BANK_NAME[bank]} with the ones from this folder?`)) return;
       const opened = await ensureProject();
       if (!opened) return;
       const { project, started } = opened;
@@ -673,7 +670,6 @@ function App() {
    */
   const loadAcapella = async (file: File) => {
     if (addPackStatus || loading) return;
-    if (Object.values(latest.current.pads).some((p) => p.section) && !window.confirm("Replace the chop on Bank D with this acapella?")) return;
     setAddPackStatus("Reading…");
     try {
       const result = await readAcapellaZip(file);
@@ -1844,24 +1840,24 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose a drum pack with 808 or bass subfolders. Two basses and two 808s fill the bottom row of Bank B and are tuned by default."
-              onClick={() => {
-                bassInput.current?.click();
-                setMenuOpen(false);
-              }}
-            >
-              {addPackStatus || "Fill Bank B: 808 & Bass"}
-            </button>
-            <button
-              className="menu__button"
-              disabled={analyzing > 0 || loading || !!addPackStatus}
               title="Choose a folder that holds only sound files, no subfolders. 16 are taken at random for Bank C (sounds over 30 seconds are skipped) and tuned by default."
               onClick={() => {
                 oneShotsInput.current?.click();
                 setMenuOpen(false);
               }}
             >
-              {addPackStatus || "Fill Bank C: One Shots"}
+              {addPackStatus || "Load Bank C: One Shots"}
+            </button>
+            <button
+              className="menu__button"
+              disabled={analyzing > 0 || loading || !!addPackStatus}
+              title="Choose a drum pack with 808 or bass subfolders. Two basses and two 808s fill the bottom row of Bank B and are tuned by default."
+              onClick={() => {
+                bassInput.current?.click();
+                setMenuOpen(false);
+              }}
+            >
+              {addPackStatus || "Load Bank B: 808 & Bass"}
             </button>
             <button
               className="menu__button"
@@ -1872,7 +1868,7 @@ function App() {
                 setMenuOpen(false);
               }}
             >
-              {addPackStatus || "Load koala acapella zip"}
+              {addPackStatus || "Load Bank D: Acapella (Koala project)"}
             </button>
             <Switch label="Show symbols on pads" on={padSymbols} onChange={setPadSymbols} />
             <label className="menu__a4">
