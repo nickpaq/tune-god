@@ -47,16 +47,18 @@ export const ChopTimeline = forwardRef<
     chops: number[];
     /** Where the downbeat markers sit (frames). */
     downbeats: number[];
+    /** Where the 1.1.1 sits (frame), if set. */
+    oneOne: number | null;
     sections: DrawnSection[];
     /** A finger started scrubbing. */
     onScrub: () => void;
   }
->(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, sections, onScrub }, ref) {
+>(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, onScrub }, ref) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const time = useRef<HTMLSpanElement>(null);
   const total = pyramid.totalFrames;
-  const latest = useRef({ grid, chops, downbeats, sections, onScrub });
-  latest.current = { grid, chops, downbeats, sections, onScrub };
+  const latest = useRef({ grid, chops, downbeats, oneOne, sections, onScrub });
+  latest.current = { grid, chops, downbeats, oneOne, sections, onScrub };
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
   const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number } | null>(null);
@@ -74,7 +76,7 @@ export const ChopTimeline = forwardRef<
     const ctx = el.getContext("2d");
     if (!ctx) return;
     const ink = getComputedStyle(el).color;
-    const { grid: g, chops: cuts, downbeats: downs, sections: bin } = latest.current;
+    const { grid: g, chops: cuts, downbeats: downs, oneOne: one111, sections: bin } = latest.current;
     const { cursor, span } = view.current;
     const start = cursor - span / 2;
     ctx.globalAlpha = 1;
@@ -133,19 +135,21 @@ export const ChopTimeline = forwardRef<
     ctx.font = `${Math.round(8 * ratio)}px Silkscreen, monospace`;
     ctx.textBaseline = "middle";
 
-    // Downbeat markers: a line and a flag below the waveform reading 1.
+    // Downbeat markers (a flag below the waveform reading 1) and the 1.1.1 (the same, reading 1.1.1).
     ctx.textAlign = "center";
-    for (const frame of downs) {
+    const downFlag = (frame: number, text: string) => {
       const x = Math.round(xOf(frame));
-      if (x < -20 * ratio || x > w + 20 * ratio) continue;
+      const fw = (text.length * 5 + 8) * ratio;
+      if (x < -fw || x > w + fw) return;
       ctx.fillStyle = ink;
       ctx.globalAlpha = 1;
       ctx.fillRect(x - one, flag, 2 * one, bottom - flag);
-      const fw = 16 * ratio;
       ctx.fillRect(x - fw / 2, bottom, fw, flag);
       ctx.fillStyle = "#000";
-      ctx.fillText("1", x, bottom + flag / 2 + ratio);
-    }
+      ctx.fillText(text, x, bottom + flag / 2 + ratio);
+    };
+    for (const frame of downs) downFlag(frame, "1");
+    if (one111 !== null) downFlag(one111, "1.1.1");
 
     // Chop markers: a line in the colour of the section that starts there (the last one takes the colour of the section it ends), a numbered flag on top.
     cuts.forEach((frame, i) => {

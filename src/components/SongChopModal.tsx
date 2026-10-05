@@ -10,7 +10,7 @@ import {
   baseGrid,
   chopLines,
   commit,
-  gridWithDownbeats,
+  gridWithMarks,
   markerAt,
   NO_MARKS,
   redo,
@@ -129,7 +129,7 @@ export function SongChopModal({
     if (detected === null) return null;
     return detected === "none" ? baseGrid(sampleRate, beatsPerBar, 120, 0) : baseGrid(sampleRate, beatsPerBar, detected.bpm, detected.downbeatSeconds);
   }, [detected, sampleRate, beatsPerBar]);
-  const grid = useMemo(() => (base ? gridWithDownbeats(base, marks.downbeats) : null), [base, marks.downbeats]);
+  const grid = useMemo(() => (base ? gridWithMarks(base, marks) : null), [base, marks]);
 
   const lines = useMemo(() => (grid ? chopLines(grid, marks.chops) : []), [grid, marks.chops]);
   const sections = useMemo(() => sectionsBetween(lines), [lines]);
@@ -205,6 +205,14 @@ export function SongChopModal({
     change({ ...marks, downbeats: [...marks.downbeats, frame] }, `Downbeat added at ${formatTime(frame / sampleRate)}`);
   };
 
+  const addOneOne = () => {
+    if (!grid) return;
+    const cursor = timeline.current?.cursor() ?? 0;
+    if (marks.oneOne !== null && Math.abs(marks.oneOne - cursor) <= grid.segments[0].beatFrames / 4) return change({ ...marks, oneOne: null }, "1.1.1 removed");
+    const frame = attackNear(cursor);
+    change({ ...marks, oneOne: frame }, `1.1.1 set at ${formatTime(frame / sampleRate)}`);
+  };
+
   const stepHistory = (step: typeof undo, message: string) => {
     setHistory(step);
     setStatus(message);
@@ -215,7 +223,7 @@ export function SongChopModal({
   const drawnSections = grid ? sections.map((s, i) => ({ start: lineFrame(grid, s.first), end: lineFrame(grid, s.last), color: colorOf(i) })) : [];
   const chopFrames = grid ? lines.map((n) => lineFrame(grid, n)) : [];
   
-  const note = "Scroll the waveform to a cut and add a chop. A downbeat marker locks the grid back in where it drifts.";
+  const note = "Scroll the waveform to a cut and add a chop. A downbeat marker locks the grid in where it drifts; 1.1.1 sets bar 1.";
   const readoutOne =
     detected === null ? "Finding the beat..." : detected === "none" ? "No beat found: set downbeat markers" : `${(grid ? bpmAt(grid, 0) : 0).toFixed(1)} BPM`;
   const readoutTwo = status || `${lines.length} chop${lines.length === 1 ? "" : "s"}, ${marks.downbeats.length} downbeat${marks.downbeats.length === 1 ? "" : "s"}`;
@@ -232,7 +240,7 @@ export function SongChopModal({
         <div className="chop__scroll">
           <p className="chop__note">{note}</p>
 
-          <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} sections={drawnSections} onScrub={player.stop} />
+          <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} onScrub={player.stop} />
 
           <div className="chop__readout">
             <span>{readoutOne}</span>
@@ -256,6 +264,9 @@ export function SongChopModal({
             </button>
             <button className="chop__btn chop__grow" disabled={!grid} onClick={addDownbeat} title="Says a bar starts at the line, and locks the grid to it from there on. On a marker already there it takes it away.">
               Downbeat marker
+            </button>
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={addOneOne} title="Sets where the song's bars are counted from. It can be before the first downbeat marker. On the 1.1.1 already there it takes it away.">
+              1.1.1
             </button>
           </div>
           <div className="chop__row">

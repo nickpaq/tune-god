@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barLineNear, baseGrid, chopLines, commit, gridWithDownbeats, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
+import { barLineNear, baseGrid, chopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
 import { isBarLine, lineFrame, planSections } from "./tapGrid";
 
 const RATE = 1000;
@@ -16,33 +16,43 @@ describe("baseGrid", () => {
   });
 });
 
-describe("gridWithDownbeats", () => {
+describe("gridWithMarks", () => {
+  const none = { downbeats: [], oneOne: null };
+
   it("is the detected grid with no markers", () => {
-    expect(gridWithDownbeats(base, [])).toBe(base);
+    expect(gridWithMarks(base, none)).toBe(base);
   });
 
-  it("drops the detected bar 1 and counts bars from the marker", () => {
-    // a marker on the second beat: that beat is now a bar's first
-    const grid = gridWithDownbeats(base, [1500]);
-    expect(isBarLine(grid, 1)).toBe(true);
-    expect(isBarLine(grid, 0)).toBe(false);
-    expect(isBarLine(grid, 5)).toBe(true);
+  it("keeps the detected bar 1 when only downbeat markers are placed", () => {
+    const grid = gridWithMarks(base, { downbeats: [3040], oneOne: null });
+    expect(isBarLine(grid, 0)).toBe(true);
+    expect(isBarLine(grid, 4)).toBe(true);
+    expect(isBarLine(grid, 1)).toBe(false);
   });
 
-  it("puts the lines after a marker on the marker, keeping the tempo", () => {
-    const grid = gridWithDownbeats(base, [3040]); // bar 2 is 40 frames late
+  it("puts the lines after a downbeat marker on the marker, keeping the tempo", () => {
+    const grid = gridWithMarks(base, { downbeats: [3040], oneOne: null }); // bar 2 is 40 frames late
     expect(lineFrame(grid, 4)).toBe(3040);
     expect(lineFrame(grid, 5)).toBe(3540);
     expect(lineFrame(grid, 3)).toBe(2500); // before it nothing moves
   });
 
   it("re-locks at each marker, whatever order they were placed in", () => {
-    const a = gridWithDownbeats(base, [3040, 7100]);
-    const b = gridWithDownbeats(base, [7100, 3040]);
-    expect(lineFrame(a, 12)).toBe(7100);
-    expect(lineFrame(a, 8)).toBe(5040);
-    expect(lineFrame(b, 12)).toBe(7100);
-    expect(lineFrame(b, 8)).toBe(5040);
+    const a = gridWithMarks(base, { downbeats: [3040, 7100], oneOne: null });
+    const b = gridWithMarks(base, { downbeats: [7100, 3040], oneOne: null });
+    for (const grid of [a, b]) {
+      expect(lineFrame(grid, 12)).toBe(7100);
+      expect(lineFrame(grid, 8)).toBe(5040);
+    }
+  });
+
+  it("counts the bars from the 1.1.1, which can sit before the first downbeat marker", () => {
+    // the grid is locked in on a bar later in the song, then 1.1.1 is set on the second beat of the detection's first bar
+    const grid = gridWithMarks(base, { downbeats: [7100], oneOne: 1500 });
+    expect(isBarLine(grid, 1)).toBe(true);
+    expect(isBarLine(grid, 0)).toBe(false);
+    expect(isBarLine(grid, 5)).toBe(true);
+    expect(lineFrame(grid, 12)).toBe(7100);
   });
 });
 
@@ -55,7 +65,7 @@ describe("chop markers", () => {
   });
 
   it("follow the grid when a downbeat marker shifts it", () => {
-    const grid = gridWithDownbeats(base, [3040]);
+    const grid = gridWithMarks(base, [3040]);
     expect(chopLines(grid, [3000])).toEqual([4]);
     expect(lineFrame(grid, 4)).toBe(3040);
   });

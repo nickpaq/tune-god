@@ -16,10 +16,13 @@ import {
 /** What the user has placed, as the frames of the song they were placed on (the cursor's position at the time), in the order they were placed. */
 export interface Marks {
   chops: readonly number[];
+  /** Where a bar starts, to lock the grid in. They do not say where the song's bar 1 is. */
   downbeats: readonly number[];
+  /** The 1.1.1: where the song's bars are counted from. It can sit before the first downbeat marker. Null leaves the detection's own bar 1. */
+  oneOne: number | null;
 }
 
-export const NO_MARKS: Marks = { chops: [], downbeats: [] };
+export const NO_MARKS: Marks = { chops: [], downbeats: [], oneOne: null };
 
 /** The grid the detection found: a line for every beat, bar 1 on line 0. */
 export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, downbeatSeconds: number): TapGrid {
@@ -33,13 +36,14 @@ export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, d
 }
 
 /**
- * The detected grid with the downbeat markers applied, earliest first. A marker starts a new stretch of the grid at its own frame (same tempo), so the
- * lines after it sit on it, and makes the nearest line a bar's first beat. Once there are markers the detection's own bar 1 is dropped: the bars before
- * the first marker are counted back from it.
+ * The detected grid with the markers applied, earliest first. A downbeat marker starts a new stretch of the grid at its own frame (same tempo), so the
+ * lines after it sit on it, and makes the nearest line a bar's first beat; the 1.1.1 does the same and also replaces the detection's own bar 1, so
+ * the bars are counted from it (back from it, before it). Downbeat markers alone leave the detection's bar 1 where it was.
  */
-export function gridWithDownbeats(base: TapGrid, downbeats: readonly number[]): TapGrid {
-  let grid: TapGrid = downbeats.length > 0 ? { ...base, downbeats: [] } : base;
-  for (const frame of [...downbeats].sort((a, b) => a - b)) {
+export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "oneOne">): TapGrid {
+  let grid: TapGrid = marks.oneOne !== null ? { ...base, downbeats: [] } : base;
+  const frames = marks.oneOne !== null ? [...marks.downbeats, marks.oneOne] : [...marks.downbeats];
+  for (const frame of frames.sort((a, b) => a - b)) {
     const beatFrames = beatFramesAt(grid, lineNear(grid, frame));
     grid = realignGrid(grid, { origin: frame, beatFrames });
     grid = setDownbeat(grid, lineNear(grid, frame));
