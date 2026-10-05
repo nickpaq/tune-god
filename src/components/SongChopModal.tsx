@@ -131,7 +131,12 @@ export function SongChopModal({
   }, [detected, sampleRate, beatsPerBar]);
   const grid = useMemo(() => (base ? gridWithMarks(base, marks) : null), [base, marks]);
 
-  const lines = useMemo(() => (grid ? chopLines(grid, marks.chops) : []), [grid, marks.chops]);
+  // The 1.1.1 is the first chop marker: a chop before it does not count.
+  const lines = useMemo(() => {
+    if (!grid) return [];
+    const first = marks.oneOne === null ? null : barLineNear(grid, marks.oneOne);
+    return chopLines(grid, marks.chops).filter((n) => first === null || n >= first);
+  }, [grid, marks.chops, marks.oneOne]);
   const sections = useMemo(() => sectionsBetween(lines), [lines]);
   const plans = useMemo(() => (grid ? planSections(totalFrames, grid, sections) : []), [grid, totalFrames, sections]);
   const fits = Math.min(plans.length, freeSlots);
@@ -190,6 +195,7 @@ export function SongChopModal({
     const cursor = timeline.current?.cursor() ?? 0;
     const line = barLineNear(grid, cursor);
     const at = lineFrame(grid, line);
+    if (marks.oneOne !== null && line < barLineNear(grid, marks.oneOne)) return setStatus("The 1.1.1 is the first chop: nothing before it");
     const there = marks.chops.find((f) => barLineNear(grid, f) === line);
     if (there !== undefined) return change({ ...marks, chops: marks.chops.filter((f) => f !== there) }, `Chop removed at ${formatTime(at / sampleRate)}`);
     change({ ...marks, chops: [...marks.chops, cursor] }, `Chop added at ${formatTime(at / sampleRate)}`);
