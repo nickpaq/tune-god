@@ -87,7 +87,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 ## What the app writes
 
-- Bass bus: SIDECHAIN (source kick, threshold -24 dB, release 120 ms, output 0 dB).
+- Bass bus: SIDECHAIN (source kick, threshold -14 dB, release 80 ms, output 0 dB).
 - Kick bus: CLIPPER (input +4 dB, threshold -6 dB, output 0, HQ on).
 - Melodic bus: EQ (lo highpass 150 Hz, hi shelf -2 dB at 8 kHz).
 - Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (+3 dB input gain), only into an empty master strip.
@@ -96,3 +96,20 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 ## Sequence notes (read from a project with recorded patterns)
 
 `sequence.json`: `{autoPlay, beatsPerBar, bpm, currSequenceId, quantizeDivision, quantizing, seqSnap, swing, sequences[32]}`. `autoPlay: "next"` chains each pattern into the next. Each sequence is `{lastViewedPath, noteSequence: {pattern: {notes, numBars}}, parameterSequences}`; `notes` is null when empty. A note is `{chance: 1.0, length, num (pad, 0-based), pan (-1.0078740119934082 = the pad's own pan), pitch: 0.0, start: 0.0, subPad: -1, timeOffset, vel}`. `timeOffset` and `length` are in ticks, **4096 per beat** (1024 per 16th), `vel` is 0 to 127. A 1-bar pattern at 4/4 is 16384 ticks. Checked against a render: 5 patterns of 2, 1, 1, 1 and 1 bars rendered to exactly 6 bars (13.09 s at 110 BPM, 48 kHz stereo 24-bit). Whether `length` is also in ticks is assumed. How velocity maps to level is measured by the Kick velocity pattern of the mix calibration project.
+
+## Calibration render 1 (all mixer options on, pad settings and auto-colour off)
+
+From `mix-calibration.koala` exported by the app, saved by Koala, and rendered as one WAV (`scripts/analyzeMixRender.py` repeats the measurements).
+
+- **Koala keeps everything.** The project saved by Koala is identical to the export: every mixer plugin and value, every pad setting, all 18 WAVs and the sequences. Nothing is clamped or rewritten on load or save. The per-pad EQ was not exercised in this round (Settings by sound type was off).
+- **Timing.** The 6 patterns rendered to 117.81 s (expected 117.82 s) with hits within about 2 ms of the grid. Each hit lands where `timeOffset` (4096 ticks per beat) says. `length` in ticks held a looping pad for the full pattern, so it is the same unit.
+- **Master chain gain.** A 1 kHz tone through melodic bus and master came out +5.3 dB higher than the pad level: +3 dB LIMITER input gain and about +2.3 dB from DRIVE (6 dB drive at a 30% mix raises the level). Bass content gets about +2.5 dB more from the master EQ bell at 70 Hz. The limiter stops the render at about -0.25 dBFS.
+- **Loudness.** The full groove integrates to -9.1 LUFS (BS.1770 gated) with a crest of 8.8 dB: inside the -8 to -10 target. The kick, 808 and bass all sit on the limiter (peak -0.3 dBFS); the kick alone is -4.5 LUFS over 200 ms.
+- **Hats and cymbals were too far back.** Peaks of -14.1 (closed), -16.1 (open) and -21.7 dBFS (crash) against -1.8 for the snare: 12 to 20 dB under it. Cause: the crest cap in `crestBonusDb` (-5/-4/-4), not the trims. Fixed in the preset (trims -5/-4/-3, crest cap -1): predicted peaks about -10, -11 and -15 dBFS.
+- **Velocity.** The kick is pinned at the limiter at every velocity (peak -0.28 to -0.30), so the curve cannot be read from it. Its 200 ms loudness fell 0.7, 2.0 and 3.9 dB at velocity 100, 70 and 40, much less than a linear velocity would, which suggests Koala's velocity only scales part of the level (about 0.5 + 0.5 x vel/127 fits). The next round measures it on the tom, which stays well under the limiter.
+- **Sidechain.** Estimated by subtracting the kick-alone render: the bass fell more than 18 dB within 50 ms of each kick and took about 450 ms to come back (-12 dB at 200 ms, -4 dB at 400 ms), which at 110 BPM leaves the bass fully present only just before the next kick. That matches a kick about 18 dB over the old -24 dB threshold. The preset now uses threshold -14 dB and release 80 ms for a shallower, shorter duck. The estimate is blurred by the nonlinear master chain; render with the master chain off to measure it cleanly.
+- **Not yet measurable:** the kick bus clipper (the limiter hides it) and the per-pad EQ.
+
+### Next render
+
+Export the updated calibration project from KoalaTune with **Heavy, warm master chain OFF**, route to buses ON and **Settings by sound type ON**, save it from Koala, and render the 6 patterns again. With the master chain off the limiter no longer hides the kick bus clipper or the sidechain, and the per-pad EQ is exercised. Run `python3 scripts/analyzeMixRender.py render.wav exported.koala`.

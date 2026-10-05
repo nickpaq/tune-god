@@ -94,9 +94,9 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
       bass: 0, // 808s level with the kick: this is most of the "heavy"
       snare: -2, // backbeat sits a little behind the kick
       clap: -3, // under the snare
-      closedHat: -9, // hats and cymbals read bright on the meter, so they sit well back: this is most of the "warm"
-      openHat: -9,
-      cymbal: -10,
+      closedHat: -5, // hats and cymbals read bright on the meter, so they sit back (about 8 to 9 dB under the snare's peak in the calibration render)
+      openHat: -4,
+      cymbal: -3,
       perc: -5,
       melodic: -4,
       vox: -3,
@@ -107,7 +107,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
       other: -3,
     },
     bonusDb: { kick: 4, bass: 4 }, // kick and bass lifted 4 dB over the common loudness
-    crestBonusDb: { kick: 5, closedHat: -5, openHat: -4, cymbal: -4 }, // hats and cymbals held lower so they never rival the snare
+    crestBonusDb: { kick: 5, closedHat: -1, openHat: -1, cymbal: -1 }, // hats and cymbals held 1 dB lower so they never rival the snare. This cap, not the trim, is what held them down at -5/-4: with it, lowering the trim moves them and raising it does not
     maxCrestDb: 8,
     peakLimitedFraction: 0.1,
   },
@@ -127,7 +127,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
   },
   buses: {
     kickClipper: { input: 4, threshold: -6, output: 0, oversample: 1 }, // about 9 dB of drive into a soft clip
-    bassSidechain: { threshold: -24, release: 120, output: 0 }, // short release so the 808 returns under the kick's tail
+    bassSidechain: { threshold: -14, release: 80, output: 0 }, // the duck depth follows how far the kick is over the threshold (measured: about 18 dB over gave a duck of 18 dB or more that took about 450 ms to recover), so a higher threshold is a shallower duck
     melodicEq: {
       "lo freq": 150, "lo gain": 0, "lo Q": 0.7, // highpass: leaves the low end to the kick and bass
       "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, // untouched

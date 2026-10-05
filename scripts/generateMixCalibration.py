@@ -158,10 +158,12 @@ def build_patterns():
     # 3. sidechain: four-on-the-floor kick over the held bass
     sc = [note(bass_sus, 0, TICKS_BAR * 4)] + [note(kick, bar * TICKS_BAR + b * TICKS_BEAT, STEP * 4) for bar in range(4) for b in range(4)]
     pats.append(("Sidechain", sc, 4, "kick on every beat over a held 55 Hz bass: ducking depth and release"))
-    # 4. kick level by velocity, then the quiet kick
+    # 4. velocity: the kick (which the master limiter pins, so it shows the clipper and limiter) then the tom, which stays well under the limiter
+    tom = pad_of("tom_perc")
     kv = [(127, 0), (100, 1), (70, 2), (40, 3)]
     kc = [note(kick, bar * TICKS_BAR, STEP * 4, vel) for vel, bar in kv] + [note(kick_quiet, 4 * TICKS_BAR, STEP * 4, 127)]
-    pats.append(("Kick velocity", kc, 5, "kick at velocity 127, 100, 70, 40 (bars 1 to 4), then the -18 dBFS kick at 127 (bar 5): clipper and velocity curve"))
+    kc += [note(tom, (5 + bar) * TICKS_BAR, STEP * 4, vel) for vel, bar in [(127, 0), (100, 1), (70, 2), (40, 3)]]
+    pats.append(("Velocity", kc, 9, "kick at velocity 127, 100, 70, 40 (bars 1 to 4), the -18 dBFS kick at 127 (bar 5), then the tom at 127, 100, 70, 40 (bars 6 to 9): velocity curve and clipper"))
     # 5. hats and cymbals only
     hc = [note(ch, bar * TICKS_BAR + k * STEP * 2, STEP) for bar in range(2) for k in range(8)] + [note(oh, 2 * TICKS_BAR + STEP * 8, STEP * 4), note(crash, 3 * TICKS_BAR, STEP * 8)]
     pats.append(("Hats and cymbals", hc, 4, "closed hats on 8ths (bars 1 and 2), open hat (bar 3), crash (bar 4): pad highpass and high-shelf cut"))

@@ -21,7 +21,7 @@ Applied at export, and when Normalize now is on. Every sound is gain-matched to 
 | `maxCrestDb` | Most any peak may stand above the common loudness | about 6 to 12 | Lower tames transients, higher keeps them punchy |
 | `peakLimitedFraction` | Share of pads allowed to fall short of the common loudness | 0 to 1 | Rarely changed |
 
-Current heavy and warm trims: kick 0, bass 0, snare -2, clap -3, closed and open hat -9, cymbal -10, perc -5, melodic -4, vox -3, FX -7, drum loop -3, perc and melodic loops -5, other -3. Kick and bass sit 4 dB above the common loudness.
+Current heavy and warm trims: kick 0, bass 0, snare -2, clap -3, closed hat -5, open hat -4, cymbal -3, perc -5, melodic -4, vox -3, FX -7, drum loop -3, perc and melodic loops -5, other -3. Kick and bass sit 4 dB above the common loudness. `crestBonusDb` for hats and cymbals is -1: a peak cap, not a trim, so while it was -5/-4 the hats could not rise whatever their trim was (found in the first calibration render). `scripts/simulateBalance.ts` shows each pad's output level for any trims before you export: `npx tsx scripts/simulateBalance.ts closedHat=-5 crest.closedHat=-1`.
 
 Not in the preset: `FILE_CEILING_DB` in `loudness.ts` (the -1 dBFS peak ceiling of every file, not a genre choice).
 
@@ -46,7 +46,7 @@ Written when "Route pads to buses" is on. Bus A is Kick, B Bass, C Drums, D Melo
 | `kickClipper.threshold` | same | Clip level and softness of the curve | about -35 to 0 dB | Near 0 is a hard clip, low is a soft S-curve. Lower also lowers the kick's peak |
 | `kickClipper.output` | same | Level after the clip | -36 to 0 dB | Can only turn down |
 | `kickClipper.oversample` | same | HQ button | 0 or 1 | 1 for less aliasing |
-| `bassSidechain.threshold` | Bass bus SIDECHAIN | Kick level that makes the bass duck | -60 to 0 dB | Lower ducks on quieter kicks |
+| `bassSidechain.threshold` | Bass bus SIDECHAIN | Kick level that makes the bass duck. The duck depth follows how far the kick is over it (measured: kick about 18 dB over gave a duck of 18 dB or more) | -60 to 0 dB | Higher is a shallower duck, lower a deeper one |
 | `bassSidechain.release` | same | Time for the bass to return | 10 to 1000 ms | Short is tight, long pumps |
 | `bassSidechain.output` | same | Level after ducking, not the depth | -12 to +12 dB | Rarely changed |
 | `melodicEq` | Melodic bus EQ | lo highpass, mid bell, hi shelf (freq, gain, Q for each) | freq 20 to 20000 Hz, gain +-18 dB, Q 0.5 to 10 | Raise `lo freq` to clear more low end, lower `hi gain` to darken |
