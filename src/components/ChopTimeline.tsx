@@ -1,7 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
 import { approach, isDrag, spanAfterDrag, viewUnderFinger, zoomRate, zoomRoom, zoomTravel } from "../audio/song/zoom";
-import { pulledBetween } from "../audio/song/chopMarks";
 import { isBarLine, lineFrame, linesBetween, type TapGrid } from "../audio/song/tapGrid";
 
 /** Lines closer together than this (CSS pixels) are not drawn (beats first, then bars). */
@@ -36,7 +35,7 @@ function formatTime(seconds: number): string {
 
 /**
  * The song's waveform in the screen's colours, scrolling behind a line fixed in the middle: that line is the cursor, where markers are put and where
- * the song plays from. Dragging scrubs (the waveform follows the finger, and the line is pulled toward the bar lines, smoothly), and dragging down zooms in, up zooms out. Over it: a line for every beat (the first beat of each bar
+ * the song plays from. Dragging scrubs (the waveform follows the finger, and the line is glides onto the nearest bar line when you let go), and dragging down zooms in, up zooms out. Over it: a line for every beat (the first beat of each bar
  * stronger), the sections between chop markers in their colours, the chop markers (flag on top, numbered) and the downbeat markers (flag below).
  */
 export const ChopTimeline = forwardRef<
@@ -246,18 +245,7 @@ export const ChopTimeline = forwardRef<
     return { before, after };
   };
 
-  /**
-   * The magnet while the finger drags: the line is drawn at a spot pulled toward the grid line or marker on either side of the finger. Between two
-   * neighbours the position eases through a steep double smoothstep, so the line clings to each one (the pull is strongest on top of it and fades
-   * gradually) and slides across the gap in the middle. It is continuous and never goes backwards, and no stretch of the song is without a pull.
-   */
-  const magnet = (frame: number, span: number): number => {
-    const { before, after } = bounds(frame, span);
-    if (before === -Infinity || after === Infinity) return frame;
-    return pulledBetween(frame, before, after);
-  };
-
-  /** Letting go with the magnet on: the line glides the rest of the way onto the nearest grid line or marker. */
+  /** Letting go with the magnet on: the line glides onto the nearest bar line. */
   const settle = () => {
     cancelAnimationFrame(settling.current);
     const { span } = view.current;
@@ -296,10 +284,10 @@ export const ChopTimeline = forwardRef<
     const rate = zoomRate(resting, d.room, minSpan);
     const span = spanAfterDrag(d.span, zoomTravel(e.clientY - d.y0), rate, total, minSpan);
     const start = viewUnderFinger(d.pivot, across(e.clientX), span);
-    // The line stays in the middle; it is pulled onto the nearest grid line or marker when one is close.
+    // The line stays in the middle and follows the finger freely; the snap comes when the finger lets go.
     view.current = { cursor: view.current.cursor, span };
     const raw = Math.min(total, Math.max(0, start + span / 2));
-    setCursor(latest.current.magnetOn ? magnet(raw, span) : raw);
+    setCursor(raw);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {

@@ -262,7 +262,7 @@ export function SongChopModal({
             <button className="chop__btn" disabled={!grid} onClick={() => scaleTempo(2)} title="Double the tempo: the grid has two lines for every one of its beats" aria-label="Double the tempo">
               ×2
             </button>
-            <button className="chop__btn chop__magnet" aria-pressed={magnetOn} onClick={() => setMagnetOn((on) => !on)} title="While scrubbing, pulls the line onto the nearest bar line (every fourth bar when zoomed out). Turn it off to place a marker exactly where the sound is.">
+            <button className="chop__btn chop__magnet" aria-pressed={magnetOn} onClick={() => setMagnetOn((on) => !on)} title="When you let go, lets the line glide onto the nearest bar line when you let go (every fourth bar when zoomed out). Turn it off to place a marker exactly where the sound is.">
               Snap {magnetOn ? "on" : "off"}
             </button>
           </div>

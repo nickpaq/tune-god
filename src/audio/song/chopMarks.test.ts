@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pulledBetween, barLineNear, baseGrid, chopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
+import { barLineNear, baseGrid, chopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
 import { bpmAt, isBarLine, lineFrame, planSections } from "./tapGrid";
 
 const RATE = 1000;
@@ -153,24 +153,5 @@ describe("history", () => {
     expect(h.future).toEqual([]);
     expect(redo(h)).toBe(h);
     expect(undo(h).present).toBe(1);
-  });
-});
-
-describe("pulledBetween", () => {
-  it("is on the neighbours at the neighbours and halfway at the middle", () => {
-    expect(pulledBetween(100, 100, 200)).toBe(100);
-    expect(pulledBetween(200, 100, 200)).toBe(200);
-    expect(pulledBetween(150, 100, 200)).toBeCloseTo(150, 9);
-  });
-
-  it("clings to a neighbour and never goes backwards", () => {
-    expect(pulledBetween(110, 100, 200)).toBeLessThan(103); // 10 % of the way by the finger, under 3 % by the line
-    expect(pulledBetween(190, 100, 200)).toBeGreaterThan(197);
-    let last = -Infinity;
-    for (let f = 100; f <= 200; f += 0.5) {
-      const v = pulledBetween(f, 100, 200);
-      expect(v).toBeGreaterThanOrEqual(last);
-      last = v;
-    }
   });
 });
