@@ -127,7 +127,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
   },
   buses: {
     kickClipper: { input: 4, threshold: -6, output: 0, oversample: 1 }, // about 9 dB of drive into a soft clip
-    bassSidechain: { threshold: -20, release: 80, output: 0 }, // measured (probe-sidechain, master chain off): -14 ducks 2 to 3 dB, -24 about 17 dB (back in 0.3 s), -40 deeper than 40 dB (back in 0.5 s), -60 about 37 dB and still 8 dB down after 0.5 s. -20 is interpolated for a duck of roughly 8 to 10 dB; raise it for less, lower it for more
+    bassSidechain: { threshold: -17, release: 80, output: 0 }, // measured with the master chain off (probe-sidechain round 2, bass dB re no duck at +50 ms / deepest): -14: -2 to -3, -16: -7 / -8, -20: -14 / -20, -24: about -17 deepest. About 3.5 dB deeper per dB of threshold. Release 300 ms deepens it and takes 0.5 s to recover. -17 aims at a duck of about 8 to 10 dB that is back by 0.2 s
     melodicEq: {
       "lo freq": 150, "lo gain": -6, "lo Q": 0.7, // low SHELF (measured; it is not a highpass, and gain 0 is flat): -6 dB below 150 Hz leaves the low end to the kick and bass
       "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, // untouched

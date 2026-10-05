@@ -87,7 +87,7 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 ## What the app writes
 
-- Bass bus: SIDECHAIN (source kick, threshold -20 dB (interpolated from the round 3 sweep), release 80 ms, output 0 dB).
+- Bass bus: SIDECHAIN (source kick, threshold -17 dB (round 3 sweeps), release 80 ms, output 0 dB).
 - Kick bus: CLIPPER (input +4 dB, threshold -6 dB, output 0, HQ on).
 - Melodic bus: EQ (lo highpass 150 Hz, hi shelf -2 dB at 8 kHz).
 - Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (-1 dB input gain), only into an empty master strip.
@@ -152,3 +152,19 @@ Both probes were rendered as one continuous file each and split at the timeline 
 - **Sidechain threshold sweep (release 80 ms, output 0).** Depth is very steep in the threshold: -14 dB ducks 2 to 3 dB, -24 dB ducks about 17 dB at the deepest (bass back at 0 dB by 0.3 s), -40 dB reads deeper than 40 dB (back by 0.5 s) and -60 dB about 37 dB (still 8 dB down at 0.5 s). The very deep readings include some cancellation error from subtracting the kick-alone render, so read them as "very deep". The release time is not the recovery time: with release 80 ms the bass takes 0.3 to 0.5 s to return, longer the lower the threshold. The preset now uses -20 dB, interpolated, for a duck of roughly 8 to 10 dB. Not yet confirmed by a render at -20.
 - **Bus EQ shapes.** `lo` is a low shelf (150 Hz, -12 dB: -12 dB at 30 to 50 Hz, -6 dB at 150 Hz, flat from 500 Hz), `hi` a high shelf (8 kHz, -12 dB: -6 dB at 8 kHz, -11 dB at 16 kHz), `mid` a bell (1 kHz, -12 dB, Q 1: -11.8 dB at 1 kHz, -4 dB at 500 Hz and -3.9 at 2 kHz). Gain 0 is exactly flat, and the corner frequency of a shelf is its half-gain point. Earlier notes calling the bus `lo` band a highpass were wrong: the highpass is the per-pad EQ.
 - **Pad EQ shapes.** `lo` is a highpass: 300 Hz with gain -18 dB gives -38 dB at 30 Hz, -29 at 50, -17 at 100, -9.5 at 150, -4 at 200 and flat from 300 Hz (about 12 dB per octave, -3 dB point near 190 Hz). With `lo` gain 0 the pad is exactly flat, so gain 0 switches the highpass off. `hi` is a high shelf (8 kHz, -12 dB: -7.6 dB at 8 kHz, -12.6 at 12 kHz) and `mid` a bell like the bus one.
+
+### Round 3b: sidechain probe 2 (one long pattern, master chain off)
+
+Bass dB against no duck, mean of beats 5 to 16:
+
+| Threshold / release | Deepest | +50 ms | +120 ms | +200 ms | +300 ms | +500 ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| -16 dB / 80 ms | -7.7 | -7.0 | -3.7 | 0.1 | 0 | 0 |
+| -20 dB / 80 ms | -19.6 | -14.0 | -7.2 | -1.7 | 0 | 0 |
+| -20 dB / 300 ms | -23.4 | -15.7 | -10.3 | -5.8 | -4.3 | -0.7 |
+
+Depth grows about 3.5 dB per dB of threshold (-14: 2 to 3 dB, -16: 7, -20: 14 at 50 ms, -24: 17 or more). A longer release deepens the duck and slows the recovery (0.5 s at 300 ms). The preset threshold is now -17 dB at release 80 ms, aiming at about 8 to 10 dB back by 0.2 s. Not yet checked in a full mix.
+
+### Round 3b: the mix calibration render was of the raw project
+
+`mix-calibration-3` came from the project without the app's export applied (no routing, trims, per-pad EQ or master chain): the 1 kHz reference at -20 dBFS reads -22.5 (the centred mono pan loss, -2.5 dB), every pad reads its own peak minus 2.5 to 3 dB, the kick shows no clipper and there is no ducking, and the full groove sums to 0.00 dBFS peak (crest 17.8 dB, -15.9 LUFS). That confirms the pan loss and shows the raw sum clips; it says nothing about the preset.
