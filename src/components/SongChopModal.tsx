@@ -205,12 +205,15 @@ export function SongChopModal({
     change({ ...marks, downbeats: [...marks.downbeats, frame] }, `Downbeat added at ${formatTime(frame / sampleRate)}`);
   };
 
+  /** The 1.1.1 is also the first chop marker: it is put there as the chop is, and goes and moves with it. */
   const addOneOne = () => {
     if (!grid) return;
     const cursor = timeline.current?.cursor() ?? 0;
-    if (marks.oneOne !== null && Math.abs(marks.oneOne - cursor) <= grid.segments[0].beatFrames / 4) return change({ ...marks, oneOne: null }, "1.1.1 removed");
+    const old = marks.oneOne;
+    const others = old === null ? marks.chops : marks.chops.filter((f) => f !== old);
+    if (old !== null && Math.abs(old - cursor) <= grid.segments[0].beatFrames / 4) return change({ ...marks, oneOne: null, chops: others }, "1.1.1 removed");
     const frame = attackNear(cursor);
-    change({ ...marks, oneOne: frame }, `1.1.1 set at ${formatTime(frame / sampleRate)}`);
+    change({ ...marks, oneOne: frame, chops: [...others, frame] }, `1.1.1 and chop set at ${formatTime(frame / sampleRate)}`);
   };
 
   const stepHistory = (step: typeof undo, message: string) => {
