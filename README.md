@@ -70,7 +70,7 @@ A sample longer than 60 s makes export very slow, so importing a project that co
 - **Export** (the first item in the menu) bakes tuning into the audio (24-bit WAV), writes volumes, colours, labels, pans, buses and the rearrangement, and downloads `<name>_tuned.koala`. Pads you don't retune or rebalance keep their original audio byte for byte. A progress counter shows on the menu item during long renders.
 
 ### Interface
-- The page is locked so it never scrolls or rubber-bands; the layout is a dark graphite chassis drawn in CSS that scales to any width: grey keycaps with orange LEDs, a black OLED in Silkscreen (pixel font) on a 3 px pixel grid, glowing pads in a black well, and Barlow Semi Condensed for everything else. The fonts are bundled (`@fontsource`), so the app still works offline. The design and its spec are in [docs/graphite-barlow-redesign-spec.md](./docs/graphite-barlow-redesign-spec.md).
+- The page is locked so it never scrolls or rubber-bands; the layout is a dark graphite chassis drawn in CSS that scales to any width: grey keycaps with orange LEDs, a black OLED in Silkscreen (pixel font) on a 3 px pixel grid, glowing pads in a black well, and Barlow Semi Condensed for everything else. The fonts are bundled (`@fontsource`) and precached, so the app still works offline. The menu ends with the app version, the build's git hash and the active mix preset. The design and its spec are in [docs/graphite-barlow-redesign-spec.md](./docs/graphite-barlow-redesign-spec.md).
 
 ## How pitch detection works
 

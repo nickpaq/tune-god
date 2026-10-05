@@ -43,6 +43,7 @@ import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveStat
 import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, trimCents } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
+import { ACTIVE_MIX_PRESET } from "./audio/mixPresets";
 import "./App.css";
 
 const BANKS = ["A", "B", "C", "D"];
@@ -1235,7 +1236,7 @@ function App() {
             </label>
             <label>
               <input type="checkbox" checked={routeBuses} onChange={(e) => setRouteBuses(e.target.checked)} />
-              Route pads to buses by sound type (sidechains bass to kick)
+              Route to buses (bass ducks to kick)
             </label>
             <label>
               <input type="checkbox" checked={masterChain} onChange={(e) => setMasterChain(e.target.checked)} />
@@ -1344,6 +1345,11 @@ function App() {
             >
               Color palette: {palette.name}
             </button>
+            <div className="menu__version">
+              KoalaTune v{__APP_VERSION__} · {__APP_BUILD__}
+              <br />
+              Mix preset: {ACTIVE_MIX_PRESET.name}
+            </div>
           </div>
         )}
 
@@ -1432,7 +1438,8 @@ function App() {
                       packInput.current?.click();
                     }}
                   >
-                    Choose a pack folder
+                    <span className="dropzone__long">Choose a pack folder</span>
+                    <span className="dropzone__short">Pick a pack folder</span>
                   </button>
                 </label>
               ) : !selectedPad ? (

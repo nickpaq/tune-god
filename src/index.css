@@ -35,15 +35,20 @@
   box-sizing: border-box;
 }
 
+html {
+  /* if a browser ever draws more than it reports, the extra strip takes the lower panel's colour and reads as part of it */
+  background: var(--chassis2);
+}
+
 html,
 body {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  /* the viewport, except in the installed iOS app, where main.tsx measures the screen into --app-h because the viewport
-     comes out short there, clipping the transport row */
-  height: var(--app-h, 100%);
+  /* the viewport as the browser reports it. An earlier fix forced the full screen height on installed iOS apps, which
+     clipped the transport row on iOS 26 (the visible area there is what innerHeight reports), so it is gone */
+  height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
 }

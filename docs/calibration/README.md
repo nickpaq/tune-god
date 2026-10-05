@@ -5,3 +5,5 @@
 - `mix-calibration-timeline.md`: where each pattern and each hit lands when the six patterns are rendered in order as one continuous WAV (about 127 s at 110 BPM).
 
 How to use the mix project: load it in KoalaTune, switch on the mixer options, export, open the result in Koala, render the six patterns as one WAV, and compare the audio against the timeline and what the app wrote (see `docs/koala-mixer-reference.md`).
+
+Before a calibration run, open the menu and note the version line at the bottom (version, git hash and mix preset) so the render can be tied to the build that made it.

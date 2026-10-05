@@ -1,9 +1,22 @@
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+// The version shown at the bottom of the menu: package.json's version and the commit the build was made from.
+const version = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version as string;
+const build = (() => {
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    return "dev";
+  }
+})();
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(version), __APP_BUILD__: JSON.stringify(build) },
   worker: {
     format: "es",
   },
@@ -15,7 +28,7 @@ export default defineConfig({
       // Precache everything so the app works fully offline after the first load.
       workbox: {
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
-        globPatterns: ["**/*.{js,css,html,wasm,svg,png,ico}"],
+        globPatterns: ["**/*.{js,css,html,wasm,svg,png,ico,woff2}"],
       },
       manifest: {
         name: "KoalaTune",

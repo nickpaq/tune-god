@@ -184,6 +184,8 @@
 }
 
 .oled {
+  /* a size container, so the drop zone can switch to a compact layout when the screen is short (see @container below) */
+  container-type: size;
   /* inside the OLED the ink is the pixel colour and the accent is lit pixels too */
   --accent: var(--oled);
   --accent-ink: #000;
@@ -1023,7 +1025,16 @@
   box-shadow: inset 0 0 0 1px var(--edge), 0 1.5cqw 4cqw rgba(0, 0, 0, 0.5);
   font-size: 3.2cqw;
   text-transform: uppercase;
-  white-space: nowrap;
+  /* never wider than the chassis: the longest label used to push the menu off the left edge */
+  max-width: calc(100% - 8.2cqw);
+}
+
+.menu__version {
+  font-size: 2.6cqw;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+  text-align: center;
 }
 
 .menu label {
@@ -1349,14 +1360,43 @@
 }
 /* A small text button under the drop zone's prompt for choosing a sample pack folder. */
 .dropzone__pack {
-  margin-top: 1cqw;
-  padding: 0.8cqw 2.4cqw;
+  margin-top: 0;
+  padding: 0 calc(var(--cell) * 2);
+  height: calc(var(--cell) * 10);
   font: inherit;
-  font-size: 3.4cqw;
+  line-height: calc(var(--cell) * 7.76);
   text-transform: uppercase;
   color: inherit;
   background: none;
-  border: 0.4cqw solid currentColor;
-  border-radius: 1.6cqw;
+  border: var(--cell) solid currentColor;
+  border-radius: 0;
   cursor: pointer;
+}
+
+.dropzone__short {
+  display: none;
+}
+
+/*
+ * A short screen (a phone with a big safe area) cannot hold the full drop zone, whose headline is twice the size of the other text.
+ * The aspect ratio of the screen is the same in cells on every phone, so wider than 2:1 means short: use the plain size, drop the
+ * "or" lines (the whole zone is tappable) and shorten the button.
+ */
+@container (min-aspect-ratio: 2/1) {
+  .screen .dropzone strong {
+    font-size: calc(var(--cell) * 8);
+    line-height: calc(var(--cell) * 9.76);
+  }
+
+  .screen .dropzone > span {
+    display: none;
+  }
+
+  .screen .dropzone .dropzone__long {
+    display: none;
+  }
+
+  .screen .dropzone .dropzone__short {
+    display: inline;
+  }
 }
