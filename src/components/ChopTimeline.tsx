@@ -214,7 +214,18 @@ export const ChopTimeline = forwardRef<
     [total, draw],
   );
 
-  useImperativeHandle(ref, () => ({ cursor: () => view.current.cursor, setCursor }), [setCursor]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      cursor: () => view.current.cursor,
+      // A jump made by hand ends any glide still running from the last release.
+      setCursor: (frame) => {
+        cancelAnimationFrame(settling.current);
+        setCursor(frame);
+      },
+    }),
+    [setCursor],
+  );
 
   const across = (clientX: number) => {
     const rect = canvas.current!.getBoundingClientRect();

@@ -24,6 +24,7 @@ import { bpmAt, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSectio
 import { buildPyramid } from "../audio/song/waveform";
 import { NOTE_NAMES } from "../audio/theory";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
+import { Knob } from "./Knob";
 import { useSongPlayer } from "./useSongPlayer";
 import type { Pad } from "./PadPanel";
 
@@ -176,6 +177,21 @@ export function SongChopModal({
     player.start(timeline.current?.cursor() ?? 0);
   };
 
+  /** Jumps the line `bars` bars back or forward (`direction` -1 or 1) along the bar lines, and carries on playing from there if the song was playing. */
+  const jump = (direction: number, bars: number) => {
+    if (!grid) return;
+    const cursor = timeline.current?.cursor() ?? 0;
+    const near = barLineNear(grid, cursor);
+    const nearFrame = lineFrame(grid, near);
+    // From a bar line, the whole distance; from between two, the bar line already ahead in that direction counts as the first.
+    const onLine = Math.abs(nearFrame - cursor) < grid.segments[0].beatFrames / 8;
+    const ahead = !onLine && (direction > 0 ? nearFrame > cursor : nearFrame < cursor);
+    const line = near + direction * grid.beatsPerBar * (ahead ? bars - 1 : bars);
+    const frame = Math.min(totalFrames, Math.max(0, lineFrame(grid, line)));
+    timeline.current?.setCursor(frame);
+    if (player.playing) player.start(frame);
+  };
+
   // ---- markers ----
 
   /** The sharpest attack in the audio near a frame, or the frame itself where there is none. */
@@ -270,15 +286,26 @@ export function SongChopModal({
             <span>{readoutTwo}</span>
           </div>
 
-          <div className="chop__row">
+          <div className="chop__row chop__transport">
             <button className={`chop__play${player.playing ? " chop__play--on" : ""}`} onClick={togglePlay} aria-pressed={player.playing} aria-label={player.playing ? "Pause" : "Play from the line"}>
               <span className="chop__play-icon">{player.playing ? "❚❚" : "▶"}</span>
               <span>{player.playing ? "Pause" : "Play"}</span>
             </button>
-            <label className="chop__grow">
-              Click
-              <input type="range" min={0} max={1} step={0.01} value={player.clickVolume} onChange={(e) => player.setClickVolume(Number(e.target.value))} aria-label="Click volume" />
-            </label>
+            <Knob value={player.clickVolume} onChange={player.setClickVolume} label="Click" />
+            <div className="chop__jumps">
+              <button className="chop__btn" disabled={!grid} onClick={() => jump(-1, 1)} aria-label="Back one bar">
+                ◀ 1
+              </button>
+              <button className="chop__btn" disabled={!grid} onClick={() => jump(1, 1)} aria-label="Forward one bar">
+                1 ▶
+              </button>
+              <button className="chop__btn" disabled={!grid} onClick={() => jump(-1, 4)} aria-label="Back four bars">
+                ◀ 4
+              </button>
+              <button className="chop__btn" disabled={!grid} onClick={() => jump(1, 4)} aria-label="Forward four bars">
+                4 ▶
+              </button>
+            </div>
           </div>
 
           <div className="chop__row">

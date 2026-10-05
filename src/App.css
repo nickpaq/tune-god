@@ -1850,6 +1850,7 @@
   justify-content: center;
   gap: calc(var(--cell) * 3);
   height: calc(var(--cell) * 22);
+  min-width: 0;
   border: calc(var(--cell) * 0.8) solid var(--oled);
   border-radius: 0;
   background: #000;
@@ -1941,4 +1942,69 @@
 .chop__bin-bars {
   margin-left: auto;
   opacity: 0.75;
+}
+
+/* ---- the click volume knob and the bar jumps beside the play button ---- */
+.knob {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--cell) * 1);
+}
+
+.knob__dial {
+  width: calc(var(--cell) * 15);
+  height: calc(var(--cell) * 15);
+  touch-action: none;
+  cursor: ns-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.knob__ring {
+  fill: #000;
+  stroke: var(--oled);
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+}
+
+.knob__arc {
+  fill: none;
+  stroke: var(--oled);
+  stroke-width: 3;
+}
+
+.knob__tick {
+  stroke: var(--oled);
+  stroke-width: 2.5;
+  stroke-linecap: square;
+}
+
+.knob__label {
+  font: 400 calc(var(--cell) * 5) / calc(var(--cell) * 6) "Silkscreen", monospace;
+  text-transform: uppercase;
+}
+
+.chop__jumps {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--cell) * 1.5);
+}
+
+.chop__jumps .chop__btn {
+  padding: calc(var(--cell) * 2) 0;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.chop__transport {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.chop__transport .chop__play {
+  flex: 0.9 1 0;
 }
