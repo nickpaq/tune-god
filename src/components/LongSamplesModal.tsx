@@ -19,7 +19,7 @@ export function LongSamplesModal({
   pads: Pad[];
   maxSeconds: number;
   onDelete: (pad: Pad) => void;
-  /** Opens the chop editor for a song: its 8-bar sections become pads with a pattern each. */
+  /** Opens the chop editor for a song: its sections become pads with a pattern each. */
   onChop: (pad: Pad) => void;
   onClose: () => void;
 }) {

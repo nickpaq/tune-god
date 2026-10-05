@@ -1,31 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
-import { mixToMono, snapToAttack, type SongAnalysis } from "../audio/song/beats";
-import { cutFrame, effectiveBpm, gridLines, planSections, SECTION_BARS, sectionSeconds, settleCut, snapCut, snapPlace, withoutAnchor } from "../audio/song/chop";
+import { getAudioContext } from "../audio/decode";
+import { mixToMono, snapToAttack } from "../audio/song/beats";
+import type { SectionPlan } from "../audio/song/chop";
+import { startMicTaps, type MicTaps } from "../audio/song/micTap";
+import { addCuts, gridBpm, gridFromTaps, isBarLine, lineFrame, linesBetween, nudgeLine, oddSections, placeLine, planTapSections, resetLine, shiftGrid, toggleCut, type TapGrid } from "../audio/song/tapGrid";
+import { estimateTempo, MIN_TAPS } from "../audio/song/tapTempo";
 import { buildPyramid } from "../audio/song/waveform";
 import { NOTE_NAMES } from "../audio/theory";
-import { ChopTimeline } from "./ChopTimeline";
+import { GridTimeline, type GridTimelineHandle, type TimelineMode } from "./GridTimeline";
+import { useSongPlayer } from "./useSongPlayer";
 import type { Pad } from "./PadPanel";
 
 export interface ChopSettings {
-  /** The tempo the grid starts from; the tempo the cuts settle on is worked out from this and the cuts placed (see `effectiveBpm`). */
+  /** The tempo of the tapped grid: the project tempo the export writes. */
   bpm: number;
   beatsPerBar: number;
-  /** Frame of bar 1 beat 1, in the song. */
-  downbeatFrame: number;
-  /** Cuts placed by hand: the frame each was put on, by section number (0-based). */
-  anchors: Record<number, number>;
-  /** Places the grid passes through that no cut is tied to (what a hand-placed cut taught the grid before it was moved on with snapping on). */
-  fixed: { bars: number; frame: number }[];
-  /** Bars in the sections that are not 8, by section number (0-based): where the song drops or adds bars. */
-  bars: Record<number, number>;
+  /** The sections, on the song's own frames. */
+  plans: SectionPlan[];
   /** The key to tune the project to, or null to leave the project's key alone. */
   keyPc: number | null;
 }
-
-const MIN_BPM = 30;
-const MAX_BPM = 300;
 
 function formatTime(seconds: number): string {
   const sign = seconds < 0 ? "-" : "";
@@ -34,13 +30,27 @@ function formatTime(seconds: number): string {
   return `${sign}${m}:${(abs - m * 60).toFixed(3).padStart(6, "0")}`;
 }
 
+/** While tapping, nothing is picked yet, so the line nearest the start of the song stands for bar 1 (for the clicks). */
+const estimateOrigin = (g: TapGrid): number => Math.round((0 - g.originFrame) / g.beatFrames);
+
+/** A stand-in grid for the tapping stage before there is a tempo (nothing is drawn from it). */
+const placeholderGrid = (sampleRate: number, beatsPerBar: number): TapGrid => ({ sampleRate, beatFrames: sampleRate / 2, originFrame: 0, beatsPerBar, offsets: {} });
+
+const MODE_NOTES: Record<TimelineMode, string> = {
+  view: "",
+  pick: "Tap a grid line to cut there: the first is bar 1, then each split after it. Tap a cut again to take it away. Zoom with + and −.",
+  adjust: "Tap a line that is off to choose it, then nudge it with the buttons. Lines you nudge move on their own.",
+  drag: "Drag from one grid line to another to cut a section there in one go. The view runs on at the edges.",
+};
+
 /**
- * Sets up chopping a song into sections: the tempo, bar 1 and key are found from the song and shown as suggestions the user checks against its
- * waveform. The whole song is drawn at full quality in the OLED's colours with a pointed tab at every cut; a tab is dragged into place (see
- * ChopTimeline), and every cut placed by hand refines the grid for the cuts after it. Nothing is cut until Chop is pressed, because the
- * cuts are rendered into files and cannot be corrected afterwards. The cuts are found on the song, and made on its vocal stem.
+ * Chops a song into sections by tapping out its grid. First the song plays and the user taps along (a button, or knocks on the back of the phone
+ * picked up by the microphone) until the tempo is locked in; a stray tap that the rhythm does not agree with is ignored. Then the grid is a line
+ * for every beat over the waveform: tap a line to cut there (the first cut is bar 1, every one after it a split), drag across the waveform to cut a
+ * section from one line to another, or choose a line that sits off the beat and nudge it. Nothing is cut until Chop is pressed, because the cuts
+ * are rendered into files and cannot be corrected afterwards. The cuts are found on the song, and made on its vocal stem.
  *
- * Every line of text sits in a slot of fixed size, and the panel has a fixed height, so nothing moves or resizes while a finger is dragging.
+ * Every line of text sits in a slot of fixed size, and the panel has a fixed height, so nothing moves or resizes while a finger is on the waveform.
  */
 export function SongChopModal({
   pad,
@@ -63,49 +73,41 @@ export function SongChopModal({
   const sampleRate = pad.sampleRate;
   const totalFrames = pad.channelData[0].length;
   const pyramid = useMemo(() => buildPyramid(pad.channelData), [pad.channelData]);
-  const [analysis, setAnalysis] = useState<SongAnalysis | null>(null);
-  const [status, setStatus] = useState<"listening" | "done" | "failed">("listening");
-  const [bpm, setBpm] = useState(120);
-  const [bpmText, setBpmText] = useState("120");
+  const timeline = useRef<GridTimelineHandle>(null);
+
+  const [phase, setPhase] = useState<"tap" | "edit">("tap");
   const [beatsPerBar, setBeatsPerBar] = useState(projectBeatsPerBar);
-  const [downbeatFrame, setDownbeatFrame] = useState(0);
-  const [anchors, setAnchors] = useState<Record<number, number>>({});
-  const [fixed, setFixed] = useState<{ bars: number; frame: number }[]>([]);
-  const [bars, setBars] = useState<Record<number, number>>({});
-  const [selected, setSelected] = useState(0);
-  /**
-   * With snapping on the grid is locked: a marker dragged jumps from bar line to bar line and nothing else changes, not the grid, not the tempo and not any
-   * other marker. With it off a marker is placed freely and every one placed refines the grid.
-   */
-  const [snapOn, setSnapOn] = useState(false);
-  /** What the last drag did to the song's structure, shown in the note slot. */
-  const [structureNote, setStructureNote] = useState("");
+  /** The times (seconds in the song) of the taps made, in the order they were made. */
+  const [taps, setTaps] = useState<number[]>([]);
+  const sorted = useMemo(() => [...taps].sort((a, b) => a - b), [taps]);
+  const estimate = useMemo(() => estimateTempo(sorted), [sorted]);
+
+  // The grid once it is locked in; the beats per bar can still be changed afterwards.
+  const [locked, setLocked] = useState<TapGrid | null>(null);
+  const [cuts, setCuts] = useState<number[]>([]);
+  const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [mode, setMode] = useState<TimelineMode>("pick");
+  const [wholeGrid, setWholeGrid] = useState(false);
+  const [restOfSong, setRestOfSong] = useState(true);
+
   const [keyPc, setKeyPc] = useState(0);
   const [minor, setMinor] = useState(false);
   const [useKey, setUseKey] = useState(true);
+  const [keyReady, setKeyReady] = useState(false);
 
-  const applyBpm = useCallback((value: number) => {
-    const next = Math.min(MAX_BPM, Math.max(MIN_BPM, value));
-    setBpm(next);
-    setBpmText(String(Math.round(next * 1000) / 1000));
-  }, []);
-
+  // The song's key is found in the background, as a suggestion; the tempo comes from the taps.
   useEffect(() => {
     let alive = true;
     const mono = mixToMono(pad.channelData);
     nextAnalysisWorker()
       .analyzeSong(Comlink.transfer(mono, [mono.buffer]), sampleRate, projectBeatsPerBar)
       .then((result) => {
-        if (!alive) return;
-        if (!result) return setStatus("failed");
-        setAnalysis(result);
-        applyBpm(result.bpm);
-        setDownbeatFrame(Math.round(result.downbeatSeconds * sampleRate));
+        if (!alive || !result) return;
         setKeyPc(result.key.pc);
         setMinor(result.key.minor);
-        setStatus("done");
+        setKeyReady(true);
       })
-      .catch(() => alive && setStatus("failed"));
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -113,144 +115,219 @@ export function SongChopModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const grid = useMemo(() => ({ bpm, beatsPerBar, downbeatFrame, sampleRate, anchors, fixed, bars }), [bpm, beatsPerBar, downbeatFrame, sampleRate, anchors, fixed, bars]);
-  const plans = useMemo(() => planSections(totalFrames, grid), [totalFrames, grid]);
-  const cuts = useMemo(() => plans.map((p) => p.start), [plans]);
-  const fits = Math.min(plans.length, freeSlots);
-  const chosen = Math.min(selected, Math.max(0, plans.length - 1));
-  const plan = plans[chosen];
-  const placed = Object.keys(anchors).length;
-  /** Once a cut has been placed by hand the tempo comes from the cuts, not from the box. */
-  const derived = placed > 0;
-  const tempo = effectiveBpm(grid);
-  const beatFrames = (60 * sampleRate) / tempo;
+  /** The grid on show: the locked one, or what the taps say so far, or none. */
+  const grid = useMemo<TapGrid | null>(() => {
+    if (phase === "edit" && locked) return { ...locked, beatsPerBar };
+    return estimate ? gridFromTaps(estimate, sampleRate, beatsPerBar) : null;
+  }, [phase, locked, estimate, sampleRate, beatsPerBar]);
 
-  /** The grid's own lines between two frames (bar lines and the beats between): they come from the grid, so a marker moving never moves them. */
-  const beatLines = useCallback((from: number, to: number) => gridLines(grid, from, to), [grid]);
+  const gridRef = useRef({ grid, cuts });
+  gridRef.current = { grid, cuts };
+  const clickLines = useCallback((from: number, to: number) => {
+    const { grid: g, cuts: picked } = gridRef.current;
+    if (!g) return [];
+    // The bar's first beat clicks higher, counting from the first cut once there is one.
+    return linesBetween(g, from, to).map((n) => ({ frame: lineFrame(g, n), bar: isBarLine(g, n, picked[0] ?? estimateOrigin(g)) }));
+  }, []);
+  const player = useSongPlayer(pad.channelData, sampleRate, clickLines);
 
-  /** Puts the cut at position `at` on a frame: bar 1 starts the grid, any other cut is placed by hand and refines the grid after it. */
-  const placeCut = useCallback(
-    (at: number, frame: number) => {
-      const target = plans[at];
-      if (!target) return;
-      const clamped = Math.min(totalFrames, Math.max(0, Math.round(frame)));
-      if (target.index === 0) setDownbeatFrame(clamped);
-      else setAnchors((prev) => ({ ...prev, [target.index]: clamped }));
-      setStructureNote("");
+  // The playhead runs while the song plays, with the view following it.
+  const { playing, frameNow } = player;
+  useEffect(() => {
+    if (!playing) {
+      timeline.current?.setPlayhead(null, false);
+      return;
+    }
+    let raf = 0;
+    const step = () => {
+      const frame = frameNow();
+      if (frame !== null) {
+        timeline.current?.setPlayhead(Math.min(totalFrames, Math.max(0, frame)), true);
+        if (frame >= totalFrames) return;
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, frameNow, totalFrames]);
+
+  // ---- tapping ----
+
+  const [flash, setFlash] = useState(false);
+  const flashTimer = useRef(0);
+  const registerTap = useCallback(
+    (secondsAgo: number) => {
+      const frame = player.frameAgo(secondsAgo);
+      if (frame === null) return;
+      setTaps((prev) => [...prev, frame / sampleRate]);
+      setFlash(true);
+      window.clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => setFlash(false), 90);
     },
-    [plans, totalFrames],
+    [player, sampleRate],
   );
+  const tapRef = useRef(registerTap);
+  tapRef.current = registerTap;
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
 
-  /**
-   * A tab was let go. A cut that landed almost exactly whole bars from where the grid had it means the song has fewer (or more) bars there: the
-   * section before it is that many bars shorter, and the cuts after it follow (see settleCut).
-   */
-  const releaseCut = useCallback(
-    (at: number) => {
-      const target = plans[at];
-      if (!target || target.index < 1) return;
-      const edit = settleCut(grid, target.index, target.start);
-      if (edit.barChange === 0) return;
-      setBars(edit.bars);
-      const now = edit.bars[target.index - 1] ?? SECTION_BARS;
-      setStructureNote(`Section ${at} is now ${now} bar${now === 1 ? "" : "s"}${edit.barChange < 0 ? ": a bar was missing here" : ""}. The cuts after it follow.`);
-    },
-    [plans, grid],
-  );
-
-  /** Where a cut dragged to a frame snaps to (the marker is drawn there while it is dragged). */
-  const snapFrame = useCallback(
-    (at: number, frame: number) => {
-      const target = plans[at];
-      return target && target.index >= 1 ? snapCut(grid, target.index, frame, at < plans.length - 1).frame : frame;
-    },
-    [plans, grid],
-  );
-
-  /**
-   * A marker let go on a bar line, the grid locked: only that marker moves. The sections either side of it gain and lose the bars it crossed, and
-   * the grid, its tempo and every other marker stay exactly as they were (see snapPlace).
-   */
-  const commitSnap = useCallback(
-    (at: number, frame: number) => {
-      const target = plans[at];
-      if (!target || target.index < 1) return;
-      const edit = snapPlace(grid, target.index, frame, at < plans.length - 1);
-      setAnchors(edit.anchors);
-      setFixed(edit.fixed);
-      setBars(edit.bars);
-      const before = edit.bars[target.index - 1] ?? SECTION_BARS;
-      setStructureNote(edit.barChange === 0 ? "" : `Section ${at} is now ${before} bar${before === 1 ? "" : "s"}. Nothing else moved.`);
-    },
-    [plans, grid],
-  );
-
-  const nudge = (frames: number) => plan && placeCut(chosen, plan.start + frames);
-  const nudgeMs = (ms: number) => nudge(Math.round((ms * sampleRate) / 1000));
-
-  /** Takes the chosen cut off the hand-placed ones: it goes back to where the grid, as the other cuts refine it, puts it. */
-  const snapToGrid = () => {
-    if (!plan || plan.index < 1) return;
-    setAnchors((prev) => withoutAnchor({ ...grid, anchors: prev }, plan.index).anchors as Record<number, number>);
-    setStructureNote("");
+  const onTapDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    // The press waited in the browser's queue for a moment; the song has moved on by then.
+    registerTap(Math.min(0.2, Math.max(0, (performance.now() - e.timeStamp) / 1000)));
   };
 
-  /** Moves the chosen cut onto the sharpest rise in loudness within 30 ms (a drum hit, say). */
+  // The microphone: a knock on the back of the phone, picked up as a tap.
+  const mic = useRef<MicTaps | null>(null);
+  const micLevel = useRef(0);
+  const [micOn, setMicOn] = useState(false);
+  const [micError, setMicError] = useState("");
+  const [sensitivity, setSensitivity] = useState(0.5);
+  const [level, setLevel] = useState(0);
+  const sensitivityRef = useRef(sensitivity);
+  sensitivityRef.current = sensitivity;
+
+  const stopMic = useCallback(() => {
+    mic.current?.stop();
+    mic.current = null;
+    setMicOn(false);
+    setLevel(0);
+  }, []);
+  const toggleMic = async () => {
+    if (mic.current) return stopMic();
+    setMicError("");
+    try {
+      mic.current = await startMicTaps(
+        getAudioContext(),
+        sensitivityRef.current,
+        (secondsAgo) => tapRef.current(secondsAgo),
+        (peak) => {
+          micLevel.current = Math.max(micLevel.current * 0.9, peak);
+        },
+      );
+      setMicOn(true);
+    } catch (err) {
+      setMicError(err instanceof Error && err.name === "NotAllowedError" ? "The microphone is blocked: allow it in the browser's settings." : "No microphone found.");
+    }
+  };
+  useEffect(() => mic.current?.setSensitivity(sensitivity), [sensitivity]);
+  useEffect(() => {
+    if (!micOn) return;
+    const timer = window.setInterval(() => setLevel(micLevel.current), 80);
+    return () => window.clearInterval(timer);
+  }, [micOn]);
+  useEffect(() => () => mic.current?.stop(), []);
+
+  const play = () => {
+    if (player.playing) return player.stop();
+    const from = Math.max(0, timeline.current?.centre() ?? 0);
+    // Playing from before the taps made means starting over: they belong to another run of the song.
+    if (phase === "tap" && sorted.length > 0 && from / sampleRate < sorted[sorted.length - 1]) setTaps([]);
+    player.start(from);
+  };
+
+  const lockGrid = () => {
+    if (!estimate) return;
+    player.stop();
+    stopMic();
+    timeline.current?.centreOn(estimate.accepted[0] * sampleRate);
+    setLocked(gridFromTaps(estimate, sampleRate, beatsPerBar));
+    setCuts([]);
+    setSelectedLine(null);
+    setMode("pick");
+    setPhase("edit");
+  };
+
+  const tapAgain = () => {
+    if (cuts.length > 0 && !window.confirm("Tapping again makes a new grid and clears the cuts you picked. Go back to tapping?")) return;
+    player.stop();
+    setPhase("tap");
+  };
+
+  // ---- editing the grid ----
+
+  const edit = grid && phase === "edit";
+  const setGridEdit = (next: TapGrid) => setLocked(next);
+
+  const onLine = (n: number | null) => {
+    setSelectedLine(n);
+    if (n !== null && mode === "pick") setCuts((prev) => toggleCut(prev, n));
+  };
+  const onSpan = (first: number, last: number) => {
+    setCuts((prev) => addCuts(prev, [first, last]));
+    setSelectedLine(null);
+  };
+
+  const nudge = (frames: number) => {
+    if (!grid || !edit) return;
+    if (wholeGrid) return setGridEdit(shiftGrid(grid, frames));
+    if (selectedLine !== null) setGridEdit(nudgeLine(grid, selectedLine, frames));
+  };
+  const nudgeMs = (ms: number) => nudge((ms * sampleRate) / 1000);
+
+  /** Puts the chosen line on the sharpest rise in loudness within 30 ms of it (a drum hit, say). */
   const toTransient = () => {
-    if (!plan) return;
+    if (!grid || selectedLine === null) return;
+    const at = lineFrame(grid, selectedLine);
     const radius = Math.round(0.03 * sampleRate);
-    const from = Math.max(0, plan.start - radius - 16);
-    const to = Math.min(totalFrames, plan.start + radius + 16);
+    const from = Math.max(0, Math.round(at) - radius - 16);
+    const to = Math.min(totalFrames, Math.round(at) + radius + 16);
+    if (to - from < 32) return;
     const slice = mixToMono(pad.channelData.map((d) => d.subarray(from, to)));
-    placeCut(chosen, from + snapToAttack(slice, plan.start - from, radius));
+    setGridEdit(placeLine(grid, selectedLine, from + snapToAttack(slice, Math.round(at) - from, radius)));
   };
 
-  const resetCut = () => {
-    if (!plan || plan.index < 1) return;
-    snapToGrid();
-    setBars((prev) => {
-      const { [plan.index - 1]: _gone, ...rest } = prev;
-      return rest;
-    });
-  };
+  const nudged = grid && selectedLine !== null ? (grid.offsets[selectedLine] ?? 0) : 0;
+  const selectedCut = selectedLine !== null ? cuts.indexOf(selectedLine) : -1;
 
-  const resetGrid = () => {
-    setAnchors({});
-    setFixed([]);
-    setBars({});
-    setStructureNote("");
-  };
+  const plans = useMemo(() => (grid && edit ? planTapSections(totalFrames, grid, cuts, { restOfSong }) : []), [grid, edit, totalFrames, cuts, restOfSong]);
+  const fits = Math.min(plans.length, freeSlots);
+  const odd = grid && edit ? oddSections(grid, cuts) : [];
+  const tempo = grid ? gridBpm(grid) : 0;
 
-  const confidenceNote = !analysis
-    ? null
-    : Math.min(analysis.confidence.tempo, analysis.confidence.grid) < 0.4
-      ? "The tempo is uncertain: check the cuts sit on the beats at both ends."
-      : analysis.confidence.downbeat < 0.4
-        ? "Which beat is beat 1 is a guess: check cut 1 against the music."
-        : null;
-  const note =
-    structureNote ||
-    (status === "listening"
-      ? "Listening for the tempo, bar 1 and key..."
-      : status === "failed"
-        ? "No steady beat found. Set the tempo and place the cuts by hand."
-        : (confidenceNote ?? "Found them. Place cut 1 on the first downbeat, then each cut after it: the grid refines as you go."));
+  const need = Math.max(0, MIN_TAPS - (estimate?.accepted.length ?? 0));
+  const tapNote =
+    taps.length === 0
+      ? "Press play, then tap along to the beat with the big button, or on the back of the phone with the microphone on. Keep going until the tempo locks in."
+      : !estimate
+        ? "Keep tapping: it needs two taps to find a tempo."
+        : estimate.locked
+          ? "Locked in. A few more taps make it steadier, or lock the grid and pick the cuts."
+          : need > 0
+            ? `${need} more tap${need === 1 ? "" : "s"} before the grid can be locked. A stray tap is ignored if the rhythm carries on.`
+            : "Nearly there: keep tapping along until it says locked in, or lock the grid now.";
+  const note = phase === "tap" ? tapNote : MODE_NOTES[mode];
 
-  const gridAt = plan && plan.index >= 1 ? cutFrame(withoutAnchor(grid, plan.index), plan.index) : null;
-  const fromGridMs = plan && gridAt !== null ? ((plan.start - gridAt) / sampleRate) * 1000 : 0;
-  const detail = !plan
-    ? ""
-    : plan.index === 0
-      ? "Bar 1 starts the grid"
-      : anchors[plan.index] === undefined
-        ? "On the grid"
-        : `By hand: ${fromGridMs >= 0 ? "+" : ""}${fromGridMs.toFixed(1)} ms`;
+  const readoutOne =
+    phase === "tap"
+      ? estimate
+        ? `${estimate.bpm.toFixed(1)} BPM from ${estimate.accepted.length} tap${estimate.accepted.length === 1 ? "" : "s"}`
+        : `${taps.length} tap${taps.length === 1 ? "" : "s"}`
+      : selectedLine === null
+        ? `${tempo.toFixed(2)} BPM`
+        : `Line ${selectedLine}${selectedCut >= 0 ? `, cut ${selectedCut + 1}` : ""} at ${formatTime(lineFrame(grid!, selectedLine) / sampleRate)}`;
+  const readoutTwo =
+    phase === "tap"
+      ? estimate
+        ? `${estimate.ignored.length} ignored${estimate.locked ? ", locked in" : ""}`
+        : ""
+      : selectedLine === null
+        ? "No line chosen"
+        : nudged === 0
+          ? "On the grid"
+          : `Moved ${nudged >= 0 ? "+" : ""}${((nudged / sampleRate) * 1000).toFixed(1)} ms`;
+
+  const marks = useMemo(() => {
+    if (phase !== "tap") return undefined;
+    const ignored = new Set(estimate?.ignored ?? []);
+    return taps.map((t) => ({ frame: t * sampleRate, ignored: ignored.has(t) }));
+  }, [phase, taps, estimate, sampleRate]);
+  const startFrame = sorted.length > 0 ? sorted[0] * sampleRate : (locked?.originFrame ?? 0);
 
   return (
     <div className="palette-backdrop" onClick={onClose}>
       <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
         <div className="chop__head">
-          <span>Chop to patterns</span>
+          <span>{phase === "tap" ? "Tap the tempo" : "Pick the cuts"}</span>
           <button onClick={onClose} aria-label="Close">
             X
           </button>
@@ -258,127 +335,172 @@ export function SongChopModal({
         <div className="chop__scroll">
           <p className="chop__note">{note}</p>
 
-          <ChopTimeline
+          <GridTimeline
+            ref={timeline}
             pyramid={pyramid}
             sampleRate={sampleRate}
-            cuts={cuts}
-            selected={chosen}
-            beatFrames={beatFrames}
-            beatLines={beatLines}
-            snapFrame={snapOn ? snapFrame : undefined}
-            onMoveCut={placeCut}
-            onReleaseCut={releaseCut}
-            onSnapCommit={snapOn ? commitSnap : undefined}
-            onSelect={setSelected}
+            grid={grid ?? placeholderGrid(sampleRate, beatsPerBar)}
+            showGrid={!!grid}
+            cuts={edit ? cuts : []}
+            tail={!!edit && restOfSong}
+            selectedLine={edit ? selectedLine : null}
+            mode={edit ? mode : "view"}
+            taps={marks}
+            startFrame={startFrame}
+            onLine={onLine}
+            onSpan={onSpan}
           />
 
           <div className="chop__readout">
-            <span>{plan ? `Cut ${chosen + 1} at ${formatTime(plan.start / sampleRate)}` : ""}</span>
-            <span>{detail}</span>
+            <span>{readoutOne}</span>
+            <span>{readoutTwo}</span>
           </div>
 
-          <div className="chop__row">
-            <button className="chop__btn chop__toggle" aria-pressed={snapOn} onClick={() => setSnapOn((on) => !on)} title="On: the grid is locked and a marker you drag jumps from bar line to bar line, changing nothing else. Off: a marker goes where you put it, and refines the grid after it.">
-              Snap {snapOn ? "on" : "off"}
+          <div className="chop-timeline__play">
+            <button className={`chop__play${player.playing ? " chop__play--on" : ""}`} onClick={play} aria-pressed={player.playing} aria-label="Play from the middle of the view">
+              <span className="chop__play-icon">{player.playing ? "■" : "▶"}</span>
+              <span>{player.playing ? "Stop" : "Play"}</span>
             </button>
-            <span className="chop__hint">{snapOn ? "Grid locked: markers jump between bar lines" : "Markers refine the grid"}</span>
-          </div>
-          <div className="chop__row">
-            <button className="chop__btn" disabled={snapOn} onClick={() => nudgeMs(-10)}>
-              -10 ms
-            </button>
-            <button className="chop__btn" disabled={snapOn} onClick={() => nudge(-1)}>
-              -1
-            </button>
-            <button className="chop__btn" disabled={snapOn} onClick={() => nudge(1)}>
-              +1
-            </button>
-            <button className="chop__btn" disabled={snapOn} onClick={() => nudgeMs(10)}>
-              +10 ms
-            </button>
-          </div>
-          <div className="chop__row">
-            <button className="chop__btn" disabled={snapOn || !plan || anchors[plan.index] === undefined} onClick={snapToGrid} title="Puts the cut back where the grid, refined by the other cuts, says it belongs">
-              Snap to grid
-            </button>
-            <button className="chop__btn" disabled={snapOn || !plan} onClick={toTransient} title="Moves the cut onto the nearest sharp rise in loudness">
-              To transient
-            </button>
-            <button className="chop__btn" disabled={snapOn || !plan || plan.index < 1 || (anchors[plan.index] === undefined && bars[plan.index - 1] === undefined)} onClick={resetCut}>
-              Reset cut
-            </button>
-            <button className="chop__btn" disabled={snapOn || (placed === 0 && fixed.length === 0 && Object.keys(bars).length === 0)} onClick={resetGrid}>
-              Reset grid
+            <button className="chop__btn chop__clicks" aria-pressed={player.clicks} onClick={() => player.setClicks((on) => !on)} title="A click on every line of the grid while it plays">
+              Clicks {player.clicks ? "on" : "off"}
             </button>
           </div>
 
-          <div className="chop__row">
-            <label>
-              Tempo
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min={MIN_BPM}
-                max={MAX_BPM}
-                disabled={derived || snapOn}
-                value={derived ? String(Math.round(tempo * 1000) / 1000) : bpmText}
-                onChange={(e) => {
-                  setBpmText(e.target.value);
-                  const value = parseFloat(e.target.value);
-                  if (Number.isFinite(value) && value >= MIN_BPM && value <= MAX_BPM) setBpm(value);
-                }}
-                onBlur={() => setBpmText(String(Math.round(bpm * 1000) / 1000))}
-              />
-            </label>
-            <button className="chop__btn" disabled={derived || snapOn} onClick={() => applyBpm(bpm / 2)}>
-              ÷2
-            </button>
-            <button className="chop__btn" disabled={derived || snapOn} onClick={() => applyBpm(bpm * 2)}>
-              ×2
-            </button>
-            <label>
-              Beats per bar
-              <input type="number" min={1} max={16} step={1} value={beatsPerBar} disabled={snapOn} onChange={(e) => setBeatsPerBar(Math.min(16, Math.max(1, Math.round(Number(e.target.value)) || 1)))} />
-            </label>
-          </div>
+          {phase === "tap" ? (
+            <>
+              <button className={`chop__tap${flash ? " chop__tap--hit" : ""}`} onPointerDown={onTapDown} disabled={!player.playing} aria-label="Tap on the beat">
+                {player.playing ? "Tap" : "Press play, then tap"}
+              </button>
+              <div className="chop__row">
+                <button className="chop__btn chop__toggle" aria-pressed={micOn} onClick={toggleMic} title="Knock on the back of the phone instead of pressing the button: the microphone hears it">
+                  Mic {micOn ? "on" : "off"}
+                </button>
+                <label className="chop__grow">
+                  Sensitivity
+                  <input type="range" min={0} max={1} step={0.01} value={sensitivity} onChange={(e) => setSensitivity(Number(e.target.value))} />
+                </label>
+              </div>
+              <div className="chop__row">
+                <span className="chop__meter" aria-hidden="true">
+                  <span style={{ width: `${Math.min(100, Math.sqrt(level) * 140)}%` }} />
+                </span>
+                <span className="chop__hint">{micError || (micOn ? "Knock close to the microphone. Headphones keep the song out of it." : "Mic off")}</span>
+              </div>
+              <div className="chop__row">
+                <label>
+                  Beats per bar
+                  <input type="number" min={1} max={16} step={1} value={beatsPerBar} onChange={(e) => setBeatsPerBar(Math.min(16, Math.max(1, Math.round(Number(e.target.value)) || 1)))} />
+                </label>
+                <button className="chop__btn" disabled={taps.length === 0} onClick={() => setTaps([])}>
+                  Clear taps
+                </button>
+              </div>
+              <button className="chop__btn chop__wide" disabled={!estimate || estimate.accepted.length < MIN_TAPS} onClick={lockGrid}>
+                Lock the grid
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="chop__row chop__modes">
+                {(["pick", "adjust", "drag"] as const).map((m) => (
+                  <button key={m} className="chop__btn chop__toggle" aria-pressed={mode === m} onClick={() => setMode(m)}>
+                    {m === "pick" ? "Pick cuts" : m === "adjust" ? "Adjust grid" : "Drag section"}
+                  </button>
+                ))}
+              </div>
+              {mode === "adjust" ? (
+                <>
+                  <div className="chop__row">
+                    <button className="chop__btn" disabled={!wholeGrid && selectedLine === null} onClick={() => nudgeMs(-10)}>
+                      -10 ms
+                    </button>
+                    <button className="chop__btn" disabled={!wholeGrid && selectedLine === null} onClick={() => nudge(-1)}>
+                      -1
+                    </button>
+                    <button className="chop__btn" disabled={!wholeGrid && selectedLine === null} onClick={() => nudge(1)}>
+                      +1
+                    </button>
+                    <button className="chop__btn" disabled={!wholeGrid && selectedLine === null} onClick={() => nudgeMs(10)}>
+                      +10 ms
+                    </button>
+                  </div>
+                  <div className="chop__row">
+                    <button className="chop__btn chop__toggle" aria-pressed={wholeGrid} onClick={() => setWholeGrid((on) => !on)} title="On: the buttons move every line together, for a tap that always lands early or late">
+                      Whole grid {wholeGrid ? "on" : "off"}
+                    </button>
+                    <button className="chop__btn" disabled={selectedLine === null || wholeGrid} onClick={toTransient} title="Moves the line onto the nearest sharp rise in loudness">
+                      To transient
+                    </button>
+                    <button className="chop__btn" disabled={selectedLine === null || nudged === 0 || wholeGrid} onClick={() => grid && selectedLine !== null && setGridEdit(resetLine(grid, selectedLine))}>
+                      Reset line
+                    </button>
+                  </div>
+                </>
+              ) : null}
+              <div className="chop__row">
+                <button className="chop__btn" disabled={cuts.length === 0} onClick={() => setCuts((prev) => prev.slice(0, -1))}>
+                  Remove last cut
+                </button>
+                <button className="chop__btn" disabled={cuts.length === 0} onClick={() => setCuts([])}>
+                  Clear cuts
+                </button>
+                <button className="chop__btn" onClick={tapAgain}>
+                  Tap again
+                </button>
+              </div>
+              <div className="chop__row">
+                <label>
+                  Beats per bar
+                  <input type="number" min={1} max={16} step={1} value={beatsPerBar} onChange={(e) => setBeatsPerBar(Math.min(16, Math.max(1, Math.round(Number(e.target.value)) || 1)))} />
+                </label>
+                <label className="chop__check">
+                  <input type="checkbox" checked={restOfSong} onChange={(e) => setRestOfSong(e.target.checked)} />
+                  Rest of the song after the last cut
+                </label>
+              </div>
 
-          <div className="chop__row">
-            <label className="chop__check">
-              <input type="checkbox" checked={useKey} onChange={(e) => setUseKey(e.target.checked)} />
-              Tune the project to the song's key
-            </label>
-          </div>
-          <div className="chop__row">
-            <select value={keyPc} onChange={(e) => setKeyPc(Number(e.target.value))} aria-label="Key">
-              {NOTE_NAMES.map((name, i) => (
-                <option key={name} value={i}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <select value={minor ? "minor" : "major"} onChange={(e) => setMinor(e.target.value === "minor")} aria-label="Major or minor">
-              <option value="major">major</option>
-              <option value="minor">minor</option>
-            </select>
-          </div>
+              <div className="chop__row">
+                <label className="chop__check">
+                  <input type="checkbox" checked={useKey} onChange={(e) => setUseKey(e.target.checked)} />
+                  Tune the project to the song's key
+                </label>
+              </div>
+              <div className="chop__row">
+                <select value={keyPc} onChange={(e) => setKeyPc(Number(e.target.value))} aria-label="Key">
+                  {NOTE_NAMES.map((name, i) => (
+                    <option key={name} value={i}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                <select value={minor ? "minor" : "major"} onChange={(e) => setMinor(e.target.value === "minor")} aria-label="Major or minor">
+                  <option value="major">major</option>
+                  <option value="minor">minor</option>
+                </select>
+              </div>
+              {!keyReady ? <p className="chop__note chop__note--summary">Listening for the key...</p> : null}
 
-          <p className="chop__note chop__note--summary">
-            The cuts are made on the song and applied to "{vocalsName}". {plans.length} section{plans.length === 1 ? "" : "s"} of {SECTION_BARS} bars ({sectionSeconds(tempo, beatsPerBar).toFixed(2)} s each).
-            {placed > 0 ? ` ${placed} cut${placed === 1 ? " was" : "s were"} placed by hand.` : ""}
-            {plans.some((p) => p.bars !== SECTION_BARS) ? ` Not 8 bars: ${plans.filter((p) => p.bars !== SECTION_BARS).map((p) => `section ${plans.indexOf(p) + 1} (${p.bars})`).join(", ")}.` : ""}
-            {plans.length > 0 && plans[plans.length - 1].audioFrames < plans[plans.length - 1].length ? " The last one is padded with silence to a full 8 bars." : ""}
-            {plans.length > fits ? ` Only ${fits} fit on free pads: the last ${plans.length - fits} are dropped.` : ""} The vocal stem's own pad is replaced by the sections, and the project tempo becomes {tempo.toFixed(2)} BPM.
-          </p>
+              <p className="chop__note chop__note--summary">
+                {cuts.length === 0
+                  ? "No cuts yet: pick the line where bar 1 starts."
+                  : `The cuts are made on the song and applied to "${vocalsName}". ${plans.length} section${plans.length === 1 ? "" : "s"} from ${cuts.length} cut${cuts.length === 1 ? "" : "s"}.`}
+                {odd.length > 0 ? ` Not a whole number of bars: section ${odd.join(", ")}. It is cut where the lines are and held for the nearest whole bars.` : ""}
+                {plans.length > fits ? ` Only ${fits} fit on free pads: the last ${plans.length - fits} are dropped.` : ""}
+                {plans.length > 0 ? ` The vocal stem's own pad is replaced by the sections, and the project tempo becomes ${tempo.toFixed(2)} BPM.` : ""}
+              </p>
+            </>
+          )}
         </div>
 
-        <button
-          className="chop__go"
-          disabled={status === "listening" || plans.length === 0 || fits === 0}
-          onClick={() => onConfirm({ bpm, beatsPerBar, downbeatFrame, anchors, fixed, bars, keyPc: useKey ? keyPc : null })}
-        >
-          Chop into {fits} pattern{fits === 1 ? "" : "s"}
-        </button>
+        {phase === "edit" ? (
+          <button
+            className="chop__go"
+            disabled={plans.length === 0 || fits === 0}
+            onClick={() => grid && onConfirm({ bpm: gridBpm(grid), beatsPerBar, plans, keyPc: useKey ? keyPc : null })}
+          >
+            Chop into {fits} pattern{fits === 1 ? "" : "s"}
+          </button>
+        ) : null}
       </div>
     </div>
   );

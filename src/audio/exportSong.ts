@@ -1,5 +1,5 @@
-// A chopped song in the export: one pad per 8-bar section (one-shot, all in one choke group so a section cuts the one before it),
-// one pattern per section holding that pad's note for the whole 8 bars, and the project tempo set to the song's.
+// A chopped song in the export: one pad per section (one-shot, all in one choke group so a section cuts the one before it),
+// one pattern per section holding that pad's note for the section's whole length, and the project tempo set to the song's.
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 

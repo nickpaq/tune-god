@@ -37,7 +37,7 @@ import { FINGER_LAYOUTS, kitSlotCounts, layoutById } from "./audio/fingerLayouts
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
-import { scaleGrid } from "./audio/song/chop";
+import { scalePlans } from "./audio/song/tapGrid";
 import { baseName, checkStems, padTitle } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
@@ -859,10 +859,9 @@ function App() {
    * The export writes the pads, their patterns and the tempo.
    */
   const chopSong = (song: Pad, vocals: Pad, settings: ChopSettings) => {
-    // The cuts were found on the song; the stem may be at another sample rate, so the grid is put on the stem's own frames.
-    const onSong = { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, anchors: settings.anchors, fixed: settings.fixed, bars: settings.bars };
-    const grid = scaleGrid(onSong, vocals.sampleRate);
-    const { pads: sections } = makeSectionPads(vocals, grid, freeSongSlots(removePad(pads, vocals.index)), padTitle(song));
+    // The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
+    const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
+    const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(removePad(pads, vocals.index)), padTitle(song));
     recordEdit();
     setPads((prev) => {
       const next = removePad(prev, vocals.index);
