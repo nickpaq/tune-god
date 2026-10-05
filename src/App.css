@@ -1617,7 +1617,7 @@
   }
 }
 
-/* ---- the song chop editor ---- */
+/* ---- the song chop editor: the OLED's colours, but not its pixel grid, so the waveform is drawn at full quality ---- */
 .sound-row__chop {
   flex: 1 1 100%;
   padding: 2cqw;
@@ -1632,73 +1632,157 @@
 }
 
 .chop {
-  max-height: 92%;
+  --cell: var(--c, 2.6px);
+  display: flex;
+  flex-direction: column;
+  width: 96%;
+  max-height: 94%;
+  overflow: hidden;
+  border-radius: 1cqw;
+  background: #000;
+  color: var(--oled);
+  box-shadow: 0 0 0 var(--cell) var(--bezel), 0 1.5cqw 4cqw rgba(0, 0, 0, 0.6);
 }
 
-.chop__body {
-  gap: 2.5cqw;
+.chop__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: calc(var(--cell) * 10);
+  padding: 0 var(--cell);
+  background: var(--oled);
+  color: #000;
+  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chop__head button {
+  border: 0;
+  background: none;
+  color: #000;
+  font: inherit;
+}
+
+.chop__scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--cell) * 3);
+  padding: calc(var(--cell) * 3);
+  overflow-y: auto;
+}
+
+.chop__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0.75;
+}
+
+.chop__readout {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--cell) * 2);
+  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
+  text-transform: uppercase;
+}
+
+.chop__readout span:last-child {
+  opacity: 0.7;
 }
 
 .chop__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2cqw;
-  font-size: 2.8cqw;
+  gap: calc(var(--cell) * 2);
+  font-size: 12px;
   text-transform: uppercase;
 }
 
 .chop__row label {
   display: flex;
   align-items: center;
-  gap: 1.5cqw;
+  gap: calc(var(--cell) * 2);
 }
 
-.chop__row input[type="number"] {
-  width: 17cqw;
-  padding: 1.5cqw;
-  border: 0;
-  border-radius: 1cqw;
-  background: var(--btn);
-  box-shadow: inset 0 0 0 1px var(--edge);
-  color: var(--ink);
+.chop__btn,
+.chop select,
+.chop input[type="number"] {
+  padding: calc(var(--cell) * 2) calc(var(--cell) * 3);
+  border: var(--cl, 1px) solid var(--oled);
+  border-radius: 0;
+  background: #000;
+  color: var(--oled);
   font: inherit;
+  text-transform: uppercase;
+}
+
+.chop input[type="number"] {
+  width: 16cqw;
   font-size: 16px; /* at least 16px so iOS does not zoom on focus */
 }
 
-.chop__row .menu__button {
-  padding: 1.5cqw 2.5cqw;
-  font-size: 2.8cqw;
+.chop select {
+  flex: 1;
+  font-size: 16px;
 }
 
-.chop__row .menu__select {
-  width: auto;
-  flex: 1;
+.chop__btn:disabled {
+  opacity: 0.35;
+}
+
+.chop__btn:active:not(:disabled) {
+  background: var(--oled);
+  color: #000;
 }
 
 .chop__check input {
-  width: 4.5cqw;
-  height: 4.5cqw;
-  accent-color: var(--accent);
+  width: calc(var(--cell) * 6);
+  height: calc(var(--cell) * 6);
+  accent-color: var(--oled);
 }
 
-.chop-view {
+.chop__go {
+  flex: none;
+  height: calc(var(--cell) * 14);
+  border: 0;
+  background: var(--oled);
+  color: #000;
+  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
+  text-transform: uppercase;
+}
+
+.chop__go:disabled {
+  opacity: 0.35;
+}
+
+.chop-timeline {
   display: flex;
   flex-direction: column;
-  gap: 1cqw;
+  gap: calc(var(--cell) * 2);
 }
 
-.chop-view__label {
-  font-size: 2.6cqw;
-  color: var(--ink3);
-}
-
-.chop-view__canvas {
+.chop-timeline__canvas {
   width: 100%;
-  height: 22cqw;
-  border-radius: 1cqw;
+  height: 44cqw;
   background: #000;
   color: var(--oled);
   touch-action: none;
-  cursor: ew-resize;
+  cursor: grab;
+}
+
+.chop-timeline__canvas:active {
+  cursor: grabbing;
+}
+
+.chop-timeline__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--cell) * 2);
+  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
 }

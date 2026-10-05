@@ -11,7 +11,7 @@ For acapellas and full songs: a long sample is cut into 8-bar sections, each sec
 
 ## Exactness
 
-`planSections` (`src/audio/song/chop.ts`) rounds every cut from its exact grid position, never from the previous cut, so nothing drifts and the sections tile the song with no gap and no overlap (tested frame by frame). A section is always exactly 8 bars; the last one is padded with silence. A downbeat before the start of the file pads the first section with silence. Audio before bar 1 is not kept.
+`planSections` (`src/audio/song/chop.ts`) rounds every cut from its exact grid position, never from the previous cut, so nothing drifts and the sections tile the song with no gap and no overlap (tested frame by frame). A section is always exactly 8 bars (a cut moved by hand keeps that length); the last one is padded with silence. A downbeat before the start of the file pads the first section with silence. Audio before bar 1 is not kept.
 
 ## Detection
 
@@ -22,7 +22,14 @@ For acapellas and full songs: a long sample is cut into 8-bar sections, each sec
 
 ## Editor
 
-Two zoomed waveform views with the beat grid, bar 1 and the last section. Drag the waveform until the sound sits on the line: the first view moves bar 1, the second changes the tempo (bar 1 stays). Nudge buttons are -10 ms, -1 and +1 frame, +10 ms; Snap goes to the nearest attack; "Play with clicks" plays two bars from either view with a click on every beat.
+`SongChopModal` is drawn in the OLED's colours (black, the screen ink, Silkscreen headings) but not on its pixel grid, so the waveform is full quality. `ChopTimeline` shows about half the song at rest (`defaultSpan`), with every cut as a tab along the bottom whose top comes to a point. Constants to tune are at the top of `src/audio/song/zoom.ts` (`MIN_SPAN_FRAMES`, `MIN_ZOOM_ROOM_PX`) and `ChopTimeline.tsx` (tab size, `RETURN_MS`).
+
+- Grab a tab and drag **down** to zoom in: the span goes from the resting one to the closest along a geometric curve (`spanAt`), the way the pitch slider's slowdown works, so there are no steps. Travel is half the way to the bottom of the screen from where the finger grabbed.
+- The tab stays under the finger (`dragStep`), and a pixel of sideways travel covers `span / width` frames, so the further in, the finer the placement. At the closest zoom one pixel is about a frame.
+- Let go: the cut stays where it was put and the view eases back out to the resting zoom, keeping the tab at the same place across the screen. Dragging anywhere else pans; the arrows page half a view.
+- Cut 1 is bar 1: moving it moves the whole grid. Any other cut moves alone (`SongGrid.shifts`, frames from where the grid puts it), and still lasts exactly 8 bars, which leaves a gap or an overlap with its neighbours. This is for a song that drifts off its tempo. **Fit tempo to this cut** sets the tempo so the grid passes through bar 1 and the chosen cut; **Reset cut** puts a moved cut back on the grid.
+- Nudge buttons (-10 ms, -1 and +1 frame, +10 ms) and **Snap** (nearest attack) act on the chosen cut. **Play with clicks** plays two bars from it with a click on every beat.
+- The waveform comes from a min/max pyramid (`src/audio/song/waveform.ts`), so a 7-minute song draws in full at every zoom without scanning the audio.
 
 ## Limits
 

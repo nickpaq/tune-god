@@ -9,6 +9,11 @@ export interface SongGrid {
   /** The frame of bar 1 beat 1. May be fractional, and may be negative or past the start of the file. */
   downbeatFrame: number;
   sampleRate: number;
+  /**
+   * Frames a cut has been moved by hand from where the grid puts it, by section (0-based). The section still lasts exactly 8 bars,
+   * so a moved cut leaves a gap or an overlap with its neighbours: it is for a song that drifts off its tempo.
+   */
+  shifts?: Readonly<Record<number, number>>;
 }
 
 /** A section is this many bars long. */
@@ -23,6 +28,8 @@ export interface SectionPlan {
   length: number;
   /** Frames of real audio at the end of the song that fit in it; less than `length` for the last, padded, section. */
   audioFrames: number;
+  /** Which section of the grid this is (0-based), the key into `SongGrid.shifts`. */
+  index: number;
 }
 
 /** Frames in one bar, exact (not rounded). */
@@ -30,9 +37,14 @@ export function framesPerBar(grid: SongGrid): number {
   return (grid.beatsPerBar * 60 * grid.sampleRate) / grid.bpm;
 }
 
+/** Where the grid puts the start of section `k` (0-based), rounded to a frame, before any hand-made shift. */
+export function gridStart(grid: SongGrid, k: number): number {
+  return Math.round(grid.downbeatFrame + k * framesPerBar(grid) * SECTION_BARS);
+}
+
 /**
  * The 8-bar sections of a song, in order. Every cut is rounded from its exact grid position, never from the previous
- * cut, so rounding never builds up and the sections tile the song with no gap and no overlap.
+ * cut, so rounding never builds up and, with no hand-made shifts, the sections tile the song with no gap and no overlap.
  */
 export function planSections(totalFrames: number, grid: SongGrid): SectionPlan[] {
   const section = framesPerBar(grid) * SECTION_BARS;
@@ -41,14 +53,15 @@ export function planSections(totalFrames: number, grid: SongGrid): SectionPlan[]
   const sections: SectionPlan[] = [];
   // The first section is the one holding frame 0: with the downbeat before the file starts, earlier sections would be silence.
   for (let k = Math.max(0, Math.ceil(-(grid.downbeatFrame + section) / section)); ; k++) {
-    const start = Math.round(grid.downbeatFrame + k * section);
-    const end = Math.round(grid.downbeatFrame + (k + 1) * section);
+    const length = gridStart(grid, k + 1) - gridStart(grid, k);
+    const start = gridStart(grid, k) + (grid.shifts?.[k] ?? 0);
+    const end = start + length;
     const audioFrames = Math.max(0, Math.min(end, totalFrames) - Math.max(start, 0));
     if (start >= totalFrames) break;
     if (end <= 0) continue;
     // Only the last section can run past the audio; it is kept if enough of the song is in it.
     if (end > totalFrames && audioFrames < minTail) break;
-    sections.push({ start, length: end - start, audioFrames });
+    sections.push({ start, length, audioFrames, index: k });
   }
   return sections;
 }

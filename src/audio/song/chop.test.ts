@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planSections, sectionSeconds, sliceSection, type SongGrid } from "./chop";
+import { gridStart, planSections, sectionSeconds, sliceSection, type SongGrid } from "./chop";
 
 const grid = (over: Partial<SongGrid> = {}): SongGrid => ({ bpm: 120, beatsPerBar: 4, downbeatFrame: 0, sampleRate: 48000, ...over });
 
@@ -61,12 +61,12 @@ describe("planSections", () => {
 describe("sliceSection", () => {
   it("returns exactly the planned length with the audio in the right place", () => {
     const data = [Float32Array.from({ length: 100 }, (_, i) => i + 1)];
-    const out = sliceSection(data, { start: -10, length: 50, audioFrames: 40 })[0];
+    const out = sliceSection(data, { start: -10, length: 50, audioFrames: 40, index: 0 })[0];
     expect(out).toHaveLength(50);
     expect(out.slice(0, 10).every((v) => v === 0)).toBe(true);
     expect(out[10]).toBe(1);
     expect(out[49]).toBe(40);
-    const tail = sliceSection(data, { start: 90, length: 30, audioFrames: 10 })[0];
+    const tail = sliceSection(data, { start: 90, length: 30, audioFrames: 10, index: 0 })[0];
     expect(tail[9]).toBe(100);
     expect(tail[10]).toBe(0);
   });
@@ -95,5 +95,24 @@ describe("the cuts together", () => {
     const last = plans[plans.length - 1];
     const exactSection = (8 * 4 * 60 * 44100) / 93.7;
     expect(last.start + last.length).toBe(Math.round(1234.56 + plans.length * exactSection));
+  });
+});
+
+describe("a cut moved by hand", () => {
+  it("starts where it was put and still lasts exactly 8 bars; the others stay on the grid", () => {
+    const g = grid({ shifts: { 1: 4410, 2: -300 } });
+    const plan = planSections(768000 * 4, g);
+    expect(plan.map((s) => s.start)).toEqual([0, 768000 + 4410, 1536000 - 300, 2304000]);
+    expect(plan.every((s) => s.length === 768000)).toBe(true);
+    expect(plan.map((s) => s.index)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("moves with the grid: shifts are measured from where the grid puts the cut", () => {
+    const g = grid({ bpm: 93.7, shifts: { 2: 100 } });
+    expect(planSections(48000 * 300, g)[2].start).toBe(gridStart(g, 2) + 100);
+  });
+
+  it("does not change anything when there are no shifts", () => {
+    expect(planSections(768000 * 3, grid({ shifts: {} }))).toEqual(planSections(768000 * 3, grid()));
   });
 });

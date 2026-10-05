@@ -844,7 +844,7 @@ function App() {
 
   /** Replaces the song's pad with its 8-bar sections (on free pads, fourth bank first). The export writes the pads, their patterns and the tempo. */
   const chopSong = (song: Pad, settings: ChopSettings) => {
-    const { pads: sections } = makeSectionPads(song, { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate }, freeSongSlots(removePad(pads, song.index)));
+    const { pads: sections } = makeSectionPads(song, { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, shifts: settings.shifts }, freeSongSlots(removePad(pads, song.index)));
     recordEdit();
     setPads((prev) => {
       const next = removePad(prev, song.index);

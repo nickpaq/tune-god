@@ -3,8 +3,10 @@ import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
 import { getAudioContext } from "../audio/decode";
 import { mixToMono, snapToAttack, type SongAnalysis } from "../audio/song/beats";
-import { framesPerBar, planSections, SECTION_BARS, sectionSeconds } from "../audio/song/chop";
+import { gridStart, planSections, SECTION_BARS, sectionSeconds } from "../audio/song/chop";
+import { buildPyramid } from "../audio/song/waveform";
 import { NOTE_NAMES } from "../audio/theory";
+import { ChopTimeline } from "./ChopTimeline";
 import type { Pad } from "./PadPanel";
 
 export interface ChopSettings {
@@ -12,14 +14,14 @@ export interface ChopSettings {
   beatsPerBar: number;
   /** Frame of bar 1 beat 1. */
   downbeatFrame: number;
+  /** Cuts moved by hand: frames from where the grid puts each section's start, by section number (0-based). */
+  shifts: Record<number, number>;
   /** The key to tune the project to, or null to leave the project's key alone. */
   keyPc: number | null;
 }
 
 const MIN_BPM = 30;
 const MAX_BPM = 300;
-/** Seconds the zoomed views show: wide to find the transient, fine to put the line on its first sample. */
-const WINDOWS = { wide: 2, fine: 0.25 } as const;
 
 function formatTime(seconds: number): string {
   const sign = seconds < 0 ? "-" : "";
@@ -28,106 +30,11 @@ function formatTime(seconds: number): string {
   return `${sign}${m}:${(abs - m * 60).toFixed(3).padStart(6, "0")}`;
 }
 
-/** Every bar and beat line of the grid that falls in a window, as frames. */
-function gridLines(startFrame: number, endFrame: number, bpm: number, beatsPerBar: number, sampleRate: number, origin: number) {
-  const beat = (60 * sampleRate) / bpm;
-  const lines: { frame: number; bar: boolean }[] = [];
-  for (let n = Math.ceil((startFrame - origin) / beat); origin + n * beat <= endFrame; n++) {
-    lines.push({ frame: origin + n * beat, bar: ((n % beatsPerBar) + beatsPerBar) % beatsPerBar === 0 });
-  }
-  return lines;
-}
-
-/** A zoomed look at one bar line: the waveform with the beat grid over it. Dragging the waveform moves the grid. */
-function GridView({
-  channelData,
-  sampleRate,
-  barFrame,
-  bpm,
-  beatsPerBar,
-  windowSeconds,
-  onDrag,
-  label,
-}: {
-  channelData: Float32Array[];
-  sampleRate: number;
-  /** The frame of the bar line this view is centred on (a quarter of the way in from the left). */
-  barFrame: number;
-  bpm: number;
-  beatsPerBar: number;
-  windowSeconds: number;
-  /** The grid should move by this many seconds (drag the waveform until the sound sits on the line). */
-  onDrag: (seconds: number) => void;
-  label: string;
-}) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const drag = useRef<{ id: number; x: number } | null>(null);
-  const windowFrames = windowSeconds * sampleRate;
-  const startFrame = barFrame - windowFrames * 0.25;
-
-  useEffect(() => {
-    const el = canvas.current;
-    if (!el) return;
-    const ratio = window.devicePixelRatio || 1;
-    const w = Math.max(1, Math.round(el.clientWidth * ratio));
-    const h = Math.max(1, Math.round(el.clientHeight * ratio));
-    el.width = w;
-    el.height = h;
-    const ctx = el.getContext("2d");
-    if (!ctx) return;
-    const style = getComputedStyle(el);
-    ctx.clearRect(0, 0, w, h);
-    const mid = h / 2;
-    // The loudest sample of every channel in each pixel column.
-    const perPixel = windowFrames / w;
-    const peaks = new Float32Array(w);
-    let top = 0;
-    for (let x = 0; x < w; x++) {
-      const from = Math.max(0, Math.floor(startFrame + x * perPixel));
-      const to = Math.min(channelData[0].length, Math.max(from + 1, Math.floor(startFrame + (x + 1) * perPixel)));
-      let peak = 0;
-      for (const data of channelData) for (let i = from; i < to; i++) peak = Math.max(peak, Math.abs(data[i]));
-      peaks[x] = peak;
-      top = Math.max(top, peak);
-    }
-    ctx.fillStyle = style.color;
-    const scale = top > 0 ? (mid * 0.9) / top : 0;
-    for (let x = 0; x < w; x++) ctx.fillRect(x, mid - peaks[x] * scale, 1, Math.max(1, peaks[x] * scale * 2));
-    for (const line of gridLines(startFrame, startFrame + windowFrames, bpm, beatsPerBar, sampleRate, barFrame)) {
-      const x = Math.round(((line.frame - startFrame) / windowFrames) * w);
-      ctx.fillStyle = line.bar ? style.getPropertyValue("--accent") || "#f0a" : "rgba(255,255,255,0.45)";
-      ctx.fillRect(x, 0, Math.max(1, Math.round(ratio * (line.bar ? 2 : 1))), h);
-    }
-  }, [channelData, sampleRate, barFrame, bpm, beatsPerBar, windowFrames, startFrame]);
-
-  return (
-    <div className="chop-view">
-      <div className="chop-view__label">{label}</div>
-      <canvas
-        ref={canvas}
-        className="chop-view__canvas"
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          drag.current = { id: e.pointerId, x: e.clientX };
-        }}
-        onPointerMove={(e) => {
-          const d = drag.current;
-          if (!d || d.id !== e.pointerId) return;
-          const seconds = ((d.x - e.clientX) / e.currentTarget.clientWidth) * windowSeconds;
-          d.x = e.clientX;
-          onDrag(seconds);
-        }}
-        onPointerUp={() => (drag.current = null)}
-        onPointerCancel={() => (drag.current = null)}
-      />
-    </div>
-  );
-}
-
 /**
  * Sets up chopping a song into 8-bar sections: the tempo, bar 1 and key are found from the audio and shown as suggestions the
- * user checks against the waveform. Two zoomed views (bar 1 and the last section) show the beat grid on the sound, and a click
- * track plays over the audio to hear it. Nothing is cut until Chop is pressed, because the cuts are rendered into files.
+ * user checks against the waveform. The whole song is drawn at full quality in the OLED's colours with a pointed tab at every cut;
+ * a tab is dragged into place (down to zoom in, see ChopTimeline). Nothing is cut until Chop is pressed, because the cuts are
+ * rendered into files and cannot be corrected afterwards.
  */
 export function SongChopModal({
   pad,
@@ -145,13 +52,15 @@ export function SongChopModal({
 }) {
   const sampleRate = pad.sampleRate;
   const totalFrames = pad.channelData[0].length;
+  const pyramid = useMemo(() => buildPyramid(pad.channelData), [pad.channelData]);
   const [analysis, setAnalysis] = useState<SongAnalysis | null>(null);
   const [status, setStatus] = useState<"listening" | "done" | "failed">("listening");
   const [bpm, setBpm] = useState(120);
   const [bpmText, setBpmText] = useState("120");
   const [beatsPerBar, setBeatsPerBar] = useState(projectBeatsPerBar);
   const [downbeatFrame, setDownbeatFrame] = useState(0);
-  const [zoom, setZoom] = useState<keyof typeof WINDOWS>("wide");
+  const [shifts, setShifts] = useState<Record<number, number>>({});
+  const [selected, setSelected] = useState(0);
   const [keyPc, setKeyPc] = useState(0);
   const [minor, setMinor] = useState(false);
   const [useKey, setUseKey] = useState(true);
@@ -189,12 +98,52 @@ export function SongChopModal({
 
   useEffect(() => () => stopPlaying.current?.(), []);
 
-  const grid = useMemo(() => ({ bpm, beatsPerBar, downbeatFrame, sampleRate }), [bpm, beatsPerBar, downbeatFrame, sampleRate]);
+  const grid = useMemo(() => ({ bpm, beatsPerBar, downbeatFrame, sampleRate, shifts }), [bpm, beatsPerBar, downbeatFrame, sampleRate, shifts]);
   const plans = useMemo(() => planSections(totalFrames, grid), [totalFrames, grid]);
-  const last = plans.length - 1;
+  const cuts = useMemo(() => plans.map((p) => p.start), [plans]);
   const fits = Math.min(plans.length, freeSlots);
+  const chosen = Math.min(selected, Math.max(0, plans.length - 1));
+  const plan = plans[chosen];
+  const adjusted = Object.values(shifts).filter((s) => s !== 0).length;
+  const beatFrames = (60 * sampleRate) / bpm;
 
-  /** Plays the song from a bar line with a click on every beat (higher on the bar's first), so the grid can be heard against the music. */
+  /** Puts the cut at position `at` on a frame: bar 1 moves the whole grid, any other cut moves alone. */
+  const placeCut = useCallback(
+    (at: number, frame: number) => {
+      const target = plans[at];
+      if (!target) return;
+      const clamped = Math.min(totalFrames, Math.max(0, Math.round(frame)));
+      if (target.index === 0) setDownbeatFrame(clamped);
+      else setShifts((prev) => ({ ...prev, [target.index]: clamped - gridStart({ bpm, beatsPerBar, downbeatFrame, sampleRate }, target.index) }));
+    },
+    [plans, totalFrames, bpm, beatsPerBar, downbeatFrame, sampleRate],
+  );
+
+  const nudge = (frames: number) => plan && placeCut(chosen, plan.start + frames);
+  const nudgeMs = (ms: number) => nudge(Math.round((ms * sampleRate) / 1000));
+
+  /** Moves the chosen cut onto the sharpest rise in loudness within 30 ms. */
+  const snap = () => {
+    if (!plan) return;
+    const radius = Math.round(0.03 * sampleRate);
+    const from = Math.max(0, plan.start - radius - 16);
+    const to = Math.min(totalFrames, plan.start + radius + 16);
+    const slice = mixToMono(pad.channelData.map((d) => d.subarray(from, to)));
+    placeCut(chosen, from + snapToAttack(slice, plan.start - from, radius));
+  };
+
+  /** With this cut where the user put it, the tempo that puts every cut on the grid through bar 1 and this cut. */
+  const fitTempo = () => {
+    if (!plan || plan.index < 1 || plan.start <= downbeatFrame) return;
+    const frames = (plan.start - downbeatFrame) / plan.index;
+    applyBpm((SECTION_BARS * beatsPerBar * 60 * sampleRate) / frames);
+    setShifts((prev) => {
+      const { [plan.index]: _gone, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  /** Plays the song from a cut with a click on every beat (higher on the bar's first), so the grid can be heard against the music. */
   const playFrom = (startFrame: number) => {
     stopPlaying.current?.();
     const ctx = getAudioContext();
@@ -205,8 +154,7 @@ export function SongChopModal({
     const frames = Math.round(seconds * sampleRate);
     const buffer = ctx.createBuffer(pad.channelData.length, frames, sampleRate);
     pad.channelData.forEach((data, ch) => {
-      const from = Math.max(0, startFrame);
-      const slice = data.subarray(from, Math.min(data.length, startFrame + frames));
+      const slice = data.subarray(Math.max(0, startFrame), Math.min(data.length, startFrame + frames));
       buffer.copyToChannel(slice as Float32Array<ArrayBuffer>, ch, Math.max(0, -startFrame));
     });
     const t0 = ctx.currentTime + 0.05;
@@ -249,53 +197,86 @@ export function SongChopModal({
     };
   };
 
-  const nudge = (frames: number) => setDownbeatFrame((d) => Math.round(d + frames));
-  const nudgeMs = (ms: number) => nudge(Math.round((ms * sampleRate) / 1000));
-  const beatFrames = (60 * sampleRate) / bpm;
-
-  /** Moves bar 1 onto the sharpest rise in loudness within 30 ms. */
-  const snap = () => {
-    const radius = Math.round(0.03 * sampleRate);
-    const from = Math.max(0, downbeatFrame - radius - 16);
-    const to = Math.min(totalFrames, downbeatFrame + radius + 16);
-    const slice = mixToMono(pad.channelData.map((d) => d.subarray(from, to)));
-    const at = snapToAttack(slice, downbeatFrame - from, radius);
-    setDownbeatFrame(from + at);
-  };
-
-  const sectionStart = (k: number) => plans[Math.max(0, Math.min(last, k))]?.start ?? downbeatFrame;
-  /** Dragging the end view moves the last section's cut; with bar 1 fixed that means a different tempo. */
-  const dragEnd = (seconds: number) => {
-    if (last < 1) return nudge(seconds * sampleRate);
-    const section = framesPerBar(grid) * SECTION_BARS;
-    const wanted = section + (seconds * sampleRate) / last;
-    if (wanted > 0) applyBpm(((SECTION_BARS * beatsPerBar * 60 * sampleRate) / wanted));
-  };
-
   const confidenceNote = !analysis
     ? null
     : Math.min(analysis.confidence.tempo, analysis.confidence.grid) < 0.4
-      ? "The tempo is uncertain: check the grid sits on the beats at both ends."
+      ? "The tempo is uncertain: check the cuts sit on the beats at both ends."
       : analysis.confidence.downbeat < 0.4
-        ? "Which beat is beat 1 is a guess: check bar 1 against the music."
+        ? "Which beat is beat 1 is a guess: check cut 1 against the music."
         : null;
+
+  const shiftMs = plan && plan.index > 0 ? ((shifts[plan.index] ?? 0) / sampleRate) * 1000 : 0;
 
   return (
     <div className="palette-backdrop" onClick={onClose}>
-      <div className="palette-modal chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
-        <div className="palette-modal__head">
-          <strong>Chop to patterns</strong>
+      <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
+        <div className="chop__head">
+          <span>Chop to patterns</span>
           <button onClick={onClose} aria-label="Close">
-            ✕
+            X
           </button>
         </div>
-        <div className="palette-modal__key">
-          {status === "listening" && "Listening for the tempo, bar 1 and key…"}
-          {status === "failed" && "No steady beat found. Set the tempo and bar 1 by hand."}
-          {status === "done" && (confidenceNote ?? "Found them. Check the grid sits on the beats, then chop.")}
-        </div>
+        <div className="chop__scroll">
+          <p className="chop__note">
+            {status === "listening" && "Listening for the tempo, bar 1 and key..."}
+            {status === "failed" && "No steady beat found. Set the tempo and place the cuts by hand."}
+            {status === "done" && (confidenceNote ?? "Found them. Grab a tab and drag down to zoom in, then place it on the beat.")}
+          </p>
 
-        <div className="palette-modal__list chop__body">
+          <ChopTimeline
+            pyramid={pyramid}
+            sampleRate={sampleRate}
+            cuts={cuts}
+            selected={chosen}
+            gridOrigin={downbeatFrame}
+            beatFrames={beatFrames}
+            beatsPerBar={beatsPerBar}
+            onMoveCut={placeCut}
+            onSelect={setSelected}
+          />
+
+          {plan && (
+            <div className="chop__readout">
+              <span>
+                Cut {chosen + 1} at {formatTime(plan.start / sampleRate)}
+              </span>
+              <span>{plan.index > 0 ? (shiftMs === 0 ? "On the grid" : `${shiftMs > 0 ? "+" : ""}${shiftMs.toFixed(1)} ms from the grid`) : "Bar 1: moves the grid"}</span>
+            </div>
+          )}
+
+          <div className="chop__row">
+            <button className="chop__btn" onClick={() => nudgeMs(-10)}>
+              -10 ms
+            </button>
+            <button className="chop__btn" onClick={() => nudge(-1)}>
+              -1
+            </button>
+            <button className="chop__btn" onClick={() => nudge(1)}>
+              +1
+            </button>
+            <button className="chop__btn" onClick={() => nudgeMs(10)}>
+              +10 ms
+            </button>
+            <button className="chop__btn" onClick={snap}>
+              Snap
+            </button>
+          </div>
+          <div className="chop__row">
+            <button className="chop__btn" onClick={() => (playing ? stopPlaying.current?.() : plan && playFrom(plan.start))}>
+              {playing ? "Stop" : "Play with clicks"}
+            </button>
+            <button className="chop__btn" disabled={!plan || plan.index < 1} onClick={fitTempo} title="Sets the tempo so that every cut lines up with bar 1 and this cut">
+              Fit tempo to this cut
+            </button>
+            <button
+              className="chop__btn"
+              disabled={!plan || (shifts[plan.index] ?? 0) === 0}
+              onClick={() => plan && setShifts((prev) => ({ ...prev, [plan.index]: 0 }))}
+            >
+              Reset cut
+            </button>
+          </div>
+
           <div className="chop__row">
             <label>
               Tempo
@@ -314,10 +295,10 @@ export function SongChopModal({
                 onBlur={() => setBpmText(String(Math.round(bpm * 1000) / 1000))}
               />
             </label>
-            <button className="menu__button" onClick={() => applyBpm(bpm / 2)}>
+            <button className="chop__btn" onClick={() => applyBpm(bpm / 2)}>
               ÷2
             </button>
-            <button className="menu__button" onClick={() => applyBpm(bpm * 2)}>
+            <button className="chop__btn" onClick={() => applyBpm(bpm * 2)}>
               ×2
             </button>
             <label>
@@ -326,74 +307,6 @@ export function SongChopModal({
             </label>
           </div>
 
-          <GridView
-            label={`Bar 1 at ${formatTime(downbeatFrame / sampleRate)}. Drag the waveform until the sound sits on the line`}
-            channelData={pad.channelData}
-            sampleRate={sampleRate}
-            barFrame={downbeatFrame}
-            bpm={bpm}
-            beatsPerBar={beatsPerBar}
-            windowSeconds={WINDOWS[zoom]}
-            onDrag={(seconds) => nudge(seconds * sampleRate)}
-          />
-          <div className="chop__row">
-            <button className="menu__button" onClick={() => nudgeMs(-10)}>
-              -10 ms
-            </button>
-            <button className="menu__button" onClick={() => nudge(-1)}>
-              -1
-            </button>
-            <button className="menu__button" onClick={() => nudge(1)}>
-              +1
-            </button>
-            <button className="menu__button" onClick={() => nudgeMs(10)}>
-              +10 ms
-            </button>
-            <button className="menu__button" onClick={snap}>
-              Snap
-            </button>
-          </div>
-          <div className="chop__row">
-            <button className="menu__button" onClick={() => nudge(-beatFrames)}>
-              -1 beat
-            </button>
-            <button className="menu__button" onClick={() => nudge(beatFrames)}>
-              +1 beat
-            </button>
-            <button className="menu__button" onClick={() => setZoom((z) => (z === "wide" ? "fine" : "wide"))}>
-              Zoom: {zoom === "wide" ? "wide" : "fine"}
-            </button>
-            <button className="menu__button" onClick={() => (playing ? stopPlaying.current?.() : playFrom(sectionStart(0)))}>
-              {playing ? "Stop" : "Play with clicks"}
-            </button>
-          </div>
-
-          {last >= 1 && (
-            <>
-              <GridView
-                label={`Section ${last + 1} starts at ${formatTime(sectionStart(last) / sampleRate)}. Drag to adjust the tempo until it lines up too`}
-                channelData={pad.channelData}
-                sampleRate={sampleRate}
-                barFrame={sectionStart(last)}
-                bpm={bpm}
-                beatsPerBar={beatsPerBar}
-                windowSeconds={WINDOWS[zoom]}
-                onDrag={dragEnd}
-              />
-              <div className="chop__row">
-                <button className="menu__button" onClick={() => applyBpm(bpm - 0.01)}>
-                  Tempo -0.01
-                </button>
-                <button className="menu__button" onClick={() => applyBpm(bpm + 0.01)}>
-                  Tempo +0.01
-                </button>
-                <button className="menu__button" onClick={() => (playing ? stopPlaying.current?.() : playFrom(sectionStart(last)))}>
-                  {playing ? "Stop" : "Play end"}
-                </button>
-              </div>
-            </>
-          )}
-
           <div className="chop__row">
             <label className="chop__check">
               <input type="checkbox" checked={useKey} onChange={(e) => setUseKey(e.target.checked)} />
@@ -401,32 +314,33 @@ export function SongChopModal({
             </label>
           </div>
           <div className="chop__row">
-            <select className="menu__select" value={keyPc} onChange={(e) => setKeyPc(Number(e.target.value))} aria-label="Key">
+            <select value={keyPc} onChange={(e) => setKeyPc(Number(e.target.value))} aria-label="Key">
               {NOTE_NAMES.map((name, i) => (
                 <option key={name} value={i}>
                   {name}
                 </option>
               ))}
             </select>
-            <select className="menu__select" value={minor ? "minor" : "major"} onChange={(e) => setMinor(e.target.value === "minor")} aria-label="Major or minor">
+            <select value={minor ? "minor" : "major"} onChange={(e) => setMinor(e.target.value === "minor")} aria-label="Major or minor">
               <option value="major">major</option>
               <option value="minor">minor</option>
             </select>
           </div>
 
-          <div className="palette-modal__key">
+          <p className="chop__note">
             {plans.length} section{plans.length === 1 ? "" : "s"} of {SECTION_BARS} bars ({sectionSeconds(bpm, beatsPerBar).toFixed(2)} s each).
+            {adjusted > 0 ? ` ${adjusted} cut${adjusted === 1 ? " was" : "s were"} placed by hand.` : ""}
             {plans.length > 0 && plans[plans.length - 1].audioFrames < plans[plans.length - 1].length ? " The last one is padded with silence to a full 8 bars." : ""}
             {plans.length > fits ? ` Only ${fits} fit on free pads: the last ${plans.length - fits} are dropped.` : ""} The song's own pad is replaced by the sections, and the project tempo becomes {bpm.toFixed(2)} BPM.
-          </div>
+          </p>
         </div>
 
         <button
-          className="menu__button menu__button--primary"
+          className="chop__go"
           disabled={status === "listening" || plans.length === 0 || fits === 0}
           onClick={() => {
             stopPlaying.current?.();
-            onConfirm({ bpm, beatsPerBar, downbeatFrame, keyPc: useKey ? keyPc : null });
+            onConfirm({ bpm, beatsPerBar, downbeatFrame, shifts, keyPc: useKey ? keyPc : null });
           }}
         >
           Chop into {fits} pattern{fits === 1 ? "" : "s"}
