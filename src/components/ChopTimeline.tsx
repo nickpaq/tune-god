@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
-import { approach, isDrag, spanAfterDrag, viewUnderFinger, zoomRate, zoomRoom, zoomTravel } from "../audio/song/zoom";
+import { approach, isDrag, spanAfterDrag, viewUnderFinger, zoomRate, zoomRoom } from "../audio/song/zoom";
 import { MAX_SECTION_BARS, isBarLine, lineFrame, linesBetween, type TapGrid } from "../audio/song/tapGrid";
 
 /** Height (CSS pixels) of the strip along the top that carries the chop flags, and of the one along the bottom that carries the downbeat flags. */
@@ -63,7 +63,7 @@ export const ChopTimeline = forwardRef<
   latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub };
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
-  const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number; span: number; y0: number; room: number } | null>(null);
+  const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number; span: number } | null>(null);
   const settling = useRef(0);
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
@@ -233,7 +233,7 @@ export const ChopTimeline = forwardRef<
     cancelAnimationFrame(settling.current);
     if (drag.current) return;
     const { cursor, span } = view.current;
-    drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span, y0: e.clientY, room: zoomRoom(e.clientY, window.innerHeight) };
+    drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span };
   };
 
   /** The drawn grid line just before a frame and the one just after it (infinite where there is none): where the snap can go. */
@@ -281,15 +281,15 @@ export const ChopTimeline = forwardRef<
       // Pin what is under the finger now, so the waveform does not jump by the distance the tap threshold swallowed.
       d.span = view.current.span;
       d.pivot = view.current.cursor - d.span / 2 + across(e.clientX) * d.span;
-      d.y0 = e.clientY;
-      d.room = zoomRoom(e.clientY, window.innerHeight);
       latest.current.onScrub();
     }
-    // Ableton style: sideways drags the waveform, and the point under the finger stays under it; dragging down zooms in and up zooms out, the same
-    // ratio for every equal step, once the finger has passed a small dead zone.
+    // Ableton style: sideways drags the waveform, and the point under the finger stays under it. Zoom only starts when the finger leaves the waveform
+    // vertically: below its bottom edge zooms in, above its top edge zooms out, the same ratio for every equal step; back inside it, the zoom is where it was.
+    const rect = canvas.current!.getBoundingClientRect();
+    const outside = e.clientY > rect.bottom ? e.clientY - rect.bottom : e.clientY < rect.top ? e.clientY - rect.top : 0;
     const resting = Math.max(d.span, Math.min(total, START_SECONDS * sampleRate));
-    const rate = zoomRate(resting, d.room, minSpan);
-    const span = spanAfterDrag(d.span, zoomTravel(e.clientY - d.y0), rate, total, minSpan);
+    const rate = zoomRate(resting, zoomRoom(rect.bottom, window.innerHeight), minSpan);
+    const span = spanAfterDrag(d.span, outside, rate, total, minSpan);
     const start = viewUnderFinger(d.pivot, across(e.clientX), span);
     // The line stays in the middle and follows the finger freely; the snap comes when the finger lets go.
     view.current = { cursor: view.current.cursor, span };
