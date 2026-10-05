@@ -82,33 +82,34 @@ describe("arrangeFingerDrumming", () => {
     expect(indexOf(a, vocal)).toBeLessThan(16);
   });
 
-  it("backfills drums the layout had no slot for from the end of bank D", () => {
+  it("backfills drums the layout had no slot for from the end of bank C, never bank D", () => {
     const pad = sound("melodic", { midi: 60 });
     const kit = [drum("kick"), drum("snare"), drum("closedHat")];
     // Quest for Groove has three perc slots, so a fourth and fifth perc are left over.
     const toms = Array.from({ length: 5 }, () => drum("perc"));
     const a = arrangeFingerDrumming([...kit, ...toms, pad], quest);
     const extra = toms.map((s) => indexOf(a, s)!).filter((i) => i >= 16).sort((x, y) => x - y);
-    expect(extra).toEqual([62, 63]);
+    expect(extra).toEqual([46, 47]);
     expect(indexOf(a, pad)).toBe(16);
   });
 
   it("lets real sounds replace 'missing' placeholders when the project is nearly full", () => {
-    const tonal = Array.from({ length: 60 }, (_, i) => sound("melodic", { midi: 30 + i }));
+    const tonal = Array.from({ length: 44 }, (_, i) => sound("melodic", { midi: 30 + i }));
     const a = arrangeFingerDrumming([drum("kick"), ...tonal], horizontal);
     const all = [...a.positions.values(), ...a.ghosts.map((g) => g.index), ...a.placeholders.map((p) => p.index)];
-    expect(new Set(all).size).toBe(64);
-    expect(a.positions.size).toBe(61);
+    expect(new Set(all).size).toBe(48);
+    expect(Math.max(...all)).toBeLessThan(48);
+    expect(a.positions.size).toBe(45);
     // Every real sound got a pad, which required taking over bank A's missing slots.
     expect(tonal.every((s) => a.positions.has(s.key))).toBe(true);
   });
 
-  it("gives every one of the 64 pads exactly one occupant", () => {
+  it("gives every pad of banks A to C exactly one occupant and leaves bank D (the chops' bank) alone", () => {
     for (const layout of FINGER_LAYOUTS) {
       const sounds = [drum("kick"), drum("snare"), drum("openHat"), sound("bass", { midi: 40 }), sound("fx")];
       const a = arrangeFingerDrumming(sounds, layout);
       const all = [...a.positions.values(), ...a.ghosts.map((g) => g.index), ...a.placeholders.map((p) => p.index)];
-      expect(all.sort((x, y) => x - y)).toEqual(Array.from({ length: 64 }, (_, i) => i));
+      expect(all.sort((x, y) => x - y)).toEqual(Array.from({ length: 48 }, (_, i) => i));
     }
   });
 });
@@ -204,20 +205,21 @@ describe("arrangeFingerDrumming for a sample pack", () => {
     expect(where(a, "melodic")).toEqual([24, 25, 26, 27, 28, 29, 30, 31]);
   });
 
-  it("puts two basses, then two 808s, then every other type on bank C, and leaves bank D empty", () => {
+  it("puts two basses, then two 808s, then every other type on bank C, and puts nothing on bank D, not even a placeholder", () => {
     const a = arrangeFingerDrumming(sounds, horizontal, { pack: true });
     expect(where(a, "bass", false)).toEqual([32, 33]);
     expect(where(a, "bass", true)).toEqual([34, 35]);
     for (const c of ["drumLoop", "percLoop", "other"] as CategoryId[]) for (const i of where(a, c)) expect(i).toBeGreaterThanOrEqual(36), expect(i).toBeLessThan(48);
-    const bankD = a.placeholders.filter((p) => p.index >= 48);
-    expect(bankD).toHaveLength(16);
-    expect(bankD.every((p) => p.kind === "empty")).toBe(true);
+    expect(a.placeholders.some((p) => p.index >= 48)).toBe(false);
+    expect([...a.positions.values()].some((i) => i >= 48)).toBe(false);
   });
 
-  it("does not lose sounds that overflow their place", () => {
+  it("puts sounds that overflow their place on free pads of banks B and C only, never bank D, and leaves the rest unplaced (the app keeps them in the hot-swap pool)", () => {
     const extra = [...sounds, ...many("melodicLoop", 3), ...many("bass", 3)];
     const a = arrangeFingerDrumming(extra, horizontal, { pack: true });
-    expect(extra.filter((s) => a.positions.get(s.key) === undefined)).toHaveLength(0);
+    // Banks B and C (32 pads) are full with the pack itself, so the six extra sounds find no pad.
+    expect(extra.filter((s) => a.positions.get(s.key) === undefined)).toHaveLength(6);
+    expect([...a.positions.values()].every((i) => i < 48)).toBe(true);
     expect(new Set(a.positions.values()).size).toBe(a.positions.size);
   });
 

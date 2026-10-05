@@ -21,7 +21,7 @@ import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/lo
 import { balancedSpread } from "./audio/spread";
 import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
-import { emptyPadInBank, movePad, nextEmptyPad, removePad, replaceMisfit } from "./audio/padMoves";
+import { emptyPadInBank, inChopBank, movePad, nextEmptyPad, removePad, replaceMisfit } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { PalettePicker } from "./components/PalettePicker";
 import { LayoutPicker } from "./components/LayoutPicker";
@@ -712,33 +712,49 @@ function App() {
     restore(next);
   };
 
-  /** Every pad rearranged into `layoutId`, with placeholder pads in the gaps. Earlier placeholders are dropped first. */
+  /**
+   * Every pad in banks A to C rearranged into `layoutId`, with placeholder pads in the gaps. Earlier placeholders are dropped first.
+   * Bank D is the chops' bank: whatever is on it stays exactly as it is, and nothing (no sound, no placeholder) is put there.
+   */
   const arrangeInto = (cur: Record<number, Pad>, layoutId: string): Record<number, Pad> => {
     const real = Object.values(cur)
-      .filter(isReal)
+      .filter((p) => isReal(p) && !inChopBank(p.index))
       .sort((a, b) => a.index - b.index);
     const { positions, placeholders, ghosts } = arrangeFingerDrumming(
       real.map((p) => ({ key: p.origIndex, category: p.category, midi: p.detectedMidi, centroid: p.centroid, is808: p.is808 })),
       layoutById(layoutId),
-      // A sample pack keeps its loops and melodics on bank B, everything else on bank C, and bank D empty.
+      // A sample pack keeps its loops and melodics on bank B, everything else on bank C.
       { pack: Object.keys(latest.current.hidden).length > 0 },
     );
     const next: Record<number, Pad> = {};
+    // Bank D untouched.
+    for (const p of Object.values(cur)) if (inChopBank(p.index)) next[p.index] = p;
+    const unplaced: Pad[] = [];
     for (const p of real) {
       const index = positions.get(p.origIndex);
-      if (index !== undefined) next[index] = { ...p, index };
+      if (index !== undefined && !inChopBank(index)) next[index] = { ...p, index };
+      else unplaced.push(p);
     }
-    for (const ph of placeholders) next[ph.index] = makePlaceholderPad(ph);
+    for (const ph of placeholders) if (!inChopBank(ph.index)) next[ph.index] = makePlaceholderPad(ph);
     for (const g of ghosts) {
       const source = real.find((p) => p.origIndex === g.sourceKey);
-      if (source) next[g.index] = makeGhostPad(g.index, g.kind, source);
+      if (source && !inChopBank(g.index)) next[g.index] = makeGhostPad(g.index, g.kind, source);
     }
-    // A chopped song's sections are not part of the arrangement: they keep their pad (taking it from a blank placeholder), or move to a free one.
+    // A chopped song's sections that sit outside bank D keep their pad (taking it from a blank placeholder), or move to a free one.
     for (const p of Object.values(cur)) {
-      if (!p.section) continue;
+      if (!p.section || inChopBank(p.index)) continue;
       const at = !next[p.index] || next[p.index].placeholder?.kind === "empty" ? p.index : freeSongSlots(next)[0];
       if (at !== undefined) next[at] = { ...p, index: at };
     }
+    // Sounds the layout found no pad for in banks A to C take a blank pad there, or else wait in the hot-swap pool; none is lost.
+    const blanks = Object.values(next).filter((p) => p.placeholder?.kind === "empty" && !inChopBank(p.index)).map((p) => p.index).sort((a, b) => a - b);
+    const pooled: Pad[] = [];
+    for (const p of unplaced) {
+      const at = blanks.shift();
+      if (at !== undefined) next[at] = { ...p, index: at };
+      else pooled.push({ ...p, index: -1 });
+    }
+    if (pooled.length) setHidden((prev) => ({ ...prev, ...Object.fromEntries(pooled.map((p) => [p.origIndex, p])) }));
     return next;
   };
 
@@ -775,21 +791,25 @@ function App() {
     setBank(0);
   };
 
-  /** Removes the placeholder pads and returns every remaining sound to its pre-layout slot. */
+  /** Removes the placeholder pads and returns every remaining sound to its pre-layout slot. Bank D, the chops' bank, is left exactly as it is. */
   const removeLayout = () => {
     const cur = latest.current;
     recordEdit();
     const next: Record<number, Pad> = {};
+    for (const p of Object.values(cur.pads)) if (inChopBank(p.index)) next[p.index] = p;
+    const pooled: Pad[] = [];
     for (const p of Object.values(cur.pads)) {
-      if (!isReal(p)) continue;
+      if (!isReal(p) || inChopBank(p.index)) continue;
       const wanted = cur.layout.pre[p.origIndex] ?? p.index;
-      const index = next[wanted] ? (nextEmptyPad(next, 0) ?? wanted) : wanted;
-      next[index] = { ...p, index };
+      const index = next[wanted] || inChopBank(wanted) ? nextEmptyPad(next, 0) : wanted;
+      if (index === null) pooled.push({ ...p, index: -1 });
+      else next[index] = { ...p, index };
     }
-    // A chopped song's sections stay where they are, or move to the first free pad if a sound has gone back to theirs.
+    if (pooled.length) setHidden((prev) => ({ ...prev, ...Object.fromEntries(pooled.map((p) => [p.origIndex, p])) }));
+    // A chopped song's sections outside bank D stay where they are, or move to the first free pad if a sound has gone back to theirs.
     for (const p of Object.values(cur.pads)) {
-      if (!p.section) continue;
-      const index = next[p.index] ? nextEmptyPad(next, 0) : p.index;
+      if (!p.section || inChopBank(p.index)) continue;
+      const index = next[p.index] ? (freeSongSlots(next)[0] ?? null) : p.index;
       if (index !== null) next[index] = { ...p, index };
     }
     setPads(next);

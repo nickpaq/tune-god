@@ -3,12 +3,12 @@ import type { Pad } from "../components/PadPanel";
 import { isKitCategory } from "./classify";
 import { EMPTY_PAD_LABEL } from "./fingerDrumming";
 import { makePlaceholderPad } from "./placeholderPads";
-import { PADS_PER_BANK } from "./padMoves";
+import { PADS_PER_BANK, inChopBank } from "./padMoves";
 
 /** What to do with them at export: keep them (backfilled on the last page) or delete them. */
 export type ExtraDrums = "keep" | "delete";
 
-const isExtraDrum = (p: Pad) => !p.placeholder && !p.ghost && isKitCategory(p.category) && p.index >= PADS_PER_BANK;
+const isExtraDrum = (p: Pad) => !p.placeholder && !p.ghost && isKitCategory(p.category) && p.index >= PADS_PER_BANK && !inChopBank(p.index);
 
 export const extraDrumCount = (pads: Record<number, Pad>): number => Object.values(pads).filter(isExtraDrum).length;
 

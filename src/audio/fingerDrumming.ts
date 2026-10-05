@@ -4,13 +4,13 @@
 //   Bank A   the chosen layout, filled from the user's drums and FX ("add <category>" where a slot has none).
 //            A ghost snare or soft kick slot holds a copy for now; the export only makes it if the slot stays unfilled.
 //   Banks B-D   everything that isn't a drum, lowest to highest (bass, melodic, loops, other) from the start of
-//            bank B; the drums the layout had no slot for are backfilled from the end of bank D.
+//            bank B; the drums the layout had no slot for are backfilled from the end of bank C (bank D is the chops' and never used).
 //            If the project is nearly full, the two meet and the overflow takes bank A's "missing" pads.
 //   Every pad still free at the end becomes an "Empty pad" placeholder.
 import { categoryIndex, categoryLabel, isKitCategory, type CategoryId } from "./classify";
 import type { GhostKind } from "./ghost";
 import type { FingerLayout } from "./fingerLayouts";
-import { PAD_COUNT, PADS_PER_BANK } from "./padMoves";
+import { PADS_PER_BANK, TOOL_PAD_COUNT } from "./padMoves";
 
 export interface ArrangeSound {
   /** Identifies the sound (its original slot). */
@@ -121,8 +121,8 @@ const PACK_BASS_PADS = 2;
 
 /**
  * Where a sample pack's non-kit sounds go: bank B takes eight melodic loops then eight melodics; bank C two basses, two
- * 808s (all classified as bass) and then every other type (drum loops, perc loops, other, lowest to highest); bank D stays
- * empty for the user. Sounds that do not fit their place take the first free pad of banks B, C then D, so none is lost.
+ * 808s (all classified as bass) and then every other type (drum loops, perc loops, other, lowest to highest); bank D is the
+ * chops' bank and is never used. Sounds that do not fit their place take the first free pad of banks B then C.
  */
 function placePack(tonal: ArrangeSound[], leftoverDrums: ArrangeSound[], taken: Set<number>, positions: Map<number, number>): void {
   const of = (c: CategoryId) => tonal.filter((s) => (s.category ?? "other") === c).sort(byFrequency);
@@ -148,7 +148,7 @@ function placePack(tonal: ArrangeSound[], leftoverDrums: ArrangeSound[], taken: 
   put(rest, bankC + 2 * PACK_BASS_PADS, PADS_PER_BANK - 2 * PACK_BASS_PADS);
   const used = new Set([...taken, ...positions.values()]);
   const free: number[] = [];
-  for (let i = PADS_PER_BANK; i < PAD_COUNT; i++) if (!used.has(i)) free.push(i);
+  for (let i = PADS_PER_BANK; i < TOOL_PAD_COUNT; i++) if (!used.has(i)) free.push(i);
   [...overflow, ...leftoverDrums].forEach((s, n) => {
     if (free[n] !== undefined) positions.set(s.key, free[n]);
   });
@@ -184,7 +184,7 @@ export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayo
   if (pack) {
     placePack(tonal, leftoverDrums, new Set([...placeholders.keys(), ...ghosts.map((g) => g.index)]), positions);
     const taken = new Set([...positions.values(), ...placeholders.keys(), ...ghosts.map((g) => g.index)]);
-    for (let index = 0; index < PAD_COUNT; index++) {
+    for (let index = 0; index < TOOL_PAD_COUNT; index++) {
       if (!taken.has(index)) placeholders.set(index, { index, kind: "empty", label: EMPTY_PAD_LABEL });
     }
     return { positions, ghosts, placeholders: [...placeholders.values()].sort((a, b) => a.index - b.index) };
@@ -192,15 +192,15 @@ export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayo
 
   const ordered = TONAL_ORDER.flatMap((c) => tonal.filter((s) => (s.category ?? "other") === c).sort(byFrequency));
   const back: number[] = [];
-  for (let i = PAD_COUNT - 1; i >= PADS_PER_BANK; i--) back.push(i);
+  for (let i = TOOL_PAD_COUNT - 1; i >= PADS_PER_BANK; i--) back.push(i);
   if (ordered.length + leftoverDrums.length <= back.length) {
-    // Room for everyone: melodic sounds from the start of bank B, extra drums from the end of bank D.
+    // Room for everyone: melodic sounds from the start of bank B, extra drums from the end of bank C (never bank D).
     ordered.forEach((s, n) => positions.set(s.key, PADS_PER_BANK + n));
     leftoverDrums.forEach((s, n) => positions.set(s.key, back[n]));
   } else {
     // Nearly full: one run through banks B to D, then bank A's "missing" pads (last first), so real sounds win over placeholders.
     const free: number[] = [];
-    for (let i = PADS_PER_BANK; i < PAD_COUNT; i++) free.push(i);
+    for (let i = PADS_PER_BANK; i < TOOL_PAD_COUNT; i++) free.push(i);
     free.push(...[...placeholders.keys()].sort((a, b) => b - a));
     [...ordered, ...leftoverDrums].forEach((s, n) => {
       const index = free[n];
@@ -211,7 +211,7 @@ export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayo
   }
 
   const taken = new Set([...positions.values(), ...placeholders.keys(), ...ghosts.map((g) => g.index)]);
-  for (let index = 0; index < PAD_COUNT; index++) {
+  for (let index = 0; index < TOOL_PAD_COUNT; index++) {
     if (!taken.has(index)) placeholders.set(index, { index, kind: "empty", label: EMPTY_PAD_LABEL });
   }
 
