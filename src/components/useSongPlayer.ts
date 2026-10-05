@@ -21,7 +21,7 @@ export function useSongPlayer(channelData: Float32Array[], sampleRate: number, c
   const [playing, setPlaying] = useState(false);
   const handle = useRef<PadHandle | null>(null);
   const timer = useRef(0);
-  const [clicks, setClicks] = useState(false);
+  const [clicks, setClicks] = useState(true);
   /** How loud the clicks are, 0 to 1 (the gain follows the square, so the slider feels even). */
   const [clickVolume, setClickVolume] = useState(0.6);
   const latest = useRef({ clicks, clickVolume, clickLines });

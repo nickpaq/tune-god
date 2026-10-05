@@ -1816,11 +1816,6 @@
   font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
 }
 
-/* the play button under the waveform: big, hold to play, slide down to keep playing */
-.chop-timeline__play {
-  display: flex;
-  gap: calc(var(--cell) * 2);
-}
 
 .chop__play {
   flex: 1;
@@ -1851,72 +1846,15 @@
   color: #000;
 }
 
-.chop__play--lock {
-  box-shadow: inset 0 0 0 calc(var(--cell) * 1.5) #000;
-}
 
-.chop__clicks {
-  flex: none;
-  align-self: stretch;
-  touch-action: manipulation;
-}
 
-.chop__clicks[aria-pressed="true"] {
-  background: var(--oled);
-  color: #000;
-}
 
-.chop__toggle {
-  min-width: calc(var(--cell) * 34);
-  touch-action: manipulation;
-}
 
-.chop__toggle[aria-pressed="true"] {
-  background: var(--oled);
-  color: #000;
-}
 
-.chop__hint {
-  flex: 1;
-  height: 1.35em;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  opacity: 0.7;
-  text-transform: none;
-}
 
-/* ---- tapping the tempo: the big tap button, the microphone and its meter ---- */
-.chop__tap {
-  flex: none;
-  height: calc(var(--cell) * 34);
-  border: calc(var(--cell) * 0.8) solid var(--oled);
-  border-radius: 0;
-  background: #000;
-  color: var(--oled);
-  font: 400 calc(var(--cell) * 12) / calc(var(--cell) * 14) "Silkscreen", monospace;
-  text-transform: uppercase;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
 
-.chop__tap:disabled {
-  opacity: 0.35;
-  font-size: calc(var(--cell) * 7);
-}
 
-.chop__tap--hit,
-.chop__tap:active:not(:disabled) {
-  background: var(--oled);
-  color: #000;
-}
 
-.chop__wide {
-  flex: none;
-  width: 100%;
-}
 
 .chop__grow {
   flex: 1;
@@ -1928,24 +1866,8 @@
   accent-color: var(--oled);
 }
 
-.chop__modes .chop__toggle {
-  flex: 1;
-  min-width: 0;
-}
 
-/* the microphone's level while it listens, so the sensitivity can be set by eye */
-.chop__meter {
-  flex: none;
-  width: 30cqw;
-  height: calc(var(--cell) * 4);
-  border: var(--cl, 1px) solid var(--oled);
-}
 
-.chop__meter > span {
-  display: block;
-  height: 100%;
-  background: var(--oled);
-}
 
 /* ---- the list of sections picked in the chop editor ---- */
 .chop__bin {
