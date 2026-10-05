@@ -1,10 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { approach, centredStart, clampViewStart, defaultSpan, isDrag, MIN_SPAN_FRAMES, moveMarker, spanAfterDrag, TAP_SLOP_PX, viewStart, zoomRate, zoomRoom } from "./zoom";
+import { approach, centredStart, clampViewStart, defaultSpan, isDrag, MIN_SPAN_FRAMES, moveMarker, spanAfterDrag, TAP_SLOP_PX, viewStart, ZOOM_DEAD_ZONE_PX, zoomRate, zoomRoom, zoomTravel } from "./zoom";
 
 describe("zoomRoom", () => {
-  it("is half the way from the finger to the bottom of the screen, never less than the minimum", () => {
-    expect(zoomRoom(300, 800)).toBe(250);
-    expect(zoomRoom(790, 800)).toBe(60);
+  it("is the whole way from the finger to the bottom of the screen, never less than the minimum", () => {
+    expect(zoomRoom(300, 800)).toBe(500);
+    expect(zoomRoom(790, 800)).toBe(120);
+  });
+});
+
+describe("zoomTravel", () => {
+  it("counts nothing until the finger has passed the dead zone, up or down", () => {
+    expect(zoomTravel(0)).toBe(0);
+    expect(zoomTravel(ZOOM_DEAD_ZONE_PX)).toBe(0);
+    expect(zoomTravel(-ZOOM_DEAD_ZONE_PX)).toBe(0);
+    expect(zoomTravel(10)).toBe(0);
+    expect(zoomTravel(-ZOOM_DEAD_ZONE_PX + 1)).toBe(0);
+  });
+
+  it("then counts only the part beyond it, so zoom starts from nothing with no jump", () => {
+    expect(zoomTravel(ZOOM_DEAD_ZONE_PX + 1)).toBe(1);
+    expect(zoomTravel(ZOOM_DEAD_ZONE_PX + 40)).toBe(40);
+    expect(zoomTravel(-(ZOOM_DEAD_ZONE_PX + 40))).toBe(-40);
+    // continuous across the threshold
+    expect(Math.abs(zoomTravel(ZOOM_DEAD_ZONE_PX + 0.01) - zoomTravel(ZOOM_DEAD_ZONE_PX - 0.01))).toBeLessThan(0.02);
+  });
+
+  it("keeps the whole drag smooth: zoom through the dead zone is the unchanged span", () => {
+    const rate = zoomRate(5_000_000, 200);
+    for (const dy of [-20, -5, 0, 5, 20]) expect(spanAfterDrag(3_000_000, zoomTravel(dy), rate, 10_000_000)).toBeCloseTo(3_000_000, 6);
   });
 });
 
@@ -45,17 +68,31 @@ describe("moveMarker", () => {
   const width = 360;
   const grab = { frame: 1_000_000, across: 0.2, span: 4_000_000 };
 
-  it("keeps the marker at the same place across the view: the waveform moves under it", () => {
+  it("keeps the marker at the same place across the view and moves the waveform with the finger: dragging right makes the cut earlier", () => {
     const next = moveMarker(grab, 40, width, 4_000_000, total);
     expect(next.across).toBe(0.2);
-    expect(next.frame - grab.frame).toBeCloseTo((40 / width) * 4_000_000, 3);
-    // the first frame in view moves with the marker, so everything on the waveform has moved left under it
-    expect(viewStart(next) - viewStart(grab)).toBeCloseTo(next.frame - grab.frame, 6);
+    expect(next.frame - grab.frame).toBeCloseTo(-(40 / width) * 4_000_000, 3);
+    // the waveform has moved right across the screen: what was at the start of the view is further along now
+    expect(viewStart(next)).toBeLessThan(viewStart(grab));
+  });
+
+  it("keeps the finger on the same point of the waveform however far it is dragged", () => {
+    const fingerAcross = 0.6;
+    let v = grab;
+    const underFinger = (g: typeof grab, finger: number) => viewStart(g) + finger * g.span;
+    const before = underFinger(v, fingerAcross);
+    // drag right by 30 px, then back, then left, at different zooms
+    let finger = fingerAcross;
+    for (const [dx, span] of [[30, 4_000_000], [-12, 4_000_000], [-25, 4_000_000]] as const) {
+      v = moveMarker({ ...v, span }, dx, width, span, total);
+      finger += dx / width;
+      expect(underFinger(v, finger)).toBeCloseTo(before, 3);
+    }
   });
 
   it("covers less time per pixel the further in the view is zoomed", () => {
-    const wide = moveMarker(grab, 10, width, 4_000_000, total).frame - grab.frame;
-    const close = moveMarker(grab, 10, width, 400, total).frame - grab.frame;
+    const wide = Math.abs(moveMarker(grab, 10, width, 4_000_000, total).frame - grab.frame);
+    const close = Math.abs(moveMarker(grab, 10, width, 400, total).frame - grab.frame);
     expect(close / wide).toBeCloseTo(400 / 4_000_000, 9);
   });
 
@@ -68,22 +105,22 @@ describe("moveMarker", () => {
     }
   });
 
-  it("keeps the waveform's own scale about the marker while zooming: the marker's place on the screen does not change", () => {
+  it("keeps the marker's place on the screen while zooming", () => {
     const a = moveMarker(grab, 0, width, 1_000_000, total);
     const b = moveMarker(a, 0, width, 1_000, total);
     for (const v of [a, b]) expect((v.frame - viewStart(v)) / v.span).toBeCloseTo(0.2, 9);
   });
 
   it("stops at the ends of the song, with the view stopping with it", () => {
-    const end = moveMarker({ ...grab, frame: total - 100 }, 500, width, 100_000, total);
+    const end = moveMarker({ ...grab, frame: total - 100 }, -500, width, 100_000, total);
     expect(end.frame).toBe(total);
-    const again = moveMarker(end, 50, width, 100_000, total);
+    const again = moveMarker(end, -50, width, 100_000, total);
     expect(viewStart(again)).toBe(viewStart(end));
-    expect(moveMarker({ ...grab, frame: 100 }, -500, width, 100_000, total).frame).toBe(0);
+    expect(moveMarker({ ...grab, frame: 100 }, 500, width, 100_000, total).frame).toBe(0);
   });
 
   it("a finger path that zooms right in lets a point be placed to a frame or better", () => {
-    expect(moveMarker(grab, 1, 360, MIN_SPAN_FRAMES, total).frame - grab.frame).toBeCloseTo(1, 9);
+    expect(Math.abs(moveMarker(grab, 1, 360, MIN_SPAN_FRAMES, total).frame - grab.frame)).toBeCloseTo(1, 9);
   });
 });
 

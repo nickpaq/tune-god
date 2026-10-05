@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { getAudioContext } from "../audio/decode";
 import { prepareBuffer, startPad, type PadHandle } from "../audio/player";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
-import { approach, centredStart, clampViewStart, defaultSpan, isDrag, LATCH_DRAG_PX, moveMarker, spanAfterDrag, viewStart, zoomRate, zoomRoom, type GrabbedView } from "../audio/song/zoom";
+import { approach, centredStart, clampViewStart, defaultSpan, isDrag, LATCH_DRAG_PX, moveMarker, spanAfterDrag, viewStart, zoomRate, zoomRoom, zoomTravel, type GrabbedView } from "../audio/song/zoom";
 
 /** Size of a chop point's tab, in CSS pixels: wide enough for a thumb, and its top comes to a point. */
 const TAB_WIDTH = 28;
@@ -256,7 +256,7 @@ export function ChopTimeline({
   }, [selected, chosenFrame]);
 
   /** The span a held marker's finger asks for: down from where it grabbed zooms in, up zooms out, from the zoom the view had then. */
-  const spanFor = (d: TabDrag) => spanAfterDrag(d.startSpan, d.fingerY - d.startY, zoomRate(resting, d.room), total);
+  const spanFor = (d: TabDrag) => spanAfterDrag(d.startSpan, zoomTravel(d.fingerY - d.startY), zoomRate(resting, d.room), total);
 
   /** The view eases from where it is to `target` (read afresh each frame, so it can be a moving thing). */
   const animateView = (target: () => { start: number; span: number }) => {
@@ -489,7 +489,7 @@ export function ChopTimeline({
       d.startY = e.clientY;
       return;
     }
-    // Down zooms in and up zooms out, about the marker, which stays where it was grabbed. Sideways, the waveform moves under it, and a pixel covers less time the closer in the view is.
+    // Down zooms in and up zooms out (once past a dead zone), about the marker, which stays where it was grabbed. Sideways, the waveform follows the finger under the marker, and a pixel covers less time the closer in the view is.
     const span = spanFor(d);
     const next = moveMarker(d.grab, e.clientX - d.lastX, width, span, total);
     d.lastX = e.clientX;

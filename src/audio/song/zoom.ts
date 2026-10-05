@@ -1,20 +1,31 @@
 // The maths of dragging a chop point, Ableton style. The marker stays where it was grabbed on the screen; dragging down zooms in and up
-// zooms out, smoothly and along a geometric curve (so every bit of extra travel feels the same), and sideways travel slides the waveform
-// under the marker, covering less time the further in the view is. All of it is plain arithmetic so it can be tested and tuned.
+// zooms out, smoothly and along a geometric curve (so every bit of extra travel feels the same) once the finger has passed a dead zone, and
+// sideways travel pulls the waveform along with the finger, covering less time the further in the view is. All of it is plain arithmetic so it can be tested and tuned.
 
 /** The closest view: this many frames across the whole timeline. About a millisecond per 40 pixels at 44.1 kHz. */
 export const MIN_SPAN_FRAMES = 360;
-/** Minimum travel (px) that takes the zoom all the way in; the real travel is half the room between the finger and the bottom of the screen. */
-export const MIN_ZOOM_ROOM_PX = 60;
+/** Least travel (px) that takes the zoom all the way in; the usual travel is the whole way from the finger to the bottom of the screen, so zooming is gentle. */
+export const MIN_ZOOM_ROOM_PX = 120;
+/** Vertical travel (px) a drag has to pass before zoom starts to take effect, so a sideways scrub that wanders a little up or down never zooms. */
+export const ZOOM_DEAD_ZONE_PX = 24;
 
 /** How much of the song the resting view shows: about half. */
 export function defaultSpan(totalFrames: number): number {
   return Math.max(MIN_SPAN_FRAMES, totalFrames / 2);
 }
 
-/** The room (px) a drag that starts at screen height `y` has to zoom in: half the way to the bottom of the screen. */
+/** The room (px) a drag that starts at screen height `y` has to zoom in: the whole way to the bottom of the screen. */
 export function zoomRoom(y: number, screenHeight: number): number {
-  return Math.max(MIN_ZOOM_ROOM_PX, (screenHeight - y) / 2);
+  return Math.max(MIN_ZOOM_ROOM_PX, screenHeight - y);
+}
+
+/**
+ * Vertical travel that counts toward zoom: nothing until it has passed the dead zone, then the part beyond it, so zoom starts from nothing
+ * with no jump as the threshold is crossed. Down is positive, up negative.
+ */
+export function zoomTravel(dy: number, dead = ZOOM_DEAD_ZONE_PX): number {
+  const beyond = Math.max(0, Math.abs(dy) - dead);
+  return beyond === 0 ? 0 : Math.sign(dy) * beyond;
 }
 
 /** Where a grabbed point is: its frame, where it sits across the view (0 = left edge, 1 = right) and how many frames the view spans. */
@@ -48,11 +59,12 @@ export function spanAfterDrag(spanAtGrab: number, dy: number, rate: number, fart
 
 /**
  * One step of a drag, Ableton style: the marker keeps the place across the view where it was grabbed (`across`, 0 = left edge, 1 = right)
- * and the waveform moves under it. Sideways travel of `dx` pixels moves the marker by `dx / width` of the view (so a pixel covers less time
- * the closer in the view is), and zooming only scales the view about the marker, never moving it. The marker stops at the ends of the song.
+ * and the waveform moves under it, following the finger: the point of the waveform under the finger stays under it, so dragging right pulls
+ * the waveform right and the marker, fixed on the screen, ends up earlier in the song. A pixel of travel covers `span / width` frames, less
+ * the closer in the view is. Zooming only scales the view about the marker, never moving it. The marker stops at the ends of the song.
  */
 export function moveMarker(v: GrabbedView, dx: number, width: number, span: number, totalFrames: number): GrabbedView {
-  return { frame: Math.min(totalFrames, Math.max(0, v.frame + (dx / width) * span)), across: v.across, span };
+  return { frame: Math.min(totalFrames, Math.max(0, v.frame - (dx / width) * span)), across: v.across, span };
 }
 
 /** How long a marker takes to slide back to the finger after a pause: the time constant of the exponential approach, in milliseconds. */
