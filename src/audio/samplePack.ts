@@ -2,7 +2,7 @@
 // each file is classified from its folder names, then up to one pad bank's worth are picked so every
 // sound type is as evenly represented as the pack allows, within a memory budget. All of this works on
 // file names and sizes only; no audio is read until a file has been picked.
-import { classifyByName, hatOpenness, is808Name, type CategoryId } from "./classify";
+import { classifyByName, hatOpenness, is808Name, MELODIC_NAME, type CategoryId } from "./classify";
 
 const MB = 1024 * 1024;
 /** Total file size a pack import may load when nothing better is known. Decoded audio takes about three times this in memory. */
@@ -123,13 +123,37 @@ export function isOneShotFolder(folder: string): boolean {
   return /\b(one ?shots?|single ?shots?)\b/.test(tidy(folder)) && categoryOfFolder(folder) === null;
 }
 
+/** The folder a file sits in, as one key. */
+const folderKey = (folders: string[]) => folders.join("/");
+
 /**
- * Whether a pack can hold melodic one-shots at all: some folder is melodic ("Melodic", "Keys", "Synths", "Bells", "Plucks"...) or is a
- * plain "One Shots" folder, which can hold anything. A pack with neither almost certainly has none, so a file whose name merely sounds
- * melodic is not trusted and the melodic pads are left empty for another pack to fill (see planPackSounds).
+ * Folders whose own name says nothing but whose file names do: at least 3 files, half or more named like an instrument ("Piano 01",
+ * "Strings_Cmaj", "Rhodes stab"). Such a folder is a melodic one-shot folder whatever it is called ("Pack 2", "New folder").
  */
-export function packHasMelodicOneShots(files: { folders: string[] }[]): boolean {
-  return files.some((f) => f.folders.some((folder) => categoryOfFolder(folder) === "melodic" || isOneShotFolder(folder)));
+export function inferMelodicFolders(files: { folders: string[]; name: string }[]): Set<string> {
+  const counts = new Map<string, { total: number; melodic: number }>();
+  for (const f of files) {
+    if (f.folders.length === 0 || f.folders.some((d) => categoryOfFolder(d) !== null)) continue;
+    const key = folderKey(f.folders);
+    const c = counts.get(key) ?? { total: 0, melodic: 0 };
+    c.total++;
+    if (MELODIC_NAME.test(tidy(f.name.replace(/\.[a-z0-9]+$/i, "")))) c.melodic++;
+    counts.set(key, c);
+  }
+  const out = new Set<string>();
+  for (const [key, c] of counts) if (c.total >= 3 && c.melodic * 2 >= c.total) out.add(key);
+  return out;
+}
+
+/**
+ * Whether a pack can hold melodic one-shots at all: some folder is melodic ("Melodic", "Keys", "Synths", "Bells", "Plucks"...), is a
+ * plain "One Shots" folder, which can hold anything, or is filled with instrument-named files (inferMelodicFolders). A pack with none
+ * almost certainly has no melodic one-shots, so a file whose name merely sounds melodic is not trusted and the melodic pads are left
+ * empty for another pack to fill (see planPackSounds).
+ */
+export function packHasMelodicOneShots(files: { folders: string[]; name?: string }[]): boolean {
+  if (files.some((f) => f.folders.some((folder) => categoryOfFolder(folder) === "melodic" || isOneShotFolder(folder)))) return true;
+  return inferMelodicFolders(files.filter((f): f is { folders: string[]; name: string } => f.name !== undefined)).size > 0;
 }
 
 /** Fisher-Yates shuffle into a new array. `random` is injectable so tests are repeatable. */
@@ -232,8 +256,11 @@ export function planPackSounds<T>(
   let skippedForSize = 0;
   let skippedMelodicNames = 0;
   const melodicPossible = packHasMelodicOneShots(files);
+  const melodicFolders = inferMelodicFolders(files);
   for (const file of files) {
-    const category = categoryOfFile(file.folders, file.name);
+    let category = categoryOfFile(file.folders, file.name);
+    // An unlabelled file in a folder full of instrument names is a melodic one-shot.
+    if (category === "other" && melodicFolders.has(folderKey(file.folders))) category = "melodic";
     found.set(category, (found.get(category) ?? 0) + 1);
     if (category === "melodic" && !melodicPossible) {
       skippedMelodicNames++;

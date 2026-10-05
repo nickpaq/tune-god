@@ -13,6 +13,9 @@
 .phone {
   --u: 2.4cqw;
   --radius: 2.2cqw;
+  /* how far a short phone can squeeze the screen and the piano or type keys before the pads have to shrink */
+  --screen-min: 34cqw;
+  --deck-min: 22cqw;
   position: relative;
   width: min(100vw, calc(var(--app-h, 100dvh) * 9 / 17.6));
   height: 100%;
@@ -42,7 +45,7 @@
   display: flex;
   flex-direction: column;
   gap: 2cqw;
-  padding: 3cqw 4.1cqw calc(max(var(--u), var(--safe-bottom)) + 3cqw);
+  padding: 0 4.1cqw calc(max(var(--u), var(--safe-bottom)) + 3cqw);
   box-shadow: inset 0 1px 0 var(--seam-l);
 }
 
@@ -168,7 +171,7 @@
 /* ---- screen: a black OLED in a bezel ---- */
 .screen-wrap {
   flex: 1;
-  min-height: 38cqw;
+  min-height: var(--screen-min);
   position: relative;
   display: flex;
 }
@@ -525,14 +528,16 @@
 
 /* ---- deck ---- */
 .deck {
-  flex: none;
-  height: 30.8cqw;
+  /* 30.8cqw when there is room, down to --deck-min on a short phone (its piano and keys stretch to the height) */
+  flex: 0 1 30.8cqw;
+  min-height: var(--deck-min);
 }
 
 .type-keys {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-auto-rows: 9.2cqw;
+  height: 100%;
+  grid-auto-rows: 1fr;
   gap: 1.5cqw;
 }
 
@@ -718,11 +723,13 @@
 }
 
 .pads {
-  /* canvas size, shrinking only when the chassis is short (it keeps room for a 45cqw screen and the deck) */
-  /* the space the rest of the chassis needs, with the top safe area and the bottom padding counted as .upper and .lower really use them */
-  --pad-h: min(20.5cqw, calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - 45cqw - 30.8cqw - 3cqw - 4.5cqw - 10.3cqw - (6cqw + max(var(--u), var(--safe-bottom)))) / 4));
+  /* Always square pads. Full size is the width of a column; on a short phone the squares shrink together, the grid stays centred
+     (the columns spread to the edges) and the screen and piano give way first (--screen-min, --deck-min), so nothing overlaps. */
+  --pad-w: calc((100cqw - 8.2cqw - 3 * 1.5cqw) / 4);
+  --pad-h: min(var(--pad-w), calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - var(--screen-min) - var(--deck-min) - 3cqw - 4.5cqw - (6cqw + max(var(--u), var(--safe-bottom)))) / 4));
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, var(--pad-h));
+  justify-content: space-between;
   grid-auto-rows: var(--pad-h);
   gap: 1.5cqw;
 }
@@ -838,60 +845,13 @@
   pointer-events: none;
 }
 
-/* ---- transport row and name plate ---- */
-.transport {
-  flex: none;
+.menu__row {
   display: flex;
-  align-items: center;
   gap: 2cqw;
-  height: 10.3cqw;
 }
 
-.cap--transport {
-  width: 16.4cqw;
-  height: 9.2cqw;
-  display: grid;
-  place-items: center;
-  border-radius: 1.8cqw;
-}
-
-.cap--transport:disabled {
-  opacity: 0.35;
-}
-
-.cap--transport svg {
-  width: 4.1cqw;
-  height: 4.1cqw;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.nameplate {
-  margin-left: auto;
-  text-align: right;
-  color: var(--ink3);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.nameplate__name {
-  font-size: 3.3cqw;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.32em;
-  margin-right: -0.32em;
-}
-
-.nameplate__sub {
-  margin-top: 1cqw;
-  font-size: 2.3cqw;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.24em;
-  margin-right: -0.24em;
+.menu__row .menu__button {
+  flex: 1;
 }
 
 /* Marching ants, like a lasso selection: white dashes crawling along a dark outline. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryOfFile, categoryOfFolder, isOneShotFolder, packByteBudget, packHasMelodicOneShots, planPackSounds, type PackFile } from "./samplePack";
+import { categoryOfFile, categoryOfFolder, inferMelodicFolders, isOneShotFolder, packByteBudget, packHasMelodicOneShots, planPackSounds, type PackFile } from "./samplePack";
 
 // A small deterministic random source so the shuffles are repeatable.
 function seeded(seed = 1) {
@@ -186,6 +186,15 @@ describe("melodic one-shots are not mistaken for percussion", () => {
   it("still calls real percussion perc", () => {
     for (const name of ["Perc 01.wav", "Percussion Hit.wav", "Tom Low.wav", "Shaker 2.wav", "Conga Open.wav", "Drum Fill.wav"]) expect(categoryOfFile(["Pack"], name), name).toBe("perc");
     for (const folder of ["Percussion", "Percs", "Toms", "Shakers & Tambourines"]) expect(categoryOfFolder(folder), folder).toBe("perc");
+  });
+
+  it("infers a melodic folder from its file names", () => {
+    const f = (folder: string, ...names: string[]) => names.map((name) => ({ folders: ["Pack", folder], name }));
+    const piano = f("Stuff", "Piano 01.wav", "Strings Am.wav", "Cello long.wav", "Cmaj 03.wav");
+    expect(inferMelodicFolders(piano).has("Pack/Stuff")).toBe(true);
+    expect(packHasMelodicOneShots(piano)).toBe(true);
+    expect(packHasMelodicOneShots(f("Stuff", "Piano 01.wav", "Kit A.wav", "Kit B.wav", "Kit C.wav"))).toBe(false);
+    expect(packHasMelodicOneShots(f("Stuff", "Piano 01.wav", "Harp 02.wav"))).toBe(false);
   });
 
   it("knows a one-shots folder that names no type", () => {

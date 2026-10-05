@@ -1221,6 +1221,14 @@ function App() {
             >
               {exporting ? `Exporting ${exportProgress || "…"}` : "Export"}
             </button>
+            <div className="menu__row">
+              <button className="menu__button" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo}>
+                Undo
+              </button>
+              <button className="menu__button" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo}>
+                Redo
+              </button>
+            </div>
             <label>
               <input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} />
               Balance loudness
@@ -1602,25 +1610,6 @@ function App() {
             </div>
           )}
         </div>
-
-        {/* Undo and redo on the left, the name plate on the right. */}
-        <div className="transport">
-          <button className="cap cap--transport" disabled={historySize.undo === 0 || analyzing > 0} onClick={undo} aria-label="Undo">
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M5 3L2 6l3 3M2 6h7.5a4 4 0 0 1 0 8H6" />
-            </svg>
-          </button>
-          <button className="cap cap--transport" disabled={historySize.redo === 0 || analyzing > 0} onClick={redo} aria-label="Redo">
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M11 3l3 3-3 3M14 6H6.5a4 4 0 0 0 0 8H10" />
-            </svg>
-          </button>
-          <div className="nameplate">
-            <div className="nameplate__name">KoalaTune</div>
-            <div className="nameplate__sub">16 pads · 4 banks</div>
-          </div>
-        </div>
-
         </div>
 
         {layoutPickerOpen && (

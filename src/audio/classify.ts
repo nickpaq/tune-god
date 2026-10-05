@@ -108,6 +108,10 @@ export function isKitCategory(category: CategoryId | undefined): boolean {
 // "hat" is resolved by decay time when the name doesn't say open or closed.
 // Anything with no telltale word falls through to "other". A name containing "loop" turns the category it
 // would otherwise get into its loop version (see LOOP_OF); breaks count as drum loops.
+/** Words that name a pitched instrument or sound. Also used to spot a melodic folder by its file names (see inferMelodicFolders). */
+export const MELODIC_NAME =
+  /\b(pianos?|keys?|keyboards?|bells?|plucks?|plucked|guitars?|ukulele|banjo|mandolin|sitar|harps?|mallets?|marimbas?|kalimbas?|rhodes|wurlitzer|epianos?|stabs?|vibraphones?|vibes|glock(enspiel)?s?|xylophones?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|violins?|violas?|cellos?|organs?|accordion|harmonica|harpsichord|clavinet|clav|mellotron|moog|juno|arps?|saw|brass|horns?|trumpets?|trombones?|saxes|saxophones?|sax|clarinets?|oboes?|bassoon|flutes?|pan ?flutes?|orchestra|orchestral|melodic|melody|melodies|tonal|pitched)\b/;
+
 const NAME_RULES: [CategoryId | "hat", RegExp][] = [
   ["drumLoop", /\b(break|breakbeat|amen|drum loops?|drums loops?|beat loops?)\b/],
   ["kick", /\b(kick|kik|bd|bassdrum|bass drum)\b/],
@@ -123,7 +127,7 @@ const NAME_RULES: [CategoryId | "hat", RegExp][] = [
   // pitched sound is often labelled with them ("Bell Perc", "Pluck Perc", "Synth Drum") and should stay melodic.
   ["perc", /\b(tom|toms|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro)\b/],
   ["bass", /\b(808|bass|sub|reese)\b/],
-  ["melodic", /\b(piano|keys|key|bell|bells|pluck|guitar|harp|mallet|marimba|kalimba|rhodes|epiano|stab|vibraphone|glock|glockenspiel|celesta|chime|pad|synth|lead|chord|chords|strings|string|organ|arp|saw|brass|horn|flute|melodic|melody|tonal|pitched)\b/],
+  ["melodic", MELODIC_NAME],
   ["perc", /\b(perc|percussion|drum)\b/],
 ];
 
