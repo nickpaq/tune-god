@@ -225,7 +225,8 @@ function App() {
   /** Pre-rendered normalized audio per pad (by original slot, so it follows a moved pad); only used for playback while Normalize is on. */
   const [normalizedData, setNormalizedData] = useState<Record<number, Float32Array[]>>({});
   const [menuOpen, setMenuOpen] = useState(false);
-  const [masterChain, setMasterChain] = useState(saved.masterChain ?? true);
+  // Off until the user turns it on (an earlier version defaulted it on, so the old saved value is not read).
+  const [masterChain, setMasterChain] = useState(saved.masterChainOn ?? false);
   const [masterStyle, setMasterStyle] = useState<MasterStyle>(saved.masterStyle ?? "loud");
   const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
   const [packMemory, setPackMemory] = useState<PackMemory>(saved.packMemory ?? "auto");
@@ -427,7 +428,7 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ mix, organize, organized, masterStyle, masterChain, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
+    saveState({ mix, organize, organized, masterStyle, masterChainOn: masterChain, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
   }, [mix, organize, organized, masterStyle, masterChain, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
@@ -1136,10 +1137,12 @@ function App() {
     const pads = mode === "delete" ? withoutExtraDrums(padsNow) : padsNow;
     const arrangement = arrangementOf(pads);
     const placeholderList = placeholdersOf(pads);
-    const project = projectRef.current;
-    if (!project) return;
+    if (!projectRef.current) return;
     setExporting(true);
     try {
+      // The export writes into the project's zip (audio, mixer, sequence), so each export starts from a fresh read of the project file. Exporting twice
+      // from one zip used to carry the first export's master chain, bus plugins and remapped patterns into the second.
+      const project = projectFile.current ? await parseKoalaProject(projectFile.current) : projectRef.current;
       const tuned: TunedSample[] = [];
       // Koala's pan runs 0..1 (0.5 = centre) for L100..R100, so N percent is N/200 off centre.
       const pans = new Map<number, number>();

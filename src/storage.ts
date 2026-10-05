@@ -40,6 +40,8 @@ export interface SavedState {
   autoColor?: boolean;
   routeBuses?: boolean;
   masterChain?: boolean;
+  /** The Master chain switch (a newer key than `masterChain`, which an earlier version defaulted to on). */
+  masterChainOn?: boolean;
   autoPlayback?: boolean;
   /** Show a grey sound-type symbol on each pad. */
   padSymbols?: boolean;
