@@ -10,6 +10,8 @@ const MIN_LINE_PX = 7;
 const FLAG_H = 14;
 /** The closest view, in seconds across. */
 const MIN_SPAN_SECONDS = 0.25;
+/** A bar narrower than this on the screen (CSS pixels) is too small to snap to alone: the magnet then takes every fourth bar. */
+const MAGNET_BAR_PX = 30;
 /** How much of the song the first view shows, in seconds. */
 const START_SECONDS = 12;
 
@@ -34,7 +36,7 @@ function formatTime(seconds: number): string {
 
 /**
  * The song's waveform in the screen's colours, scrolling behind a line fixed in the middle: that line is the cursor, where markers are put and where
- * the song plays from. Dragging scrubs (the waveform follows the finger, and the line is pulled toward the nearest grid lines and markers, smoothly), and dragging down zooms in, up zooms out. Over it: a line for every beat (the first beat of each bar
+ * the song plays from. Dragging scrubs (the waveform follows the finger, and the line is pulled toward the bar lines, smoothly), and dragging down zooms in, up zooms out. Over it: a line for every beat (the first beat of each bar
  * stronger), the sections between chop markers in their colours, the chop markers (flag on top, numbered) and the downbeat markers (flag below).
  */
 export const ChopTimeline = forwardRef<
@@ -222,15 +224,22 @@ export const ChopTimeline = forwardRef<
     drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span, y0: e.clientY, room: zoomRoom(e.clientY, window.innerHeight) };
   };
 
-  /** The grid line or marker just before a frame and the one just after it (infinite where there is none). */
-  const neighbours = (frame: number, span: number): { before: number; after: number } => {
-    const { grid: g, chops: cuts, downbeats: downs, oneOne: one } = latest.current;
-    const widthPx = canvas.current!.clientWidth;
-    const targets = [...cuts, ...downs, ...(one === null ? [] : [one])];
-    if (g) for (const n of shownLines(g, frame - span, span * 2, widthPx * 2)) targets.push(lineFrame(g, n));
+  /**
+   * The grid lines the magnet pulls toward: bar lines only, every bar when a bar is wide enough on the screen to tell apart, otherwise every fourth bar
+   * (counted from the first bar of the grid). Never finer than a bar.
+   */
+  const bounds = (frame: number, span: number): { before: number; after: number } => {
+    const g = latest.current.grid;
     let before = -Infinity;
     let after = Infinity;
-    for (const t of targets) {
+    if (!g) return { before, after };
+    const barFrames = g.segments[0].beatFrames * g.beatsPerBar;
+    const every = (barFrames * canvas.current!.clientWidth) / span >= MAGNET_BAR_PX ? 1 : 4;
+    const reach = Math.max(span * 2, barFrames * every * 3);
+    const ref = g.downbeats[0] ?? 0;
+    for (const n of linesBetween(g, Math.max(0, frame - reach), Math.min(total, frame + reach))) {
+      if (!isBarLine(g, n) || ((((n - ref) / g.beatsPerBar) % every) + every) % every !== 0) continue;
+      const t = lineFrame(g, n);
       if (t <= frame && t > before) before = t;
       if (t > frame && t < after) after = t;
     }
@@ -243,7 +252,7 @@ export const ChopTimeline = forwardRef<
    * gradually) and slides across the gap in the middle. It is continuous and never goes backwards, and no stretch of the song is without a pull.
    */
   const magnet = (frame: number, span: number): number => {
-    const { before, after } = neighbours(frame, span);
+    const { before, after } = bounds(frame, span);
     if (before === -Infinity || after === Infinity) return frame;
     return pulledBetween(frame, before, after);
   };
@@ -252,7 +261,7 @@ export const ChopTimeline = forwardRef<
   const settle = () => {
     cancelAnimationFrame(settling.current);
     const { span } = view.current;
-    const { before, after } = neighbours(view.current.cursor, span);
+    const { before, after } = bounds(view.current.cursor, span);
     const here = view.current.cursor;
     const target = Math.abs(here - before) <= Math.abs(after - here) ? before : after;
     if (!Number.isFinite(target)) return;
