@@ -16,6 +16,11 @@ export interface SongGrid {
    */
   anchors?: Readonly<Record<number, number>>;
   /**
+   * Places the grid passes through that no cut is tied to any more: the hand-placed cut that made one was moved to another bar line with snapping on,
+   * and the grid is locked while that happens, so what it had taught the grid stays. `bars` counts from bar 1, as for a cut.
+   */
+  fixed?: ReadonlyArray<{ bars: number; frame: number }>;
+  /**
    * Bars in a section, by section (0-based), where it is not the usual 8: a song that drops or adds bars before a chorus has a
    * short section there. Every later section starts that much sooner (or later) with it.
    */
@@ -64,7 +69,7 @@ interface Anchor {
   frame: number;
 }
 
-/** The first cut and every cut placed by hand, in order of section. */
+/** Everything the grid is made to pass through: bar 1, every cut placed by hand and the places left by cuts that were moved on, in order along the song. */
 function anchorList(grid: SongGrid): Anchor[] {
   const list: Anchor[] = [{ k: 0, bars: 0, frame: grid.downbeatFrame }];
   for (const key of Object.keys(grid.anchors ?? {})
@@ -73,7 +78,9 @@ function anchorList(grid: SongGrid): Anchor[] {
     .sort((a, b) => a - b)) {
     list.push({ k: key, bars: barsBefore(grid, key), frame: (grid.anchors as Record<number, number>)[key] });
   }
-  return list;
+  // A place with no cut tied to it has no section of its own (k -1).
+  for (const f of grid.fixed ?? []) list.push({ k: -1, bars: f.bars, frame: f.frame });
+  return list.sort((a, b) => a.bars - b.bars || a.k - b.k);
 }
 
 /** Frames in a bar, fitted: the least-squares line through every cut that has been placed, or the base tempo's while there are fewer than two. */
@@ -106,7 +113,7 @@ export function effectiveBpm(grid: SongGrid): number {
 function positions(grid: SongGrid) {
   const list = anchorList(grid);
   const bar = fittedFramesPerBar(list, baseFramesPerBar(grid));
-  const byK = new Map(list.map((a) => [a.k, a]));
+  const byK = new Map(list.filter((a) => a.k >= 0).map((a) => [a.k, a]));
   const cumulative: number[] = [0];
   const bars = (k: number) => {
     while (cumulative.length <= k) cumulative.push(cumulative[cumulative.length - 1] + barsOf(grid, cumulative.length - 1));
@@ -114,6 +121,8 @@ function positions(grid: SongGrid) {
   };
   /** Where the grid puts a point `at` bars from bar 1, exact: between the cuts placed around it, or on from the last one at the fitted tempo. */
   const frameAtBars = (at: number): number => {
+    // Before the first place the grid is made to pass through (bar 1, or a place left earlier): on backwards at the fitted tempo.
+    if (at < list[0].bars) return list[0].frame + bar * (at - list[0].bars);
     let before = list[0];
     let after: Anchor | undefined;
     for (const a of list) {
@@ -208,43 +217,78 @@ export function settleCut(grid: SongGrid, k: number, frame: number): CutEdit {
 export interface Snap {
   /** The frame of the bar line the cut snapped to. */
   frame: number;
-  /** Bars the previous section gained (negative: lost) if the cut snapped to a different bar line than the one the grid had it on; 0 for the same one. */
+  /** Bars the cut moved by, in bar lines: negative is earlier, 0 is the line it was on. */
   barChange: number;
 }
 
 /**
- * Where a cut dragged to `raw` snaps to: the nearest bar line of the grid as the other cuts have refined it. The bar lines are the cut's own place
- * and the places one to seven bars either side, which is a section of that many bars fewer or more before it: so snapping is how a section is made
- * 5 bars, say, without touching the tempo. Bar 1 does not snap: it is where the grid starts.
+ * Where a cut dragged to `raw` snaps to: the nearest bar line of the grid, as it is. The bar lines are the cut's own and the ones up to seven bars
+ * either side, but never as far as the cut before it or the one after (`hasNext` says whether there is one). Bar 1 does not snap: it is where the
+ * grid starts.
  */
-export function snapCut(grid: SongGrid, k: number, raw: number): Snap {
+export function snapCut(grid: SongGrid, k: number, raw: number, hasNext = true): Snap {
   if (k < 1) return { frame: Math.round(raw), barChange: 0 };
-  const others = withoutAnchor(grid, k);
-  const { frameAtBars } = positions(others);
-  const base = barsBefore(others, k);
-  const previous = barsOf(others, k - 1);
+  const { frameAtBars } = positions(grid);
+  const base = barsBefore(grid, k);
+  const previous = barsOf(grid, k - 1);
+  const next = barsOf(grid, k);
   let best: Snap = { frame: frameAtBars(base), barChange: 0 };
   for (let j = -MAX_STRUCTURE_BARS; j <= MAX_STRUCTURE_BARS; j++) {
     if (j === 0 || previous + j < 1 || previous + j > MAX_SECTION_BARS) continue;
+    if (hasNext && (next - j < 1 || next - j > MAX_SECTION_BARS)) continue;
     const frame = frameAtBars(base + j);
     if (Math.abs(frame - raw) < Math.abs(best.frame - raw)) best = { frame, barChange: j };
   }
   return { frame: Math.round(best.frame), barChange: best.barChange };
 }
 
+export interface SnapResult extends CutEdit {
+  /** The places the grid passes through that no cut is tied to. */
+  fixed: { bars: number; frame: number }[];
+  /** Where the cut is now. */
+  frame: number;
+}
+
 /**
- * What snapping a cut does to the grid: the section before it gains or loses the bars it snapped across, and the cut stops being an anchor, because
- * it sits exactly on a bar line of the grid and says nothing new about the tempo. Only the structure changes.
+ * Moves a cut to a bar line with snapping on: the grid is locked. Nothing about the grid changes (not the tempo, not where any bar line is),
+ * and no other cut moves: the cut before it gains or loses the bars it moved across, the cut after it loses or gains the same, so every other cut keeps
+ * its bar line. If the cut had been placed by hand and so held the grid in place, what it taught the grid is kept as a place the grid passes through
+ * (`fixed`), with no cut tied to it. With no cut after it (`hasNext` false) only the section before changes.
  */
-export function snapEdit(grid: SongGrid, k: number, raw: number): CutEdit {
-  const { barChange } = snapCut(grid, k, raw);
-  const anchors = { ...withoutAnchor(grid, k).anchors };
+export function snapPlace(grid: SongGrid, k: number, raw: number, hasNext = true): SnapResult {
+  const { frame, barChange } = snapCut(grid, k, raw, hasNext);
+  const anchors = { ...grid.anchors };
+  const fixed = [...(grid.fixed ?? [])];
   const bars = { ...grid.bars };
-  if (barChange !== 0) {
+  if (barChange !== 0 && k >= 1) {
+    if (anchors[k] !== undefined) {
+      fixed.push({ bars: barsBefore(grid, k), frame: anchors[k] });
+      delete anchors[k];
+    }
     bars[k - 1] = barsOf(grid, k - 1) + barChange;
-    if (bars[k - 1] === SECTION_BARS) delete bars[k - 1];
+    if (hasNext) bars[k] = barsOf(grid, k) - barChange;
+    for (const key of [k - 1, k]) if (bars[key] === SECTION_BARS) delete bars[key];
   }
-  return { anchors, bars, barChange };
+  return { anchors, fixed, bars, barChange, frame };
+}
+
+/**
+ * The grid's own lines between two frames, bar lines and the beats between them, wherever the cuts are: a cut moving never moves them.
+ * (Where a cut was placed by hand the grid passes through it, so its bar line is there.)
+ */
+export function gridLines(grid: SongGrid, from: number, to: number): { frame: number; bar: boolean }[] {
+  const { frameAtBars, bar } = positions(grid);
+  const lines: { frame: number; bar: boolean }[] = [];
+  if (!(bar > 0)) return lines;
+  const first = Math.floor((from - grid.downbeatFrame) / bar) - 3;
+  const last = Math.ceil((to - grid.downbeatFrame) / bar) + 3;
+  for (let b = first; b <= last; b++) {
+    for (let n = 0; n < grid.beatsPerBar; n++) {
+      const frame = frameAtBars(b + n / grid.beatsPerBar);
+      if (frame >= from && frame <= to) lines.push({ frame, bar: n === 0 });
+    }
+  }
+  return lines;
 }
 
 /** The same grid on audio at another sample rate (the vocal stem need not be at the song's rate): every frame position scales with it. */
@@ -252,7 +296,8 @@ export function scaleGrid(grid: SongGrid, sampleRate: number): SongGrid {
   const ratio = sampleRate / grid.sampleRate;
   const anchors: Record<number, number> = {};
   for (const [k, frame] of Object.entries(grid.anchors ?? {})) anchors[Number(k)] = frame * ratio;
-  return { ...grid, sampleRate, downbeatFrame: grid.downbeatFrame * ratio, anchors };
+  const fixed = (grid.fixed ?? []).map((f) => ({ bars: f.bars, frame: f.frame * ratio }));
+  return { ...grid, sampleRate, downbeatFrame: grid.downbeatFrame * ratio, anchors, fixed };
 }
 
 /** One section's audio, zero-padded where the section runs outside the song, so it is always exactly `plan.length` frames. */

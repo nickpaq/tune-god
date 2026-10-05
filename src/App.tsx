@@ -860,7 +860,7 @@ function App() {
    */
   const chopSong = (song: Pad, vocals: Pad, settings: ChopSettings) => {
     // The cuts were found on the song; the stem may be at another sample rate, so the grid is put on the stem's own frames.
-    const onSong = { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, anchors: settings.anchors, bars: settings.bars };
+    const onSong = { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, anchors: settings.anchors, fixed: settings.fixed, bars: settings.bars };
     const grid = scaleGrid(onSong, vocals.sampleRate);
     const { pads: sections } = makeSectionPads(vocals, grid, freeSongSlots(removePad(pads, vocals.index)), padTitle(song));
     recordEdit();

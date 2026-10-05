@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
 import { mixToMono, snapToAttack, type SongAnalysis } from "../audio/song/beats";
-import { cutFrame, effectiveBpm, planSections, SECTION_BARS, sectionSeconds, settleCut, snapCut, snapEdit, withoutAnchor } from "../audio/song/chop";
+import { cutFrame, effectiveBpm, gridLines, planSections, SECTION_BARS, sectionSeconds, settleCut, snapCut, snapPlace, withoutAnchor } from "../audio/song/chop";
 import { buildPyramid } from "../audio/song/waveform";
 import { NOTE_NAMES } from "../audio/theory";
 import { ChopTimeline } from "./ChopTimeline";
@@ -16,6 +16,8 @@ export interface ChopSettings {
   downbeatFrame: number;
   /** Cuts placed by hand: the frame each was put on, by section number (0-based). */
   anchors: Record<number, number>;
+  /** Places the grid passes through that no cut is tied to (what a hand-placed cut taught the grid before it was moved on with snapping on). */
+  fixed: { bars: number; frame: number }[];
   /** Bars in the sections that are not 8, by section number (0-based): where the song drops or adds bars. */
   bars: Record<number, number>;
   /** The key to tune the project to, or null to leave the project's key alone. */
@@ -68,9 +70,13 @@ export function SongChopModal({
   const [beatsPerBar, setBeatsPerBar] = useState(projectBeatsPerBar);
   const [downbeatFrame, setDownbeatFrame] = useState(0);
   const [anchors, setAnchors] = useState<Record<number, number>>({});
+  const [fixed, setFixed] = useState<{ bars: number; frame: number }[]>([]);
   const [bars, setBars] = useState<Record<number, number>>({});
   const [selected, setSelected] = useState(0);
-  /** With snapping on, a marker dragged snaps to the nearest bar line of the grid and nothing refines the tempo; with it off a marker is placed freely and every one placed refines the grid. */
+  /**
+   * With snapping on the grid is locked: a marker dragged jumps from bar line to bar line and nothing else changes, not the grid, not the tempo and not any
+   * other marker. With it off a marker is placed freely and every one placed refines the grid.
+   */
   const [snapOn, setSnapOn] = useState(false);
   /** What the last drag did to the song's structure, shown in the note slot. */
   const [structureNote, setStructureNote] = useState("");
@@ -107,7 +113,7 @@ export function SongChopModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const grid = useMemo(() => ({ bpm, beatsPerBar, downbeatFrame, sampleRate, anchors, bars }), [bpm, beatsPerBar, downbeatFrame, sampleRate, anchors, bars]);
+  const grid = useMemo(() => ({ bpm, beatsPerBar, downbeatFrame, sampleRate, anchors, fixed, bars }), [bpm, beatsPerBar, downbeatFrame, sampleRate, anchors, fixed, bars]);
   const plans = useMemo(() => planSections(totalFrames, grid), [totalFrames, grid]);
   const cuts = useMemo(() => plans.map((p) => p.start), [plans]);
   const fits = Math.min(plans.length, freeSlots);
@@ -119,26 +125,8 @@ export function SongChopModal({
   const tempo = effectiveBpm(grid);
   const beatFrames = (60 * sampleRate) / tempo;
 
-  /** The beats of the grid between two frames: the first cut's bar forwards from each cut, so the lines follow the refined grid and the cuts. */
-  const beatLines = useCallback(
-    (from: number, to: number) => {
-      const lines: { frame: number; bar: boolean }[] = [];
-      plans.forEach((p, i) => {
-        const next = plans[i + 1]?.start ?? Infinity;
-        const end = Math.min(p.start + p.bars * beatsPerBar * beatFrames, next);
-        if (p.start > to) return;
-        if (i === 0) for (let n = -1; p.start + n * beatFrames >= from - beatFrames; n--) if (p.start + n * beatFrames >= from) lines.push({ frame: p.start + n * beatFrames, bar: ((n % beatsPerBar) + beatsPerBar) % beatsPerBar === 0 });
-        if (end < from) return;
-        for (let n = 0; p.start + n * beatFrames < end; n++) {
-          const frame = p.start + n * beatFrames;
-          if (frame > to) break;
-          if (frame >= from) lines.push({ frame, bar: n % beatsPerBar === 0 });
-        }
-      });
-      return lines;
-    },
-    [plans, beatsPerBar, beatFrames],
-  );
+  /** The grid's own lines between two frames (bar lines and the beats between): they come from the grid, so a marker moving never moves them. */
+  const beatLines = useCallback((from: number, to: number) => gridLines(grid, from, to), [grid]);
 
   /** Puts the cut at position `at` on a frame: bar 1 starts the grid, any other cut is placed by hand and refines the grid after it. */
   const placeCut = useCallback(
@@ -174,24 +162,27 @@ export function SongChopModal({
   const snapFrame = useCallback(
     (at: number, frame: number) => {
       const target = plans[at];
-      return target && target.index >= 1 ? snapCut(grid, target.index, frame).frame : frame;
+      return target && target.index >= 1 ? snapCut(grid, target.index, frame, at < plans.length - 1).frame : frame;
     },
     [plans, grid],
   );
 
-  /** A marker let go on a bar line: the section before it gains or loses the bars it moved across, and the tempo is not touched (see snapEdit). */
+  /**
+   * A marker let go on a bar line, the grid locked: only that marker moves. The sections either side of it gain and lose the bars it crossed, and
+   * the grid, its tempo and every other marker stay exactly as they were (see snapPlace).
+   */
   const commitSnap = useCallback(
     (at: number, frame: number) => {
       const target = plans[at];
-      if (!target) return;
-      if (target.index < 1) return placeCut(at, frame);
-      const edit = snapEdit(grid, target.index, frame);
+      if (!target || target.index < 1) return;
+      const edit = snapPlace(grid, target.index, frame, at < plans.length - 1);
       setAnchors(edit.anchors);
+      setFixed(edit.fixed);
       setBars(edit.bars);
-      const now = edit.bars[target.index - 1] ?? SECTION_BARS;
-      setStructureNote(edit.barChange === 0 ? "" : `Section ${at} is now ${now} bar${now === 1 ? "" : "s"}. The cuts after it follow, and the tempo is unchanged.`);
+      const before = edit.bars[target.index - 1] ?? SECTION_BARS;
+      setStructureNote(edit.barChange === 0 ? "" : `Section ${at} is now ${before} bar${before === 1 ? "" : "s"}. Nothing else moved.`);
     },
-    [plans, grid, placeCut],
+    [plans, grid],
   );
 
   const nudge = (frames: number) => plan && placeCut(chosen, plan.start + frames);
@@ -225,6 +216,7 @@ export function SongChopModal({
 
   const resetGrid = () => {
     setAnchors({});
+    setFixed([]);
     setBars({});
     setStructureNote("");
   };
@@ -286,36 +278,36 @@ export function SongChopModal({
           </div>
 
           <div className="chop__row">
-            <button className="chop__btn chop__toggle" aria-pressed={snapOn} onClick={() => setSnapOn((on) => !on)} title="On: a marker you drag snaps to the grid's bar lines, so a section's length can change without touching the tempo. Off: a marker goes where you put it, and refines the grid after it.">
+            <button className="chop__btn chop__toggle" aria-pressed={snapOn} onClick={() => setSnapOn((on) => !on)} title="On: the grid is locked and a marker you drag jumps from bar line to bar line, changing nothing else. Off: a marker goes where you put it, and refines the grid after it.">
               Snap {snapOn ? "on" : "off"}
             </button>
-            <span className="chop__hint">{snapOn ? "Markers snap to bar lines" : "Markers refine the grid"}</span>
+            <span className="chop__hint">{snapOn ? "Grid locked: markers jump between bar lines" : "Markers refine the grid"}</span>
           </div>
           <div className="chop__row">
-            <button className="chop__btn" onClick={() => nudgeMs(-10)}>
+            <button className="chop__btn" disabled={snapOn} onClick={() => nudgeMs(-10)}>
               -10 ms
             </button>
-            <button className="chop__btn" onClick={() => nudge(-1)}>
+            <button className="chop__btn" disabled={snapOn} onClick={() => nudge(-1)}>
               -1
             </button>
-            <button className="chop__btn" onClick={() => nudge(1)}>
+            <button className="chop__btn" disabled={snapOn} onClick={() => nudge(1)}>
               +1
             </button>
-            <button className="chop__btn" onClick={() => nudgeMs(10)}>
+            <button className="chop__btn" disabled={snapOn} onClick={() => nudgeMs(10)}>
               +10 ms
             </button>
           </div>
           <div className="chop__row">
-            <button className="chop__btn" disabled={!plan || anchors[plan.index] === undefined} onClick={snapToGrid} title="Puts the cut back where the grid, refined by the other cuts, says it belongs">
+            <button className="chop__btn" disabled={snapOn || !plan || anchors[plan.index] === undefined} onClick={snapToGrid} title="Puts the cut back where the grid, refined by the other cuts, says it belongs">
               Snap to grid
             </button>
-            <button className="chop__btn" disabled={!plan} onClick={toTransient} title="Moves the cut onto the nearest sharp rise in loudness">
+            <button className="chop__btn" disabled={snapOn || !plan} onClick={toTransient} title="Moves the cut onto the nearest sharp rise in loudness">
               To transient
             </button>
-            <button className="chop__btn" disabled={!plan || plan.index < 1 || (anchors[plan.index] === undefined && bars[plan.index - 1] === undefined)} onClick={resetCut}>
+            <button className="chop__btn" disabled={snapOn || !plan || plan.index < 1 || (anchors[plan.index] === undefined && bars[plan.index - 1] === undefined)} onClick={resetCut}>
               Reset cut
             </button>
-            <button className="chop__btn" disabled={placed === 0 && Object.keys(bars).length === 0} onClick={resetGrid}>
+            <button className="chop__btn" disabled={snapOn || (placed === 0 && fixed.length === 0 && Object.keys(bars).length === 0)} onClick={resetGrid}>
               Reset grid
             </button>
           </div>
@@ -329,7 +321,7 @@ export function SongChopModal({
                 step="0.01"
                 min={MIN_BPM}
                 max={MAX_BPM}
-                disabled={derived}
+                disabled={derived || snapOn}
                 value={derived ? String(Math.round(tempo * 1000) / 1000) : bpmText}
                 onChange={(e) => {
                   setBpmText(e.target.value);
@@ -339,15 +331,15 @@ export function SongChopModal({
                 onBlur={() => setBpmText(String(Math.round(bpm * 1000) / 1000))}
               />
             </label>
-            <button className="chop__btn" disabled={derived} onClick={() => applyBpm(bpm / 2)}>
+            <button className="chop__btn" disabled={derived || snapOn} onClick={() => applyBpm(bpm / 2)}>
               ÷2
             </button>
-            <button className="chop__btn" disabled={derived} onClick={() => applyBpm(bpm * 2)}>
+            <button className="chop__btn" disabled={derived || snapOn} onClick={() => applyBpm(bpm * 2)}>
               ×2
             </button>
             <label>
               Beats per bar
-              <input type="number" min={1} max={16} step={1} value={beatsPerBar} onChange={(e) => setBeatsPerBar(Math.min(16, Math.max(1, Math.round(Number(e.target.value)) || 1)))} />
+              <input type="number" min={1} max={16} step={1} value={beatsPerBar} disabled={snapOn} onChange={(e) => setBeatsPerBar(Math.min(16, Math.max(1, Math.round(Number(e.target.value)) || 1)))} />
             </label>
           </div>
 
@@ -383,7 +375,7 @@ export function SongChopModal({
         <button
           className="chop__go"
           disabled={status === "listening" || plans.length === 0 || fits === 0}
-          onClick={() => onConfirm({ bpm, beatsPerBar, downbeatFrame, anchors, bars, keyPc: useKey ? keyPc : null })}
+          onClick={() => onConfirm({ bpm, beatsPerBar, downbeatFrame, anchors, fixed, bars, keyPc: useKey ? keyPc : null })}
         >
           Chop into {fits} pattern{fits === 1 ? "" : "s"}
         </button>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cutFrame, effectiveBpm, framesPerBarOf, planSections, scaleGrid, sectionSeconds, settleCut, sliceSection, snapCut, snapEdit, withoutAnchor, type SongGrid } from "./chop";
+import { cutFrame, effectiveBpm, framesPerBarOf, planSections, scaleGrid, sectionSeconds, settleCut, sliceSection, snapCut, snapPlace, gridLines, withoutAnchor, type SongGrid } from "./chop";
 
 const grid = (over: Partial<SongGrid> = {}): SongGrid => ({ bpm: 120, beatsPerBar: 4, downbeatFrame: 0, sampleRate: 48000, ...over });
 // 120 BPM, 4/4, 48 kHz: one bar is 96000 frames, 8 bars 768000
@@ -275,44 +275,107 @@ describe("how the grid copes with sections of unusual length", () => {
   });
 });
 
-describe("snapCut", () => {
-  it("snaps to the nearest bar line of the grid", () => {
+describe("snapping with the grid locked", () => {
+  const cuts = (g: SongGrid, n = 8) => Array.from({ length: n }, (_, k) => cutFrame(g, k));
+
+  it("snapCut finds the nearest bar line of the grid as it is", () => {
     expect(snapCut(grid(), 3, 3 * SECTION + 30000)).toEqual({ frame: 3 * SECTION, barChange: 0 });
-    // a little under 1 bar early: the bar line one bar before the grid's, which makes the section before it 7 bars
     expect(snapCut(grid(), 3, 3 * SECTION - BAR + 20000)).toEqual({ frame: 3 * SECTION - BAR, barChange: -1 });
     expect(snapCut(grid(), 3, 3 * SECTION - 3 * BAR - 30000)).toEqual({ frame: 3 * SECTION - 3 * BAR, barChange: -3 });
     expect(snapCut(grid(), 3, 3 * SECTION + 2 * BAR + 10000)).toEqual({ frame: 3 * SECTION + 2 * BAR, barChange: 2 });
   });
 
-  it("follows the grid as the other cuts have refined it", () => {
-    // cut 4 placed 1% late: the bar lines before it are 1% further apart than the base grid's
-    const g = grid({ anchors: { 4: 4 * SECTION * 1.01 } });
-    const snapped = snapCut(g, 2, 2 * SECTION * 1.01 - BAR * 1.01 + 900);
+  it("uses the grid as the hand-placed cuts have refined it, including the cut's own", () => {
+    const g = grid({ anchors: { 3: 3 * SECTION * 1.01, 4: 4 * SECTION * 1.01 } });
+    const snapped = snapCut(g, 3, 3 * SECTION * 1.01 - BAR * 1.01 + 900);
     expect(snapped.barChange).toBe(-1);
-    expect(snapped.frame).toBeCloseTo(2 * SECTION * 1.01 - BAR * 1.01, -1);
+    expect(snapped.frame).toBeCloseTo(3 * SECTION * 1.01 - BAR * 1.01, -1);
   });
 
-  it("does not snap bar 1, and does not snap a section shorter than a bar or longer than 16", () => {
+  it("does not snap bar 1, and never across the cut before or after, or to a section shorter than a bar or longer than 16", () => {
     expect(snapCut(grid(), 0, 12345).frame).toBe(12345);
     const short = grid({ bars: { 2: 1 } });
     expect(snapCut(short, 3, cutFrame(short, 3) - BAR).barChange).toBe(0);
+    const tightAfter = grid({ bars: { 3: 1 } });
+    expect(snapCut(tightAfter, 3, cutFrame(tightAfter, 3) + BAR).barChange).toBe(0);
+    // with no cut after it, only the section before limits it
+    expect(snapCut(tightAfter, 3, cutFrame(tightAfter, 3) + BAR, false).barChange).toBe(1);
+  });
+
+  it("changes nothing else: the grid, its tempo, its bar lines and every other cut are exactly as they were", () => {
+    const g = grid({ anchors: { 2: 2 * SECTION + 3000, 5: 5 * SECTION + 5200 } });
+    const before = cuts(g);
+    const linesBefore = gridLines(g, 0, SECTION * 6).map((l) => l.frame);
+    const edit = snapPlace(g, 3, 3 * SECTION - BAR + 2000);
+    const after = { ...g, anchors: edit.anchors, fixed: edit.fixed, bars: edit.bars };
+    expect(edit.barChange).toBe(-1);
+    expect(effectiveBpm(after)).toBe(effectiveBpm(g));
+    expect(gridLines(after, 0, SECTION * 6).map((l) => l.frame)).toEqual(linesBefore);
+    // every cut but the one that moved is where it was
+    cuts(after).forEach((frame, k) => {
+      if (k !== 3) expect(frame).toBeCloseTo(before[k], 6);
+    });
+    // and it is on the bar line before, the grid's own: 23 bars from bar 1 rather than 24. The section before it is 7 bars, the one after it 9
+    const barLines = gridLines(g, 0, SECTION * 6).filter((l) => l.bar).map((l) => l.frame);
+    expect(cuts(after)[3]).toBeCloseTo(barLines[23], 6);
+    expect(edit.bars).toEqual({ 2: 7, 3: 9 });
+    expect(edit.frame).toBe(Math.round(cutFrame(after, 3)));
+  });
+
+  it("with no cut after it, only the section before changes", () => {
+    const edit = snapPlace(grid(), 4, 4 * SECTION + 2 * BAR + 500, false);
+    expect(edit.bars).toEqual({ 3: 10 });
+  });
+
+  it("a cut that was placed by hand and held the grid in place leaves what it taught the grid behind, tied to no cut", () => {
+    const g = grid({ anchors: { 3: 3 * SECTION * 1.004, 6: 6 * SECTION * 1.004 } });
+    const edit = snapPlace(g, 3, cutFrame(g, 3) - BAR * 1.004 + 800);
+    const after = { ...g, anchors: edit.anchors, fixed: edit.fixed, bars: edit.bars };
+    expect(edit.anchors[3]).toBeUndefined();
+    expect(edit.fixed).toEqual([{ bars: 24, frame: 3 * SECTION * 1.004 }]);
+    expect(effectiveBpm(after)).toBeCloseTo(effectiveBpm(g), 9);
+    expect(cutFrame(after, 6)).toBeCloseTo(cutFrame(g, 6), 6);
+    expect(cutFrame(after, 3)).toBeCloseTo(cutFrame(g, 3) - BAR * 1.004, 3);
+  });
+
+  it("snapping to the line it is on changes nothing", () => {
+    const g = grid({ anchors: { 3: 3 * SECTION + 700 } });
+    const edit = snapPlace(g, 3, 3 * SECTION + 400);
+    expect(edit.barChange).toBe(0);
+    expect(edit.anchors).toEqual(g.anchors);
+    expect(edit.fixed).toEqual([]);
+    expect(edit.bars).toEqual({});
+  });
+
+  it("turning snapping off again, a marker moved freely refines the grid as before", () => {
+    const g = grid();
+    const locked = snapPlace(g, 3, 3 * SECTION - BAR + 500);
+    const afterSnap = { ...g, anchors: locked.anchors, fixed: locked.fixed, bars: locked.bars };
+    expect(effectiveBpm(afterSnap)).toBeCloseTo(120, 9);
+    // dragged freely a little off the grid: it becomes an anchor, and the tempo is refined
+    const free = settleCut(afterSnap, 3, cutFrame(afterSnap, 3) + 4000);
+    expect(free.anchors[3]).toBeDefined();
+    expect(effectiveBpm({ ...afterSnap, ...free })).not.toBeCloseTo(120, 3);
   });
 });
 
-describe("snapEdit", () => {
-  it("changes only the structure: the section before gains or loses the bars, the cut stops being an anchor, and the tempo is untouched", () => {
-    const g = grid({ anchors: { 3: 3 * SECTION + 20000 } });
-    const edit = snapEdit(g, 3, 3 * SECTION - BAR + 5000);
-    expect(edit.barChange).toBe(-1);
-    expect(edit.bars).toEqual({ 2: 7 });
-    expect(edit.anchors).toEqual({});
-    expect(effectiveBpm({ ...g, ...edit })).toBeCloseTo(120, 6);
+describe("gridLines", () => {
+  it("are the bar lines and the beats between, wherever the cuts are", () => {
+    const lines = gridLines(grid(), SECTION - 10, SECTION + BAR + 10);
+    expect(lines.filter((l) => l.bar).map((l) => l.frame)).toEqual([SECTION, SECTION + BAR]);
+    expect(lines.filter((l) => !l.bar)).toHaveLength(3);
+    expect(lines.map((l) => l.frame)).toEqual([SECTION, SECTION + BAR / 4, SECTION + BAR / 2, SECTION + (3 * BAR) / 4, SECTION + BAR]);
   });
 
-  it("snapping back to where the grid had it restores the usual 8 bars", () => {
-    const g = grid({ bars: { 2: 7 } });
-    const edit = snapEdit(g, 3, cutFrame(g, 3) + BAR);
-    expect(edit.barChange).toBe(1);
-    expect(edit.bars).toEqual({});
+  it("pass through the cuts placed by hand and follow the refined tempo", () => {
+    const g = grid({ anchors: { 2: 2 * SECTION + 9600 } });
+    const there = gridLines(g, 2 * SECTION + 9000, 2 * SECTION + 10200).filter((l) => l.bar);
+    expect(there.map((l) => l.frame)).toEqual([2 * SECTION + 9600]);
+  });
+
+  it("run before bar 1 as well", () => {
+    const lines = gridLines(grid({ downbeatFrame: 48000 }), 0, 48000).filter((l) => l.bar);
+    expect(lines.map((l) => l.frame)).toEqual([48000]);
+    expect(gridLines(grid({ downbeatFrame: 200000 }), 0, 100000).filter((l) => l.bar).map((l) => l.frame)).toEqual([8000]);
   });
 });
