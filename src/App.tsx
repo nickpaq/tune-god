@@ -359,6 +359,7 @@ function App() {
           index: at,
           origIndex: ref.pad,
           name: ref.fileName,
+          label: ref.label || undefined,
           sampleId: ref.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,

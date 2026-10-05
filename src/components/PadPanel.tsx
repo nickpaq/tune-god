@@ -15,6 +15,8 @@ export interface Pad {
   origIndex: number;
   /** The sample's file name in the project, shown in the classifier. */
   name: string;
+  /** The label on the pad in Koala, when the project had one: it is what a vocal stem is found by (see audio/song/stems.ts). */
+  label?: string;
   /** The sample's id inside the .koala project, used when writing tuned audio back. */
   sampleId: number;
   sampleRate: number;

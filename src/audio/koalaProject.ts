@@ -11,6 +11,8 @@ export interface KoalaPadRef {
   sampleId: number;
   /** Friendly name for the UI, derived from the sample's original import path when available. */
   fileName: string;
+  /** The label on the pad in Koala (what the pad shows), or "" when it has none. */
+  label?: string;
 }
 
 export interface ParsedKoalaProject {
@@ -53,6 +55,7 @@ export async function parseKoalaProject(file: File): Promise<ParsedKoalaProject>
       pad: Number(p.pad) - padBase,
       sampleId: p.sampleId as number,
       fileName: nameById.get(p.sampleId) ?? `sample-${p.sampleId}.wav`,
+      label: typeof p.label === "string" ? p.label.trim() : "",
     }))
     .sort((a: KoalaPadRef, b: KoalaPadRef) => a.pad - b.pad);
 

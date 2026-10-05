@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Pad } from "../../components/PadPanel";
-import { baseName, checkStems, isVocalsName, songNameOfVocals, vocalsNameFor } from "./stems";
+import { baseName, checkStems, isVocalsName, padTitle, songNameOfVocals, vocalsNameFor } from "./stems";
 
-const pad = (name: string, seconds = 100, sampleRate = 44100, index = 0): Pad => ({
+const pad = (name: string, seconds = 100, sampleRate = 44100, index = 0, label?: string): Pad => ({
   index,
   origIndex: index,
   name,
+  label,
   sampleId: index + 1,
   sampleRate,
   channelData: [new Float32Array(Math.round(seconds * sampleRate))],
@@ -29,6 +30,48 @@ describe("names", () => {
     expect(isVocalsName("Toxic DRUMS")).toBe(false);
     expect(songNameOfVocals("Toxic VOCALS.wav")).toBe("Toxic");
     expect(baseName("a.b.c.WAV")).toBe("a.b.c");
+  });
+});
+
+describe("labels", () => {
+  it("a pad is called by its label in Koala, or by its file name when it has none", () => {
+    expect(padTitle(pad("take_07_final.wav", 1, 44100, 0, "Toxic"))).toBe("Toxic");
+    expect(padTitle(pad("Toxic.wav", 1, 44100, 0, ""))).toBe("Toxic");
+    expect(padTitle(pad("Toxic.wav", 1, 44100, 0, "  "))).toBe("Toxic");
+    expect(padTitle(pad("Toxic.wav"))).toBe("Toxic");
+  });
+
+  it("finds the stem by the song's LABEL plus VOCALS, whatever the sample files are called", () => {
+    const song = pad("take_07_final.wav", 199.5, 44100, 3, "Toxic");
+    const vocals = pad("stem_a1b2.wav", 199.5, 44100, 4, "Toxic VOCALS");
+    const check = checkStems(song, [song, vocals]);
+    expect(check.ok).toBe(true);
+    // and from the stem
+    const back = checkStems(vocals, [song, vocals]);
+    expect(back.ok).toBe(true);
+    if (back.ok) expect(back.song).toBe(song);
+  });
+
+  it("when the song has a label, that label is what the stem is named after, not the song's file name", () => {
+    const song = pad("Toxic.wav", 199.5, 44100, 3, "Britney");
+    // named after the song's FILE name: not the stem of a song labelled "Britney"
+    expect(checkStems(song, [song, pad("Toxic VOCALS.wav", 199.5, 44100, 4, "something else")]).ok).toBe(false);
+    // labelled after the song's label: it is
+    expect(checkStems(song, [song, pad("stem.wav", 199.5, 44100, 4, "Britney VOCALS")]).ok).toBe(true);
+    // a pad with no label of its own can still answer by its file name
+    expect(checkStems(song, [song, pad("Britney VOCALS.wav", 199.5, 44100, 4)]).ok).toBe(true);
+    expect(checkStems(song, [song, pad("stem.wav", 199.5, 44100, 4, "Britney DRUMS")]).ok).toBe(false);
+  });
+
+  it("names the label that is missing in the alert", () => {
+    const song = pad("whatever.wav", 100, 44100, 3, "Toxic");
+    const check = checkStems(song, [song]);
+    expect(check.ok).toBe(false);
+    if (!check.ok) {
+      expect(check.message).toContain('"Toxic VOCALS"');
+      expect(check.message).toMatch(/labelled/);
+      expect(check.message).toMatch(/start and end points/);
+    }
   });
 });
 

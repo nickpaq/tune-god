@@ -44,12 +44,12 @@ export function LongSamplesModal({
                 <button
                   className="sound-row__icon"
                   onPointerDown={() => preview.toggle(pad.origIndex, pad.channelData, pad.sampleRate)}
-                  aria-label={`${preview.playing === pad.origIndex ? "Stop" : "Play"} ${pad.name}`}
+                  aria-label={`${preview.playing === pad.origIndex ? "Stop" : "Play"} ${(pad.label || pad.name)}`}
                 >
                   {preview.playing === pad.origIndex ? "■" : "▶"}
                 </button>
                 <span className="sound-row__name">
-                  <span className="sound-row__pad">{pad.index + 1}</span> {pad.name}
+                  <span className="sound-row__pad">{pad.index + 1}</span> {(pad.label || pad.name)}
                 </span>
                 <span className="sound-row__duration">{formatDuration(pad.channelData[0].length / pad.sampleRate)}</span>
                 <button
@@ -58,7 +58,7 @@ export function LongSamplesModal({
                     if (preview.playing === pad.origIndex) preview.stop();
                     onChop(pad);
                   }}
-                  aria-label={`Chop ${pad.name} to patterns for acapella`}
+                  aria-label={`Chop ${(pad.label || pad.name)} to patterns for acapella`}
                 >
                   Chop to patterns for acapella
                 </button>
@@ -68,7 +68,7 @@ export function LongSamplesModal({
                     if (preview.playing === pad.origIndex) preview.stop();
                     onDelete(pad);
                   }}
-                  aria-label={`Delete ${pad.name}`}
+                  aria-label={`Delete ${(pad.label || pad.name)}`}
                 >
                   🗑
                 </button>
