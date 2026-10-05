@@ -58,9 +58,8 @@ export function PadPanel({
   keyName,
   toneOffset,
   needsKey,
-  onToneStart,
   onToneOffset,
-  onToneEnd,
+  onCorrect,
   onChange,
 }: {
   pad: Pad;
@@ -72,10 +71,9 @@ export function PadPanel({
   toneOffset: number;
   /** No key is chosen yet, so there is no tone to match: the slider is locked. */
   needsKey: boolean;
-  onToneStart: () => void;
   onToneOffset: (cents: number) => void;
-  /** The slider was let go: the pad moves by the opposite of the tone's offset. */
-  onToneEnd: () => void;
+  /** Correct was pressed: the pad moves by the opposite of the tone's offset, so it sits on the key. */
+  onCorrect: () => void;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
@@ -102,7 +100,7 @@ export function PadPanel({
 
       <Waveform channelData={pad.channelData} />
 
-      <div className={`pad-panel__slider${pad.tune ? "" : " pad-panel__slider--off"}`}>
+      <div className="pad-panel__slider">
         <PrecisionSlider
           min={-TRIM_RANGE_CENTS}
           max={TRIM_RANGE_CENTS}
@@ -114,14 +112,21 @@ export function PadPanel({
           bipolar
           disabled={needsKey}
           onChange={onToneOffset}
-          onDragStart={onToneStart}
-          onDragEnd={onToneEnd}
           onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={formatTrim}
-          title="Match the tone to the sound: hold to hear the pad loop with a tone, slide the tone until it matches. Letting go moves the pad by the opposite amount. Double-tap to reset the trim."
+          title="Pitch of the sound: slide the tone until it matches what you hear, then press Correct to move the sound onto the key. Back in the middle, the sound and tone fade."
         />
         <div className="pad-panel__scale">
-          {needsKey ? <span>Select a key first</span> : (
+          {needsKey ? (
+            <span>Select a key first</span>
+          ) : toneOffset !== 0 ? (
+            <>
+              <span>{formatTrim(toneOffset)}st</span>
+              <button className="tune-toggle tune-toggle--on" onClick={onCorrect} title="Moves the sound by the opposite of what the tone moved, onto the key">
+                Correct
+              </button>
+            </>
+          ) : (
             <>
               <span>-12st</span>
               <span>+12st</span>

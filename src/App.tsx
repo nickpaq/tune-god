@@ -251,6 +251,8 @@ function App() {
   /** The looping pad and moving tone that play while the pitch slider is held. */
   const matchVoice = useRef<{ index: number; lift: number; handle: PadHandle } | null>(null);
   const matchFade = useRef<number | null>(null);
+  /** Counts slider moves and corrections, so a correction's slide back to the middle gives way if the slider is touched meanwhile. */
+  const matchRun = useRef(0);
   /** Sounds (by original slot) that were over the length limit when the project was imported; the warning lists the ones still present. */
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
@@ -896,7 +898,7 @@ function App() {
   const pressPad = (index: number) => {
     const pad = pads[index];
     if (!pad) return;
-    endMatch(false);
+    endMatch();
     setSelected(index);
     if (pad.placeholder) return; // silent: nothing to play
     holdVoice.current?.release();
@@ -1067,37 +1069,79 @@ function App() {
     };
   };
 
+  /**
+   * The pitch slider moved. Off the middle, the selected pad loops at its current tuning with a tone on the key (the tone switches on by itself) and
+   * the slider stays where it is let go, so the two can be compared for as long as it takes. Back in the middle, the sound and the tone fade.
+   */
   const moveTone = (cents: number) => {
+    matchRun.current++;
     toneOffsetRef.current = cents;
     setToneOffset(cents);
+    if (cents === 0) return stopMatch();
+    if (!matchVoice.current) startMatch();
     matchVoice.current?.handle.setToneOffset(cents);
+    setToneOn(true);
   };
 
-  /** Slider let go: it snaps back to 0 and, when `apply` is set, the pad moves by the opposite of what the tone moved. */
-  const endMatch = (apply: boolean) => {
-    const offset = toneOffsetRef.current;
-    toneOffsetRef.current = 0;
-    setToneOffset(0);
+  /** Fades the matching sound and tone out, leaving the pad as it is. */
+  const stopMatch = () => {
     const match = matchVoice.current;
-    if (!match) return;
     matchVoice.current = null;
     if (matchFade.current !== null) window.clearTimeout(matchFade.current);
-    const pad = latest.current.pads[match.index];
-    if (apply && pad && offset !== 0) {
-      const trim = Math.max(-1200, Math.min(1200, trimCents(pad.semis, pad.cents) - offset));
-      patchPad(match.index, splitTrim(trim));
-      // The pad slides to its new pitch (and the tone back to its note) so the two meet, then both fade. The octave lift stays until then.
-      const next = shiftFor({ ...pad, ...splitTrim(trim) }, latest.current.tunedTarget, a4);
+    matchFade.current = null;
+    match?.handle.release();
+  };
+
+  /** Leaving the pad or the Tune screen: the match ends, the slider goes back to the middle, nothing is moved. */
+  const endMatch = () => {
+    matchRun.current++;
+    toneOffsetRef.current = 0;
+    setToneOffset(0);
+    stopMatch();
+  };
+
+  /**
+   * Correct was pressed: the pad moves by the opposite of what the tone moved, so it sits on the key. The sound bends to its new pitch and the tone
+   * back to the key's note so the two meet, the slider travels back to the middle at the same pace, and once it is there both fade.
+   */
+  const correctMatch = () => {
+    const offset = toneOffsetRef.current;
+    const match = matchVoice.current;
+    if (offset === 0) return;
+    const pad = match ? latest.current.pads[match.index] : selected !== null ? latest.current.pads[selected] : undefined;
+    if (!pad) return;
+    const trim = Math.max(-1200, Math.min(1200, trimCents(pad.semis, pad.cents) - offset));
+    // Correcting a sound means it is to be tuned: tuning goes on with it.
+    patchPad(pad.index, { ...splitTrim(trim), tune: true, tuneLocked: true });
+    if (match) {
+      const next = shiftFor({ ...pad, ...splitTrim(trim), tune: true }, latest.current.tunedTarget, a4);
       match.handle.glide(next + match.lift, 0, MATCH_GLIDE_S);
-      matchFade.current = window.setTimeout(() => {
-        matchFade.current = null;
-        match.handle.release();
-      }, (MATCH_GLIDE_S + 0.1) * 1000);
-    } else match.handle.release();
+    }
+    // The slider returns to the middle over the same time.
+    const from = offset;
+    const began = performance.now();
+    const run = ++matchRun.current;
+    const step = (now: number) => {
+      if (run !== matchRun.current) return;
+      const t = Math.min(1, (now - began) / (MATCH_GLIDE_S * 1000));
+      const value = Math.round(from * (1 - t));
+      toneOffsetRef.current = value;
+      setToneOffset(value);
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        toneOffsetRef.current = 0;
+        setToneOffset(0);
+        matchFade.current = window.setTimeout(() => {
+          matchFade.current = null;
+          stopMatch();
+        }, 100);
+      }
+    };
+    requestAnimationFrame(step);
   };
 
   // Leaving the pad or the Tune screen mid-hold ends the match without moving anything.
-  useEffect(() => () => endMatch(false), [selected, mode]);
+  useEffect(() => () => endMatch(), [selected, mode]);
 
   const liftPad = (index: number) => {
     releasePad.current.get(index)?.release();
@@ -1438,9 +1482,8 @@ function App() {
       autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4)}
       toneOffset={toneOffset}
       needsKey={(selectedPad.keyPc ?? keyPc) === null}
-      onToneStart={startMatch}
       onToneOffset={moveTone}
-      onToneEnd={() => endMatch(true)}
+      onCorrect={correctMatch}
       onChange={(patch) => {
         if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
         else patchPad(selectedPad.index, patch);

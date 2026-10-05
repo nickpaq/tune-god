@@ -617,6 +617,10 @@
 .deck--tune {
   display: flex;
   gap: 2cqw;
+  /* small: the piano is pressed once to choose the key, not played. What it gives up goes to the Tune screen above (which needs it for its sliders);
+     the pad height still reserves --screen-min and --deck-min, so the pads are exactly the size they were */
+  flex: 0 0 12cqw;
+  min-height: 0;
 }
 
 /* ---- piano: seven naturals with five sharps standing over them ---- */
@@ -639,31 +643,35 @@
   padding: 0;
   border: 0;
   color: var(--key-ink);
-  font-size: 2.8cqw;
+  font-size: 2.6cqw;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   touch-action: none;
   transition: box-shadow 0.1s, transform 0.08s;
 }
 
+/* the piano keys are keycaps like the bank buttons: the same gradient, edge, rounding and lamp above the name */
 .key--natural {
   flex: 1;
-  border-radius: 0 0 1.5cqw 1.5cqw;
+  border-radius: 1.5cqw;
   background: linear-gradient(180deg, var(--key-hi), var(--key));
   box-shadow: 0 3px 0 var(--key-edge), 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
+/* the sharps are the same keycap, darker */
 .key--sharp {
   position: absolute;
   top: 0;
   width: 6.7cqw;
-  height: 18cqw;
+  height: 62%;
   left: calc((var(--i) + 1) * (100% - 6 * var(--gap)) / 7 + var(--i) * var(--gap) + var(--gap) / 2 - 3.35cqw);
-  border-radius: 0 0 1.3cqw 1.3cqw;
+  border-radius: 1.5cqw;
   color: #bdb9ae;
-  font-size: 2.3cqw;
-  background: linear-gradient(180deg, #26272b, #141517);
-  box-shadow: 0 3px 0 #000, 0 5px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  font-size: 2.2cqw;
+  background: linear-gradient(180deg, #1c1d20, #0c0d0e);
+  box-shadow: 0 3px 0 #000, 0 5px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .key--selected {
@@ -678,17 +686,17 @@
 .key__lamp {
   position: absolute;
   left: 50%;
-  bottom: 6.2cqw;
-  width: 1.5cqw;
-  height: 1.5cqw;
-  margin-left: -0.75cqw;
+  top: 1.3cqw;
+  width: 1.3cqw;
+  height: 1.3cqw;
+  margin-left: -0.65cqw;
   border-radius: 50%;
   background: var(--led-off);
   box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
 }
 
 .key--sharp .key__lamp {
-  bottom: 5cqw;
+  top: 0.9cqw;
 }
 
 .key--selected .key__lamp {
@@ -700,12 +708,12 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 2cqw;
+  bottom: 1.5cqw;
   text-align: center;
 }
 
 .key--sharp .key__name {
-  bottom: 1.8cqw;
+  bottom: 1cqw;
 }
 
 .deck__side {
@@ -722,12 +730,25 @@
   letter-spacing: 0.1em;
 }
 
-.cap--side .cap__led {
+.deck__side .cap--side {
+  border-radius: 1.5cqw;
+}
+
+/* ALL and TONE: the deck's width stays, each key is half its height, one over the other; the lamp sits left of the name, level with it */
+.menu__switch .cap--side .cap__led {
   top: 2.3cqw;
 }
 
-.cap--side .cap__legend {
-  bottom: 2.6cqw;
+.deck__side .cap--side .cap__led {
+  left: 2.4cqw;
+  top: 50%;
+  margin: -0.65cqw 0 0;
+}
+
+.deck__side .cap--side .cap__legend {
+  left: 4.6cqw;
+  bottom: 50%;
+  transform: translateY(50%);
 }
 
 /* ---- pads: lit glass in a black well ---- */
