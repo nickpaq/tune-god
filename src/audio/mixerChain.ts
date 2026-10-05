@@ -1,6 +1,6 @@
 // Builds the effects the export puts on Koala's mixer strips from the active mix preset (src/audio/mixPresets.ts, where every value
 // to tweak lives): a sidechain from the kick bus onto the bass bus, clipping on the kick bus, an EQ on the melodic bus and a master
-// chain. Plugin and parameter names are Koala's own (docs/koala-mixer-reference.md). Slots that already hold a plugin are never replaced.
+// chain. Plugin and parameter names are Koala's own (docs/koala-mixer-reference.md). Bus plugins are added after any plugins already on the strip (never replacing one, never doubling one that is there); the master chain replaces the master strip, and the app warns first.
 import { ACTIVE_MIX_PRESET, type MasterStyle, type MixPreset } from "./mixPresets";
 
 /** One effect as Koala writes it into a strip's `chain` (five slots, an empty one is null). */
@@ -39,5 +39,16 @@ export function fillEmptySlots(chain: MixerSlot[], effects: MixerEffect[]): bool
     slots[at++] = fx;
   }
   chain.splice(0, chain.length, ...slots);
+  return true;
+}
+
+/** Puts the effects, in order, after the last effect already in the strip, so the user's own plugins keep their place at the front. Returns false (and changes nothing) when they do not fit. */
+export function appendAfterExisting(chain: MixerSlot[], effects: MixerEffect[]): boolean {
+  let last = -1;
+  chain.forEach((fx, i) => {
+    if (fx) last = i;
+  });
+  if (last + 1 + effects.length > chain.length) return false;
+  effects.forEach((fx, i) => (chain[last + 1 + i] = fx));
   return true;
 }

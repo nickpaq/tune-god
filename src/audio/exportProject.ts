@@ -4,7 +4,7 @@ import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
 import type { MasterStyle } from "./mixPresets";
-import { bassSidechain, fillEmptySlots, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
+import { appendAfterExisting, bassSidechain, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
 
 /** A silent pad the finger-drumming layout adds: where it sits, what Koala shows on it, and its colour. */
@@ -148,8 +148,8 @@ const emptyStrip = (name: string) => ({ chain: [null, null, null, null, null], m
 
 /**
  * Sets up the mixer in mixer.json: bus strip names, a sidechain from the kick bus onto the bass bus, a little clipping on the kick bus, an EQ on the melodic bus, and the master chain.
- * Each bus keeps its effects and levels, and an effect only goes into an empty slot (the master chain only into an empty
- * master strip). A project that has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
+ * Each bus keeps its effects and levels, and a new effect goes after the last one already there; the master chain replaces the master
+ * strip's plugins (the app warns first). A project that has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
  */
 async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean; masterStyle?: MasterStyle; kickClip?: boolean; melodicEq?: boolean }): Promise<void> {
   const entry = project.zip.file("mixer.json");
@@ -161,22 +161,24 @@ async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]
   if (setup.sidechain) {
     const bass = (mixer.buses[1] ??= emptyStrip(BUS_NAMES[1]));
     bass.chain = Array.isArray(bass.chain) ? bass.chain : [null, null, null, null, null];
-    if (!bass.chain.some((fx: MixerSlot) => fx?.name === "SIDECHAIN")) fillEmptySlots(bass.chain, [bassSidechain()]);
+    if (!bass.chain.some((fx: MixerSlot) => fx?.name === "SIDECHAIN")) appendAfterExisting(bass.chain, [bassSidechain()]);
   }
   if (setup.kickClip) {
     const kick = (mixer.buses[0] ??= emptyStrip(BUS_NAMES[0]));
     kick.chain = Array.isArray(kick.chain) ? kick.chain : [null, null, null, null, null];
-    if (!kick.chain.some((fx: MixerSlot) => fx?.name === "CLIPPER")) fillEmptySlots(kick.chain, [kickClipper()]);
+    if (!kick.chain.some((fx: MixerSlot) => fx?.name === "CLIPPER")) appendAfterExisting(kick.chain, [kickClipper()]);
   }
   if (setup.melodicEq) {
     const melodic = (mixer.buses[3] ??= emptyStrip(BUS_NAMES[3]));
     melodic.chain = Array.isArray(melodic.chain) ? melodic.chain : [null, null, null, null, null];
-    if (!melodic.chain.some((fx: MixerSlot) => fx?.name === "EQ")) fillEmptySlots(melodic.chain, [melodicEq()]);
+    if (!melodic.chain.some((fx: MixerSlot) => fx?.name === "EQ")) appendAfterExisting(melodic.chain, [melodicEq()]);
   }
   if (setup.master) {
     const master = (mixer.master ??= emptyStrip("MAIN"));
     master.chain = Array.isArray(master.chain) ? master.chain : [null, null, null, null, null];
-    if (master.chain.every((fx: MixerSlot) => !fx)) fillEmptySlots(master.chain, masterChainEffects(setup.masterStyle));
+    // The master chain replaces whatever the master strip held (the app warns before an export that would).
+    const effects = masterChainEffects(setup.masterStyle);
+    master.chain = [...effects, ...Array(Math.max(0, 5 - effects.length)).fill(null)];
   }
   project.zip.file("mixer.json", JSON.stringify(mixer));
 }
@@ -352,4 +354,16 @@ async function addGhostPads(project: ParsedKoalaProject, samplerJson: any, ghost
     taken.add(g.index);
   }
   pads.sort((a, b) => Number(a.pad) - Number(b.pad));
+}
+
+/** The names of the effects already on a project's master strip: the master chain would wipe them out. */
+export async function masterEffectNames(project: ParsedKoalaProject): Promise<string[]> {
+  const entry = project.zip.file("mixer.json");
+  if (!entry) return [];
+  try {
+    const chain = JSON.parse(await entry.async("string"))?.master?.chain;
+    return Array.isArray(chain) ? chain.filter(Boolean).map((fx: MixerSlot) => fx!.name) : [];
+  } catch {
+    return [];
+  }
 }

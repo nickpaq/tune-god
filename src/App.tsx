@@ -15,7 +15,7 @@ import {
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
 import { setReferencePitch, startPad, type PadHandle, type PadMode } from "./audio/player";
-import { buildTunedKoala, downloadBlob, type GhostPadExport, type TunedSample } from "./audio/exportProject";
+import { buildTunedKoala, downloadBlob, masterEffectNames, type GhostPadExport, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
@@ -1143,6 +1143,10 @@ function App() {
       // The export writes into the project's zip (audio, mixer, sequence), so each export starts from a fresh read of the project file. Exporting twice
       // from one zip used to carry the first export's master chain, bus plugins and remapped patterns into the second.
       const project = projectFile.current ? await parseKoalaProject(projectFile.current) : projectRef.current;
+      if (masterChain) {
+        const there = await masterEffectNames(project);
+        if (there.length > 0 && !window.confirm(`Your project already has effects on the master: ${there.join(", ")}.\n\nThe master chain replaces them. Export anyway?`)) return;
+      }
       const tuned: TunedSample[] = [];
       // Koala's pan runs 0..1 (0.5 = centre) for L100..R100, so N percent is N/200 off centre.
       const pans = new Map<number, number>();

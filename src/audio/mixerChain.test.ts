@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { BUS_NAMES, CATEGORY_BUS } from "./routing";
-import { bassSidechain, fillEmptySlots, kickClipper, masterChain, melodicEq, SIDECHAIN_SOURCE_BUS, type MixerSlot } from "./mixerChain";
+import { appendAfterExisting, bassSidechain, fillEmptySlots, kickClipper, masterChain, melodicEq, SIDECHAIN_SOURCE_BUS, type MixerSlot } from "./mixerChain";
 
 async function load(mixer?: unknown): Promise<ParsedKoalaProject> {
   const zip = await JSZip.loadAsync(readFileSync(new URL("../../docs/calibration/calibration.koala", import.meta.url)));
@@ -62,17 +62,30 @@ describe("mixer export", () => {
     expect(gain(loud)).not.toBe(gain(dynamic));
   });
 
-  it("never doubles a sidechain and leaves a master chain the user already built alone", async () => {
+  it("never doubles a sidechain, adds bus plugins after the ones already there, and replaces a master chain", async () => {
     const strip = (name: string, chain: unknown[]) => ({ chain, mute: false, name, solo: false, volume: 0 });
     const empty = [null, null, null, null, null];
     const mine = { bypass: false, name: "COMPRESSOR", parameters: { ratio: 4 } };
     const project = await load({
-      buses: [strip("a", empty), strip("b", [bassSidechain(), null, null, null, null]), strip("c", empty), strip("d", empty)],
+      buses: [strip("a", [null, mine, null, null, null]), strip("b", [bassSidechain(), null, null, null, null]), strip("c", empty), strip("d", empty)],
       master: strip("MAIN", [null, mine, null, null, null]),
     });
     const mixer = await exported(project, { sidechain: true, masterChain: true });
     expect(mixer.buses[1].chain.filter((s: any) => s?.name === "SIDECHAIN")).toHaveLength(1);
-    expect(mixer.master.chain).toEqual([null, mine, null, null, null]);
+    // The kick bus keeps its own plugin first, and the clipper goes after it.
+    expect(mixer.buses[0].chain.map((s: any) => s?.name ?? null)).toEqual([null, "COMPRESSOR", "CLIPPER", null, null]);
+    // The master chain wipes out what was there.
+    expect(mixer.master.chain.map((s: any) => s?.name)).toEqual(masterChain().map((s) => s.name));
+  });
+
+  it("appends after the last effect and refuses when there is no room", () => {
+    const fx = { bypass: false, name: "EQ", parameters: {} };
+    const chain = [fx, null, fx, null, null];
+    expect(appendAfterExisting(chain, [bassSidechain()])).toBe(true);
+    expect(chain.map((s) => s?.name ?? null)).toEqual(["EQ", null, "EQ", "SIDECHAIN", null]);
+    const tight = [null, null, null, null, fx];
+    expect(appendAfterExisting(tight, [bassSidechain()])).toBe(false);
+    expect(tight[0]).toBeNull();
   });
 });
 
