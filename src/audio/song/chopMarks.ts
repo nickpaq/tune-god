@@ -141,3 +141,11 @@ export const undo = <T>(h: History<T>): History<T> =>
 
 export const redo = <T>(h: History<T>): History<T> =>
   h.future.length === 0 ? h : { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) };
+
+const smoothstep = (x: number) => x * x * (3 - 2 * x);
+
+/**
+ * The magnet's pull: where the line is drawn when the finger is on `frame` between two neighbouring lines. A steep double smoothstep, so the line
+ * clings to each neighbour and slides across the middle; continuous, never backwards, and equal to the neighbours at the neighbours.
+ */
+export const pulledBetween = (frame: number, before: number, after: number): number => before + (after - before) * smoothstep(smoothstep((frame - before) / (after - before)));

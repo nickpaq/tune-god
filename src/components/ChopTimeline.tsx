@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { columnPeaks, type PeakPyramid } from "../audio/song/waveform";
-import { isDrag, spanAfterDrag, viewUnderFinger, zoomRate, zoomRoom, zoomTravel } from "../audio/song/zoom";
+import { approach, isDrag, spanAfterDrag, viewUnderFinger, zoomRate, zoomRoom, zoomTravel } from "../audio/song/zoom";
+import { pulledBetween } from "../audio/song/chopMarks";
 import { isBarLine, lineFrame, linesBetween, type TapGrid } from "../audio/song/tapGrid";
 
 /** Lines closer together than this (CSS pixels) are not drawn (beats first, then bars). */
@@ -64,6 +65,7 @@ export const ChopTimeline = forwardRef<
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
   const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number; span: number; y0: number; room: number } | null>(null);
+  const settling = useRef(0);
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
 
@@ -214,17 +216,14 @@ export const ChopTimeline = forwardRef<
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    cancelAnimationFrame(settling.current);
     if (drag.current) return;
     const { cursor, span } = view.current;
     drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span, y0: e.clientY, room: zoomRoom(e.clientY, window.innerHeight) };
   };
 
-  /**
-   * The magnet: where the finger puts the line, the line is drawn at a spot pulled toward the grid line or marker on either side of it. Between two
-   * neighbours the position eases through a smoothstep, so the line lingers on each (the pull is strongest on top of it and fades gradually) and
-   * glides across the gap in the middle; it is continuous and never goes backwards, and there is no stretch of the song where nothing pulls it.
-   */
-  const magnet = (frame: number, span: number): number => {
+  /** The grid line or marker just before a frame and the one just after it (infinite where there is none). */
+  const neighbours = (frame: number, span: number): { before: number; after: number } => {
     const { grid: g, chops: cuts, downbeats: downs, oneOne: one } = latest.current;
     const widthPx = canvas.current!.clientWidth;
     const targets = [...cuts, ...downs, ...(one === null ? [] : [one])];
@@ -235,9 +234,37 @@ export const ChopTimeline = forwardRef<
       if (t <= frame && t > before) before = t;
       if (t > frame && t < after) after = t;
     }
+    return { before, after };
+  };
+
+  /**
+   * The magnet while the finger drags: the line is drawn at a spot pulled toward the grid line or marker on either side of the finger. Between two
+   * neighbours the position eases through a steep double smoothstep, so the line clings to each one (the pull is strongest on top of it and fades
+   * gradually) and slides across the gap in the middle. It is continuous and never goes backwards, and no stretch of the song is without a pull.
+   */
+  const magnet = (frame: number, span: number): number => {
+    const { before, after } = neighbours(frame, span);
     if (before === -Infinity || after === Infinity) return frame;
-    const t = (frame - before) / (after - before);
-    return before + (after - before) * (t * t * (3 - 2 * t));
+    return pulledBetween(frame, before, after);
+  };
+
+  /** Letting go with the magnet on: the line glides the rest of the way onto the nearest grid line or marker. */
+  const settle = () => {
+    cancelAnimationFrame(settling.current);
+    const { span } = view.current;
+    const { before, after } = neighbours(view.current.cursor, span);
+    const here = view.current.cursor;
+    const target = Math.abs(here - before) <= Math.abs(after - here) ? before : after;
+    if (!Number.isFinite(target)) return;
+    let last = performance.now();
+    const step = (now: number) => {
+      const next = approach(view.current.cursor, target, now - last);
+      last = now;
+      const done = Math.abs(next - target) < Math.max(1, view.current.span / 4000);
+      setCursor(done ? target : next);
+      if (!done) settling.current = requestAnimationFrame(step);
+    };
+    settling.current = requestAnimationFrame(step);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -267,8 +294,13 @@ export const ChopTimeline = forwardRef<
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (drag.current?.id === e.pointerId) drag.current = null;
+    const d = drag.current;
+    if (d?.id !== e.pointerId) return;
+    drag.current = null;
+    if (d.moved && latest.current.magnetOn) settle();
   };
+
+  useEffect(() => () => cancelAnimationFrame(settling.current), []);
 
   return (
     <div className="chop-timeline">
