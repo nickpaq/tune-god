@@ -660,7 +660,11 @@ function App() {
     if (file) return void loadProject(file);
     // The entries have to be taken now; the list is empty once this handler returns.
     const entries = entriesOfDrop(data.items);
-    if (entries.some((entry) => entry.isDirectory)) void loadPack(() => findPackInEntries(entries));
+    if (!entries.some((entry) => entry.isDirectory)) return;
+    // After a song has been chopped the pack fills the drum layout waiting in bank A; otherwise a dropped pack is a new project.
+    const chopped = layout.on && Object.values(latest.current.pads).some((p) => p.section);
+    if (chopped) void addPack(() => findPackInEntries(entries));
+    else void loadPack(() => findPackInEntries(entries));
   };
 
   /**
@@ -861,16 +865,21 @@ function App() {
   const chopSong = (song: Pad, vocals: Pad, settings: ChopSettings) => {
     // The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
     const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
-    const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(removePad(removePad(pads, vocals.index), song.index)), palette.colors);
     recordEdit();
-    setPads((prev) => {
-      const next = removePad(removePad(prev, vocals.index), song.index);
-      for (const section of sections) next[section.index] = section;
-      return next;
-    });
+    // As the last step the stem and the full song are deleted, and bank A becomes the drum layout (the MPC one unless a layout is already on),
+    // empty and waiting for a drum pack to be dropped in.
+    const rest = removePad(removePad(pads, vocals.index), song.index);
+    const layoutId = layout.on ? layout.id : FINGER_LAYOUTS[0].id;
+    const next = layout.on ? { ...rest } : arrangeInto(rest, layoutId);
+    // Sections from an earlier chop are not part of the arrangement: they stay where they were.
+    for (const p of Object.values(rest)) if (p.section && !next[p.index]) next[p.index] = p;
+    const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(next), palette.colors);
+    for (const section of sections) next[section.index] = section;
+    if (!layout.on) setLayout({ on: true, id: layoutId, pre: Object.fromEntries(Object.values(rest).filter(isReal).map((p) => [p.origIndex, p.index])) });
+    setPads(next);
     if (settings.keyPc !== null) applyProjectKey(settings.keyPc);
-    setSelected(sections[0]?.index ?? null);
-    if (sections[0]) setBank(Math.floor(sections[0].index / 16));
+    setSelected(null);
+    setBank(0);
     setChop(null);
     setLongSamples([]);
   };
