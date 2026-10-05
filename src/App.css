@@ -1946,3 +1946,51 @@
   height: 100%;
   background: var(--oled);
 }
+
+/* ---- the list of sections picked in the chop editor ---- */
+.chop__bin {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--cell) * 1);
+  max-height: 34cqw;
+  overflow-y: auto;
+  padding: calc(var(--cell) * 1.5);
+  border: var(--cl, 1px) solid var(--oled);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.chop__bin-empty {
+  margin: 0;
+  opacity: 0.6;
+  text-transform: none;
+}
+
+.chop__bin-row {
+  display: flex;
+  gap: calc(var(--cell) * 1.5);
+}
+
+.chop__bin-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--cell) * 3);
+  padding: calc(var(--cell) * 1.5) calc(var(--cell) * 2);
+  border: 0;
+  background: #000;
+  color: var(--oled);
+  font: inherit;
+  text-align: left;
+}
+
+.chop__bin-swatch {
+  flex: none;
+  width: calc(var(--cell) * 6);
+  height: calc(var(--cell) * 6);
+}
+
+.chop__bin-bars {
+  margin-left: auto;
+  opacity: 0.75;
+}

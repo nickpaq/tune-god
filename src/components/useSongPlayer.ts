@@ -22,8 +22,10 @@ export function useSongPlayer(channelData: Float32Array[], sampleRate: number, c
   const handle = useRef<PadHandle | null>(null);
   const timer = useRef(0);
   const [clicks, setClicks] = useState(false);
-  const latest = useRef({ clicks, clickLines });
-  latest.current = { clicks, clickLines };
+  /** How loud the clicks are, 0 to 1 (the gain follows the square, so the slider feels even). */
+  const [clickVolume, setClickVolume] = useState(0.6);
+  const latest = useRef({ clicks, clickVolume, clickLines });
+  latest.current = { clicks, clickVolume, clickLines };
   const total = channelData[0].length;
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export function useSongPlayer(channelData: Float32Array[], sampleRate: number, c
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.frequency.value = line.bar ? 1600 : 1000;
-          gain.gain.setValueAtTime(0.25, when);
+          gain.gain.setValueAtTime(Math.max(0.0002, 0.9 * latest.current.clickVolume ** 2), when);
           gain.gain.exponentialRampToValueAtTime(0.001, when + 0.04);
           osc.connect(gain).connect(ctx.destination);
           osc.start(when);
@@ -93,5 +95,5 @@ export function useSongPlayer(channelData: Float32Array[], sampleRate: number, c
     [frameNow, sampleRate],
   );
 
-  return { playing, start, stop, frameNow, frameAgo, clicks, setClicks };
+  return { playing, start, stop, frameNow, frameAgo, clicks, setClicks, clickVolume, setClickVolume };
 }

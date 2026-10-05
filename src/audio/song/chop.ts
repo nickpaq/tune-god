@@ -4,7 +4,7 @@
 export interface SectionPlan {
   /** First frame of the section in the song. Negative when the cut sits before the start of the file. */
   start: number;
-  /** Frames in the section: from its cut to the next one (the rest of the song, padded to whole bars, for the last). */
+  /** Frames in the section: from its cut to the next one . */
   length: number;
   /** Whole bars the section holds, at least one: its pattern is this long. */
   bars: number;
@@ -12,10 +12,9 @@ export interface SectionPlan {
   audioFrames: number;
   /** Which section this is (0-based). */
   index: number;
+  /** The palette colour the section was given when it was picked, if any. */
+  colorIndex?: number;
 }
-
-/** A final section holding less audio than this is not worth a pad: it would be silence and a stray tail. */
-export const MIN_TAIL_SECONDS = 0.25;
 
 /** One section's audio, zero-padded where the section runs outside the song, so it is always exactly `plan.length` frames. */
 export function sliceSection(channelData: Float32Array[], plan: SectionPlan): Float32Array[] {

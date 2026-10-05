@@ -1386,6 +1386,8 @@ function App() {
     const shownBank = bank;
   /** Palette colour for a sound, by its own category. Where it sits (including on a layout's slots) never changes it. */
   const autoColorOf = (p: Pad): string => {
+    // A section of a chopped song keeps the palette colour it was given when it was picked.
+    if (p.section?.colorIndex !== undefined) return palette.colors[p.section.colorIndex % palette.colors.length];
     const base = colorFor(palette, p.category ?? "other");
     return p.ghost ? shade(base, 2) : base;
   };
@@ -1999,6 +2001,7 @@ function App() {
           <SongChopModal
             pad={chop.song}
             vocalsName={baseName(chop.vocals.name)}
+            palette={palette}
             beatsPerBar={chop.beatsPerBar}
             freeSlots={freeSongSlots(pads).length}
             onConfirm={(settings) => chopSong(chop.song, chop.vocals, settings)}

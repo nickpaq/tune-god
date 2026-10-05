@@ -157,3 +157,23 @@ export function estimateTempo(taps: number[]): TapEstimate | null {
     locked: list.length >= LOCK_TAPS && rms <= LOCK_RMS * line.period,
   };
 }
+
+/**
+ * The tempo and phase tapped, made exact with the audio's own transients. A finger is a few tens of milliseconds out, a drum hit is not: every believed
+ * tap is moved onto the sharpest attack near it (`snap` takes a frame and a radius in frames and gives the frame of the attack), and the line is made
+ * again through those. An attack that lands off the line (a hat or a fill instead of the beat) is left out; with too few left, the taps' own line is kept.
+ */
+export function refineWithTransients(estimate: TapEstimate, sampleRate: number, snap: (frame: number, radius: number) => number): { period: number; origin: number; snapped: number } {
+  const radius = Math.round(Math.min(0.06, 0.25 * estimate.period) * sampleRate);
+  let list: Believed[] = estimate.accepted.map((t) => ({
+    t: snap(Math.round(t * sampleRate), radius) / sampleRate,
+    n: Math.round((t - estimate.origin) / estimate.period),
+  }));
+  for (let pass = 0; pass < 2; pass++) {
+    const line = fit(list);
+    if (!line) break;
+    list = list.filter((a) => Math.abs(a.t - (line.origin + a.n * line.period)) <= 0.1 * line.period);
+  }
+  const line = list.length >= 4 ? fit(list) : null;
+  return line && plausible(line.period) ? { ...line, snapped: list.length } : { period: estimate.period, origin: estimate.origin, snapped: 0 };
+}

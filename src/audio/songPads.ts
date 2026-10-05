@@ -39,7 +39,7 @@ export function makeSectionPads(song: Pad, plans: SectionPlan[], bpm: number, be
       tune: false,
       semis: 0,
       cents: 0,
-      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar, bars: plan.bars, title },
+      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar, bars: plan.bars, colorIndex: plan.colorIndex, title },
     });
   });
   return { pads, dropped: Math.max(0, plans.length - free.length), seconds: plans.slice(0, free.length).reduce((sum, p) => sum + p.length, 0) / song.sampleRate };
