@@ -148,6 +148,10 @@ export function SongChopModal({
 
   const gridRef = useRef(grid);
   gridRef.current = grid;
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+  const marksRef = useRef(marks);
+  marksRef.current = marks;
   const clickLines = useCallback((from: number, to: number) => {
     const g = gridRef.current;
     if (!g) return [];
@@ -164,6 +168,7 @@ export function SongChopModal({
       const frame = frameNow();
       if (frame !== null) {
         timeline.current?.setCursor(frame);
+        autoChopRef.current(frame);
         if (frame >= totalFrames) return;
       }
       raf = requestAnimationFrame(step);
@@ -172,6 +177,7 @@ export function SongChopModal({
     return () => cancelAnimationFrame(raf);
   }, [playing, frameNow, totalFrames]);
 
+  const autoChopRef = useRef<(frame: number) => void>(() => {});
   /** The bar line the last pause snapped to: Play starts from it even if pressed while the line is still gliding there. */
   const pausedAt = useRef<number | null>(null);
   /** Pausing leaves the line where the song was and glides it onto the nearest bar line; Play then starts from that line. */
@@ -243,8 +249,45 @@ export function SongChopModal({
     if (marks.oneOne !== null && line < barLineNear(grid, marks.oneOne)) return setStatus("The 1.1.1 is the first chop: nothing before it");
     const there = marks.chops.find((f) => barLineNear(grid, f) === line);
     if (there !== undefined) return change({ ...marks, chops: marks.chops.filter((f) => f !== there) }, `Chop removed at ${formatTime(at / sampleRate)}`);
-    change({ ...marks, chops: [...marks.chops, cursor] }, `Chop added at ${formatTime(at / sampleRate)}`);
+    // A section may not pass 16 bars: markers fill in every 16 bars from the nearest chop before this one when it is further back than that.
+    const before = lines.filter((n) => n < line).pop();
+    const filler: number[] = [];
+    if (before !== undefined) for (let n = before + MAX_SECTION_BARS * grid.beatsPerBar; n < line; n += MAX_SECTION_BARS * grid.beatsPerBar) filler.push(lineFrame(grid, n));
+    change({ ...marks, chops: [...marks.chops, ...filler, cursor] }, `Chop added at ${formatTime(at / sampleRate)}${filler.length ? ` (+${filler.length} at 16 bars)` : ""}`);
   };
+
+  /** While the song plays, a chop marker is added by itself where the section since the last chop reaches 16 bars. */
+  const autoChop = (frame: number) => {
+    const g = gridRef.current;
+    const ls = linesRef.current;
+    if (!g || ls.length === 0) return;
+    const step = MAX_SECTION_BARS * g.beatsPerBar;
+    const next = ls[ls.length - 1] + step;
+    if (frame < lineFrame(g, next) || lineFrame(g, next) >= totalFrames) return;
+    const m = marksRef.current;
+    change({ ...m, chops: [...m.chops, lineFrame(g, next)] }, `Chop added at ${formatTime(lineFrame(g, next) / sampleRate)} (16 bars)`);
+  };
+
+  /** Puts a chop marker every `bars` bars from the first chop (or the first bar line) to the end of the song, then chops straight away. */
+  const chopEvery = (bars: number) => {
+    if (!grid) return;
+    const step = bars * grid.beatsPerBar;
+    let start = lines.length > 0 ? lines[0] : barLineNear(grid, 0);
+    while (lineFrame(grid, start) < 0) start += grid.beatsPerBar;
+    const cuts: number[] = [];
+    for (let n = start; lineFrame(grid, n) < totalFrames; n += step) cuts.push(n);
+    // The last bar line inside the song closes the final section when it is at least a bar on from the last cut.
+    let end = barLineNear(grid, totalFrames);
+    while (lineFrame(grid, end) > totalFrames) end -= grid.beatsPerBar;
+    if (end - cuts[cuts.length - 1] >= grid.beatsPerBar) cuts.push(end);
+    const picked = sectionsBetween(cuts);
+    const chosen = planSections(totalFrames, grid, picked);
+    if (chosen.length === 0) return setStatus("No whole bars to chop");
+    change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)) }, `Chopped by ${bars}`);
+    onConfirm({ bpm: bpmAt(grid, picked[0].first), beatsPerBar, plans: chosen, keyPc: useKey ? keyPc : null });
+  };
+
+  autoChopRef.current = autoChop;
 
   const addDownbeat = () => {
     if (!grid) return;
@@ -348,6 +391,14 @@ export function SongChopModal({
             </button>
             <button className="chop__btn chop__grow" disabled={!grid} onClick={addOneOne} title="Sets where the song's bars are counted from. It can be before the first downbeat marker. On the 1.1.1 already there it takes it away.">
               1.1.1
+            </button>
+          </div>
+          <div className="chop__row">
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops the vocal into patterns.">
+              Chop by 8
+            </button>
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song and chops the vocal into patterns.">
+              Chop by 16
             </button>
           </div>
           <div className="chop__row">
