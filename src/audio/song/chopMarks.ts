@@ -2,13 +2,10 @@
 // Chop markers say where a section starts or ends; downbeat markers say where a bar starts, to lock the grid back in where it has gone out of sync.
 // Markers are kept as the frames they were placed on and the grid and the cuts are worked out from them, so undo is just going back to earlier markers.
 import {
-  beatFramesAt,
   isBarLine,
   lineFrame,
   lineNear,
   MAX_SECTION_BARS,
-  realignGrid,
-  setDownbeat,
   type PickedSection,
   type TapGrid,
 } from "./tapGrid";
@@ -20,9 +17,14 @@ export interface Marks {
   downbeats: readonly number[];
   /** The 1.1.1: where the song's bars are counted from. It can sit before the first downbeat marker. Null leaves the detection's own bar 1. */
   oneOne: number | null;
+  /** The detected tempo is taken this many times over (2 for double time, 0.5 for half time). */
+  tempoScale: number;
 }
 
-export const NO_MARKS: Marks = { chops: [], downbeats: [], oneOne: null };
+export const NO_MARKS: Marks = { chops: [], downbeats: [], oneOne: null, tempoScale: 1 };
+
+/** How far the tempo fitted through the markers may stray from the detected one (a ratio), so a stray marker cannot bend the grid. */
+const FIT_RANGE = 0.15;
 
 /** The grid the detection found: a line for every beat, bar 1 on line 0. */
 export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, downbeatSeconds: number): TapGrid {
@@ -36,19 +38,39 @@ export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, d
 }
 
 /**
- * The detected grid with the markers applied, earliest first. A downbeat marker starts a new stretch of the grid at its own frame (same tempo), so the
- * lines after it sit on it, and makes the nearest line a bar's first beat; the 1.1.1 does the same and also replaces the detection's own bar 1, so
- * the bars are counted from it (back from it, before it). Downbeat markers alone leave the detection's bar 1 where it was.
+ * The grid with the markers applied. Every downbeat marker and the 1.1.1 is an anchor: a frame where a bar starts. The first anchor is where bars are
+ * counted from, and the lines tile backwards from it as well as forwards (a 1.1.1 set midway through the song gives the intro its grid too). With one
+ * anchor the grid keeps the detected tempo. With more, the tempo is fitted through all of them (a straight line through anchor frame against bars
+ * counted, so the BPM homes in on the exact one as markers are added) and is a single tempo for the whole song; each anchor then re-locks the phase from
+ * there, which only ever moves the lines by the little the fitted tempo is out. With no anchor the detection's own bar 1 and tempo stand.
  */
-export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "oneOne">): TapGrid {
-  let grid: TapGrid = marks.oneOne !== null ? { ...base, downbeats: [] } : base;
-  const frames = marks.oneOne !== null ? [...marks.downbeats, marks.oneOne] : [...marks.downbeats];
-  for (const frame of frames.sort((a, b) => a - b)) {
-    const beatFrames = beatFramesAt(grid, lineNear(grid, frame));
-    grid = realignGrid(grid, { origin: frame, beatFrames });
-    grid = setDownbeat(grid, lineNear(grid, frame));
+export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "oneOne" | "tempoScale">): TapGrid {
+  const bpb = base.beatsPerBar;
+  const detected = base.segments[0].beatFrames / marks.tempoScale;
+  const frames = [...new Set(marks.oneOne === null ? marks.downbeats : [...marks.downbeats, marks.oneOne])].sort((a, b) => a - b);
+  if (frames.length === 0) return marks.tempoScale === 1 ? base : { ...base, segments: [{ ...base.segments[0], beatFrames: detected }] };
+
+  let beat = detected;
+  const anchors = [{ bars: 0, frame: frames[0] }];
+  for (const frame of frames.slice(1)) {
+    const last = anchors[anchors.length - 1];
+    // Whole bars from the last anchor, by the tempo so far (a marker less than half a bar on from one is the same bar, and is left out).
+    const bars = Math.round((frame - last.frame) / (beat * bpb));
+    if (bars < 1) continue;
+    anchors.push({ bars: last.bars + bars, frame });
+    // The tempo fitted through every anchor so far.
+    const n = anchors.length;
+    const meanX = anchors.reduce((t, a) => t + a.bars, 0) / n;
+    const meanY = anchors.reduce((t, a) => t + a.frame, 0) / n;
+    const slope = anchors.reduce((t, a) => t + (a.bars - meanX) * (a.frame - meanY), 0) / anchors.reduce((t, a) => t + (a.bars - meanX) ** 2, 0);
+    beat = Math.min(detected * (1 + FIT_RANGE), Math.max(detected * (1 - FIT_RANGE), slope / bpb));
   }
-  return grid;
+  return {
+    ...base,
+    segments: anchors.map((a) => ({ line: a.bars * bpb, frame: a.frame, beatFrames: beat })),
+    offsets: {},
+    downbeats: anchors.map((a) => a.bars * bpb),
+  };
 }
 
 /** The first beat of the bar nearest `frame`. */

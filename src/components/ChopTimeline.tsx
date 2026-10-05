@@ -52,15 +52,17 @@ export const ChopTimeline = forwardRef<
     /** Where the 1.1.1 sits (frame), if set. */
     oneOne: number | null;
     sections: DrawnSection[];
+    /** Whether the cursor is pulled onto the nearest grid line or marker while scrubbing. */
+    magnetOn: boolean;
     /** A finger started scrubbing. */
     onScrub: () => void;
   }
->(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, onScrub }, ref) {
+>(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, magnetOn, onScrub }, ref) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const time = useRef<HTMLSpanElement>(null);
   const total = pyramid.totalFrames;
-  const latest = useRef({ grid, chops, downbeats, oneOne, sections, onScrub });
-  latest.current = { grid, chops, downbeats, oneOne, sections, onScrub };
+  const latest = useRef({ grid, chops, downbeats, oneOne, sections, magnetOn, onScrub });
+  latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub };
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
   const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number; span: number; y0: number; room: number } | null>(null);
@@ -260,7 +262,8 @@ export const ChopTimeline = forwardRef<
     const start = viewUnderFinger(d.pivot, across(e.clientX), span);
     // The line stays in the middle; it is pulled onto the nearest grid line or marker when one is close.
     view.current = { cursor: view.current.cursor, span };
-    setCursor(magnet(Math.min(total, Math.max(0, start + span / 2)), span));
+    const raw = Math.min(total, Math.max(0, start + span / 2));
+    setCursor(latest.current.magnetOn ? magnet(raw, span) : raw);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {

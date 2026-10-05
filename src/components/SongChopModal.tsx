@@ -96,6 +96,8 @@ export function SongChopModal({
   const marks = history.present;
   /** What the last press did, for the readout. */
   const [status, setStatus] = useState("");
+  /** Whether scrubbing pulls the line onto grid lines and markers; off, to place a marker exactly where the sound is. */
+  const [magnetOn, setMagnetOn] = useState(true);
 
   const [keyPc, setKeyPc] = useState(0);
   const [minor, setMinor] = useState(false);
@@ -211,6 +213,8 @@ export function SongChopModal({
     change({ ...marks, downbeats: [...marks.downbeats, frame] }, `Downbeat added at ${formatTime(frame / sampleRate)}`);
   };
 
+  const scaleTempo = (factor: number) => change({ ...marks, tempoScale: marks.tempoScale * factor }, factor > 1 ? "Tempo doubled" : "Tempo halved");
+
   /** The 1.1.1 is also the first chop marker: it is put there as the chop is, and goes and moves with it. */
   const addOneOne = () => {
     if (!grid) return;
@@ -233,8 +237,7 @@ export function SongChopModal({
   const chopFrames = grid ? lines.map((n) => lineFrame(grid, n)) : [];
   
   const note = "Scroll the waveform to a cut and add a chop. A downbeat marker locks the grid in where it drifts; 1.1.1 sets bar 1.";
-  const readoutOne =
-    detected === null ? "Finding the beat..." : detected === "none" ? "No beat found: set downbeat markers" : `${(grid ? bpmAt(grid, 0) : 0).toFixed(1)} BPM`;
+  const bpmText = detected === null ? "Finding the beat..." : detected === "none" && marks.downbeats.length === 0 && marks.oneOne === null ? "No beat found" : `${(grid ? bpmAt(grid, 0) : 0).toFixed(2)} BPM`;
   const readoutTwo = status || `${lines.length} chop${lines.length === 1 ? "" : "s"}, ${marks.downbeats.length} downbeat${marks.downbeats.length === 1 ? "" : "s"}`;
 
   return (
@@ -249,10 +252,21 @@ export function SongChopModal({
         <div className="chop__scroll">
           <p className="chop__note">{note}</p>
 
-          <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} onScrub={player.stop} />
+          <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} onScrub={player.stop} />
 
+          <div className="chop__row chop__bpm">
+            <span className="chop__bpm-text">{bpmText}</span>
+            <button className="chop__btn" disabled={!grid} onClick={() => scaleTempo(0.5)} title="Half the tempo: the grid has a line for every two of its beats" aria-label="Half the tempo">
+              ÷2
+            </button>
+            <button className="chop__btn" disabled={!grid} onClick={() => scaleTempo(2)} title="Double the tempo: the grid has two lines for every one of its beats" aria-label="Double the tempo">
+              ×2
+            </button>
+            <button className="chop__btn chop__magnet" aria-pressed={magnetOn} onClick={() => setMagnetOn((on) => !on)} title="While scrubbing, pulls the line onto the nearest grid line or marker. Turn it off to place a marker exactly where the sound is.">
+              Snap {magnetOn ? "on" : "off"}
+            </button>
+          </div>
           <div className="chop__readout">
-            <span>{readoutOne}</span>
             <span>{readoutTwo}</span>
           </div>
 

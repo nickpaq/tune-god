@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { barLineNear, baseGrid, chopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
-import { isBarLine, lineFrame, planSections } from "./tapGrid";
+import { bpmAt, isBarLine, lineFrame, planSections } from "./tapGrid";
 
 const RATE = 1000;
 // 120 BPM: a beat is 500 frames, a 4/4 bar 2000, bar 1 at 1 s.
@@ -17,42 +17,61 @@ describe("baseGrid", () => {
 });
 
 describe("gridWithMarks", () => {
-  const none = { downbeats: [], oneOne: null };
+  const marks = (downbeats: number[], oneOne: number | null = null, tempoScale = 1) => ({ downbeats, oneOne, tempoScale });
 
   it("is the detected grid with no markers", () => {
-    expect(gridWithMarks(base, none)).toBe(base);
+    expect(gridWithMarks(base, marks([]))).toBe(base);
   });
 
-  it("keeps the detected bar 1 when only downbeat markers are placed", () => {
-    const grid = gridWithMarks(base, { downbeats: [3040], oneOne: null });
+  it("tiles backwards as well as forwards from a 1.1.1 set midway through the song", () => {
+    const grid = gridWithMarks(base, marks([], 41000)); // 40 beats on from the detected bar 1, 1000 frames late for the grid
+    expect(lineFrame(grid, 0)).toBe(41000);
+    expect(lineFrame(grid, 4)).toBe(43000);
+    expect(lineFrame(grid, -1)).toBe(40500);
+    expect(lineFrame(grid, -8)).toBe(37000);
     expect(isBarLine(grid, 0)).toBe(true);
-    expect(isBarLine(grid, 4)).toBe(true);
-    expect(isBarLine(grid, 1)).toBe(false);
+    expect(isBarLine(grid, -4)).toBe(true);
+    expect(isBarLine(grid, -3)).toBe(false);
+    // the first downbeat of the song is found before it
+    expect(barLineNear(grid, 1100)).toBe(-80);
   });
 
-  it("puts the lines after a downbeat marker on the marker, keeping the tempo", () => {
-    const grid = gridWithMarks(base, { downbeats: [3040], oneOne: null }); // bar 2 is 40 frames late
-    expect(lineFrame(grid, 4)).toBe(3040);
-    expect(lineFrame(grid, 5)).toBe(3540);
-    expect(lineFrame(grid, 3)).toBe(2500); // before it nothing moves
+  it("keeps the detected tempo with one anchor", () => {
+    const grid = gridWithMarks(base, marks([3040]));
+    expect(bpmAt(grid, 0)).toBeCloseTo(120, 9);
+    expect(lineFrame(grid, 0)).toBe(3040);
   });
 
-  it("re-locks at each marker, whatever order they were placed in", () => {
-    const a = gridWithMarks(base, { downbeats: [3040, 7100], oneOne: null });
-    const b = gridWithMarks(base, { downbeats: [7100, 3040], oneOne: null });
-    for (const grid of [a, b]) {
-      expect(lineFrame(grid, 12)).toBe(7100);
-      expect(lineFrame(grid, 8)).toBe(5040);
-    }
+  it("homes in on the exact tempo as downbeat markers are added", () => {
+    // the real tempo is 121 BPM (beat 495.87 frames); the detection said 120
+    const beat = (60 * RATE) / 121;
+    const at = (bars: number) => 2000 + bars * 4 * beat;
+    const two = gridWithMarks(base, marks([at(32)], at(0)));
+    expect(bpmAt(two, 0)).toBeCloseTo(121, 6);
+    const three = gridWithMarks(base, marks([at(32), at(60)], at(0)));
+    expect(bpmAt(three, 0)).toBeCloseTo(121, 6);
+    // a marker a little off barely moves it
+    const off = gridWithMarks(base, marks([at(32) + 8, at(60) - 5], at(0)));
+    expect(Math.abs(bpmAt(off, 0) - 121)).toBeLessThan(0.02);
   });
 
-  it("counts the bars from the 1.1.1, which can sit before the first downbeat marker", () => {
-    // the grid is locked in on a bar later in the song, then 1.1.1 is set on the second beat of the detection's first bar
-    const grid = gridWithMarks(base, { downbeats: [7100], oneOne: 1500 });
-    expect(isBarLine(grid, 1)).toBe(true);
-    expect(isBarLine(grid, 0)).toBe(false);
-    expect(isBarLine(grid, 5)).toBe(true);
-    expect(lineFrame(grid, 12)).toBe(7100);
+  it("is one tempo for the whole song, each anchor only re-locking the phase", () => {
+    const grid = gridWithMarks(base, marks([8030, 16010], 0));
+    const beats = new Set(grid.segments.map((s) => s.beatFrames));
+    expect(beats.size).toBe(1);
+    expect(lineFrame(grid, 16)).toBe(8030);
+    expect(Math.abs(lineFrame(grid, 8) - 4000)).toBeLessThan(40);
+  });
+
+  it("does not let a stray marker bend the tempo far", () => {
+    const grid = gridWithMarks(base, marks([9000], 0)); // 4.5 bars on: counts as 5 bars, a 10 % slower tempo
+    expect(Math.abs(bpmAt(grid, 0) - 120)).toBeLessThan(120 * 0.16);
+  });
+
+  it("takes the tempo half or double", () => {
+    expect(bpmAt(gridWithMarks(base, marks([], null, 2)), 0)).toBeCloseTo(240, 9);
+    expect(bpmAt(gridWithMarks(base, marks([], null, 0.5)), 0)).toBeCloseTo(60, 9);
+    expect(bpmAt(gridWithMarks(base, marks([], 3000, 2)), 0)).toBeCloseTo(240, 9);
   });
 });
 
@@ -65,9 +84,9 @@ describe("chop markers", () => {
   });
 
   it("follow the grid when a downbeat marker shifts it", () => {
-    const grid = gridWithMarks(base, { downbeats: [3040], oneOne: null });
-    expect(chopLines(grid, [3000])).toEqual([4]);
-    expect(lineFrame(grid, 4)).toBe(3040);
+    const grid = gridWithMarks(base, { downbeats: [3040], oneOne: null, tempoScale: 1 });
+    expect(chopLines(grid, [3000])).toEqual([0]);
+    expect(lineFrame(grid, 0)).toBe(3040);
   });
 
   it("are listed once each, in song order", () => {
