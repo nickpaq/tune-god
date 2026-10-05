@@ -67,7 +67,11 @@ def wav24(sig):
     hdr = b"RIFF" + struct.pack("<I", 36 + len(body)) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, SR, SR * 3, 3, 24) + b"data" + struct.pack("<I", len(body))
     return hdr + bytes(body)
 
-def kick(dur=0.5): return fade(tone(45, dur, decay=7, sweep=3.3, sweep_tau=0.04))
+def kick(dur=0.28):
+    """A short, punchy kick: a fast pitch drop from about 170 Hz to 48 Hz, a quick decay and a few milliseconds of click on the attack."""
+    body = tone(48, dur, decay=16, sweep=3.6, sweep_tau=0.025)
+    click = [0.45 * v for v in noise(0.006, decay=300, hp=0.5)]
+    return fade(mix(body, click), ms=1)
 def snare(): return mix(noise(0.25, decay=18, hp=0.2), tone(190, 0.25, decay=20))
 def hat(dur, decay): return noise(dur, decay=decay, hp=0.95)
 chord = lambda f, dur, dec: mix(*[tone(f * r, dur, decay=dec, harmonics=(1, .4, .2)) for r in (1, 1.189, 1.498)])
@@ -79,7 +83,7 @@ def drum_loop():
         for i, v in enumerate(sig):
             if s + i < total: out[s + i] += v
     for b in range(8):
-        if b % 2 == 0: put(kick(0.35), b * BEAT)
+        if b % 2 == 0: put(kick(), b * BEAT)
         if b % 2 == 1: put(snare(), b * BEAT)
         put(hat(0.07, 60), b * BEAT); put(hat(0.07, 60), b * BEAT + BEAT / 2)
     return out
@@ -123,7 +127,7 @@ SOUNDS = [
     ("piano_stab_A3_-9dBFS.wav", fade(chord(220, 1.0, 2.5)), -9, False),
     ("melodic_loop_Am_110bpm_-9dBFS.wav", fade(chord_loop()), -9, False),
     ("drum_loop_110bpm_-3dBFS.wav", fade(drum_loop()), -3, False),
-    ("kick_beat_110bpm_-3dBFS.wav", fade(kick(BEAT)[: int(SR * BEAT)]), -3, True),
+    ("kick_beat_110bpm_-3dBFS.wav", fade(kick() + [0.0] * (int(SR * BEAT) - int(SR * 0.28))), -3, True),
     ("bass_sustain_55Hz_-9dBFS.wav", tone(55, 8.0), -9, True),
     ("reference_1kHz_-20dBFS.wav", fade(tone(1000, 2.0)), -20, False),
 ]
