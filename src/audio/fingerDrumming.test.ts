@@ -189,43 +189,44 @@ describe("classification by name", () => {
   });
 });
 
-describe("arrangeFingerDrumming for a sample pack", () => {
+describe("arrangeFingerDrumming for the bank loaders' layout", () => {
   const many = (category: CategoryId, n: number, extra: Partial<ArrangeSound> = {}) => Array.from({ length: n }, () => sound(category, extra));
   const sounds = [
     drum("kick"), drum("snare"), drum("closedHat"), drum("openHat"),
-    ...many("melodicLoop", 8), ...many("melodic", 8), ...many("bass", 2), ...many("bass", 2, { is808: true }),
-    ...many("drumLoop", 4), ...many("percLoop", 4), ...many("other", 4),
+    ...many("melodicLoop", 12), ...many("melodic", 16), ...many("bass", 2), ...many("bass", 2, { is808: true }),
   ];
   const where = (a: ReturnType<typeof arrangeFingerDrumming>, c: CategoryId, only808?: boolean) =>
     sounds.filter((s) => s.category === c && (only808 === undefined || !!s.is808 === only808)).map((s) => indexOf(a, s)!).sort((x, y) => x - y);
 
-  it("puts eight melodic loops then eight melodics on bank B", () => {
+  it("puts twelve melodic loops on the top three rows of bank B", () => {
     const a = arrangeFingerDrumming(sounds, horizontal, { pack: true });
-    expect(where(a, "melodicLoop")).toEqual([16, 17, 18, 19, 20, 21, 22, 23]);
-    expect(where(a, "melodic")).toEqual([24, 25, 26, 27, 28, 29, 30, 31]);
+    expect(where(a, "melodicLoop")).toEqual([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]);
   });
 
-  it("puts two basses, then two 808s, then every other type on bank C, and puts nothing on bank D, not even a placeholder", () => {
+  it("puts two basses then two 808s on the bottom row of bank B, and the one-shots on bank C", () => {
     const a = arrangeFingerDrumming(sounds, horizontal, { pack: true });
-    expect(where(a, "bass", false)).toEqual([32, 33]);
-    expect(where(a, "bass", true)).toEqual([34, 35]);
-    for (const c of ["drumLoop", "percLoop", "other"] as CategoryId[]) for (const i of where(a, c)) expect(i).toBeGreaterThanOrEqual(36), expect(i).toBeLessThan(48);
+    expect(where(a, "bass", false)).toEqual([28, 29]);
+    expect(where(a, "bass", true)).toEqual([30, 31]);
+    expect(where(a, "melodic")).toEqual(Array.from({ length: 16 }, (_, n) => 32 + n));
+  });
+
+  it("puts nothing on bank D, not even a placeholder", () => {
+    const a = arrangeFingerDrumming([...sounds, ...many("drumLoop", 4), ...many("other", 4)], horizontal, { pack: true });
     expect(a.placeholders.some((p) => p.index >= 48)).toBe(false);
     expect([...a.positions.values()].some((i) => i >= 48)).toBe(false);
   });
 
-  it("puts sounds that overflow their place on free pads of banks B and C only, never bank D, and leaves the rest unplaced (the app keeps them in the hot-swap pool)", () => {
-    const extra = [...sounds, ...many("melodicLoop", 3), ...many("bass", 3)];
+  it("leaves sounds that overflow banks B and C unplaced (the app keeps them in the hot-swap pool)", () => {
+    const extra = [...sounds, ...many("melodicLoop", 3), ...many("drumLoop", 3)];
     const a = arrangeFingerDrumming(extra, horizontal, { pack: true });
-    // Banks B and C (32 pads) are full with the pack itself, so the six extra sounds find no pad.
     expect(extra.filter((s) => a.positions.get(s.key) === undefined)).toHaveLength(6);
     expect([...a.positions.values()].every((i) => i < 48)).toBe(true);
     expect(new Set(a.positions.values()).size).toBe(a.positions.size);
   });
 
-  it("fills all four bank C bass pads from 808s when a pack has no ordinary bass", () => {
+  it("fills all four bass pads from 808s when there is no ordinary bass", () => {
     const eights = [0, 1, 2, 3].map(() => sound("bass", { is808: true }));
     const a = arrangeFingerDrumming(eights, horizontal, { pack: true });
-    expect(eights.map((s) => indexOf(a, s)).sort((x, y) => x! - y!)).toEqual([32, 33, 34, 35]);
+    expect(eights.map((s) => indexOf(a, s)).sort((x, y) => x! - y!)).toEqual([28, 29, 30, 31]);
   });
 });

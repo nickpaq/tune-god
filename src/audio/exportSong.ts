@@ -44,6 +44,8 @@ export interface SongExport {
   bars: number;
   /** The song's time signature numerator; written to the project (the project's own is used when it is not given). */
   beatsPerBar?: number;
+  /** The stem's pad settings when the stem is not in the project (an acapella zip loaded into bank D); otherwise they are found by `sourceSampleId`. */
+  template?: SongTemplate;
 }
 
 /** The song's own pad and sample entry, kept before the song pad is removed from the project, for the section pads to start from. */

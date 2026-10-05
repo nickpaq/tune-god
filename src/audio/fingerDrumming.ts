@@ -113,16 +113,14 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[]): Kit {
   return { slots, leftover: drums.filter((d) => !used.has(d.key)) };
 }
 
-/** A sample pack's bank B holds eight melodic loops (its first two rows) and then eight melodics (the last two). */
-const PACK_LOOP_PADS = 8;
-const PACK_MELODIC_PADS = 8;
-/** Bank C starts with two ordinary basses and two 808s. */
+/** Where the bank loaders keep things (see bankLoad.ts): bank B's top twelve pads are melodic loops and its bottom four basses and 808s; bank C is one-shots. */
+const PACK_LOOP_PADS = 12;
 const PACK_BASS_PADS = 2;
 
 /**
- * Where a sample pack's non-kit sounds go: bank B takes eight melodic loops then eight melodics; bank C two basses, two
- * 808s (all classified as bass) and then every other type (drum loops, perc loops, other, lowest to highest); bank D is the
- * chops' bank and is never used. Sounds that do not fit their place take the first free pad of banks B then C.
+ * Where the non-kit sounds of a project made with the bank loaders go: bank B takes twelve melodic loops, then two basses and two 808s (all
+ * classified as bass); bank C takes the melodic one-shots. Anything else (drum loops, perc loops, other) and what does not fit its place takes
+ * the first free pad of banks B then C. Bank D is the chops' bank and is never used.
  */
 function placePack(tonal: ArrangeSound[], leftoverDrums: ArrangeSound[], taken: Set<number>, positions: Map<number, number>): void {
   const of = (c: CategoryId) => tonal.filter((s) => (s.category ?? "other") === c).sort(byFrequency);
@@ -132,20 +130,19 @@ function placePack(tonal: ArrangeSound[], leftoverDrums: ArrangeSound[], taken: 
     list.slice(0, count).forEach((s, n) => positions.set(s.key, start + n));
     overflow.push(...list.slice(count));
   };
-  const bankC = PADS_PER_BANK * 2;
   put(of("melodicLoop"), PADS_PER_BANK, PACK_LOOP_PADS);
-  put(of("melodic"), PADS_PER_BANK + PACK_LOOP_PADS, PACK_MELODIC_PADS);
-  // Two ordinary-bass pads then two 808 pads; a shortfall in one kind is made up from the other, as the planner does.
+  // Two ordinary-bass pads then two 808 pads; a shortfall in one kind is made up from the other.
   const spare = { plain: bass.filter((s) => !s.is808), eights: bass.filter((s) => s.is808) };
   for (let n = 0; n < 2 * PACK_BASS_PADS; n++) {
     const ownKind = n < PACK_BASS_PADS ? spare.plain : spare.eights;
     const otherKind = n < PACK_BASS_PADS ? spare.eights : spare.plain;
     const pick = ownKind.shift() ?? otherKind.shift();
-    if (pick) positions.set(pick.key, bankC + n);
+    if (pick) positions.set(pick.key, PADS_PER_BANK + PACK_LOOP_PADS + n);
   }
   overflow.push(...spare.plain, ...spare.eights);
+  put(of("melodic"), PADS_PER_BANK * 2, PADS_PER_BANK);
   const rest = TONAL_ORDER.filter((c) => c !== "bass" && c !== "melodic" && c !== "melodicLoop").flatMap(of);
-  put(rest, bankC + 2 * PACK_BASS_PADS, PADS_PER_BANK - 2 * PACK_BASS_PADS);
+  overflow.push(...rest);
   const used = new Set([...taken, ...positions.values()]);
   const free: number[] = [];
   for (let i = PADS_PER_BANK; i < TOOL_PAD_COUNT; i++) if (!used.has(i)) free.push(i);

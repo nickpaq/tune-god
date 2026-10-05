@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
-import { appendPackToProject, buildPackProject, entriesOfDrop, findPackInEntries, findPackInFileList, type FoundPack } from "./audio/packProject";
-import { assignFill, fillPlan, missingSlots, standInSlots } from "./audio/packFill";
+import { blankProject, entriesOfDrop, findPackInEntries, findPackInFileList, writeBankSounds, type FoundPack } from "./audio/packProject";
+import { BANK_ZONES, bankTakes, fillKitGaps, MAX_LOAD_SECONDS, numberedLabel, parseBankName, placeBank, planBank, type BankLoad } from "./audio/bankLoad";
+import { readAcapellaZip } from "./audio/acapella";
 import { displayName, packTags } from "./audio/sampleName";
-import { packByteBudget, type PackMemory, type PackMode } from "./audio/samplePack";
+import { packByteBudget, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
 import {
@@ -33,7 +34,7 @@ import { TypeKeys } from "./components/TypeKeys";
 import { Waveform } from "./components/Waveform";
 import { LongSamplesModal } from "./components/LongSamplesModal";
 import { arrangeFingerDrumming, EMPTY_PAD_LABEL } from "./audio/fingerDrumming";
-import { FINGER_LAYOUTS, kitSlotCounts, layoutById } from "./audio/fingerLayouts";
+import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
@@ -41,7 +42,7 @@ import { scalePlans } from "./audio/song/tapGrid";
 import { checkStems } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
-import { addSongSections, songTemplate, type SongExport } from "./audio/exportSong";
+import { addSongSections, songTemplate, type SongExport, type SongTemplate } from "./audio/exportSong";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadSymbol } from "./components/PadSymbol";
@@ -290,20 +291,24 @@ function App() {
   const projectRef = useRef<ParsedKoalaProject | null>(null);
   /** The project file as last saved (its size counts against the memory budget when a pack is added). */
   const projectFile = useRef<File | null>(null);
-  /** What the Add pack button says while a pack is being added. */
+  /** What the load buttons say while a bank is being loaded. */
   const [addPackStatus, setAddPackStatus] = useState("");
   const packInput = useRef<HTMLInputElement>(null);
-  const addPackInput = useRef<HTMLInputElement>(null);
-  const addMelodicInput = useRef<HTMLInputElement>(null);
+  /** The folder pickers of the four loaders (and the acapella file picker). They live outside the menu: closing the menu unmounts it. */
+  const drumsInput = useRef<HTMLInputElement>(null);
+  const loopsInput = useRef<HTMLInputElement>(null);
+  const bassInput = useRef<HTMLInputElement>(null);
+  const oneShotsInput = useRef<HTMLInputElement>(null);
+  const acapellaInput = useRef<HTMLInputElement>(null);
+  /** The stem's pad settings from the acapella zip being chopped (not in the project), for the export. */
+  const acapellaTemplate = useRef<SongTemplate | undefined>(undefined);
 
   /** The sound type a dropped pack gave each pad (by pad number), used in place of the classifier's guess. */
   const categoryHints = useRef<Record<number, CategoryId>>({});
-  /** Set while a freshly imported sample pack still needs its finger-drumming layout and Normalize switched on (they wait for analysis). */
-  const packSetup = useRef(false);
   /** What the drop zone says while a pack is being measured and levelled. */
   const [importStatus, setImportStatus] = useState("");
 
-  const loadProject = useCallback(async (file: File, restore = false, pack?: { categories: Record<number, CategoryId>; knobDb: Record<number, number>; is808: Record<number, true> }) => {
+  const loadProject = useCallback(async (file: File, restore = false) => {
     const token = ++loadToken.current;
     setLoading(true);
     try {
@@ -311,8 +316,7 @@ function App() {
       if (token !== loadToken.current) return;
       projectRef.current = project;
       projectFile.current = file;
-      categoryHints.current = pack?.categories ?? {};
-      packSetup.current = !restore && !!pack;
+      categoryHints.current = {};
       past.current = [];
       future.current = [];
       lastEdit.current = { key: "", time: 0 };
@@ -368,8 +372,8 @@ function App() {
           sampleId: ref.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
-          knobDb: restore ? restorePads.current[ref.pad]?.knobDb : pack?.knobDb[ref.pad],
-          is808: restore ? restorePads.current[ref.pad]?.is808 : pack?.is808[ref.pad],
+          knobDb: restore ? restorePads.current[ref.pad]?.knobDb : undefined,
+          is808: restore ? restorePads.current[ref.pad]?.is808 : undefined,
           trimmedFrom: range?.start,
           tune: false,
           semis: 0,
@@ -526,99 +530,77 @@ function App() {
     if (file) void loadProject(file);
   };
 
-  /** Turns a sample pack into a project (a mix of its sound types across the pads) and loads it like any other. */
-  const loadPack = async (find: () => Promise<FoundPack> | FoundPack, mode: PackMode = "drums") => {
-    setLoading(true);
-    try {
-      const built = await buildPackProject(await find(), {
-        kitSlots: kitSlotCounts(layoutById(layout.id)),
-        mode,
-        byteBudget: packByteBudget(packMemory),
-        measure: (input) => getRenderWorker().measure(input),
-        onProgress: setImportStatus,
-      });
-      if (built) await loadProject(built.file, false, built);
-      else window.alert("No audio files (wav, aiff, flac, mp3, ogg or m4a) were found in that folder.");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setImportStatus("");
-      setLoading(false);
+  /** Makes sure a project is open for a loader to write into: a blank one when nothing is. Returns whether one was started. */
+  const ensureProject = async (): Promise<{ project: ParsedKoalaProject; started: boolean } | null> => {
+    const started = !projectRef.current;
+    if (started) {
+      await loadProject(await blankProject());
+      // Let the project's state settle before the loader reads it.
+      await new Promise((resolve) => setTimeout(resolve));
     }
+    return projectRef.current ? { project: projectRef.current, started } : null;
   };
 
-  // A new sample pack arrives measured and levelled already, so once its sounds are analysed it is switched to Normalize
-  // and arranged into the finger-drumming layout (bank A the kit, the rest after it). Nothing to undo back to: history starts clean.
-  useEffect(() => {
-    if (!packSetup.current || loading || analyzing > 0 || Object.keys(pads).length === 0) return;
-    packSetup.current = false;
-    setMix(true);
-    // A pack's folders already named every sound's type, so it counts as organized. The export writes each pad's colour and label for Koala only with Organize on.
-    setOrganize(true);
-    setOrganized(true);
-    applyLayout(layout.id);
-    past.current = [];
-    future.current = [];
-    syncHistory();
-  });
+  /** What each loader is called, for the replace question. */
+  const BANK_NAME: Record<BankLoad, string> = { drums: "Bank A", loops: "the top of Bank B", bass: "the 808 and bass pads of Bank B", oneShots: "Bank C" };
+  /** The bank that is shown once a loader has filled its pads. */
+  const BANK_SHOWN: Record<BankLoad, number> = { drums: 0, loops: 1, bass: 1, oneShots: 2 };
 
   /**
-   * Adds another sample pack to the project already loaded. Everything the user has stays exactly where it is; the new pack
-   * only fills slots that are still missing a sound (placeholders and gaps in banks A to C, never bank D) and tops up the
-   * hot-swap pool, all levelled against what is already in the project.
+   * Fills one bank from a folder (see bankLoad.ts for what each loader takes). Loading again replaces that bank's pads and spares and
+   * leaves every other bank exactly as it is. The sounds are named by type and number ("Kick 1"), levelled against the rest of the
+   * project, written into the project's zip, and put on their pads; what the pads cannot hold goes to the hot-swap pool.
    */
-  const addPack = async (find: () => Promise<FoundPack> | FoundPack, mode: PackMode = "drums") => {
-    const project = projectRef.current;
-    if (!project) return;
-    const token = loadToken.current;
+  const loadBank = async (bank: BankLoad, find: () => Promise<FoundPack> | FoundPack) => {
+    if (addPackStatus || loading) return;
     setAddPackStatus("Reading…");
     try {
       const found = await find();
+      const plan = planBank(bank, found.files);
+      if (plan.problem) {
+        window.alert(plan.problem);
+        return;
+      }
+      const zone = BANK_ZONES[bank];
+      const inZone = (p: Pad) => !p.section && p.index >= zone.start && p.index < zone.end;
+      if (Object.values(latest.current.pads).some((p) => isReal(p) && inZone(p)) && !window.confirm(`Replace the sounds on ${BANK_NAME[bank]} with the ones from this folder?`)) return;
+      const opened = await ensureProject();
+      if (!opened) return;
+      const { project, started } = opened;
+      const token = loadToken.current;
       const cur = latest.current;
       const lay = layoutById(layout.id);
-      // Kit slots filled by a stand-in (a clap where no snare was found) are open to a sound of their own type.
-      const standIns = mode === "melodic" ? [] : standInSlots(cur.pads, lay);
-      const missing = [...missingSlots(cur.pads, lay, mode), ...standIns];
-      const fill = fillPlan(missing, lay, Object.values(cur.hidden));
-      const existing = [...Object.values(cur.pads).filter(isReal), ...Object.values(cur.hidden)].map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category }));
-      const result = await appendPackToProject(project, found, {
-        ...fill,
-        mode,
-        byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
+      // What this load replaces: the real sounds on its pads, and the spares of its kind in the hot-swap pool.
+      const replacedPads = Object.values(cur.pads).filter((p) => isReal(p) && inZone(p));
+      const replacedSpares = Object.values(cur.hidden).filter((p) => (bank === "drums" ? isKitCategory(p.category) : bankTakes(bank, p.category)));
+      const replaced = [...replacedPads, ...replacedSpares];
+      const kept = [...Object.values(cur.pads).filter((p) => isReal(p) && !inZone(p)), ...Object.values(cur.hidden).filter((p) => !replacedSpares.includes(p))];
+      const bytesOf = (p: Pad) => p.channelData.reduce((n, ch) => n + ch.length * 3, 0);
+      const budget = Math.max(0, packByteBudget(packMemory) - Math.max(0, (projectFile.current?.size ?? 0) - replaced.reduce((n, p) => n + bytesOf(p), 0)));
+      const result = await writeBankSounds(project, plan.groups, {
+        existing: kept.map((p) => ({ channelData: p.channelData, sampleRate: p.sampleRate, category: p.category })),
+        byteBudget: budget,
+        maxSeconds: bank === "loops" || bank === "oneShots" ? MAX_LOAD_SECONDS : undefined,
+        replace: replaced.map((p) => p.origIndex),
         measure: (input) => getRenderWorker().measure(input),
         onProgress: setAddPackStatus,
-        existing,
       });
       if (token !== loadToken.current) return;
       if (!result) {
-        window.alert("Nothing in that folder was needed: every slot is filled and the swap lists are stocked, or it holds no usable audio.");
+        window.alert(`No sound in that folder could be loaded: they were too long (over ${MAX_LOAD_SECONDS} s), too big for the project size limit, or unreadable.`);
         return;
       }
       projectFile.current = result.file;
       void saveProjectFile(result.file);
-      const forSlot = result.sounds.filter((x) => x.forSlot);
-      const slotOf = assignFill(missing, lay, forSlot, new Set(standIns));
-      // A sound chosen for a slot that no gap could take (say, a snare when no snare slot is open) joins the hot-swap pool instead.
-      const placed = new Map<number, number>();
-      for (const [slot, at] of slotOf) placed.set(forSlot[at].pad, slot);
-      // A stand-in that was replaced by a sound of its own type is kept as a hot-swap spare.
-      const displaced = [...placed.values()].filter((slot) => standIns.includes(slot)).map((slot) => cur.pads[slot]);
-      if (displaced.length) {
-        setHidden((prev) => ({ ...prev, ...Object.fromEntries(displaced.map((p) => [p.origIndex, { ...p, index: -1 }])) }));
-        setPads((prev) => {
-          const next = { ...prev };
-          for (const p of displaced) if (next[p.index]?.origIndex === p.origIndex) delete next[p.index];
-          return next;
-        });
-      }
-      setAnalyzing((n) => n + result.sounds.length);
+      const placement = placeBank(bank, result.sounds.map((s) => ({ key: s.pad, category: s.category, is808: s.is808 })), lay);
+      const fresh: Pad[] = [];
       for (const sound of result.sounds) {
-        const ref = { pad: sound.pad, sampleId: sound.sampleId, fileName: sound.fileName };
-        const slot = placed.get(sound.pad);
+        const ref = project.pads.find((p) => p.pad === sound.pad)!;
         const decoded = await decodeNative(await koalaPadToFile(project, ref));
         if (token !== loadToken.current) return;
-        const pad: Pad = {
-          index: slot ?? -1,
+        categoryHints.current = { ...categoryHints.current, [sound.pad]: sound.category };
+        fresh.push({
+          index: placement.positions.get(sound.pad) ?? -1,
           origIndex: sound.pad,
           name: sound.fileName,
           sampleId: sound.sampleId,
@@ -630,44 +612,82 @@ function App() {
           tune: false,
           semis: 0,
           cents: 0,
-        };
-        categoryHints.current = { ...categoryHints.current, [sound.pad]: sound.category };
-        if (slot === undefined) setHidden((prev) => ({ ...prev, [sound.pad]: pad }));
-        else setPads((prev) => ({ ...prev, [slot]: pad }));
+        });
+      }
+      const onPads = fresh.filter((p) => p.index >= 0);
+      const spares = fresh.filter((p) => p.index < 0);
+      setPads((prev) => {
+        const next: Record<number, Pad> = {};
+        for (const p of Object.values(prev)) if (!inZone(p)) next[p.index] = p;
+        for (const p of onPads) next[p.index] = p;
+        if (bank === "drums") {
+          for (const ph of placement.placeholders) next[ph.index] = makePlaceholderPad(ph);
+          for (const g of placement.ghosts) {
+            const source = onPads.find((p) => p.origIndex === g.sourceKey);
+            if (source) next[g.index] = makeGhostPad(g.index, g.kind, source);
+          }
+        }
+        return next;
+      });
+      setHidden((prev) => ({ ...Object.fromEntries(Object.entries(prev).filter(([, p]) => !replacedSpares.some((r) => r.origIndex === p.origIndex))), ...Object.fromEntries(spares.map((p) => [p.origIndex, p])) }));
+      if (bank === "drums") setLayout({ on: true, id: lay.id, pre: {} });
+      // Every sound is named by its type already, so the project counts as organized; a project this load started gets Mix too.
+      setOrganize(true);
+      setOrganized(true);
+      if (started) setMix(true);
+      setSelected(null);
+      setBank(BANK_SHOWN[bank]);
+      setAnalyzing((n) => n + fresh.length);
+      if (result.skipped > 0) setNotice(`${result.skipped} file${result.skipped === 1 ? "" : "s"} skipped: too long, too big for the project size limit or unreadable`);
+      for (const pad of fresh) {
         nextAnalysisWorker()
-          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, sound.fileName)
+          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.name)
           .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined }))
           .then(({ midi: detectedMidi, detail, centroid }) => {
             if (token !== loadToken.current) return;
             const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
             setPads((prev) => {
-              const at = Object.keys(prev).find((k) => prev[Number(k)].origIndex === sound.pad);
+              const at = Object.keys(prev).find((k) => prev[Number(k)].origIndex === pad.origIndex);
               return at === undefined ? prev : { ...prev, [Number(at)]: analysed(prev[Number(at)]) };
             });
-            setHidden((prev) => (prev[sound.pad] ? { ...prev, [sound.pad]: analysed(prev[sound.pad]) } : prev));
+            setHidden((prev) => (prev[pad.origIndex] ? { ...prev, [pad.origIndex]: analysed(prev[pad.origIndex]) } : prev));
             setAnalyzing((n) => n - 1);
           });
       }
-      // A ghost snare or soft kick slot that was waiting for its source sound gets its copy now that one has arrived.
-      setPads((prev) => {
-        const next = { ...prev };
-        lay.slots.forEach((slotDef, i) => {
-          if (!layout.on || !slotDef.ghostOf || (next[i] && !next[i].placeholder)) return;
-          const source = lay.slots
-            .map((s, j) => ({ s, j }))
-            .filter(({ s, j }) => !s.ghostOf && s.category === slotDef.ghostOf && next[j] && isReal(next[j]))
-            .map(({ j }) => next[j])[0];
-          if (source) next[i] = makeGhostPad(i, slotDef.ghostOf === "snare" ? "ghostSnare" : "softKick", source);
-        });
-        return next;
-      });
       // The new sounds are part of the project now; undo would only be able to take them away again.
       past.current = [];
       future.current = [];
       syncHistory();
     } catch (err) {
       console.error(err);
-      window.alert("That pack could not be added.");
+      window.alert("That folder could not be loaded.");
+    } finally {
+      setAddPackStatus("");
+      setImportStatus("");
+    }
+  };
+
+  /**
+   * Bank D: takes the song and its vocal stem out of an acapella Koala project and opens the chop editor on them. The project itself is not
+   * loaded; only the two sounds are read, and the sections the chop makes go on bank D.
+   */
+  const loadAcapella = async (file: File) => {
+    if (addPackStatus || loading) return;
+    if (Object.values(latest.current.pads).some((p) => p.section) && !window.confirm("Replace the chop on Bank D with this acapella?")) return;
+    setAddPackStatus("Reading…");
+    try {
+      const result = await readAcapellaZip(file);
+      if (!result.ok) {
+        window.alert(result.message);
+        return;
+      }
+      const { song, vocals, beatsPerBar, template } = result.acapella;
+      acapellaTemplate.current = template;
+      setMenuOpen(false);
+      setChop({ song, vocals, beatsPerBar });
+    } catch (err) {
+      console.error(err);
+      window.alert("That acapella project could not be read.");
     } finally {
       setAddPackStatus("");
     }
@@ -680,10 +700,8 @@ function App() {
     // The entries have to be taken now; the list is empty once this handler returns.
     const entries = entriesOfDrop(data.items);
     if (!entries.some((entry) => entry.isDirectory)) return;
-    // After a song has been chopped the pack fills the drum layout waiting in bank A; otherwise a dropped pack is a new project.
-    const chopped = layout.on && Object.values(latest.current.pads).some((p) => p.section);
-    if (chopped) void addPack(() => findPackInEntries(entries));
-    else void loadPack(() => findPackInEntries(entries));
+    // A dropped folder is a drum pack for bank A.
+    void loadBank("drums", () => findPackInEntries(entries));
   };
 
   /**
@@ -739,8 +757,8 @@ function App() {
     const { positions, placeholders, ghosts } = arrangeFingerDrumming(
       real.map((p) => ({ key: p.origIndex, category: p.category, midi: p.detectedMidi, centroid: p.centroid, is808: p.is808 })),
       layoutById(layoutId),
-      // A sample pack keeps its loops and melodics on bank B, everything else on bank C.
-      { pack: Object.keys(latest.current.hidden).length > 0 },
+      // Sounds from the bank loaders keep to their banks: loops, basses and 808s on bank B, one-shots on bank C.
+      { pack: Object.keys(latest.current.hidden).length > 0 || real.some((p) => parseBankName(p.name)?.category === p.category) },
     );
     const next: Record<number, Pad> = {};
     // Bank D untouched.
@@ -784,10 +802,9 @@ function App() {
     const arranged = arrangeInto(cur.pads, id);
     const spares = Object.values(cur.hidden);
     if (spares.length > 0) {
-      // A sample pack fills its gaps (missing kit sounds, bank B and C slots) from its hot-swap spares straight away.
+      // Gaps in the kit (bank A) are filled from the hot-swap spares straight away.
       const lay = layoutById(id);
-      const missing = missingSlots(arranged, lay);
-      const slotOf = assignFill(missing, lay, spares.map((p) => ({ category: p.category ?? "other", is808: p.is808 })));
+      const slotOf = fillKitGaps(arranged, lay, spares);
       const used = new Set<number>();
       for (const [slot, at] of slotOf) {
         const spare = spares[at];
@@ -906,6 +923,7 @@ function App() {
     }
     const project = projectRef.current;
     const { beatsPerBar } = project ? await projectTimeSignature(project) : { beatsPerBar: 4 };
+    acapellaTemplate.current = undefined;
     setChop({ song: check.song, vocals: check.vocals, beatsPerBar });
   };
 
@@ -918,6 +936,7 @@ function App() {
       beatsPerBar: sorted[0].section!.beatsPerBar,
       sampleRate: sorted[0].sampleRate,
       sourceSampleId: sorted[0].section!.sourceSampleId,
+      template: acapellaTemplate.current,
       bars: 8,
       sections: sorted.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColorOf(p) })),
     };
@@ -928,10 +947,10 @@ function App() {
    * and reads it back. Returns what went wrong, or null when every section is in. Nothing in the app or the original file is changed.
    */
   const trialWriteSections = async (sections: Pad[], sourceSampleId: number): Promise<string | null> => {
-    if (!projectFile.current) return null; // a sample pack has no project file yet; the export makes one
+    if (!projectFile.current) return null;
     const project = await parseKoalaProject(projectFile.current);
     const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
-    const template = songTemplate(samplerJson, sourceSampleId);
+    const template = acapellaTemplate.current ?? songTemplate(samplerJson, sourceSampleId);
     // The project's own pads are moved and kept by the export's arrangement, so here only the sections are checked.
     samplerJson.pads = [];
     const song = songExportOf(sections)!;
@@ -966,9 +985,14 @@ function App() {
     try {
       // 1. Cut. The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
       const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
-      const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(pads), palette.colors);
+      // The sections go on bank D (the chop is the only thing that ever does), and a new chop replaces the last one.
+      const opened = await ensureProject();
+      if (!opened) return;
+      if (opened.started) setMix(true);
+      const without = Object.fromEntries(Object.entries(latest.current.pads).filter(([, p]) => !p.section));
+      const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(without), palette.colors);
       if (sections.length === 0) {
-        window.alert("There is no free pad for the sections, so nothing was changed: the song and its vocals are still there. Delete a few pads and chop again.");
+        window.alert("There is no free pad for the sections on Bank D, so nothing was changed. Delete a few pads there and chop again.");
         return;
       }
       // 2. Write them into a copy of the project and check every one went in.
@@ -985,11 +1009,11 @@ function App() {
       }
       recordEdit();
       // 3. Fill the pads. The song, its vocals, the key and the drum layout are left as they were.
-      const grid: Record<number, Pad> = { ...latest.current.pads };
+      const grid: Record<number, Pad> = { ...without };
       for (const section of sections) grid[section.index] = section;
       setPads(grid);
       setSelected(null);
-      setBank(0);
+      setBank(3);
       setChop(null);
       setLongSamples([]);
     } finally {
@@ -1546,7 +1570,7 @@ function App() {
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
   const sectionLabel = (p: Pad): string => `${CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
-  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? sectionLabel(p) : padLabel(p));
+  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? sectionLabel(p) : (numberedLabel(p)?.label ?? padLabel(p)));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   const canExport =
     (arrangement !== undefined ||
@@ -1561,7 +1585,9 @@ function App() {
   const selectedPad = selected !== null ? pads[selected] : undefined;
 
   /** Hot swap only exists with the finger-drumming layout; without it the screen starts on Tune. */
-  const shownMode: Mode | null = focus ? "type" : mode === null ? null : mode === "swap" && !layout.on ? "tune" : mode;
+  /** Hot swap works on a drum layout, or once a loader has left spare sounds to swap in. */
+  const canSwap = layout.on || Object.keys(hidden).length > 0;
+  const shownMode: Mode | null = focus ? "type" : mode === null ? null : mode === "swap" && !canSwap ? "tune" : mode;
   /** The note a pad is tuned to, or "--" when its tuning is off or there is no key yet. */
   const keyNameOf = (pad: Pad) => {
     const pc = pad.tune ? (pad.keyPc ?? keyPc) : null;
@@ -1626,7 +1652,7 @@ function App() {
     if (!pad) return "";
     if (pad.section) return `${CATEGORIES[categoryIndex("vox")].short} ${pad.section.number}`;
     if (pad.placeholder || pad.ghost) return labelOf(pad);
-    return isReal(pad) && pad.category ? CATEGORIES[categoryIndex(pad.category)].short : "";
+    return isReal(pad) && pad.category ? (numberedLabel(pad)?.caption ?? CATEGORIES[categoryIndex(pad.category)].short) : "";
   };
   /** The sound type a pad's symbol shows: real sounds and ghosts have one, silent placeholders none. */
   const symbolOf = (pad: Pad | undefined): CategoryId | undefined => {
@@ -1650,7 +1676,7 @@ function App() {
       <div className="phone">
         {/* Outside the menu: closing the menu unmounts it, and an input that is gone never reports the folder that was picked. */}
         <input
-          ref={addPackInput}
+          ref={drumsInput}
           type="file"
           hidden
           // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
@@ -1658,11 +1684,11 @@ function App() {
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
             e.target.value = "";
-            if (files.length) void addPack(() => findPackInFileList(files), "drums");
+            if (files.length) void loadBank("drums", () => findPackInFileList(files));
           }}
         />
         <input
-          ref={addMelodicInput}
+          ref={loopsInput}
           type="file"
           hidden
           // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
@@ -1670,7 +1696,42 @@ function App() {
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
             e.target.value = "";
-            if (files.length) void addPack(() => findPackInFileList(files), "melodic");
+            if (files.length) void loadBank("loops", () => findPackInFileList(files));
+          }}
+        />
+        <input
+          ref={bassInput}
+          type="file"
+          hidden
+          // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
+          webkitdirectory=""
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length) void loadBank("bass", () => findPackInFileList(files));
+          }}
+        />
+        <input
+          ref={oneShotsInput}
+          type="file"
+          hidden
+          // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
+          webkitdirectory=""
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length) void loadBank("oneShots", () => findPackInFileList(files));
+          }}
+        />
+        <input
+          ref={acapellaInput}
+          type="file"
+          accept=".koala,.zip"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void loadAcapella(file);
           }}
         />
         {menuOpen && (
@@ -1760,37 +1821,70 @@ function App() {
             </button>
             <button
               className="menu__button"
-              disabled={!hasProject || analyzing > 0 || !!addPackStatus}
-              title="Choose a folder of drum sounds. Drums go to the kit and basses and 808s to their pads, only into slots that are missing a sound; no melodic sounds or loops are added."
+              disabled={analyzing > 0 || loading || !!addPackStatus}
+              title="Choose a drum pack with subfolders (Kicks, Snares, Hi Hats...). Sounds are taken by subfolder name: 10 kicks, 10 snares, 5 closed and 5 open hats, 5 of every other drum type, named Kick 1, Snare 2 and so on."
               onClick={() => {
-                addPackInput.current?.click();
+                drumsInput.current?.click();
                 setMenuOpen(false);
               }}
             >
-              {addPackStatus || "Load drums"}
+              {addPackStatus || "Load Bank A: Drums"}
             </button>
             <button
               className="menu__button"
-              disabled={!hasProject || analyzing > 0 || !!addPackStatus}
-              title="Choose a folder of melodic one-shots or loops. Only these are added; no drums or basses."
+              disabled={analyzing > 0 || loading || !!addPackStatus}
+              title="Choose a folder that holds only sound files, no subfolders. 12 are taken at random for the top three rows of Bank B (sounds over 30 seconds are skipped) and tuned by default."
               onClick={() => {
-                addMelodicInput.current?.click();
+                loopsInput.current?.click();
                 setMenuOpen(false);
               }}
             >
-              {addPackStatus || "Load melodic & loops"}
+              {addPackStatus || "Load Bank B: Melodic Loops"}
+            </button>
+            <button
+              className="menu__button"
+              disabled={analyzing > 0 || loading || !!addPackStatus}
+              title="Choose a drum pack with 808 or bass subfolders. Two basses and two 808s fill the bottom row of Bank B and are tuned by default."
+              onClick={() => {
+                bassInput.current?.click();
+                setMenuOpen(false);
+              }}
+            >
+              {addPackStatus || "Fill Bank B: 808 & Bass"}
+            </button>
+            <button
+              className="menu__button"
+              disabled={analyzing > 0 || loading || !!addPackStatus}
+              title="Choose a folder that holds only sound files, no subfolders. 16 are taken at random for Bank C (sounds over 30 seconds are skipped) and tuned by default."
+              onClick={() => {
+                oneShotsInput.current?.click();
+                setMenuOpen(false);
+              }}
+            >
+              {addPackStatus || "Fill Bank C: One Shots"}
+            </button>
+            <button
+              className="menu__button"
+              disabled={analyzing > 0 || loading || !!addPackStatus}
+              title="Choose a Koala project that holds only a song and its vocal stem. It is not opened as the project: its two sounds go to the chop editor, and the sections go on Bank D."
+              onClick={() => {
+                acapellaInput.current?.click();
+                setMenuOpen(false);
+              }}
+            >
+              {addPackStatus || "Load koala acapella zip"}
             </button>
             <Switch label="Show symbols on pads" on={padSymbols} onChange={setPadSymbols} />
             <label className="menu__a4">
-              Sample pack memory
+              Project size limit
               <select
                 className="menu__select"
                 value={packMemory}
                 onChange={(e) => setPackMemory(e.target.value as PackMemory)}
-                aria-label="Sample pack memory"
+                aria-label="Project size limit"
               >
                 <option value="low">Low (96 MB)</option>
-                <option value="auto">Auto ({Math.round(packByteBudget("auto") / 1048576)} MB)</option>
+                <option value="auto">Default ({Math.round(packByteBudget("auto") / 1048576)} MB)</option>
                 <option value="high">High ({Math.round(packByteBudget("high") / 1048576)} MB)</option>
               </select>
             </label>
@@ -1851,8 +1945,8 @@ function App() {
                   className={`cap cap--mode${on ? " cap--on" : ""}`}
                   aria-label={m.aria}
                   aria-pressed={on}
-                  disabled={m.id === "swap" && !layout.on}
-                  title={m.id === "swap" && !layout.on ? "Hot swap needs the finger drumming layout (menu)" : undefined}
+                  disabled={m.id === "swap" && !canSwap}
+                  title={m.id === "swap" && !canSwap ? "Hot swap needs the finger drumming layout or a loaded bank (menu)" : undefined}
                   onClick={() => setMode(on ? null : m.id)}
                 >
                   <span className="cap__led" />
@@ -1909,11 +2003,11 @@ function App() {
                     onChange={(e) => {
                       const list = Array.from(e.target.files ?? []);
                       e.target.value = "";
-                      if (list.length) void loadPack(() => findPackInFileList(list));
+                      if (list.length) void loadBank("drums", () => findPackInFileList(list));
                     }}
                   />
                   <strong>{loading ? importStatus || "Loading…" : "Drop a .koala project"}</strong>
-                  <span>or a sample pack folder</span>
+                  <span>or a drum pack folder</span>
                   <span>or tap to choose one</span>
                   <button
                     type="button"
@@ -1924,8 +2018,8 @@ function App() {
                       packInput.current?.click();
                     }}
                   >
-                    <span className="dropzone__long">Choose a pack folder</span>
-                    <span className="dropzone__short">Pick a pack folder</span>
+                    <span className="dropzone__long">Choose a drum pack folder</span>
+                    <span className="dropzone__short">Pick a drum folder</span>
                   </button>
                 </label>
               ) : focus?.started ? (
@@ -2169,7 +2263,7 @@ function App() {
             pad={chop.song}
             palette={palette}
             beatsPerBar={chop.beatsPerBar}
-            freeSlots={freeSongSlots(pads).length}
+            freeSlots={freeSongSlots(Object.fromEntries(Object.entries(pads).filter(([, p]) => !p.section))).length}
             onConfirm={(settings) => chopSong(chop.song, chop.vocals, settings)}
             onClose={() => setChop(null)}
           />

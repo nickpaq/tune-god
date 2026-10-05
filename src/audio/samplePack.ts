@@ -1,40 +1,25 @@
-// Turns a dropped sample pack (a folder tree of audio files) into the sounds for a Koala project:
-// each file is classified from its folder names, then up to one pad bank's worth are picked so every
-// sound type is as evenly represented as the pack allows, within a memory budget. All of this works on
-// file names and sizes only; no audio is read until a file has been picked.
-import { classifyByName, hatOpenness, is808Name, isKitCategory, MELODIC_NAME, type CategoryId } from "./classify";
+// Reading a sample pack folder: the audio files in it (see packProject.ts), the sound type a folder name implies, and the
+// memory budget a project may use. What each bank takes from a folder is in bankLoad.ts. All of this works on file names
+// and sizes only; no audio is read until a file has been picked.
+import { classifyByName, hatOpenness, type CategoryId } from "./classify";
 
 const MB = 1024 * 1024;
-/** Total file size a pack import may load when nothing better is known. Decoded audio takes about three times this in memory. */
-export const PACK_BYTE_BUDGET = 96 * MB;
+/** Total file size of the sounds a project may hold: the default limit. Decoded audio takes about three times this in memory. */
+export const PROJECT_BYTE_BUDGET = 512 * MB;
+const LOW_BYTE_BUDGET = 96 * MB;
+const HIGH_BYTE_BUDGET = 1024 * MB;
 
-/** The menu's choice of how much of a pack to load. */
+/** The menu's choice of the project size limit. */
 export type PackMemory = "low" | "auto" | "high";
 
-/**
- * How many bytes of files a pack import may load. Browsers cannot report free memory (Safari reports nothing at all),
- * so "auto" is a guess from what they do tell us: iPhones and iPads get a middling figure, Chrome's device memory
- * scales it, anything else gets a safe default. "low" and "high" let the user move it either way and see where it breaks.
- */
-export function packByteBudget(
-  setting: PackMemory,
-  env: { ios: boolean; deviceMemoryGb?: number } = detectEnvironment(),
-): number {
-  if (setting === "low") return PACK_BYTE_BUDGET;
-  if (env.ios) return (setting === "high" ? 384 : 192) * MB;
-  const auto = env.deviceMemoryGb ? Math.min(512, Math.max(128, env.deviceMemoryGb * 64)) : 192;
-  return (setting === "high" ? Math.min(1024, auto * 2) : auto) * MB;
+/** How many bytes of sound files a project may hold: 512 MB unless the menu says Low (96 MB) or High (1 GB). */
+export function packByteBudget(setting: PackMemory): number {
+  if (setting === "low") return LOW_BYTE_BUDGET;
+  return setting === "high" ? HIGH_BYTE_BUDGET : PROJECT_BYTE_BUDGET;
 }
 
 /** The biggest single file a budget allows: no one sample may swallow more than a sixth of it. */
 export const maxFileBytesFor = (byteBudget: number) => Math.round(byteBudget / 6);
-
-function detectEnvironment(): { ios: boolean; deviceMemoryGb?: number } {
-  if (typeof navigator === "undefined") return { ios: false };
-  // iPadOS reports itself as a Mac, but only it has a touch screen.
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  return { ios, deviceMemoryGb: (navigator as Navigator & { deviceMemory?: number }).deviceMemory };
-}
 
 /** One audio file found in the pack: where it sits (folder names, outermost first) and how big it is. */
 export interface PackFile<T = unknown> {
@@ -118,44 +103,6 @@ export function categoryOfFile(folders: string[], fileName: string): CategoryId 
   return byName ?? "other";
 }
 
-/** A folder that names the one-shots without saying what type they are: "One Shots", "Drum One Shots", "Single Shots". */
-export function isOneShotFolder(folder: string): boolean {
-  return /\b(one ?shots?|single ?shots?)\b/.test(tidy(folder)) && categoryOfFolder(folder) === null;
-}
-
-/** The folder a file sits in, as one key. */
-const folderKey = (folders: string[]) => folders.join("/");
-
-/**
- * Folders whose own name says nothing but whose file names do: at least 3 files, half or more named like an instrument ("Piano 01",
- * "Strings_Cmaj", "Rhodes stab"). Such a folder is a melodic one-shot folder whatever it is called ("Pack 2", "New folder").
- */
-export function inferMelodicFolders(files: { folders: string[]; name: string }[]): Set<string> {
-  const counts = new Map<string, { total: number; melodic: number }>();
-  for (const f of files) {
-    if (f.folders.length === 0 || f.folders.some((d) => categoryOfFolder(d) !== null)) continue;
-    const key = folderKey(f.folders);
-    const c = counts.get(key) ?? { total: 0, melodic: 0 };
-    c.total++;
-    if (MELODIC_NAME.test(tidy(f.name.replace(/\.[a-z0-9]+$/i, "")))) c.melodic++;
-    counts.set(key, c);
-  }
-  const out = new Set<string>();
-  for (const [key, c] of counts) if (c.total >= 3 && c.melodic * 2 >= c.total) out.add(key);
-  return out;
-}
-
-/**
- * Whether a pack can hold melodic one-shots at all: some folder is melodic ("Melodic", "Keys", "Synths", "Bells", "Plucks"...), is a
- * plain "One Shots" folder, which can hold anything, or is filled with instrument-named files (inferMelodicFolders). A pack with none
- * almost certainly has no melodic one-shots, so a file whose name merely sounds melodic is not trusted and the melodic pads are left
- * empty for another pack to fill (see planPackSounds).
- */
-export function packHasMelodicOneShots(files: { folders: string[]; name?: string }[]): boolean {
-  if (files.some((f) => f.folders.some((folder) => categoryOfFolder(folder) === "melodic" || isOneShotFolder(folder)))) return true;
-  return inferMelodicFolders(files.filter((f): f is { folders: string[]; name: string } => f.name !== undefined)).size > 0;
-}
-
 /** Fisher-Yates shuffle into a new array. `random` is injectable so tests are repeatable. */
 export function shuffled<T>(items: readonly T[], random: () => number = Math.random): T[] {
   const out = [...items];
@@ -164,228 +111,4 @@ export function shuffled<T>(items: readonly T[], random: () => number = Math.ran
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
-}
-
-export interface PickedSound<T = unknown> {
-  file: PackFile<T>;
-  category: CategoryId;
-  /** A bass sound that is an 808 (named so, or in a folder named so). */
-  is808?: boolean;
-}
-
-/** Hidden alternatives kept for each drum type the layout has slots for, for the hot-swap menu. */
-export const PACK_ALTERNATIVES = 10;
-/** Hidden alternatives kept for each of the other types (bass, melodic, loops). */
-export const PACK_OTHER_ALTERNATIVES = 4;
-/**
- * How the pack's sounds sit on the pads: bank A is the drum kit; bank B holds eight melodic loops then eight melodic
- * one-shots (pianos, plucks, bells); bank C holds two basses and two 808s (all classified as bass) and then shares its
- * other twelve pads between every remaining type (drum loops, perc loops, other...); bank D is left empty for the user.
- */
-export const BANK_B_QUOTA: Partial<Record<CategoryId, number>> = { melodicLoop: 8, melodic: 8 };
-/** Bass pads on bank C: two ordinary basses and two 808s (a shortfall in one kind is made up from the other). */
-export const BASS_PADS = 2;
-export const C_808_PADS = 2;
-/** The rest of bank C. */
-export const BANK_C_REST_PADS = 12;
-
-/** What the planner counts as a type: the categories, with 808s apart from the other bass sounds. */
-export type PlanKey = CategoryId | "808";
-const categoryOfKey = (key: PlanKey): CategoryId => (key === "808" ? "bass" : key);
-
-/**
- * What a pack import may take from the folder: "drums" the kit sounds (kick, snare, clap, hats, cymbals, perc, vox, fx) and the basses and 808s, never a
- * melodic sound or loop; "melodic" only melodic one-shots and loops, never a drum or bass; "all" everything (the old behaviour).
- */
-export type PackMode = "drums" | "melodic" | "all";
-
-/** Whether a mode takes a sound of this type. */
-export function modeTakes(mode: PackMode, category: CategoryId): boolean {
-  if (mode === "all") return true;
-  if (mode === "drums") return isKitCategory(category) || category === "bass";
-  return category === "melodic" || category === "melodicLoop" || category === "drumLoop" || category === "percLoop";
-}
-
-export interface PackPlan<T = unknown> {
-  /** The sounds that go on pads. */
-  visible: PickedSound<T>[];
-  /** Sounds that only sit in the hot-swap menu; the export drops whichever are not chosen. */
-  hidden: PickedSound<T>[];
-  /** How many files the pack held in each type, and how many of those were picked (shown or hidden). */
-  counts: Partial<Record<CategoryId, { found: number; picked: number }>>;
-  /** Audio files left out because they were too large to load, or because the byte budget ran out. */
-  skippedForSize: number;
-  /** Files named like melodic one-shots in a pack with no melodic or one-shots folder, left out so the melodic pads stay empty. */
-  skippedMelodicNames: number;
-  totalFiles: number;
-}
-
-/** Order the types are loaded in, so a tight memory budget runs out on loops and long sounds, not on the kit. */
-const BUDGET_TIERS: (PlanKey[] | "kit")[] = ["kit", ["melodic", "bass", "808"], ["vox", "fx", "perc", "melodicLoop", "percLoop", "drumLoop", "other"]];
-
-/**
- * Plans what a pack contributes. The drum kit comes first: for every type the finger-drumming page has slots for,
- * one sound per slot goes on a pad and `alternatives` more are held back, hidden, as hot-swap options. Bank B then
- * gets its melodic loops and melodics, bank C its basses and 808s and a share of everything else, each type with its
- * own hidden alternatives (see BANK_B_QUOTA). Pads a type cannot fill stay empty: they are not given to other types,
- * so a loop bank that cannot fit the size limits stays short rather than filling with something else. Types take
- * turns within a tier of the memory budget (kit, then melodics and bass, then the rest), so the budget runs out on
- * the longest material last. A file that would push the total past `byteBudget` (or is over `maxFileBytes`) is
- * passed over for the next one of its type.
- */
-export function planPackSounds<T>(
-  files: PackFile<T>[],
-  {
-    kitSlots,
-    bankB = BANK_B_QUOTA,
-    bassPads = BASS_PADS,
-    pads808 = C_808_PADS,
-    restPads = BANK_C_REST_PADS,
-    have = {},
-    alternatives = PACK_ALTERNATIVES,
-    otherAlternatives = PACK_OTHER_ALTERNATIVES,
-    byteBudget = PACK_BYTE_BUDGET,
-    maxFileBytes = maxFileBytesFor(byteBudget),
-    random = Math.random,
-    mode = "all",
-  }: {
-    /** Which kinds of sound to take; see PackMode. */
-    mode?: PackMode;
-    /** Real (not ghost) slots per type on the finger-drumming page. */
-    kitSlots: Partial<Record<CategoryId, number>>;
-    bankB?: Partial<Record<CategoryId, number>>;
-    /** Bank C's ordinary-bass and 808 pads to fill, and the rest of bank C. */
-    bassPads?: number;
-    pads808?: number;
-    restPads?: number;
-    /** Spares (by type) the project already holds in the hot-swap pool, which count toward the alternatives wanted. A type listed with 0 slots still gets topped up. */
-    have?: Partial<Record<PlanKey, number>>;
-    alternatives?: number;
-    otherAlternatives?: number;
-    byteBudget?: number;
-    maxFileBytes?: number;
-    random?: () => number;
-  },
-): PackPlan<T> {
-  // A drums import fills the kit and the bass and 808 pads, nothing else; a melodic one never fills the kit or the bass pads.
-  if (mode === "drums") {
-    bankB = {};
-    restPads = 0;
-  } else if (mode === "melodic") {
-    kitSlots = {};
-    bassPads = 0;
-    pads808 = 0;
-  }
-  const queues = new Map<PlanKey, PackFile<T>[]>();
-  const found = new Map<CategoryId, number>();
-  let skippedForSize = 0;
-  let skippedMelodicNames = 0;
-  const melodicPossible = packHasMelodicOneShots(files);
-  const melodicFolders = inferMelodicFolders(files);
-  for (const file of files) {
-    let category = categoryOfFile(file.folders, file.name);
-    // An unlabelled file in a folder full of instrument names is a melodic one-shot.
-    if (category === "other" && melodicFolders.has(folderKey(file.folders))) category = "melodic";
-    found.set(category, (found.get(category) ?? 0) + 1);
-    if (!modeTakes(mode, category)) continue;
-    // A melodic one-shot has to be named like an instrument; a folder name alone is not enough.
-    if (category === "melodic" && !MELODIC_NAME.test(tidy(file.name.replace(/\.[a-z0-9]+$/i, "").replace(/\d+/g, " $& ")))) {
-      skippedMelodicNames++;
-      continue;
-    }
-    if (category === "melodic" && !melodicPossible) {
-      skippedMelodicNames++;
-      continue;
-    }
-    if (file.size > maxFileBytes || file.size <= 0) {
-      skippedForSize += file.size > 0 ? 1 : 0;
-      continue;
-    }
-    const key: PlanKey = category === "bass" && [file.name, ...file.folders].some(is808Name) ? "808" : category;
-    const q = queues.get(key) ?? [];
-    q.push(file);
-    queues.set(key, q);
-  }
-  for (const [key, q] of queues) queues.set(key, shuffled(q, random));
-  const available = (k: PlanKey) => queues.get(k)?.length ?? 0;
-
-  // How many of each type go on pads. Kit types get their slots, bank B's types their quotas and bank C two bass and two 808, files permitting.
-  const kitTypes = (Object.keys(kitSlots) as CategoryId[]).filter((c) => kitSlots[c] !== undefined);
-  const bankBTypes = (Object.keys(bankB) as CategoryId[]).filter((c) => bankB[c] !== undefined && !kitTypes.includes(c));
-  const bassKeys: PlanKey[] = kitTypes.includes("bass") || bankBTypes.includes("bass") ? [] : ["bass", "808"];
-  const restTypes = [...queues.keys()].filter((k) => !kitTypes.includes(k as CategoryId) && !bankBTypes.includes(k as CategoryId) && !bassKeys.includes(k));
-  const planned = new Set<PlanKey>([...kitTypes, ...bankBTypes, ...bassKeys, ...restTypes]);
-  const altsFor = (k: PlanKey) => Math.max(0, (kitTypes.includes(k as CategoryId) ? alternatives : otherAlternatives) - (have[k] ?? 0));
-
-  const visibleWant = new Map<PlanKey, number>();
-  for (const c of kitTypes) visibleWant.set(c, Math.min(kitSlots[c]!, available(c)));
-  for (const c of bankBTypes) visibleWant.set(c, Math.min(bankB[c]!, available(c)));
-  if (bassKeys.length) {
-    // Two basses and two 808s; when there are too few of one kind the other makes up the four.
-    let w808 = Math.min(pads808, available("808"));
-    let wBass = Math.min(bassPads, available("bass"));
-    const extra808 = Math.min(bassPads + pads808 - w808 - wBass, available("808") - w808);
-    w808 += extra808;
-    wBass += Math.min(bassPads + pads808 - w808 - wBass, available("bass") - wBass);
-    visibleWant.set("808", w808);
-    visibleWant.set("bass", wBass);
-  }
-  // The rest of bank C is shared evenly (a type with fewer files gives its share to the others). The alternatives are
-  // set aside first, so a small type keeps some spares to swap in rather than putting every file on a pad.
-  const forPads = (k: PlanKey) => Math.max(1, available(k) - altsFor(k));
-  const share = new Map(restTypes.map((k) => [k, 0]));
-  let room = restPads;
-  for (let open = restTypes.filter((k) => available(k) > 0); room > 0 && open.length; ) {
-    for (const k of shuffled(open, random)) {
-      if (room <= 0) break;
-      share.set(k, share.get(k)! + 1);
-      room--;
-    }
-    open = open.filter((k) => share.get(k)! < forPads(k));
-  }
-  for (const [k, n] of share) visibleWant.set(k, n);
-
-  const visible: PickedSound<T>[] = [];
-  const hidden: PickedSound<T>[] = [];
-  const shown = new Map<PlanKey, number>();
-  const kept = new Map<PlanKey, number>();
-  let bytes = 0;
-  /** Takes the next file of a type that fits the budget, or null. */
-  const pop = (key: PlanKey): PackFile<T> | null => {
-    const q = queues.get(key);
-    while (q?.length && bytes + q[q.length - 1].size > byteBudget) {
-      q.pop();
-      skippedForSize++;
-    }
-    const file = q?.pop() ?? null;
-    if (file) bytes += file.size;
-    return file;
-  };
-
-  for (const tier of BUDGET_TIERS) {
-    const types = (tier === "kit" ? kitTypes : tier).filter((k) => queues.has(k) && planned.has(k) && (tier === "kit" || !kitTypes.includes(k as CategoryId)));
-    for (let progressed = true; progressed; ) {
-      progressed = false;
-      for (const key of shuffled(types, random)) {
-        const isShown = (shown.get(key) ?? 0) < (visibleWant.get(key) ?? 0);
-        if (!isShown && (kept.get(key) ?? 0) >= altsFor(key)) continue;
-        const file = pop(key);
-        if (!file) continue;
-        progressed = true;
-        const sound: PickedSound<T> = { file, category: categoryOfKey(key), ...(key === "808" ? { is808: true } : {}) };
-        if (isShown) {
-          visible.push(sound);
-          shown.set(key, (shown.get(key) ?? 0) + 1);
-        } else {
-          hidden.push(sound);
-          kept.set(key, (kept.get(key) ?? 0) + 1);
-        }
-      }
-    }
-  }
-
-  const counts: PackPlan<T>["counts"] = {};
-  const picked = (c: CategoryId) => (shown.get(c) ?? 0) + (kept.get(c) ?? 0) + (c === "bass" ? (shown.get("808") ?? 0) + (kept.get("808") ?? 0) : 0);
-  for (const [category, n] of found) counts[category] = { found: n, picked: picked(category) };
-  return { visible: shuffled(visible, random), hidden, counts, skippedForSize, skippedMelodicNames, totalFiles: files.length };
 }

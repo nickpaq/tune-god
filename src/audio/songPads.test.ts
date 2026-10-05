@@ -6,24 +6,23 @@ import { freeSongSlots, makeSectionPads } from "./songPads";
 const pad = (index: number, frames = 10): Pad => ({ index, origIndex: index, name: "song", sampleId: 7, sampleRate: 48000, channelData: [new Float32Array(frames)], tune: false, semis: 0, cents: 0 });
 
 describe("freeSongSlots", () => {
-  it("offers the fourth bank first, in order, then the other banks from the back", () => {
+  it("offers bank D's free pads in order and no others", () => {
     const slots = freeSongSlots({ 50: pad(50), 3: pad(3) });
+    expect(slots).toHaveLength(15);
     expect(slots.slice(0, 3)).toEqual([48, 49, 51]);
-    expect(slots).toHaveLength(62);
-    expect(slots.indexOf(32)).toBe(slots.indexOf(63) + 1);
-    expect(slots).not.toContain(3);
+    expect(slots.every((s) => s >= 48 && s < 64)).toBe(true);
   });
 
-  it("counts a blank Empty pad placeholder as free, but not a missing kit slot (a drum layout fills every unused slot with one)", () => {
+  it("counts a blank Empty pad placeholder as free, but not a missing kit slot", () => {
     const empty = (index: number): Pad => ({ ...pad(index), placeholder: { kind: "empty", label: "Empty pad" } });
     const missing = (index: number): Pad => ({ ...pad(index), placeholder: { kind: "missing", label: "add snare" } });
     const grid: Record<number, Pad> = {};
-    for (let i = 0; i < 64; i++) grid[i] = i < 16 ? missing(i) : i === 20 ? pad(20) : empty(i);
+    for (let i = 0; i < 64; i++) grid[i] = i === 52 ? missing(i) : i === 53 ? pad(i) : empty(i);
     const slots = freeSongSlots(grid);
-    expect(slots.slice(0, 2)).toEqual([48, 49]);
-    expect(slots).toHaveLength(47);
-    expect(slots).not.toContain(20);
-    expect(slots.some((s) => s < 16)).toBe(false);
+    expect(slots).toHaveLength(14);
+    expect(slots).not.toContain(52);
+    expect(slots).not.toContain(53);
+    expect(slots.some((s) => s < 48)).toBe(false);
   });
 });
 

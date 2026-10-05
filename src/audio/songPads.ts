@@ -1,23 +1,22 @@
 // The sections of a chopped song as pads. Like ghost and placeholder pads they have no slot in the project they were loaded
 // from: they are written into the export as new pads (see exportSong.ts), so they are not "real" pads and are left out of tuning and mixing.
 import type { Pad } from "../components/PadPanel";
+import { CHOP_BANK_START, PAD_COUNT } from "./padMoves";
 import { sliceSection, type SectionPlan } from "./song/chop";
 
 /** Section pads have no project slot, so their stable id sits above the placeholders' and ghosts'. */
 const SECTION_ORIG_BASE = 3000;
 
 /**
- * The pad slots sections can go on: the fourth bank first, then the others from the back. A slot is free when nothing is on it or only a
- * blank "Empty pad" placeholder (a drum layout fills every unused slot with one; the section replaces it). A "missing" placeholder (a kit slot
- * waiting for its drum) is not free.
+ * The pad slots sections can go on: bank D, the acapella's bank, and nowhere else. A slot is free when nothing is on it or only a
+ * blank "Empty pad" placeholder.
  */
 export function freeSongSlots(pads: Record<number, Pad>): number[] {
   const slots: number[] = [];
-  for (let bank = 3; bank >= 0; bank--)
-    for (let i = 0; i < 16; i++) {
-      const pad = pads[bank * 16 + i];
-      if (!pad || pad.placeholder?.kind === "empty") slots.push(bank * 16 + i);
-    }
+  for (let i = CHOP_BANK_START; i < PAD_COUNT; i++) {
+    const pad = pads[i];
+    if (!pad || pad.placeholder?.kind === "empty") slots.push(i);
+  }
   return slots;
 }
 

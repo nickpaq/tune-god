@@ -114,7 +114,7 @@ export async function buildTunedKoala(
     t.channelData = []; // the WAV holds it now; let the floats go
   }
   // The song's own pad is usually deleted by the arrangement, so its settings are taken before that.
-  const template = song ? songTemplate(samplerJson, song.sourceSampleId) : undefined;
+  const template = song ? (song.template ?? songTemplate(samplerJson, song.sourceSampleId)) : undefined;
   if (arrangement) await applyArrangement(project, samplerJson, arrangement);
   if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
