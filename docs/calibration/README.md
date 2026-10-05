@@ -7,3 +7,5 @@
 How to use the mix project: load it in KoalaTune, switch on the mixer options, export, open the result in Koala, render the six patterns as one WAV, and compare the audio against the timeline and what the app wrote (see `docs/koala-mixer-reference.md`).
 
 Before a calibration run, open the menu and note the version line at the bottom (version, git hash and mix preset) so the render can be tied to the build that made it.
+
+From now on new calibration and probe projects put all their tests in a single long pattern, with an empty bar between sections. The projects above predate that and still use several patterns.
