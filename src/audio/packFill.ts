@@ -34,12 +34,12 @@ export function zoneOf(index: number, layout: FingerLayout): Zone | null {
   return null;
 }
 
-/** Slots in banks A to C that hold no sound: nothing at all, or a silent placeholder. `mode` limits them to the kit ("drums") or to everything else ("melodic"). */
+/** Slots in banks A to C that hold no sound: nothing at all, or a silent placeholder. `mode` limits them to the kit and the bass and 808 pads ("drums") or to the rest ("melodic"). */
 export function missingSlots(pads: Record<number, FillPad | undefined>, layout: FingerLayout, mode: PackMode = "all"): number[] {
   const out: number[] = [];
   for (let i = 0; i < BANK * 3; i++) {
     const zone = zoneOf(i, layout);
-    if (!zone || (mode === "drums" && zone.kind !== "kit") || (mode === "melodic" && zone.kind === "kit")) continue;
+    if (!zone || (mode === "drums" && zone.kind !== "kit" && zone.kind !== "bass" && zone.kind !== "808") || (mode === "melodic" && (zone.kind === "kit" || zone.kind === "bass" || zone.kind === "808"))) continue;
     const pad = pads[i];
     if (!pad || pad.placeholder) out.push(i);
   }

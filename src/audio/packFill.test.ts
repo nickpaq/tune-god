@@ -75,9 +75,9 @@ describe("stand-ins in the kit", () => {
     expect(assignFill(standIns, layout, [{ category: "clap" }], new Set(standIns)).size).toBe(0);
   });
 
-  it("limits the gaps to the kit for drums and to the rest for melodic", () => {
+  it("gives drums the kit and the bass pads, and melodic the rest", () => {
     const layout = layoutById("horizontal");
-    expect(missingSlots({}, layout, "drums").every((i) => i < 16)).toBe(true);
-    expect(missingSlots({}, layout, "melodic").every((i) => i >= 16)).toBe(true);
+    expect(missingSlots({}, layout, "drums").every((i) => i < 16 || (i >= 32 && i < 36))).toBe(true);
+    expect(missingSlots({}, layout, "melodic").every((i) => (i >= 16 && i < 32) || (i >= 36 && i < 48))).toBe(true);
   });
 });

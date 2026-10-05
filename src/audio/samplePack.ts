@@ -194,16 +194,16 @@ export type PlanKey = CategoryId | "808";
 const categoryOfKey = (key: PlanKey): CategoryId => (key === "808" ? "bass" : key);
 
 /**
- * What a pack import may take from the folder: "drums" only the kit sounds (kick, snare, clap, hats, cymbals, perc, vox, fx), never a
- * melodic sound, bass or loop; "melodic" only melodic one-shots, bass and loops, never a drum; "all" everything (the old behaviour).
+ * What a pack import may take from the folder: "drums" the kit sounds (kick, snare, clap, hats, cymbals, perc, vox, fx) and the basses and 808s, never a
+ * melodic sound or loop; "melodic" only melodic one-shots and loops, never a drum or bass; "all" everything (the old behaviour).
  */
 export type PackMode = "drums" | "melodic" | "all";
 
 /** Whether a mode takes a sound of this type. */
 export function modeTakes(mode: PackMode, category: CategoryId): boolean {
   if (mode === "all") return true;
-  if (mode === "drums") return isKitCategory(category);
-  return category === "melodic" || category === "melodicLoop" || category === "drumLoop" || category === "percLoop" || category === "bass";
+  if (mode === "drums") return isKitCategory(category) || category === "bass";
+  return category === "melodic" || category === "melodicLoop" || category === "drumLoop" || category === "percLoop";
 }
 
 export interface PackPlan<T = unknown> {
@@ -267,14 +267,14 @@ export function planPackSounds<T>(
     random?: () => number;
   },
 ): PackPlan<T> {
-  // A drums import never fills bank B or C; a melodic one never fills the kit.
+  // A drums import fills the kit and the bass and 808 pads, nothing else; a melodic one never fills the kit or the bass pads.
   if (mode === "drums") {
     bankB = {};
-    bassPads = 0;
-    pads808 = 0;
     restPads = 0;
   } else if (mode === "melodic") {
     kitSlots = {};
+    bassPads = 0;
+    pads808 = 0;
   }
   const queues = new Map<PlanKey, PackFile<T>[]>();
   const found = new Map<CategoryId, number>();

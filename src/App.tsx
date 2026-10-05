@@ -1781,7 +1781,7 @@ function App() {
             <button
               className="menu__button"
               disabled={!hasProject || analyzing > 0 || !!addPackStatus}
-              title="Choose a folder of drum sounds. Only drums go to the kit, and only into slots that are missing a sound; no melodic sounds or loops are added."
+              title="Choose a folder of drum sounds. Drums go to the kit and basses and 808s to their pads, only into slots that are missing a sound; no melodic sounds or loops are added."
               onClick={() => {
                 addPackInput.current?.click();
                 setMenuOpen(false);
@@ -1792,7 +1792,7 @@ function App() {
             <button
               className="menu__button"
               disabled={!hasProject || analyzing > 0 || !!addPackStatus}
-              title="Choose a folder of melodic one-shots, basses or loops. Only these go on the pads after the kit; no drums are added."
+              title="Choose a folder of melodic one-shots or loops. Only these are added; no drums or basses."
               onClick={() => {
                 addMelodicInput.current?.click();
                 setMenuOpen(false);
