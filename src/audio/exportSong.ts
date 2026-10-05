@@ -11,8 +11,10 @@ export interface SongSectionExport {
   /** The grid slot the section's pad goes on. */
   index: number;
   label: string;
-  /** Exactly 8 bars of audio at the song's rate (the last one padded with silence). */
+  /** Exactly `bars` bars of audio at the song's rate (the last one padded with silence). */
   channelData: Float32Array[];
+  /** Bars in the section and in its pattern; the song's `bars` when not given. */
+  bars?: number;
 }
 
 export interface SongExport {
@@ -22,7 +24,7 @@ export interface SongExport {
   /** The pad (by sample id) whose settings every section pad starts from: the song's own pad. */
   sourceSampleId: number;
   sections: SongSectionExport[];
-  /** Bars in each section's pattern. */
+  /** Bars in a section's pattern unless the section says otherwise. */
   bars: number;
   /** The song's time signature numerator; written to the project (the project's own is used when it is not given). */
   beatsPerBar?: number;
@@ -103,17 +105,18 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
     pads.push(pad);
     taken.add(section.index);
 
+    const bars = section.bars ?? song.bars;
     const slot = freeSlots[added];
     if (firstPattern < 0) firstPattern = slot;
     sequences[slot] = {
       ...emptySequence(),
       noteSequence: {
         pattern: {
-          numBars: song.bars,
+          numBars: bars,
           notes: [
             {
               chance: 1.0,
-              length: song.bars * beatsPerBar * TICKS_PER_BEAT,
+              length: bars * beatsPerBar * TICKS_PER_BEAT,
               num: section.index + base,
               pan: -1.0078740119934082,
               pitch: 0.0,

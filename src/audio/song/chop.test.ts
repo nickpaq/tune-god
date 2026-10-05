@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gridStart, planSections, sectionSeconds, sliceSection, type SongGrid } from "./chop";
+import { gridStart, planSections, sectionSeconds, settleCut, sliceSection, type SongGrid } from "./chop";
 
 const grid = (over: Partial<SongGrid> = {}): SongGrid => ({ bpm: 120, beatsPerBar: 4, downbeatFrame: 0, sampleRate: 48000, ...over });
 
@@ -61,12 +61,12 @@ describe("planSections", () => {
 describe("sliceSection", () => {
   it("returns exactly the planned length with the audio in the right place", () => {
     const data = [Float32Array.from({ length: 100 }, (_, i) => i + 1)];
-    const out = sliceSection(data, { start: -10, length: 50, audioFrames: 40, index: 0 })[0];
+    const out = sliceSection(data, { start: -10, length: 50, audioFrames: 40, index: 0, bars: 8 })[0];
     expect(out).toHaveLength(50);
     expect(out.slice(0, 10).every((v) => v === 0)).toBe(true);
     expect(out[10]).toBe(1);
     expect(out[49]).toBe(40);
-    const tail = sliceSection(data, { start: 90, length: 30, audioFrames: 10, index: 0 })[0];
+    const tail = sliceSection(data, { start: 90, length: 30, audioFrames: 10, index: 0, bars: 8 })[0];
     expect(tail[9]).toBe(100);
     expect(tail[10]).toBe(0);
   });
@@ -114,5 +114,95 @@ describe("a cut moved by hand", () => {
 
   it("does not change anything when there are no shifts", () => {
     expect(planSections(768000 * 3, grid({ shifts: {} }))).toEqual(planSections(768000 * 3, grid()));
+  });
+});
+
+describe("a song with a short section", () => {
+  // 120 BPM, 4/4, 48 kHz: one bar is 96000 frames, 8 bars 768000
+  const BAR = 96000;
+
+  it("a section of 7 bars is 7 bars long and every later section starts a bar sooner", () => {
+    const plan = planSections(768000 * 5, grid({ bars: { 2: 7 } }));
+    expect(plan.slice(0, 5).map((s) => [s.start, s.length, s.bars])).toEqual([
+      [0, 768000, 8],
+      [768000, 768000, 8],
+      [1536000, 7 * BAR, 7],
+      [1536000 + 7 * BAR, 768000, 8],
+      [1536000 + 7 * BAR + 768000, 768000, 8],
+    ]);
+  });
+
+  it("still tiles the song exactly: each section starts where the one before ends", () => {
+    const g = grid({ bpm: 93.7, bars: { 1: 3, 4: 5 } });
+    const plan = planSections(48000 * 400, g);
+    for (let i = 1; i < plan.length; i++) expect(plan[i].start).toBe(plan[i - 1].start + plan[i - 1].length);
+    expect(plan[1].bars).toBe(3);
+    expect(Math.abs(plan[1].length - (3 * 4 * 60 * 48000) / 93.7)).toBeLessThan(1);
+  });
+
+  it("gridStart follows the bars of the sections before it", () => {
+    expect(gridStart(grid({ bars: { 0: 6, 1: 7 } }), 3)).toBe(13 * BAR + 8 * BAR);
+  });
+});
+
+describe("settleCut: a cut almost exactly whole bars off", () => {
+  const BAR = 96000;
+  const g = grid();
+
+  it("one bar early means the section before it is 7 bars, and what is left is a small shift", () => {
+    const edit = settleCut(g, 3, gridStart(g, 3) - BAR + 240); // 5 ms late
+    expect(edit.barChange).toBe(-1);
+    expect(edit.bars).toEqual({ 2: 7 });
+    expect(edit.shifts[3]).toBe(240);
+    // planned with the edit, the cut is where it was put and the section before is 7 bars
+    const plan = planSections(768000 * 5, { ...g, ...edit });
+    expect(plan[3].start).toBe(gridStart(g, 3) - BAR + 240);
+    expect(plan[2].bars).toBe(7);
+    expect(plan[2].start + plan[2].length).toBe(plan[3].start - 240);
+  });
+
+  it("two or three bars early make a 6 or 5 bar section", () => {
+    expect(settleCut(g, 3, gridStart(g, 3) - 2 * BAR).bars).toEqual({ 2: 6 });
+    expect(settleCut(g, 3, gridStart(g, 3) - 3 * BAR + 100).bars).toEqual({ 2: 5 });
+  });
+
+  it("a bar late makes a 9 bar section", () => {
+    expect(settleCut(g, 3, gridStart(g, 3) + BAR).bars).toEqual({ 2: 9 });
+  });
+
+  it("anything that is not nearly a whole bar stays a small shift (a drifting song)", () => {
+    for (const bars of [0.3, 0.5, 0.15, -0.4]) {
+      const edit = settleCut(g, 3, Math.round(gridStart(g, 3) + bars * BAR));
+      expect(edit.barChange).toBe(0);
+      expect(edit.bars).toEqual({});
+      expect(edit.shifts[3]).toBe(Math.round(bars * BAR));
+    }
+    // a few tens of milliseconds is a drift, not a bar
+    expect(settleCut(g, 3, gridStart(g, 3) + 2400).barChange).toBe(0);
+  });
+
+  it("dragging the cut back to where the grid had it restores the 8 bars", () => {
+    const first = settleCut(g, 3, gridStart(g, 3) - BAR);
+    const moved = { ...g, ...first };
+    const back = settleCut(moved, 3, gridStart(g, 3));
+    expect(back.barChange).toBe(1);
+    expect(back.bars).toEqual({});
+    expect(back.shifts[3]).toBe(0);
+  });
+
+  it("keeps the bars of other sections", () => {
+    const edit = settleCut(grid({ bars: { 0: 6 } }), 3, gridStart(grid({ bars: { 0: 6 } }), 3) - BAR);
+    expect(edit.bars).toEqual({ 0: 6, 2: 7 });
+  });
+
+  it("will not make a section shorter than a bar, or longer than 16", () => {
+    const short = grid({ bars: { 2: 1 } });
+    expect(settleCut(short, 3, gridStart(short, 3) - BAR).barChange).toBe(0);
+    const long = grid({ bars: { 2: 16 } });
+    expect(settleCut(long, 3, gridStart(long, 3) + BAR).barChange).toBe(0);
+  });
+
+  it("never treats the first cut as a structure change", () => {
+    expect(settleCut(g, 0, BAR).barChange).toBe(0);
   });
 });

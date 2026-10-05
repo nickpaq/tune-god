@@ -844,7 +844,7 @@ function App() {
 
   /** Replaces the song's pad with its 8-bar sections (on free pads, fourth bank first). The export writes the pads, their patterns and the tempo. */
   const chopSong = (song: Pad, settings: ChopSettings) => {
-    const { pads: sections } = makeSectionPads(song, { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, shifts: settings.shifts }, freeSongSlots(removePad(pads, song.index)));
+    const { pads: sections } = makeSectionPads(song, { bpm: settings.bpm, beatsPerBar: settings.beatsPerBar, downbeatFrame: settings.downbeatFrame, sampleRate: song.sampleRate, shifts: settings.shifts, bars: settings.bars }, freeSongSlots(removePad(pads, song.index)));
     recordEdit();
     setPads((prev) => {
       const next = removePad(prev, song.index);
@@ -1320,7 +1320,7 @@ function App() {
             sampleRate: sectionPads[0].sampleRate,
             sourceSampleId: sectionPads[0].section!.sourceSampleId,
             bars: 8,
-            sections: sectionPads.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData })),
+            sections: sectionPads.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars })),
           }
         : undefined;
       const buses = new Map<number, number>();
@@ -1760,7 +1760,7 @@ function App() {
                   <strong>{labelOf(selectedPad)}</strong>
                   <span>
                     {selectedPad.section
-                      ? `${selectedPad.section.bpm.toFixed(2)} BPM, one-shot`
+                      ? `${selectedPad.section.bars} bars, ${selectedPad.section.bpm.toFixed(2)} BPM`
                       : selectedPad.ghost
                       ? "Made on export unless filled"
                       : selectedPad.placeholder?.kind === "missing"

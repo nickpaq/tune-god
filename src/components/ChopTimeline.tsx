@@ -49,6 +49,7 @@ export function ChopTimeline({
   beatFrames,
   beatsPerBar,
   onMoveCut,
+  onReleaseCut,
   onSelect,
 }: {
   pyramid: PeakPyramid;
@@ -61,12 +62,14 @@ export function ChopTimeline({
   beatFrames: number;
   beatsPerBar: number;
   onMoveCut: (cut: number, frame: number) => void;
+  /** A tab was let go: the cut is final for this drag. */
+  onReleaseCut: (cut: number) => void;
   onSelect: (cut: number) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const range = useRef<HTMLSpanElement>(null);
-  const latest = useRef({ cuts, selected, gridOrigin, beatFrames, beatsPerBar, onMoveCut, onSelect });
-  latest.current = { cuts, selected, gridOrigin, beatFrames, beatsPerBar, onMoveCut, onSelect };
+  const latest = useRef({ cuts, selected, gridOrigin, beatFrames, beatsPerBar, onMoveCut, onReleaseCut, onSelect });
+  latest.current = { cuts, selected, gridOrigin, beatFrames, beatsPerBar, onMoveCut, onReleaseCut, onSelect };
   const total = pyramid.totalFrames;
   const resting = defaultSpan(total);
   const view = useRef({ start: 0, span: resting });
@@ -258,6 +261,7 @@ export function ChopTimeline({
     if (!d || d.id !== e.pointerId) return;
     drag.current = null;
     if (d.kind !== "tab") return;
+    latest.current.onReleaseCut(d.cut);
     // The point stays where it was put; the view eases back out around it, keeping it at the same place across the screen.
     const from = view.current.span;
     const t0 = performance.now();

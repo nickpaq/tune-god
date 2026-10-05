@@ -12,7 +12,7 @@ async function load(file: string): Promise<ParsedKoalaProject> {
   return { zip, samplerJson, originalName: file, pads, padBase: 0 };
 }
 
-const section = (index: number, frames: number) => ({ index, label: `Section ${index - 47}`, channelData: [new Float32Array(frames).fill(0.2)] });
+const section = (index: number, frames: number): { index: number; label: string; channelData: Float32Array[]; bars?: number } => ({ index, label: `Section ${index - 47}`, channelData: [new Float32Array(frames).fill(0.2)] });
 
 async function run(file: string, sections: ReturnType<typeof section>[], bpm = 75) {
   const project = await load(file);
@@ -98,5 +98,14 @@ describe("a chopped song in the export", () => {
     expect(added.map((p: any) => Number(p.pad))).not.toContain(Number(first.pad));
     expect(sequence.sequences).toHaveLength(32);
     expect(sequence.sequences.filter((s: any) => s.noteSequence.pattern.notes?.length)).toHaveLength(32);
+  });
+
+  it("gives a short section a pattern of its own length: 3 bars of audio, a 3 bar pattern, the note held 3 bars", async () => {
+    const { sequence, before } = await run("probe-sidechain.koala", [{ ...section(48, 100), bars: 8 }, { ...section(49, 60), bars: 3 }, { ...section(50, 100), bars: 8 }]);
+    const firstFree = before.sequences.findIndex((s: any) => !s.noteSequence.pattern.notes?.length);
+    const patterns = [0, 1, 2].map((i) => sequence.sequences[firstFree + i].noteSequence.pattern);
+    expect(patterns.map((p: any) => p.numBars)).toEqual([8, 3, 8]);
+    expect(patterns.map((p: any) => p.notes[0].length)).toEqual([8 * 4 * TICKS_PER_BEAT, 3 * 4 * TICKS_PER_BEAT, 8 * 4 * TICKS_PER_BEAT]);
+    expect(patterns.map((p: any) => p.notes[0].num)).toEqual([48, 49, 50]);
   });
 });

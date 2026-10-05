@@ -36,4 +36,11 @@ describe("makeSectionPads", () => {
     expect(pads).toHaveLength(2);
     expect(dropped).toBe(1);
   });
+
+  it("carries a short section's bars and cuts its audio to that length", () => {
+    const g = { ...grid, bars: { 1: 3 } };
+    const { pads } = makeSectionPads(pad(0, 768000 + 3 * 96000 + 768000), g, [48, 49, 50, 51]);
+    expect(pads.map((p) => p.section!.bars)).toEqual([8, 3, 8]);
+    expect(pads.map((p) => p.channelData[0].length)).toEqual([768000, 3 * 96000, 768000]);
+  });
 });

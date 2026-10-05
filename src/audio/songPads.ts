@@ -36,7 +36,7 @@ export function makeSectionPads(song: Pad, grid: SongGrid, free: number[]): Song
       tune: false,
       semis: 0,
       cents: 0,
-      section: { number: n + 1, sourceSampleId: song.sampleId, bpm: grid.bpm, beatsPerBar: grid.beatsPerBar },
+      section: { number: n + 1, sourceSampleId: song.sampleId, bpm: grid.bpm, beatsPerBar: grid.beatsPerBar, bars: plan.bars },
     });
   });
   return { pads, dropped: Math.max(0, plans.length - free.length), seconds: (SECTION_BARS * grid.beatsPerBar * 60) / grid.bpm };

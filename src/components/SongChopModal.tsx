@@ -3,7 +3,7 @@ import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
 import { getAudioContext } from "../audio/decode";
 import { mixToMono, snapToAttack, type SongAnalysis } from "../audio/song/beats";
-import { gridStart, planSections, SECTION_BARS, sectionSeconds } from "../audio/song/chop";
+import { barsBefore, gridStart, planSections, SECTION_BARS, sectionSeconds, settleCut } from "../audio/song/chop";
 import { buildPyramid } from "../audio/song/waveform";
 import { NOTE_NAMES } from "../audio/theory";
 import { ChopTimeline } from "./ChopTimeline";
@@ -16,6 +16,8 @@ export interface ChopSettings {
   downbeatFrame: number;
   /** Cuts moved by hand: frames from where the grid puts each section's start, by section number (0-based). */
   shifts: Record<number, number>;
+  /** Bars in the sections that are not 8, by section number (0-based): where the song drops or adds bars. */
+  bars: Record<number, number>;
   /** The key to tune the project to, or null to leave the project's key alone. */
   keyPc: number | null;
 }
@@ -60,6 +62,9 @@ export function SongChopModal({
   const [beatsPerBar, setBeatsPerBar] = useState(projectBeatsPerBar);
   const [downbeatFrame, setDownbeatFrame] = useState(0);
   const [shifts, setShifts] = useState<Record<number, number>>({});
+  const [bars, setBars] = useState<Record<number, number>>({});
+  /** What the last drag did to the song's structure, for the readout. */
+  const [structureNote, setStructureNote] = useState("");
   const [selected, setSelected] = useState(0);
   const [keyPc, setKeyPc] = useState(0);
   const [minor, setMinor] = useState(false);
@@ -98,7 +103,7 @@ export function SongChopModal({
 
   useEffect(() => () => stopPlaying.current?.(), []);
 
-  const grid = useMemo(() => ({ bpm, beatsPerBar, downbeatFrame, sampleRate, shifts }), [bpm, beatsPerBar, downbeatFrame, sampleRate, shifts]);
+  const grid = useMemo(() => ({ bpm, beatsPerBar, downbeatFrame, sampleRate, shifts, bars }), [bpm, beatsPerBar, downbeatFrame, sampleRate, shifts, bars]);
   const plans = useMemo(() => planSections(totalFrames, grid), [totalFrames, grid]);
   const cuts = useMemo(() => plans.map((p) => p.start), [plans]);
   const fits = Math.min(plans.length, freeSlots);
@@ -114,9 +119,28 @@ export function SongChopModal({
       if (!target) return;
       const clamped = Math.min(totalFrames, Math.max(0, Math.round(frame)));
       if (target.index === 0) setDownbeatFrame(clamped);
-      else setShifts((prev) => ({ ...prev, [target.index]: clamped - gridStart({ bpm, beatsPerBar, downbeatFrame, sampleRate }, target.index) }));
+      else setShifts((prev) => ({ ...prev, [target.index]: clamped - gridStart({ bpm, beatsPerBar, downbeatFrame, sampleRate, bars }, target.index) }));
+      setStructureNote("");
     },
-    [plans, totalFrames, bpm, beatsPerBar, downbeatFrame, sampleRate],
+    [plans, totalFrames, bpm, beatsPerBar, downbeatFrame, sampleRate, bars],
+  );
+
+  /**
+   * A tab was let go. A cut that landed almost exactly whole bars from the grid means the song has fewer (or more) bars there: the section before
+   * it is that many bars shorter, and the cuts after it move with it (see settleCut).
+   */
+  const releaseCut = useCallback(
+    (at: number) => {
+      const target = plans[at];
+      if (!target || target.index < 1) return;
+      const edit = settleCut(grid, target.index, target.start);
+      if (edit.barChange === 0) return;
+      setShifts(edit.shifts);
+      setBars(edit.bars);
+      const now = edit.bars[target.index - 1] ?? SECTION_BARS;
+      setStructureNote(`Section ${at} is now ${now} bar${now === 1 ? "" : "s"}${edit.barChange < 0 ? ": a bar was missing here" : ""}. The cuts after it moved with it.`);
+    },
+    [plans, grid],
   );
 
   const nudge = (frames: number) => plan && placeCut(chosen, plan.start + frames);
@@ -135,8 +159,8 @@ export function SongChopModal({
   /** With this cut where the user put it, the tempo that puts every cut on the grid through bar 1 and this cut. */
   const fitTempo = () => {
     if (!plan || plan.index < 1 || plan.start <= downbeatFrame) return;
-    const frames = (plan.start - downbeatFrame) / plan.index;
-    applyBpm((SECTION_BARS * beatsPerBar * 60 * sampleRate) / frames);
+    const framesPerBar = (plan.start - downbeatFrame) / barsBefore(grid, plan.index);
+    applyBpm((beatsPerBar * 60 * sampleRate) / framesPerBar);
     setShifts((prev) => {
       const { [plan.index]: _gone, ...rest } = prev;
       return rest;
@@ -232,9 +256,11 @@ export function SongChopModal({
             beatFrames={beatFrames}
             beatsPerBar={beatsPerBar}
             onMoveCut={placeCut}
+            onReleaseCut={releaseCut}
             onSelect={setSelected}
           />
 
+          {structureNote && <p className="chop__note">{structureNote}</p>}
           {plan && (
             <div className="chop__readout">
               <span>
@@ -270,8 +296,16 @@ export function SongChopModal({
             </button>
             <button
               className="chop__btn"
-              disabled={!plan || (shifts[plan.index] ?? 0) === 0}
-              onClick={() => plan && setShifts((prev) => ({ ...prev, [plan.index]: 0 }))}
+              disabled={!plan || plan.index < 1 || ((shifts[plan.index] ?? 0) === 0 && bars[plan.index - 1] === undefined)}
+              onClick={() => {
+                if (!plan) return;
+                setShifts((prev) => ({ ...prev, [plan.index]: 0 }));
+                setBars((prev) => {
+                  const { [plan.index - 1]: _gone, ...rest } = prev;
+                  return rest;
+                });
+                setStructureNote("");
+              }}
             >
               Reset cut
             </button>
@@ -329,6 +363,7 @@ export function SongChopModal({
 
           <p className="chop__note">
             {plans.length} section{plans.length === 1 ? "" : "s"} of {SECTION_BARS} bars ({sectionSeconds(bpm, beatsPerBar).toFixed(2)} s each).
+            {plans.some((p) => p.bars !== SECTION_BARS) ? ` Not 8 bars: ${plans.filter((p) => p.bars !== SECTION_BARS).map((p) => `section ${plans.indexOf(p) + 1} (${p.bars})`).join(", ")}.` : ""}
             {adjusted > 0 ? ` ${adjusted} cut${adjusted === 1 ? " was" : "s were"} placed by hand.` : ""}
             {plans.length > 0 && plans[plans.length - 1].audioFrames < plans[plans.length - 1].length ? " The last one is padded with silence to a full 8 bars." : ""}
             {plans.length > fits ? ` Only ${fits} fit on free pads: the last ${plans.length - fits} are dropped.` : ""} The song's own pad is replaced by the sections, and the project tempo becomes {bpm.toFixed(2)} BPM.
@@ -340,7 +375,7 @@ export function SongChopModal({
           disabled={status === "listening" || plans.length === 0 || fits === 0}
           onClick={() => {
             stopPlaying.current?.();
-            onConfirm({ bpm, beatsPerBar, downbeatFrame, shifts, keyPc: useKey ? keyPc : null });
+            onConfirm({ bpm, beatsPerBar, downbeatFrame, shifts, bars, keyPc: useKey ? keyPc : null });
           }}
         >
           Chop into {fits} pattern{fits === 1 ? "" : "s"}
