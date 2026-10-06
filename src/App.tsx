@@ -241,7 +241,6 @@ function App() {
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
-  const [tuneAll, setTuneAll] = useState(saved.tuneAll ?? true);
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
   const [a4Text, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
   /** Ghost under the finger while a pad is being dragged, and the drop target under it ("kind:index"). */
@@ -432,8 +431,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget, keyMajor });
-  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget, keyMajor]);
+    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor });
+  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -1102,7 +1101,6 @@ function App() {
    * Tapping the key that is already selected switches tuning off, so every sound reverts to its original pitch.
    */
   const selectKey = (pc: number) => {
-    if (!tuneAll) return selectKeyForPad(pc);
     applyProjectKey(pc === keyPc ? null : pc);
   };
 
@@ -1127,14 +1125,6 @@ function App() {
   const matchProjectToKey = (pad: Pad) => {
     if (pad.detectedMidi == null) return;
     applyProjectKey((((Math.round(pad.detectedMidi - referenceOffsetSemitones(a4)) % 12) + 12) % 12));
-  };
-
-  /** "Tune one": the key applies to the selected pad only. Tapping that pad's key again switches its tuning off. */
-  const selectKeyForPad = (pc: number) => {
-    const pad = selected !== null ? pads[selected] : undefined;
-    if (!pad || !isReal(pad)) return;
-    const same = pad.tune && (pad.keyPc ?? keyPc) === pc;
-    patchPad(pad.index, same ? { tune: false, tuneLocked: true, keyPc: undefined } : { tune: true, tuneLocked: true, keyPc: pc });
   };
 
   /**
@@ -1304,8 +1294,6 @@ function App() {
       keyName={keyNameOf(selectedPad)}
       autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4, keyMajor)}
       needsKey={(selectedPad.keyPc ?? keyPc) === null}
-      keyMajor={keyMajor}
-      onKeyMajor={setKeyMajor}
       chords={
         selectedPad.category === "melodicLoop" && (selectedPad.keyPc ?? keyPc) !== null
           ? [referenceFor(selectedPad, (selectedPad.keyPc ?? keyPc)!, keyMajor, false), referenceFor(selectedPad, (selectedPad.keyPc ?? keyPc)!, keyMajor, true)].map((r) => `${NOTE_NAMES[r.pc]} ${r.kind}`) as [string, string]
@@ -1380,8 +1368,8 @@ function App() {
     return pad.category;
   };
   const litColor = (pad: Pad) => (pad.placeholder ? placeholderColor(pad) : pad.category ? autoColorOf(pad) : "#b3a6f2");
-  /** The note marked under the keys: the project key, or in "Tune one" the selected pad's own key. */
-  const shownKey = tuneAll ? keyPc : selectedPad?.tune ? (selectedPad.keyPc ?? keyPc) : null;
+  /** The note marked under the keys: the project key. */
+  const shownKey = keyPc;
 
   return (
     <div
@@ -1672,7 +1660,7 @@ function App() {
               {selectedPad && (
                 <div className="oled__head">
                   <span>{shownMode === "swap" ? "Hot swap" : shownMode === "type" ? "Sound type" : shownMode === "tune" ? "Tune" : "Sample"}</span>
-                  <span>{shownMode === "tune" && tuneAll ? "All pads" : shownMode === "tune" ? `Pad ${padName(selectedPad)}` : padName(selectedPad)}</span>
+                  <span>{shownMode === "tune" ? "All pads" : padName(selectedPad)}</span>
                 </div>
               )}
               {!hasProject ? (
@@ -1779,13 +1767,14 @@ function App() {
             <Keyboard selected={shownKey} onSelect={selectKey} />
             <div className="deck__side">
               <button
-                className={`cap cap--side${tuneAll ? " cap--on" : ""}`}
-                aria-pressed={tuneAll}
-                aria-label="Tune all pads or the selected pad only"
-                onClick={() => setTuneAll((on) => !on)}
+                className={`cap cap--side${keyMajor ? " cap--on" : ""}`}
+                aria-pressed={keyMajor}
+                aria-label={`The project key is ${keyMajor ? "major" : "minor"}: tap to switch`}
+                title="The project key: minor (default) or major. It sets the chord a melodic loop is played against and where the loop is moved to (a major key takes it to its relative minor, a minor third below)."
+                onClick={() => setKeyMajor(!keyMajor)}
               >
                 <span className="cap__led" />
-                <span className="cap__legend">{tuneAll ? "All" : "One"}</span>
+                <span className="cap__legend">{keyMajor ? "Major" : "Minor"}</span>
               </button>
               <button className={`cap cap--side${toneOn ? " cap--on" : ""}`} aria-pressed={toneOn} onClick={() => setToneOn((on) => !on)}>
                 <span className="cap__led" />

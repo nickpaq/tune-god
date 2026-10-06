@@ -49,8 +49,6 @@ export interface SavedState {
   packMemory?: "low" | "auto" | "high";
   paletteId?: string;
   toneOn?: boolean;
-  /** The key drawer's switch: a key applies to every pad ("Tune all", the default) or only the selected pad. */
-  tuneAll?: boolean;
   /** A4 reference pitch in Hz (440 = standard). */
   a4?: number;
   bank?: number;

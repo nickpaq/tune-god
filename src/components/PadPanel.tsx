@@ -66,8 +66,6 @@ export function PadPanel({
   autoShift,
   keyName,
   needsKey,
-  keyMajor,
-  onKeyMajor,
   chords,
   relative,
   onRelative,
@@ -83,9 +81,6 @@ export function PadPanel({
   keyName: string;
   /** No key is chosen yet, so there is no tone to hold the sound against: the slider is locked. */
   needsKey: boolean;
-  /** The piano's key is a major key (default: minor). It sets the chord a melodic loop is judged against and where the loop is moved to. */
-  keyMajor: boolean;
-  onKeyMajor: (major: boolean) => void;
   /** For a melodic loop: the reference chord of the project's key and of its relative key (e.g. "C minor", "D# major"); null for any other sound. */
   chords: [string, string] | null;
   /** The reference is the relative key's chord (picked with the squares shown while the slider is dragged up). */
@@ -121,14 +116,6 @@ export function PadPanel({
               aria-pressed={pad.tune}
             >
               {pad.tune ? "Tune on" : "Tune off"}
-            </button>
-            <button
-              className="tune-toggle"
-              onClick={() => onKeyMajor(!keyMajor)}
-              aria-label={`The key is ${keyMajor ? "major" : "minor"}: tap to switch`}
-              title="Major or minor: the chord a melodic loop is played against, and the key it is moved to (a major key takes the loop to its relative minor, a minor third below)."
-            >
-              {keyMajor ? "Major" : "Minor"}
             </button>
           </div>
           <div>Shift {pad.tune ? `${total >= 0 ? "+" : "-"}${Math.abs(total).toFixed(2)}` : "0.00"}st</div>
