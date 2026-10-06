@@ -56,11 +56,10 @@ export function PadPanel({
   pad,
   autoShift,
   keyName,
-  toneOffset,
   needsKey,
-  onToneOffset,
-  onToneRelease,
-  onCorrect,
+  onTrim,
+  onHoldStart,
+  onHoldEnd,
   onChange,
 }: {
   pad: Pad;
@@ -68,15 +67,14 @@ export function PadPanel({
   autoShift: number;
   /** The note the pad is tuned to ("C#"), or "--" when tuning is off. */
   keyName: string;
-  /** How far the slider has moved the reference tone, in cents. It snaps back to 0 when let go. */
-  toneOffset: number;
-  /** No key is chosen yet, so there is no tone to match: the slider is locked. */
+  /** No key is chosen yet, so there is no tone to hold the sound against: the slider is locked. */
   needsKey: boolean;
-  onToneOffset: (cents: number) => void;
-  /** The pitch slider was let go (the sound and tone stop; the slider stays where it was left). */
-  onToneRelease: () => void;
-  /** Correct was pressed: the pad moves by the opposite of the tone's offset, so it sits on the key. */
-  onCorrect: () => void;
+  /** The pitch slider moved: the pad's pitch trim, in cents. */
+  onTrim: (cents: number) => void;
+  /** The slider was grabbed: the pad loops with a tone on the key, until it is let go. */
+  onHoldStart: () => void;
+  /** The slider was let go: the sound and the tone stop. */
+  onHoldEnd: () => void;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
@@ -111,25 +109,19 @@ export function PadPanel({
           keyStep={10}
           fineSpan={100}
           coarseStep={100}
-          value={toneOffset}
+          value={trim}
           bipolar
           disabled={needsKey}
-          onChange={onToneOffset}
-          onDragEnd={onToneRelease}
+          onChange={onTrim}
+          onDragStart={onHoldStart}
+          onDragEnd={onHoldEnd}
           onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={formatTrim}
-          title="Pitch of the sound: hold and slide the tone until it matches what you hear; the sound and tone stop when you let go. Press Correct to move the sound onto the key."
+          title="Pitch of the sound: hold and slide to repitch it against a tone on the key. The sound and tone play only while you hold. Double-tap to reset."
         />
         <div className="pad-panel__scale">
           {needsKey ? (
             <span>Select a key first</span>
-          ) : toneOffset !== 0 ? (
-            <>
-              <span>{formatTrim(toneOffset)}st</span>
-              <button className="tune-toggle tune-toggle--on" onClick={onCorrect} title="Moves the sound by the opposite of what the tone moved, onto the key">
-                Correct
-              </button>
-            </>
           ) : (
             <>
               <span>-12st</span>
