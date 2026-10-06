@@ -38,6 +38,7 @@ export function PrecisionSlider({
   keyStep = step,
   fineSpan,
   coarseStep,
+  coarseStops,
   value,
   onChange,
   onDoubleClick,
@@ -58,6 +59,8 @@ export function PrecisionSlider({
   fineSpan: number;
   /** While the finger is directly over the track, the value snaps to multiples of this (e.g. whole semitones). */
   coarseStep?: number;
+  /** Or, instead of `coarseStep`: the only values the thumb stops on while the finger is directly over the track (e.g. the offsets a pitch detector gets wrong by). */
+  coarseStops?: number[];
   value: number;
   onChange: (value: number) => void;
   onDoubleClick?: () => void;
@@ -79,6 +82,12 @@ export function PrecisionSlider({
   const [dragging, setDragging] = useState(false);
   const keyHeld = useRef(false);
 
+  /** The coarse value nearest to `v`: a stop from `coarseStops`, or a multiple of `coarseStep`. */
+  const snapCoarse = (v: number) => {
+    if (coarseStops?.length) return coarseStops.reduce((best, stop) => (Math.abs(stop - v) < Math.abs(best - v) ? stop : best), coarseStops[0]);
+    return coarseStep ? Math.round(v / coarseStep) * coarseStep : v;
+  };
+
   const snapToStep = (v: number) => {
     const stepped = Math.round(v / step) * step;
     return Math.min(max, Math.max(min, stepped));
@@ -93,7 +102,7 @@ export function PrecisionSlider({
       lastX: e.clientX,
       startY: e.clientY,
       value,
-      offset: coarseStep ? value - Math.round(value / coarseStep) * coarseStep : 0,
+      offset: coarseStep || coarseStops?.length ? value - snapCoarse(value) : 0,
       room: Math.max(MIN_DRAG_ROOM_PX, (window.innerHeight - e.clientY) / 2),
     };
     setDragging(true);
@@ -116,9 +125,9 @@ export function PrecisionSlider({
     drag.value = Math.min(max, Math.max(min, drag.value + deltaValue));
     const rect = track.getBoundingClientRect();
     const overTrack = e.clientY >= rect.top - 12 && e.clientY <= rect.bottom + 12;
-    if (coarseStep && overTrack) {
-      // whole steps from where the drag began, so any cents offset the value already had stays until a double-tap resets it
-      onChange(Math.min(max, Math.max(min, Math.round((drag.value - drag.offset) / coarseStep) * coarseStep + drag.offset)));
+    if ((coarseStep || coarseStops?.length) && overTrack) {
+      // whole steps (or stops) from where the drag began, so any cents offset the value already had stays until a double-tap resets it
+      onChange(Math.min(max, Math.max(min, snapCoarse(drag.value - drag.offset) + drag.offset)));
     } else {
       onChange(snapToStep(drag.value));
     }
