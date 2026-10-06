@@ -1,5 +1,8 @@
 import { useEffect } from "react";
 
+/** A screen with fewer rows of text than this is "tight": the drop zone leaves out its optional lines. */
+const TIGHT_ROWS = 90;
+
 /** The hot-swap list's cell as a share of the screen's cell. */
 const SWAP_CELL_SHARE = 0.8;
 
@@ -95,6 +98,10 @@ export function useOledCell() {
         const after = oled.getBoundingClientRect();
         lastKey = `${base}|${ratio}|${after.width.toFixed(1)}x${after.height.toFixed(1)}|${oled.textContent}`;
       }
+      // How many rows of text the screen holds, counted in cells; the text never changes size, so a short screen drops its least important lines
+      // instead (see `data-tight` in App.css). Never taller than the screen is the rule for everything on it.
+      const rows = Math.floor(box.height / (base / ratio));
+      oled.dataset.tight = rows < TIGHT_ROWS ? "1" : "";
       oled.style.left = oled.style.top = "0px";
       const placed = oled.getBoundingClientRect();
       const nudge = (edge: number) => (Math.round(edge * ratio) - edge * ratio) / ratio;

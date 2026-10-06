@@ -50,6 +50,7 @@ import { useOledCell } from "./components/useOledCell";
 import { SeqScreen, type SeqPad } from "./components/seq/SeqScreen";
 import { useSafeArea } from "./components/useSafeArea";
 import { SIDECHAIN_HINT, sidechainStatus } from "./audio/sidechain";
+import { ACAPELLA_ICON, DRUM_ICON, K_ICON, KEYS_ICON } from "./components/dropIcons";
 import { ACTIVE_MIX_PRESET, MASTER_STYLES, type MasterStyle } from "./audio/mixPresets";
 import "./App.css";
 
@@ -144,6 +145,16 @@ const MAX_SAMPLE_SECONDS = 60;
 function tuneDefault(locked: boolean | undefined, current: boolean, category: CategoryId | undefined, detectedMidi: number | null | undefined, target: number | null): boolean {
   if (locked) return current;
   return target !== null && detectedMidi != null && isTunedCategory(category);
+}
+
+/** `scale` is how many screen cells one pixel of the art takes (2 for the small sort-key icons, 1 for the 20 x 20 start-screen icons). */
+function PixelIcon({ rows, scale = 2 }: { rows: string[]; scale?: number }) {
+  const cols = rows[0].length;
+  return (
+    <svg className="pixel-icon" viewBox={`0 0 ${cols} ${rows.length}`} style={{ width: `calc(var(--cell) * ${cols * scale})`, height: `calc(var(--cell) * ${rows.length * scale})` }} shapeRendering="crispEdges" aria-hidden="true">
+      {rows.flatMap((row, y) => [...row].map((ch, x) => (ch === "#" ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null)))}
+    </svg>
+  );
 }
 
 /** A menu switch: the same lit key as the ones under the piano, with its words (and a line of explanation) beside it. */
@@ -253,7 +264,7 @@ function App() {
   const projectFile = useRef<File | null>(null);
   /** What the load buttons say while a bank is being loaded. */
   const [addPackStatus, setAddPackStatus] = useState("");
-  const packInput = useRef<HTMLInputElement>(null);
+  const projectInput = useRef<HTMLInputElement>(null);
   /** The folder pickers of the four loaders (and the acapella file picker). They live outside the menu: closing the menu unmounts it. */
   const drumsInput = useRef<HTMLInputElement>(null);
   const loopsInput = useRef<HTMLInputElement>(null);
@@ -1671,40 +1682,30 @@ function App() {
                 </div>
               )}
               {!hasProject ? (
-                <label className="dropzone">
+                <div className="dropzone">
                   <svg className="dropzone__ants" aria-hidden="true">
                     <rect className="dropzone__ants-base" pathLength="280" />
                     <rect className="dropzone__ants-dash" pathLength="280" />
                   </svg>
-                  <input type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
-                  <input
-                    type="file"
-                    hidden
-                    // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
-                    webkitdirectory=""
-                    ref={packInput}
-                    onChange={(e) => {
-                      const list = Array.from(e.target.files ?? []);
-                      e.target.value = "";
-                      if (list.length) void loadBank("drums", () => findPackInFileList(list));
-                    }}
-                  />
-                  <strong>{loading ? importStatus || "Loading…" : "Drop a .koala project"}</strong>
-                  <span>or a drum pack folder</span>
-                  <span>or tap to choose one</span>
-                  <button
-                    type="button"
-                    className="dropzone__pack"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      packInput.current?.click();
-                    }}
-                  >
-                    <span className="dropzone__long">Choose a drum pack folder</span>
-                    <span className="dropzone__short">Pick a drum folder</span>
-                  </button>
-                </label>
+                  <input ref={projectInput} type="file" accept=".koala" hidden onChange={(e) => pickFile(e.target.files)} />
+                  {loading || addPackStatus ? (
+                    <strong>{loading ? importStatus || "Loading…" : addPackStatus}</strong>
+                  ) : (
+                    <div className="dropzone__choices">
+                      {[
+                        { icon: K_ICON, label: "Project", aria: "Open a .koala project", input: projectInput },
+                        { icon: DRUM_ICON, label: "Drums", aria: "Load Bank A: Drums", input: drumsInput },
+                        { icon: KEYS_ICON, label: "Loops", aria: "Load Bank B: Melodic Loops", input: loopsInput },
+                        { icon: ACAPELLA_ICON, label: "Acapella", aria: "Load Bank D: Acapella (Koala project)", input: acapellaInput },
+                      ].map((choice) => (
+                        <button key={choice.label} type="button" className="dropzone__btn" aria-label={choice.aria} onClick={() => choice.input.current?.click()}>
+                          <PixelIcon rows={choice.icon} scale={1} />
+                          <span>{choice.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : !selectedPad ? (
                 <div className="screen__message">
                   <strong>{projectName}</strong>
@@ -1768,8 +1769,9 @@ function App() {
           )}
         </div>
 
-        {/* The deck under the screen: the sound type keys, or the piano with its two keys. Hot swap has none, its list takes the room. */}
-        {shownMode === "type" && (
+        {/* The deck under the screen: the sound type keys, or the piano with its two keys. Hot swap has none, its list takes the room, and so
+            does the empty start screen (nothing to type or tune yet), whose drop zone needs the height to fit its text. */}
+        {hasProject && shownMode === "type" && (
           <div className="deck">
             <TypeKeys
               pad={selectedPad && isReal(selectedPad) ? selectedPad : null}
@@ -1778,7 +1780,7 @@ function App() {
             />
           </div>
         )}
-        {shownMode === "tune" && (
+        {hasProject && shownMode === "tune" && (
           <div className="deck deck--tune">
             <Keyboard selected={shownKey} onSelect={selectKey} />
             <div className="deck__side">
