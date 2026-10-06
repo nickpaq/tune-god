@@ -172,3 +172,19 @@ describe("stretchLengthFor", () => {
     expect(stretchLengthFor(3, 7)).toBe(21);
   });
 });
+
+describe("acapella mode leaves the project's tempo alone", () => {
+  it("writes no tempo when none is given, and the key offset on every section's pitch knob", async () => {
+    const project = await load("probe-sidechain.koala");
+    const source = project.samplerJson.pads[0];
+    const before = JSON.parse(await project.zip.file("sequence.json")!.async("string"));
+    const { blob } = await buildTunedKoala(project, [], { song: { pitch: -3, sampleRate: 44100, sourceSampleId: source.sampleId, sections: [section(48, 100), section(49, 100)], bars: 8 } });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const sampler = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
+    const sequence = JSON.parse(await zip.file("sequence.json")!.async("string"));
+    expect(sequence.bpm).toBe(before.bpm);
+    const added = sampler.pads.filter((p: any) => /^Section/.test(p.label));
+    expect(added.map((p: any) => p.pitch)).toEqual([-3, -3]);
+    expect(added.every((p: any) => String(p.stretching) === "true")).toBe(true);
+  });
+});

@@ -5,6 +5,7 @@ import type { ParsedKoalaProject } from "./koalaProject";
 import type { MasterStyle } from "./mixPresets";
 import { appendAfterExisting, bassSidechain, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
+import { addChopperPad, type ChopperExport } from "./exportChopper";
 import { addSongSections, emptySequence, SEQUENCE_SLOTS, songTemplate, type SongExport } from "./exportSong";
 
 /** A ghost snare or soft kick the layout adds: a quieter copy of another pad, written as its own sample. */
@@ -57,9 +58,10 @@ export async function buildTunedKoala(
     playback,
     ghosts,
     song,
+    chopper,
     bpm,
     stretch,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; ghosts?: GhostPadExport[]; song?: SongExport; bpm?: number; stretch?: Map<number, number> } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number> } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -117,6 +119,7 @@ export async function buildTunedKoala(
   if (arrangement) await applyArrangement(project, samplerJson, arrangement);
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
   if (song?.sections.length) await addSongSections(project, samplerJson, song, template);
+  if (chopper) await addChopperPad(project, samplerJson, chopper);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
   if (bpm !== undefined) await writeBpm(project, bpm);
   if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, melodicEq: sidechain, master: masterChain, masterStyle });

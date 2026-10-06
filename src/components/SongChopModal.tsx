@@ -25,6 +25,7 @@ import { buildPyramid } from "../audio/song/waveform";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
 import { Knob } from "./Knob";
 import { useSongPlayer } from "./useSongPlayer";
+import type { SongKey } from "../audio/song/keyOffset";
 import { padTitle } from "../audio/song/stems";
 import { loadChopMarks, saveChopMarks } from "../storage";
 import type { Pad } from "./PadPanel";
@@ -35,13 +36,15 @@ export interface ChopSettings {
   beatsPerBar: number;
   /** The sections, on the song's own frames. */
   plans: SectionPlan[];
-  /** The key to tune the project to, or null to leave the project's key alone. */
+  /** The song's key as detected (null when no beat, so no key, was found): what the key picked on the piano is compared with. */
+  key: SongKey | null;
 }
 
 /** What the automatic detection found: the tempo and where bar 1 starts. */
 interface Detected {
   bpm: number;
   downbeatSeconds: number;
+  key: SongKey;
 }
 
 /** Where a downbeat marker looks for the sound's real attack, either side of the cursor (seconds). */
@@ -72,6 +75,7 @@ export function SongChopModal({
   palette,
   beatsPerBar,
   freeSlots,
+  unit = "pattern",
   onConfirm,
   onClose,
 }: {
@@ -82,6 +86,8 @@ export function SongChopModal({
   /** The project's time signature numerator. */
   beatsPerBar: number;
   freeSlots: number;
+  /** What the chop makes: a pattern per section (acapella mode) or a chop on the chopper (chopper mode). */
+  unit?: "pattern" | "chop";
   onConfirm: (settings: ChopSettings) => void;
   onClose: () => void;
 }) {
@@ -122,7 +128,7 @@ export function SongChopModal({
       .then((result) => {
         if (!alive) return;
         if (!result) return setDetected("none");
-        setDetected({ bpm: result.bpm, downbeatSeconds: result.downbeatSeconds });
+        setDetected({ bpm: result.bpm, downbeatSeconds: result.downbeatSeconds, key: { pc: result.key.pc, minor: result.key.minor } });
       })
       .catch(() => alive && setDetected("none"));
     return () => {
@@ -149,6 +155,7 @@ export function SongChopModal({
   const plans = useMemo(() => (grid ? planSections(totalFrames, grid, sections) : []), [grid, totalFrames, sections]);
   const fits = Math.min(plans.length, freeSlots);
   const longOnes = grid ? sections.map((s, i) => (tooLong(grid, s) ? i + 1 : 0)).filter(Boolean) : [];
+  const detectedKey = detected && detected !== "none" ? detected.key : null;
   const tempo = grid ? bpmAt(grid, sections.length > 0 ? sections[0].first : 0) : 0;
 
   const gridRef = useRef(grid);
@@ -289,7 +296,7 @@ export function SongChopModal({
     const chosen = planSections(totalFrames, grid, picked);
     if (chosen.length === 0) return setStatus("No whole bars to chop");
     change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)) }, `Chopped by ${bars}`);
-    onConfirm({ bpm: bpmAt(grid, picked[0].first), beatsPerBar, plans: chosen });
+    onConfirm({ bpm: bpmAt(grid, picked[0].first), beatsPerBar, plans: chosen, key: detectedKey });
   };
 
   autoChopRef.current = autoChop;
@@ -433,8 +440,8 @@ export function SongChopModal({
 
         </div>
 
-        <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans })}>
-          Chop into {fits} pattern{fits === 1 ? "" : "s"}
+        <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, key: detectedKey })}>
+          Chop into {fits} {unit}{fits === 1 ? "" : "s"}
         </button>
       </div>
     </div>

@@ -34,8 +34,10 @@ export interface SongSectionExport {
 }
 
 export interface SongExport {
-  /** The project tempo: the song's. */
-  bpm: number;
+  /** The project tempo to write. Left out, the project's own tempo stays (the stretched sections follow whatever it is). */
+  bpm?: number;
+  /** Semitones written to every section pad's pitch knob (the key offset); the audio is not altered. */
+  pitch?: number;
   sampleRate: number;
   /** The pad (by sample id) whose settings every section pad starts from: the song's own pad. */
   sourceSampleId: number;
@@ -64,7 +66,7 @@ export function songTemplate(samplerJson: any, sourceSampleId: number): SongTemp
 /** A pattern slot as Koala writes it when nothing is recorded. */
 export const emptySequence = () => ({ lastViewedPath: "", noteSequence: { pattern: { notes: null, numBars: 1 } }, parameterSequences: null });
 
-const isEmpty = (seq: any) => !Array.isArray(seq?.noteSequence?.pattern?.notes) || seq.noteSequence.pattern.notes.length === 0;
+export const isEmpty = (seq: any) => !Array.isArray(seq?.noteSequence?.pattern?.notes) || seq.noteSequence.pattern.notes.length === 0;
 
 /** The first choke group no pad uses yet (0 is no group). */
 function freeChokeGroup(pads: any[]): number {
@@ -91,7 +93,7 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
   const sequenceEntry = project.zip.file("sequence.json");
   const sequence = sequenceEntry
     ? JSON.parse(await sequenceEntry.async("string"))
-    : { autoPlay: "next", beatsPerBar: 4, bpm: song.bpm, currSequenceId: 0, quantizeDivision: 16, quantizing: true, seqSnap: "Sequence", swing: 0 };
+    : { autoPlay: "next", beatsPerBar: 4, bpm: song.bpm ?? 120, currSequenceId: 0, quantizeDivision: 16, quantizing: true, seqSnap: "Sequence", swing: 0 };
   const sequences: any[] = (sequence.sequences = Array.isArray(sequence.sequences) ? sequence.sequences : []);
   while (sequences.length < SEQUENCE_SLOTS) sequences.push(emptySequence());
   if (song.beatsPerBar && song.beatsPerBar > 0) sequence.beatsPerBar = song.beatsPerBar;
@@ -125,7 +127,7 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
     // and at the song's own tempo (which the export sets) they are not altered at all.
     pad.stretching = typeof source?.stretching === "string" ? "true" : true;
     pad.stretchLength = stretchLengthFor(section.bars ?? song.bars, beatsPerBar);
-    Object.assign(pad, { start: 0, zoomStart: 0, end: frames, zoomEnd: frames, pitch: 0, vol: 1, pan: 0.5 });
+    Object.assign(pad, { start: 0, zoomStart: 0, end: frames, zoomEnd: frames, pitch: song.pitch ?? 0, vol: 1, pan: 0.5 });
     if ("loopPoint" in pad) pad.loopPoint = -1;
     pads.push(pad);
     taken.add(section.index);
@@ -158,7 +160,7 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
   }
   pads.sort((a, b) => Number(a.pad) - Number(b.pad));
   if (added > 0) {
-    sequence.bpm = song.bpm;
+    if (song.bpm !== undefined) sequence.bpm = song.bpm;
     sequence.autoPlay = "next"; // each pattern plays on into the next, so the song plays through
     sequence.currSequenceId = firstPattern;
     project.zip.file("sequence.json", JSON.stringify(sequence));

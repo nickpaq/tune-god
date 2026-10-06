@@ -21,7 +21,7 @@ import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/lo
 import { balancedSpread } from "./audio/spread";
 import { CATEGORIES, categoryIndex, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
-import { CHOP_BANK_START, emptyPadInBank, inChopBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
+import { CHOP_BANK_START, emptyPadInBank, inChopBank, movePad, nextEmptyPad, PADS_PER_BANK, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
@@ -39,6 +39,10 @@ import { checkStems, findAcapellaPair } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
 import { addSongSections, songTemplate, type SongExport, type SongTemplate } from "./audio/exportSong";
+import { addChopperPad, CHOPPER_MAX_SLICES, fitPlans, sliceLayout, type ChopperExport } from "./audio/exportChopper";
+import { keyOffset } from "./audio/song/keyOffset";
+import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
+import { CHOPPER_MIN_SECONDS, ChopperSourceModal } from "./components/ChopperSourceModal";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadSymbol } from "./components/PadSymbol";
@@ -114,7 +118,7 @@ function shiftFor(pad: Pad, projectKey: number | null, a4: number, major = false
 }
 
 /** A sound from the project itself: not a silent placeholder and not a ghost copy the layout made. */
-const isReal = (p: Pad) => !p.placeholder && !p.ghost && !p.section;
+const isReal = (p: Pad) => !p.placeholder && !p.ghost && !p.section && !p.chopper;
 
 /**
  * Preview only (the project's own play settings are untouched). Every pad plays while held and fades
@@ -134,6 +138,7 @@ function referenceFor(pad: Pad, keyPc: number, major: boolean, relative: boolean
 function padMode(pad: Pad): PadMode {
   // A song section previews like a melodic loop: it loops while held and stops on release. (In Koala it is written as a one-shot, see exportSong.ts.)
   if (pad.section) return "loop";
+  if (pad.chopper) return "hold"; // the chopper plays the whole sample once while held; its chops are played in Koala
   return isTunedCategory(pad.category) ? "loop" : "hold";
 }
 
@@ -154,6 +159,8 @@ function limitPeak(channelData: Float32Array[]): Float32Array[] {
 
 /** A sample longer than this is flagged on import: samples this long make export very slow. */
 const MAX_SAMPLE_SECONDS = 60;
+/** Stable id of the chopper pad (above the section pads' ids). */
+const CHOPPER_ORIG_INDEX = 3500;
 
 /** A pad's default Tune state: the user's manual choice if locked, else decided by its category: on for Bass and Melodic with a detected pitch. */
 function tuneDefault(locked: boolean | undefined, current: boolean, category: CategoryId | undefined, detectedMidi: number | null | undefined, target: number | null): boolean {
@@ -549,7 +556,7 @@ function App() {
         return;
       }
       const zone = BANK_ZONES[bank];
-      const inZone = (p: Pad) => !p.section && p.index >= zone.start && p.index < zone.end;
+      const inZone = (p: Pad) => !p.section && !p.chopper && p.index >= zone.start && p.index < zone.end;
       const opened = await ensureProject();
       if (!opened) return;
       const { project, started } = opened;
@@ -651,27 +658,51 @@ function App() {
     }
   };
 
-  /** Set while a Koala project picked for the acapella is loading: the chopper starts as soon as it is in. */
-  const acapellaPending = useRef(false);
+  /** The Acapella / Chopper button asks which mode first. */
+  const [modeAsk, setModeAsk] = useState(false);
+  /** Chopper mode's list of samples over 10 seconds. */
+  const [sourcePick, setSourcePick] = useState(false);
+  /** The mode chosen while the Koala project picker is open, and then while that project loads: the mode starts as soon as the project is in. */
+  const pickedMode = useRef<ChopMode | null>(null);
+  const acapellaPending = useRef<ChopMode | null>(null);
 
-  /** The acapella's picker: opens the Koala project like any other (long sounds are fine) and then looks for the song and its vocal stem in it. */
+  const askChopMode = () => {
+    setMenuOpen(false);
+    setModeAsk(true);
+  };
+
+  /** A mode was chosen. With no project open a Koala project is picked first and opened like any other (a long song is fine: the 60 s limit is ignored). */
+  const chooseChopMode = (mode: ChopMode) => {
+    setModeAsk(false);
+    const open = Object.keys(latest.current.pads).length > 0 || Object.keys(latest.current.hidden).length > 0;
+    if (open) return void beginChop(mode);
+    pickedMode.current = mode;
+    acapellaInput.current?.click();
+  };
+
   const loadAcapella = async (file: File) => {
     if (addPackStatus || loading) return;
-    acapellaPending.current = true;
+    acapellaPending.current = pickedMode.current ?? "acapella";
+    pickedMode.current = null;
     await loadProject(file, false, true);
     await new Promise((resolve) => setTimeout(resolve));
     if (Object.keys(latest.current.pads).length === 0 && Object.keys(latest.current.hidden).length === 0) {
-      acapellaPending.current = false;
+      acapellaPending.current = null;
       window.alert("That file could not be opened as a Koala project.");
     }
   };
 
+  const beginChop = async (mode: ChopMode) => {
+    if (addPackStatus || loading || analyzing > 0) return;
+    if (mode === "chopper") return void setSourcePick(true);
+    await startAcapella();
+  };
+
   /**
-   * Bank D: the acapella chopper. The song and its vocal stem are looked for in bank D's first two slots, then anywhere else in the project
-   * (a pad labelled like the song and one labelled like the song with VOCALS after it). With no pair the user is told both are needed.
+   * Acapella mode: the song and its vocal stem are looked for in bank D's first two slots, then anywhere else in the project (a pad labelled like the
+   * song and one labelled like the song with VOCALS after it). With no pair the user is told both are needed.
    */
   const startAcapella = async () => {
-    if (addPackStatus || loading || analyzing > 0) return;
     const cur = latest.current;
     const onPads = Object.values(cur.pads)
       .filter(isReal)
@@ -681,14 +712,14 @@ function App() {
       window.alert(found.message);
       return;
     }
-    setMenuOpen(false);
-    await launchChop(found.song, found.vocals);
+    await launchAcapella(found.song, found.vocals);
   };
 
   useEffect(() => {
-    if (!acapellaPending.current || loading || analyzing > 0 || !hasProject) return;
-    acapellaPending.current = false;
-    void startAcapella();
+    const mode = acapellaPending.current;
+    if (!mode || loading || analyzing > 0 || !hasProject) return;
+    acapellaPending.current = null;
+    void beginChop(mode);
     // starts once, when the picked project has finished loading
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, analyzing, pads, hidden]);
@@ -764,8 +795,8 @@ function App() {
     patchPad(pad.index, pad.tuneLocked ? { category } : { category, tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) });
   };
 
-  /** The song being chopped (the cuts are found on it) and its vocal stem (what is cut), with the project's beats per bar, while the chop editor is open. */
-  const [chop, setChop] = useState<{ song: Pad; vocals: Pad; beatsPerBar: number } | null>(null);
+  /** The sound being chopped (the cuts are found on it), and in acapella mode its vocal stem (what is cut), with the project's beats per bar, while the chop editor is open. */
+  const [chop, setChop] = useState<{ mode: ChopMode; song: Pad; vocals: Pad; beatsPerBar: number } | null>(null);
   /**
    * Starts the a cappella chop for a long sound. It needs the song and its vocal stem from Koala's stem split, named like the song with VOCALS after
    * it and left exactly as the split made them, so this checks for them first and says what to do if they are not right.
@@ -776,38 +807,40 @@ function App() {
       window.alert(check.message);
       return;
     }
-    await launchChop(check.song, check.vocals);
+    await launchAcapella(check.song, check.vocals);
   };
 
-  /**
-   * Opens the chop editor on the song and its vocal stem. The chops go on bank D, possibly on every pad of it, so a song or stem sitting there is
-   * first moved into the hot-swap pool: the pool is part of the saved project (the project file and the saved pad state both live on the device),
-   * so the two sounds survive the chop and the app being closed. The chops never write over them.
-   */
-  const launchChop = async (song: Pad, vocals: Pad) => {
+  const beatsPerBarOfProject = async () => {
     const project = projectRef.current;
-    const { beatsPerBar } = project ? await projectTimeSignature(project) : { beatsPerBar: 4 };
-    const onBankD = [song, vocals].filter((p) => inChopBank(p.index) && latest.current.pads[p.index]?.origIndex === p.origIndex);
-    if (onBankD.length > 0) {
-      recordEdit();
-      setPads((prev) => {
-        const next = { ...prev };
-        for (const p of onBankD) if (next[p.index]?.origIndex === p.origIndex) delete next[p.index];
-        return next;
-      });
-      setHidden((prev) => ({ ...prev, ...Object.fromEntries(onBankD.map((p) => [p.origIndex, { ...p, index: -1 }])) }));
-      setSelected((sel) => (sel !== null && onBankD.some((p) => p.index === sel) ? null : sel));
-    }
+    return project ? (await projectTimeSignature(project)).beatsPerBar : 4;
+  };
+
+  /** Opens the chop editor in acapella mode. The chops overwrite everything on bank D, so the user is warned when something is there. */
+  const launchAcapella = async (song: Pad, vocals: Pad) => {
+    const occupied = Object.values(latest.current.pads).filter((p) => inChopBank(p.index)).length;
+    if (occupied > 0 && !window.confirm(`Acapella mode overwrites everything on Bank D (${occupied} pad${occupied === 1 ? "" : "s"}). Continue?`)) return;
+    const beatsPerBar = await beatsPerBarOfProject();
     acapellaTemplate.current = undefined;
-    setChop({ song: { ...song, index: -1 }, vocals: { ...vocals, index: -1 }, beatsPerBar });
+    setMenuOpen(false);
+    setLongSamples([]);
+    setChop({ mode: "acapella", song, vocals, beatsPerBar });
+  };
+
+  /** Opens the chop editor in chopper mode on the sample that was picked (the song itself is the sound that is cut). */
+  const launchChopper = async (song: Pad) => {
+    const beatsPerBar = await beatsPerBarOfProject();
+    setSourcePick(false);
+    setMenuOpen(false);
+    setChop({ mode: "chopper", song, vocals: song, beatsPerBar });
   };
 
   /** The song sections as the export writes them: their pads, audio, bars, labels, colours and the tempo. */
   const songExportOf = (sectionPads: Pad[]): SongExport | undefined => {
     const sorted = [...sectionPads].sort((a, b) => a.section!.number - b.section!.number);
     if (!sorted.length) return undefined;
+    // No bpm: acapella mode never touches the project's tempo (the sections are stretched to whatever it is). The key offset goes on every pad's pitch knob.
     return {
-      bpm: sorted[0].section!.bpm,
+      pitch: sorted[0].section!.pitch,
       beatsPerBar: sorted[0].section!.beatsPerBar,
       sampleRate: sorted[0].sampleRate,
       sourceSampleId: sorted[0].section!.sourceSampleId,
@@ -847,30 +880,114 @@ function App() {
   /** While a chop is being made: a second press of Chop does nothing. */
   const chopping = useRef(false);
 
+  /** The chopper pad as the export writes it. */
+  const chopperExportOf = (pad: Pad): ChopperExport => ({
+    index: pad.index,
+    label: labelOf(pad),
+    color: autoColorOf(pad),
+    bus: CATEGORY_BUS.melodic,
+    sampleId: pad.chopper!.sourceSampleId,
+    sampleRate: pad.sampleRate,
+    channelData: pad.channelData,
+    layout: pad.chopper!.layout,
+    beatsPerBar: pad.chopper!.beatsPerBar,
+    pitch: pad.chopper!.pitch,
+  });
+
+  /** Writes the chopper into a fresh copy of the project as the export will and reads it back: how many patterns it got, or what went wrong. */
+  const trialWriteChopper = async (pad: Pad): Promise<{ patterns: number } | { problem: string }> => {
+    if (!projectFile.current) return { patterns: pad.chopper!.layout.sections.length };
+    const project = await parseKoalaProject(projectFile.current);
+    const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
+    samplerJson.pads = [];
+    const patterns = await addChopperPad(project, samplerJson, chopperExportOf(pad));
+    if (!samplerJson.pads.some((p: any) => p.synth === "CHOPPER")) return { problem: "the chopper pad was not written" };
+    if (patterns === 0 && pad.chopper!.layout.sections.length > 0) return { problem: "the project has no free pattern (Koala has 32 pattern slots; free some and chop again)" };
+    return { patterns };
+  };
+
   /**
-   * The a cappella chop, in this order, and each step only once the one before it is done:
-   *  1. the vocal stem is cut at the song's chop points into section pads (on free pads, the fourth bank first);
-   *  2. the sections are written into a copy of the Koala project the way the export writes them, and checked;
-   *  3. the sections are put on their pads.
-   * Nothing else changes: the song, the vocal stem, the key and the layout stay as they were. If step 1 or 2 fails nothing at all is changed. The sections keep their own label and colour and are left alone by organizing, tuning and mixing.
+   * The chop, in this order, and each step only once the one before it is done:
+   *  1. the pads are made from the cuts (acapella mode: the vocal stem cut into section pads that overwrite bank D; chopper mode: one chopper pad);
+   *  2. they are written into a copy of the Koala project the way the export writes them, and checked;
+   *  3. they are put on their pads.
+   * If step 1 or 2 fails nothing at all is changed. Nothing is tuned: when a key was picked on the piano, Koala's pitch knob on the new pads is set to
+   * move the song into it (the audio is never altered). Acapella mode never touches the project's tempo; chopper mode sets it to the sample's.
    */
-  const chopSong = async (song: Pad, vocals: Pad, settings: ChopSettings) => {
+  const chopSong = async (job: { mode: ChopMode; song: Pad; vocals: Pad }, settings: ChopSettings) => {
     if (chopping.current) return;
     chopping.current = true;
     try {
-      // 1. Cut. The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
-      const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
-      // The sections go on bank D (the chop is the only thing that ever does), and a new chop replaces the last one.
       const opened = await ensureProject();
       if (!opened) return;
       if (opened.started) setOrganize(true);
-      const without = Object.fromEntries(Object.entries(latest.current.pads).filter(([, p]) => !p.section));
-      const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(without), palette.colors);
-      if (sections.length === 0) {
-        window.alert("There is no free pad for the sections on Bank D, so nothing was changed. Delete a few pads there and chop again.");
+      const cur = latest.current;
+      const offset = keyOffset(settings.key, cur.tunedTarget, keyMajor);
+      const pitchNote = offset !== 0 ? ` Pitched ${offset > 0 ? "+" : ""}${offset} on Koala's pitch knob to match the key.` : "";
+
+      if (job.mode === "chopper") {
+        const song = job.song;
+        const total = song.channelData[0].length;
+        const plans = fitPlans(settings.plans, total);
+        // A new chop replaces the last one: the old chopper (or sections) go, and the chopper takes the first free pad of bank D.
+        const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => !p.section && !p.chopper));
+        const slot = freeSongSlots(without)[0];
+        if (slot === undefined || plans.length === 0) {
+          window.alert("There is no free pad on Bank D for the chopper, so nothing was changed. Delete a pad there and chop again.");
+          return;
+        }
+        const layout = sliceLayout(plans, total);
+        // The chopper is not stretched: it plays at the sample's own tempo, and a pitch change speeds it up or slows it down by the same amount.
+        const tempo = Math.min(300, Math.max(20, Math.round(settings.bpm * 2 ** (offset / 12) * 100) / 100));
+        const pad: Pad = {
+          index: slot,
+          origIndex: CHOPPER_ORIG_INDEX,
+          name: `${song.name} chopper`,
+          sampleId: song.sampleId,
+          sampleRate: song.sampleRate,
+          channelData: song.channelData,
+          category: "melodic",
+          tune: false,
+          semis: 0,
+          cents: 0,
+          chopper: { sourceSampleId: song.sampleId, slices: layout.starts.length, bpm: tempo, beatsPerBar: settings.beatsPerBar, pitch: offset, layout },
+        };
+        let result: Awaited<ReturnType<typeof trialWriteChopper>>;
+        try {
+          result = await trialWriteChopper(pad);
+        } catch (err) {
+          console.error(err);
+          result = { problem: "the project file could not be written" };
+        }
+        if ("problem" in result) {
+          window.alert(`The chop could not be written into the Koala project: ${result.problem}. Nothing was changed.`);
+          return;
+        }
+        recordEdit();
+        setPads({ ...without, [slot]: pad });
+        // The project tempo becomes the sample's (at its pitch): the chopper does not stretch.
+        changeBpm(tempo);
+        setSelected(null);
+        setBank(3);
+        setChop(null);
+        const missing = layout.sections.length - result.patterns;
+        setNotice(
+          `Chopper on pad ${(slot % PADS_PER_BANK) + 1} of Bank D: ${layout.starts.length} chops. The project tempo is now ${tempo} BPM.${pitchNote}${missing > 0 ? ` ${missing} chop${missing === 1 ? "" : "s"} got no pattern (32 slots) but still play from the pad.` : ""}`,
+        );
         return;
       }
-      // 2. Write them into a copy of the project and check every one went in.
+
+      // Acapella mode. The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
+      const { song, vocals } = job;
+      const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
+      // The sections overwrite everything on bank D (the chop is the only thing that ever goes there).
+      const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => !inChopBank(p.index)));
+      const { pads: made } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(without), palette.colors);
+      const sections = made.map((p) => ({ ...p, section: { ...p.section!, pitch: offset } }));
+      if (sections.length === 0) {
+        window.alert("There are no sections to put on Bank D, so nothing was changed.");
+        return;
+      }
       let problem: string | null;
       try {
         problem = await trialWriteSections(sections, vocals.sampleId);
@@ -883,16 +1000,14 @@ function App() {
         return;
       }
       recordEdit();
-      // 3. Fill the pads. The song, its vocals, the key and the drum layout are left as they were.
       const grid: Record<number, Pad> = { ...without };
       for (const section of sections) grid[section.index] = section;
       setPads(grid);
-      // The song's tempo is the project's tempo now: the sections are stretched to it.
-      changeBpm(settings.bpm);
       setSelected(null);
       setBank(3);
       setChop(null);
       setLongSamples([]);
+      setNotice(`${sections.length} chop${sections.length === 1 ? "" : "s"} on Bank D, stretched to the project's tempo.${pitchNote}`);
     } finally {
       chopping.current = false;
     }
@@ -1266,6 +1381,7 @@ function App() {
       }
       rendered.length = 0;
       const songExport = songExportOf(Object.values(pads).filter((p) => p.section));
+      const chopperPad = Object.values(pads).find((p) => p.chopper);
       const buses = new Map<number, number>();
       if (routeBuses) {
         for (const p of allPads) buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
@@ -1289,7 +1405,7 @@ function App() {
         // The label is what the pad's caption says in the app, without its number.
         if (p.category && numberedLabel(p)) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { bpm: projectBpm, stretch, vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: sidechainActive, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { bpm: projectBpm, stretch, vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: sidechainActive, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport, chopper: chopperPad ? chopperExportOf(chopperPad) : undefined });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -1314,6 +1430,7 @@ function App() {
     const shownBank = bank;
   /** Palette colour for a sound, by its own category. Where it sits (including on a layout's slots) never changes it. */
   const autoColorOf = (p: Pad): string => {
+    if (p.chopper) return p.chopper.color ?? colorFor(palette, "melodic");
     // A section of a chopped song keeps the palette colour it was given when it was picked.
     if (p.section) return p.section.color ?? palette.colors[(p.section.colorIndex ?? 0) % palette.colors.length];
     const base = colorFor(palette, p.category ?? "other");
@@ -1324,7 +1441,7 @@ function App() {
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
   const sectionLabel = (p: Pad): string => `${CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
-  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? sectionLabel(p) : (numberedLabel(p)?.label ?? padLabel(p)));
+  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.chopper ? "Chopper" : p.section ? sectionLabel(p) : (numberedLabel(p)?.label ?? padLabel(p)));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   const hasProject = Object.keys(pads).length > 0 || Object.keys(hidden).length > 0;
   /** The 16 pads of a bank as the sequencer shows them: the app's own labels and colours, or null where there is no sound. */
@@ -1426,6 +1543,7 @@ function App() {
   const captionOf = (pad: Pad | undefined): string => {
     if (!pad) return "";
     if (pad.section) return `${CATEGORIES[categoryIndex("vox")].short} ${pad.section.number}`;
+    if (pad.chopper) return "Chopper";
     if (pad.placeholder || pad.ghost) return labelOf(pad);
     return isReal(pad) && pad.category ? (numberedLabel(pad)?.caption ?? CATEGORIES[categoryIndex(pad.category)].short) : "";
   };
@@ -1629,16 +1747,10 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Opens the acapella chopper on the song and its vocal stem (a pad labelled like the song, and one with VOCALS after it): Bank D's first two pads are checked, then the rest of the project. With no project open it asks for a Koala project first. The sections go on Bank D."
-              onClick={() => {
-                if (hasProject) void startAcapella();
-                else {
-                  acapellaInput.current?.click();
-                  setMenuOpen(false);
-                }
-              }}
+              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, 16 chops, stretched to the project) or chopper mode (any sample over 10 seconds, 127 chops on one pad). With no project open it asks for a Koala project first."
+              onClick={askChopMode}
             >
-              {addPackStatus || "Load Bank D: Acapella"}
+              {addPackStatus || "Load Bank D: Chopper"}
             </button>
             <Switch label="Show symbols on pads" on={padSymbols} onChange={setPadSymbols} />
             <label className="menu__a4">
@@ -1767,9 +1879,9 @@ function App() {
                         { icon: K_ICON, label: "Project", aria: "Open a .koala project", input: projectInput },
                         { icon: DRUM_ICON, label: "Drums", aria: "Load Bank A: Drums", input: drumsInput },
                         { icon: KEYS_ICON, label: "Loops", aria: "Load Bank B: Melodic Loops", input: loopsInput },
-                        { icon: ACAPELLA_ICON, label: "Acapella", aria: "Load Bank D: Acapella (Koala project)", input: acapellaInput },
+                        { icon: ACAPELLA_ICON, label: "Chopper", aria: "Load Bank D: Chopper", input: null },
                       ].map((choice) => (
-                        <button key={choice.label} type="button" className="dropzone__btn" aria-label={choice.aria} onClick={() => choice.input.current?.click()}>
+                        <button key={choice.label} type="button" className="dropzone__btn" aria-label={choice.aria} onClick={() => (choice.input ? choice.input.current?.click() : askChopMode())}>
                           <PixelIcon rows={choice.icon} scale={1} />
                           <span>{choice.label}</span>
                         </button>
@@ -1788,7 +1900,9 @@ function App() {
                 <div className="screen__message">
                   <strong>{labelOf(selectedPad)}</strong>
                   <span>
-                    {selectedPad.section
+                    {selectedPad.chopper
+                      ? `${selectedPad.chopper.slices} chops, ${selectedPad.chopper.bpm.toFixed(2)} BPM`
+                      : selectedPad.section
                       ? `${selectedPad.section.bars} bars, ${selectedPad.section.bpm.toFixed(2)} BPM`
                       : selectedPad.ghost
                       ? "Made on export unless filled"
@@ -1958,13 +2072,26 @@ function App() {
           <LongSamplesModal pads={longPads} maxSeconds={MAX_SAMPLE_SECONDS} onDelete={deletePad} onChop={openChop} onClose={() => setLongSamples([])} />
         )}
 
+        {modeAsk && <AcapellaModeModal onChoose={chooseChopMode} onCancel={() => setModeAsk(false)} />}
+
+        {sourcePick && (
+          <ChopperSourceModal
+            pads={[...Object.values(pads).filter(isReal), ...Object.values(hidden)]
+              .filter((p) => p.channelData[0].length / p.sampleRate >= CHOPPER_MIN_SECONDS)
+              .sort((a, b) => b.channelData[0].length / b.sampleRate - a.channelData[0].length / a.sampleRate)}
+            onPick={(pad) => void launchChopper(pad)}
+            onCancel={() => setSourcePick(false)}
+          />
+        )}
+
         {chop && (
           <SongChopModal
             pad={chop.song}
             palette={palette}
             beatsPerBar={chop.beatsPerBar}
-            freeSlots={freeSongSlots(Object.fromEntries(Object.entries(pads).filter(([, p]) => !p.section))).length}
-            onConfirm={(settings) => chopSong(chop.song, chop.vocals, settings)}
+            freeSlots={chop.mode === "chopper" ? CHOPPER_MAX_SLICES - 2 : PADS_PER_BANK}
+            unit={chop.mode === "chopper" ? "chop" : "pattern"}
+            onConfirm={(settings) => chopSong(chop, settings)}
             onClose={() => setChop(null)}
           />
         )}

@@ -1906,3 +1906,11 @@
     transform: translateX(calc(var(--scroll) * -1));
   }
 }
+
+.mode-points {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.75;
+}
