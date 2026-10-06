@@ -18,7 +18,6 @@ export interface SavedPad {
   is808?: boolean;
   /** The Tune screen's Stretch key was on for this loop (see Pad.stretch). */
   stretch?: boolean;
-  loopMajor?: boolean;
   /** Knob level of a sample pack sound (see Pad.knobDb). */
   knobDb?: number;
   /** Where the sound sits now, if the user moved it. Pads are keyed by their original slot. */

@@ -369,8 +369,8 @@ function App() {
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
-          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, major: null }))
-          .then(({ midi: detectedMidi, category: guessed, detail, centroid, bpm, major }) => {
+          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, named: false }))
+          .then(({ midi: detectedMidi, category: guessed, detail, centroid, bpm, named }) => {
             if (token !== loadToken.current) return;
             const category = categoryHints.current[ref.pad] ?? guessed;
             const remembered = restorePads.current[ref.pad];
@@ -381,7 +381,7 @@ function App() {
               detail,
               centroid,
               bpm: bpm ?? undefined,
-              loopMajor: major ?? undefined,
+              keyFromName: named,
               ...(remembered
                 ? {
                     tune: remembered.tune,
@@ -461,12 +461,11 @@ function App() {
         knobDb: p.knobDb,
         is808: p.is808,
         stretch: p.stretch,
-        loopMajor: p.loopMajor,
         position: p.index,
       };
     }
     for (const p of Object.values(hidden)) {
-      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, stretch: p.stretch, loopMajor: p.loopMajor, hidden: true };
+      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, stretch: p.stretch, hidden: true };
     }
     // Sounds the user deleted stay deleted when the project is reopened.
     for (const ref of projectRef.current?.pads ?? []) {
@@ -626,10 +625,10 @@ function App() {
       for (const pad of fresh) {
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.name, pad.category === "melodicLoop")
-          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, major: null }))
-          .then(({ midi: detectedMidi, detail, centroid, bpm, major }) => {
+          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, named: false }))
+          .then(({ midi: detectedMidi, detail, centroid, bpm, named }) => {
             if (token !== loadToken.current) return;
-            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, bpm: bpm ?? undefined, loopMajor: major ?? undefined, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
+            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, bpm: bpm ?? undefined, keyFromName: named, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
             setPads((prev) => {
               const at = Object.keys(prev).find((k) => prev[Number(k)].origIndex === pad.origIndex);
               return at === undefined ? prev : { ...prev, [Number(at)]: analysed(prev[Number(at)]) };
@@ -1281,8 +1280,8 @@ function App() {
     if (p.section) return p.section.color ?? palette.colors[(p.section.colorIndex ?? 0) % palette.colors.length];
     const base = colorFor(palette, p.category ?? "other");
     if (p.ghost) return shade(base, 2);
-    // A melodic loop in a major key is a slightly darker shade of the loop colour.
-    return p.category === "melodicLoop" && p.loopMajor ? darker(base) : base;
+    // A key read from the file name is a sure one: the pad is a slightly darker shade. A key that was only detected leaves the normal shade.
+    return p.keyFromName ? darker(base) : base;
   };
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
@@ -1316,10 +1315,12 @@ function App() {
     const pc = pad.tune ? (pad.keyPc ?? keyPc) : null;
     return pc === null ? "--" : NOTE_NAMES[pc];
   };
+  const tags = packTags([...Object.values(pads).filter(isReal), ...Object.values(hidden)].map((p) => p.name));
   const padName = (pad: Pad) => `${BANKS[Math.floor(pad.index / 16)]}${(pad.index % 16) + 1}`;
   const panel = selectedPad && !selectedPad.placeholder && !selectedPad.ghost && (
     <PadPanel
       pad={selectedPad}
+      name={displayName(selectedPad.name, tags)}
       keyName={keyNameOf(selectedPad)}
       autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4, keyMajor)}
       needsKey={(selectedPad.keyPc ?? keyPc) === null}
@@ -1354,7 +1355,6 @@ function App() {
     });
   };
   /** Pack tags the project's sounds share ("Rio - ..."), left out of the names in the swap list. */
-  const tags = packTags([...Object.values(pads).filter(isReal), ...Object.values(hidden)].map((p) => p.name));
   /** The hot-swap list for a pad: the sounds that can take its place. Used by the Swap screen and by the sequencer's Sounds page. */
   const swapListFor = (target: Pad) => {
     /** The type the target's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */

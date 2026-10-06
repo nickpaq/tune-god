@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { PrecisionSlider } from "./PrecisionSlider";
 import { Waveform } from "./Waveform";
 import type { CategoryId } from "../audio/classify";
@@ -49,8 +49,8 @@ export interface Pad {
   section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Whole bars in the section. */ bars: number; /** The colour it was given in the chop editor, as a place in the selected palette. */ colorIndex?: number; /** The colour (hex) it was given in the chop editor, kept as it was: the section pads keep it whatever palette is chosen later. */ color?: string };
   /** The tempo the file name states ("140bpm"), when it does: a loop of this tempo can be stretched to the project's. */
   bpm?: number;
-  /** A melodic loop whose key is major (from its file name, else from the notes it holds); minor and unknown are false. Its pad is shaded darker. */
-  loopMajor?: boolean;
+  /** The key the pad is tuned from was read from its file name (a sure one), not detected from the audio: its pad is shaded darker. */
+  keyFromName?: boolean;
   /** The loop is stretched from its own tempo to the project tempo (written to the export as Koala's stretch). */
   stretch?: boolean;
   tune: boolean;
@@ -66,9 +66,30 @@ export interface Pad {
 /** A chord name from the app ("C minor"). */
 const chordIsMinor = (chord: string) => chord.endsWith("minor");
 
+/** The sound's simplified name; a tap swaps it for the file name, which scrolls to and fro when it is wider than the screen. The choice lives only while the Tune screen does. */
+function NameLine({ name, fileName }: { name: string; fileName: string }) {
+  const [raw, setRaw] = useState(false);
+  const box = useRef<HTMLButtonElement>(null);
+  const text = useRef<HTMLSpanElement>(null);
+  const shown = raw ? fileName : name;
+  useLayoutEffect(() => {
+    const overflow = raw && box.current && text.current ? Math.max(0, text.current.scrollWidth - box.current.clientWidth) : 0;
+    text.current?.style.setProperty("--scroll", `${overflow}px`);
+    text.current?.classList.toggle("name-line__text--scroll", overflow > 0);
+  }, [raw, shown]);
+  return (
+    <button ref={box} type="button" className="name-line" onClick={() => setRaw((r) => !r)} aria-label={raw ? `File name ${fileName}: tap for the short name` : `${name}: tap for the file name`}>
+      <span ref={text} className="name-line__text">
+        {shown}
+      </span>
+    </button>
+  );
+}
+
 /** What the OLED shows for the selected pad in Tune mode: the key it follows, the tune switch, the shift, the waveform and the trim slider. */
 export function PadPanel({
   pad,
+  name,
   autoShift,
   keyName,
   needsKey,
@@ -82,6 +103,8 @@ export function PadPanel({
   onChange,
 }: {
   pad: Pad;
+  /** The simplified name of the sound; tapping it shows the file name (until the Tune screen is left). */
+  name: string;
   /** Semitones the automatic tuning moves this pad; the panel adds the manual trim for display. */
   autoShift: number;
   /** The note the pad is tuned to ("C#"), or "--" when tuning is off. */
@@ -131,6 +154,7 @@ export function PadPanel({
           <div>Shift {pad.tune ? formatTrim(total * 100) : "0.000"}st</div>
         </div>
       </div>
+      <NameLine name={name} fileName={pad.name} />
       {(pad.bpm || isLoopSound) && (
         <div className="pad-panel__toggles pad-panel__tempo">
           <span aria-label="Tempo of the sound">{pad.bpm ? (pad.stretch ? `${pad.bpm}>${projectBpm}` : pad.bpm) : "--"} BPM</span>

@@ -1866,3 +1866,43 @@
   color: var(--ink3);
 }
 
+
+/* the Tune screen's name line: the simplified name, or on a tap the file name, which scrolls when it is wider than the screen */
+.name-line {
+  flex: none;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-shadow: inherit;
+  text-transform: inherit;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.name-line__text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.name-line__text--scroll {
+  max-width: none;
+  overflow: visible;
+  animation: name-scroll 6s linear 1s infinite alternate;
+}
+
+@keyframes name-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(var(--scroll) * -1));
+  }
+}
