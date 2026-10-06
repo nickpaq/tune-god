@@ -1719,7 +1719,7 @@ function App() {
                     <span>
                       {(() => {
                         const shift = selectedPad.tune ? shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4, keyMajor) + trimCents(selectedPad.semis, selectedPad.cents) / 100 : 0;
-                        return `${shift < 0 ? "-" : "+"}${Math.abs(shift).toFixed(2)}st`;
+                        return `${shift < 0 ? "-" : "+"}${Math.abs(shift).toFixed(3)}st`;
                       })()}
                     </span>
                   </div>

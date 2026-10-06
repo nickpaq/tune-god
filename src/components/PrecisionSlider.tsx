@@ -86,7 +86,8 @@ export function PrecisionSlider({
   const snapWhole = (v: number) => (coarseStep ? Math.round(v / coarseStep) * coarseStep : v);
 
   const snapToStep = (v: number) => {
-    const stepped = Math.round(v / step) * step;
+    // Rounded again to the step's own decimals so 0.1-cent steps carry no float noise (0.30000000000000004).
+    const stepped = +(Math.round(v / step) * step).toFixed(6);
     return Math.min(max, Math.max(min, stepped));
   };
 

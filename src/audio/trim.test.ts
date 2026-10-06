@@ -16,8 +16,8 @@ describe("pitch trim", () => {
   });
 
   it("formats as signed semitones", () => {
-    expect(formatTrim(137)).toBe("+1.37");
-    expect(formatTrim(-50)).toBe("-0.50");
-    expect(formatTrim(0)).toBe("0.00");
+    expect(formatTrim(137)).toBe("+1.370");
+    expect(formatTrim(-50)).toBe("-0.500");
+    expect(formatTrim(0)).toBe("0.000");
   });
 });

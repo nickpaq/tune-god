@@ -118,7 +118,7 @@ export function PadPanel({
               {pad.tune ? "Tune on" : "Tune off"}
             </button>
           </div>
-          <div>Shift {pad.tune ? formatTrim(total * 100) : "0.00"}st</div>
+          <div>Shift {pad.tune ? formatTrim(total * 100) : "0.000"}st</div>
         </div>
       </div>
 
@@ -128,9 +128,9 @@ export function PadPanel({
         <PrecisionSlider
           min={-TRIM_RANGE_CENTS}
           max={TRIM_RANGE_CENTS}
-          step={1}
+          step={0.1}
           keyStep={10}
-          fineSpan={100}
+          fineSpan={10}
           coarseStep={100}
           onAbove={(point) => {
             if (!isLoop) return;

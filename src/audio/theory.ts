@@ -51,9 +51,9 @@ export function splitTrim(totalCents: number): { semis: number; cents: number } 
   return { semis, cents: totalCents - semis * 100 };
 }
 
-/** A trim in cents as signed semitones with two decimals for the slider, e.g. 137 -> "+1.37", -50 -> "-0.50", 0 -> "0.00". */
+/** A trim in cents as signed semitones with three decimals for the slider, e.g. 137 -> "+1.370", -50 -> "-0.500", 0 -> "0.000". */
 export function formatTrim(totalCents: number): string {
-  return `${totalCents > 0 ? "+" : totalCents < 0 ? "-" : ""}${(Math.abs(totalCents) / 100).toFixed(2)}`;
+  return `${Math.abs(totalCents) >= 0.05 ? (totalCents > 0 ? "+" : "-") : ""}${(Math.abs(totalCents) / 100).toFixed(3)}`;
 }
 
 /**
