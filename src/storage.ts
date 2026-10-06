@@ -27,14 +27,14 @@ export interface SavedPad {
 }
 
 export interface SavedState {
-  /** The menu's Mix switch: balance loudness, bus routing with the bass sidechain, settings by sound type and the melodic spread. */
+  /** The menu's Organize switch: levels, bus routing, settings by sound type, the melodic spread and the master chain. */
+  organizeOn?: boolean;
+  /** The menu's Sidechain switch (bass and 808 duck to the kick). */
+  sidechainOn?: boolean;
+  /** Older versions' Mix switch, read once to carry the setting over to Organize and Sidechain. */
   mix?: boolean;
   /** Which master chain the Master chain switch writes. */
   masterStyle?: "dynamic" | "loud";
-  /** The menu's Organize switch: pad colours and labels in the export. */
-  organize?: boolean;
-  /** Every sound's type has been confirmed (by file name or by the user), which unlocks Drum layouts. */
-  organized?: boolean;
   normalize?: boolean;
   spread?: boolean;
   autoColor?: boolean;

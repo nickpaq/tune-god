@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { blankProject, entriesOfDrop, findPackInEntries, findPackInFileList, writeBankSounds, type FoundPack } from "./audio/packProject";
-import { BANK_ZONES, bankTakes, fillKitGaps, MAX_LOAD_SECONDS, numberedLabel, parseBankName, placeBank, planBank, type BankLoad } from "./audio/bankLoad";
+import { BANK_ZONES, bankTakes, MAX_LOAD_SECONDS, numberedLabel, placeBank, planBank, type BankLoad } from "./audio/bankLoad";
 import { readAcapellaZip } from "./audio/acapella";
 import { displayName, packTags } from "./audio/sampleName";
 import { packByteBudget, type PackMemory } from "./audio/samplePack";
@@ -20,12 +20,10 @@ import { buildTunedKoala, downloadBlob, masterEffectNames, type GhostPadExport, 
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { CATEGORIES, categoryIndex, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
-import { emptyPadInBank, inChopBank, movePad, nextEmptyPad, removePad, replaceMisfit } from "./audio/padMoves";
+import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
-import { PalettePicker } from "./components/PalettePicker";
-import { LayoutPicker } from "./components/LayoutPicker";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import { extraDrumCount, fillGhostSlot, withoutExtraDrums, type ExtraDrums } from "./audio/extraDrums";
@@ -33,8 +31,7 @@ import { SwapList } from "./components/SwapList";
 import { TypeKeys } from "./components/TypeKeys";
 import { Waveform } from "./components/Waveform";
 import { LongSamplesModal } from "./components/LongSamplesModal";
-import { arrangeFingerDrumming, EMPTY_PAD_LABEL } from "./audio/fingerDrumming";
-import { FINGER_LAYOUTS, layoutById } from "./audio/fingerLayouts";
+import { layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
@@ -52,7 +49,6 @@ import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { useSafeArea } from "./components/useSafeArea";
 import { ACTIVE_MIX_PRESET, MASTER_STYLES, type MasterStyle } from "./audio/mixPresets";
-import { planOrganize } from "./audio/organize";
 import "./App.css";
 
 const BANKS = ["A", "B", "C", "D"];
@@ -90,12 +86,6 @@ interface LayoutState {
   pre: Record<number, number>;
 }
 
-const LAYOUT_ON_WARNING =
-  "Your pads will be rearranged into the finger drumming layout: the kit on page A, everything else from page B on, and silent placeholder pads filling any gaps. Recorded patterns are corrected to follow their pads, so they will still play back as expected. You can undo this. Continue?";
-const LAYOUT_SWITCH_WARNING =
-  "Switching layouts rearranges your pads again, including any moves you made since applying the current layout. Recorded patterns are corrected to follow their pads and will still play back as expected. Continue?";
-const LAYOUT_OFF_WARNING =
-  "Turning this off removes the placeholder pads and puts every sound back where it was before the layout was applied. You will lose the layout and any changes you made since. Continue?";
 /** Pad volume knob value for a dB level: plain linear amplitude (checked against a Koala project: -60 dB = 0.001, -6 dB = 0.501, 0 dB = 1, +6 dB = 1.995, -inf = 0). */
 const volFromDb = (db: number) => 10 ** (db / 20);
 /** Widest spread pan, in percent either side of centre. */
@@ -154,34 +144,6 @@ function tuneDefault(locked: boolean | undefined, current: boolean, category: Ca
   return target !== null && detectedMidi != null && isTunedCategory(category);
 }
 
-/** Pixel art for the screen: each "#" is one lit icon pixel, drawn two screen cells wide so it sits on the grid. */
-const TRASH_ICON = [
-  "...###...",
-  "#########",
-  ".#######.",
-  ".#.#.#.#.",
-  ".#.#.#.#.",
-  ".#.#.#.#.",
-  ".#######.",
-];
-const SKIP_ICON = [
-  "#......#",
-  "##.....#",
-  "###....#",
-  "####...#",
-  "###....#",
-  "##.....#",
-  "#......#",
-];
-function PixelIcon({ rows }: { rows: string[] }) {
-  const cols = rows[0].length;
-  return (
-    <svg className="pixel-icon" viewBox={`0 0 ${cols} ${rows.length}`} style={{ width: `calc(var(--cell) * ${cols * 2})`, height: `calc(var(--cell) * ${rows.length * 2})` }} shapeRendering="crispEdges" aria-hidden="true">
-      {rows.flatMap((row, y) => [...row].map((ch, x) => (ch === "#" ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null)))}
-    </svg>
-  );
-}
-
 /** A menu switch: the same lit key as the ones under the piano, with its words (and a line of explanation) beside it. */
 function Switch({ label, hint, on, disabled, onChange }: { label: string; hint?: string; on: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
   return (
@@ -217,32 +179,26 @@ function App() {
   const [normalizing, setNormalizing] = useState(false);
   /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
   const [exportProgress, setExportProgress] = useState("");
-  /** The Mix switch: levels (balance loudness, settings by sound type), bus routing with the bass sidechain, and the melodic spread. */
-  const [mix, setMix] = useState(saved.mix ?? !!(saved.normalize || saved.routeBuses || saved.autoPlayback));
-  const normalize = mix;
-  const spread = mix;
-  const routeBuses = mix;
-  const autoPlayback = mix;
-  /** The Organize switch: pad colours and labels are written on export. */
-  const [organize, setOrganize] = useState(saved.organize ?? saved.autoColor ?? false);
-  const autoColor = organize;
-  /** Every sound's type is settled (by file name or by the user): Drum layouts unlocks. A project that already had its layout on counts. */
-  const [organized, setOrganized] = useState(saved.organized ?? !!saved.layoutOn);
-  /** While sorting the unknown sounds: their original slots in order and which one is up. The screen shows only that sound and the type keys. */
-  const [focus, setFocus] = useState<{ queue: number[]; pos: number; started: boolean } | null>(null);
+  /**
+   * The Organize switch: balances levels, routes sounds to buses, sets each sound type's settings, spreads the melodic pads and adds the master chain.
+   * It never touches where a pad sits, what it says or what colour it is: the loaders (Load Bank A to D) place, label and colour every sound they bring in.
+   */
+  const [organize, setOrganize] = useState(saved.organizeOn ?? !!(saved.mix || saved.masterChainOn));
+  const normalize = organize;
+  const spread = organize;
+  const routeBuses = organize;
+  const autoPlayback = organize;
+  const masterChain = organize;
+  /** The Sidechain switch (the bass ducking to the kick); it needs a kick and a bass on the pads, so it stays locked until a drum kit and a bass are loaded. */
+  const [sidechainOn, setSidechainOn] = useState(saved.sidechainOn ?? true);
   /** A short message over the screen ("Sounds organized..."). */
   const [notice, setNotice] = useState("");
   /** Pre-rendered normalized audio per pad (by original slot, so it follows a moved pad); only used for playback while Normalize is on. */
   const [normalizedData, setNormalizedData] = useState<Record<number, Float32Array[]>>({});
   const [menuOpen, setMenuOpen] = useState(false);
-  // Off until the user turns it on (an earlier version defaulted it on, so the old saved value is not read).
-  const [masterChain, setMasterChain] = useState(saved.masterChainOn ?? false);
   const [masterStyle, setMasterStyle] = useState<MasterStyle>(saved.masterStyle ?? "loud");
   const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
   const [packMemory, setPackMemory] = useState<PackMemory>(saved.packMemory ?? "auto");
-  const [paletteId, setPaletteId] = useState(saved.paletteId ?? DEFAULT_PALETTE_ID);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   /** Set while the export is waiting for the answer about drums the layout has no slot for. */
   const [extraPrompt, setExtraPrompt] = useState(false);
   /** The mode keys: what the screen and the deck show. Swap is the resting mode; it needs the finger-drumming layout (see shownMode). Null (a pressed key tapped again) is the plain waveform view. */
@@ -331,10 +287,6 @@ function App() {
       setNormalizedData({});
       setLongSamples([]);
       if (!restore) {
-        // A new project's sounds have not been sorted yet.
-        setFocus(null);
-        setOrganized(false);
-        setOrganize(false);
         setSelected(null);
         setKeyPc(null);
         setTunedTarget(null);
@@ -455,8 +407,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ mix, organize, organized, masterStyle, masterChainOn: masterChain, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
-  }, [mix, organize, organized, masterStyle, masterChain, padSymbols, packMemory, paletteId, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
+    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
+  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -628,10 +580,8 @@ function App() {
       });
       setHidden((prev) => ({ ...Object.fromEntries(Object.entries(prev).filter(([, p]) => !replacedSpares.some((r) => r.origIndex === p.origIndex))), ...Object.fromEntries(spares.map((p) => [p.origIndex, p])) }));
       if (bank === "drums") setLayout({ on: true, id: lay.id, pre: {} });
-      // Every sound is named by its type already, so the project counts as organized; a project this load started gets Mix too.
-      setOrganize(true);
-      setOrganized(true);
-      if (started) setMix(true);
+      // A project this load started gets Organize too.
+      if (started) setOrganize(true);
       setSelected(null);
       setBank(BANK_SHOWN[bank]);
       setAnalyzing((n) => n + fresh.length);
@@ -742,166 +692,14 @@ function App() {
     restore(next);
   };
 
-  /**
-   * Every pad in banks A to C rearranged into `layoutId`, with placeholder pads in the gaps. Earlier placeholders are dropped first.
-   * Bank D is the chops' bank: whatever is on it stays exactly as it is, and nothing (no sound, no placeholder) is put there.
-   */
-  const arrangeInto = (cur: Record<number, Pad>, layoutId: string): Record<number, Pad> => {
-    const real = Object.values(cur)
-      .filter((p) => isReal(p) && !inChopBank(p.index))
-      .sort((a, b) => a.index - b.index);
-    const { positions, placeholders, ghosts } = arrangeFingerDrumming(
-      real.map((p) => ({ key: p.origIndex, category: p.category, midi: p.detectedMidi, centroid: p.centroid, is808: p.is808 })),
-      layoutById(layoutId),
-      // Sounds from the bank loaders keep to their banks: loops, basses and 808s on bank B, one-shots on bank C.
-      { pack: Object.keys(latest.current.hidden).length > 0 || real.some((p) => parseBankName(p.name)?.category === p.category) },
-    );
-    const next: Record<number, Pad> = {};
-    // Bank D untouched.
-    for (const p of Object.values(cur)) if (inChopBank(p.index)) next[p.index] = p;
-    const unplaced: Pad[] = [];
-    for (const p of real) {
-      const index = positions.get(p.origIndex);
-      if (index !== undefined && !inChopBank(index)) next[index] = { ...p, index };
-      else unplaced.push(p);
-    }
-    for (const ph of placeholders) if (!inChopBank(ph.index)) next[ph.index] = makePlaceholderPad(ph);
-    for (const g of ghosts) {
-      const source = real.find((p) => p.origIndex === g.sourceKey);
-      if (source && !inChopBank(g.index)) next[g.index] = makeGhostPad(g.index, g.kind, source);
-    }
-    // A chopped song's sections that sit outside bank D keep their pad (taking it from a blank placeholder), or move to a free one.
-    for (const p of Object.values(cur)) {
-      if (!p.section || inChopBank(p.index)) continue;
-      const at = !next[p.index] || next[p.index].placeholder?.kind === "empty" ? p.index : freeSongSlots(next)[0];
-      if (at !== undefined) next[at] = { ...p, index: at };
-    }
-    // Sounds the layout found no pad for in banks A to C take a blank pad there, or else wait in the hot-swap pool; none is lost.
-    const blanks = Object.values(next).filter((p) => p.placeholder?.kind === "empty" && !inChopBank(p.index)).map((p) => p.index).sort((a, b) => a - b);
-    const pooled: Pad[] = [];
-    for (const p of unplaced) {
-      const at = blanks.shift();
-      if (at !== undefined) next[at] = { ...p, index: at };
-      else pooled.push({ ...p, index: -1 });
-    }
-    if (pooled.length) setHidden((prev) => ({ ...prev, ...Object.fromEntries(pooled.map((p) => [p.origIndex, p])) }));
-    return next;
-  };
-
-  /** Applies a layout as one undo step, remembering where the sounds were so turning it off can put them back. */
-  const applyLayout = (id: string) => {
-    const cur = latest.current;
-    const pre = cur.layout.on
-      ? cur.layout.pre
-      : Object.fromEntries(Object.values(cur.pads).filter(isReal).map((p) => [p.origIndex, p.index]));
-    recordEdit();
-    const arranged = arrangeInto(cur.pads, id);
-    const spares = Object.values(cur.hidden);
-    if (spares.length > 0) {
-      // Gaps in the kit (bank A) are filled from the hot-swap spares straight away.
-      const lay = layoutById(id);
-      const slotOf = fillKitGaps(arranged, lay, spares);
-      const used = new Set<number>();
-      for (const [slot, at] of slotOf) {
-        const spare = spares[at];
-        arranged[slot] = { ...spare, index: slot, tune: tuneDefault(spare.tuneLocked, spare.tune, spare.category, spare.detectedMidi, tunedTarget) };
-        used.add(spare.origIndex);
-      }
-      lay.slots.forEach((slotDef, i) => {
-        if (!slotDef.ghostOf || (arranged[i] && !arranged[i].placeholder)) return;
-        const source = lay.slots.map((s, j) => ({ s, j })).filter(({ s, j }) => !s.ghostOf && s.category === slotDef.ghostOf && arranged[j] && isReal(arranged[j])).map(({ j }) => arranged[j])[0];
-        if (source) arranged[i] = makeGhostPad(i, slotDef.ghostOf === "snare" ? "ghostSnare" : "softKick", source);
-      });
-      if (used.size) setHidden((prev) => Object.fromEntries(Object.entries(prev).filter(([, p]) => !used.has(p.origIndex))));
-    }
-    setPads(arranged);
-    setLayout({ on: true, id, pre });
-    setSelected(null);
-    setBank(0);
-  };
-
-  /** Removes the placeholder pads and returns every remaining sound to its pre-layout slot. Bank D, the chops' bank, is left exactly as it is. */
-  const removeLayout = () => {
-    const cur = latest.current;
-    recordEdit();
-    const next: Record<number, Pad> = {};
-    for (const p of Object.values(cur.pads)) if (inChopBank(p.index)) next[p.index] = p;
-    const pooled: Pad[] = [];
-    for (const p of Object.values(cur.pads)) {
-      if (!isReal(p) || inChopBank(p.index)) continue;
-      const wanted = cur.layout.pre[p.origIndex] ?? p.index;
-      const index = next[wanted] || inChopBank(wanted) ? nextEmptyPad(next, 0) : wanted;
-      if (index === null) pooled.push({ ...p, index: -1 });
-      else next[index] = { ...p, index };
-    }
-    if (pooled.length) setHidden((prev) => ({ ...prev, ...Object.fromEntries(pooled.map((p) => [p.origIndex, p])) }));
-    // A chopped song's sections outside bank D stay where they are, or move to the first free pad if a sound has gone back to theirs.
-    for (const p of Object.values(cur.pads)) {
-      if (!p.section || inChopBank(p.index)) continue;
-      const index = next[p.index] ? (freeSongSlots(next)[0] ?? null) : p.index;
-      if (index !== null) next[index] = { ...p, index };
-    }
-    setPads(next);
-    setLayout((l) => ({ ...l, on: false, pre: {} }));
-    setSelected(null);
-    setBank(0);
-  };
-
-  const toggleLayout = (on: boolean) => {
-    if (on) {
-      if (window.confirm(LAYOUT_ON_WARNING)) applyLayout(layout.id);
-    } else if (window.confirm(LAYOUT_OFF_WARNING)) removeLayout();
-  };
-
-  const chooseLayout = (id: string) => {
-    if (!layout.on) setLayout((l) => ({ ...l, id }));
-    else if (id !== layout.id && window.confirm(LAYOUT_SWITCH_WARNING)) applyLayout(id);
-  };
-
   const patchPad = (index: number, patch: Partial<Pad>) => {
     recordEdit("semis" in patch || "cents" in patch ? `${index}:trim` : "");
     setPads((prev) => ({ ...prev, [index]: { ...prev[index], ...patch } }));
   };
 
-  /** Changes a sound's type. Tune follows the new type unless the user set it by hand. */
-  /**
-   * In a sample pack, a sound re-typed by the user leaves its pad: it joins the hot-swap pool as a sound of its new type (so
-   * it turns up in the swap list when a pad of that type is selected), and a spare of the pad's old type takes the pad's place,
-   * so every area of the pads keeps its sounds. With no spare to give, the pad is left as a silent placeholder.
-   */
-  const retypeIntoPool = (pad: Pad, category: CategoryId) => {
-    recordEdit();
-    const spares = latest.current.hidden;
-    const slot = layout.on && pad.index < 16 ? layoutById(layout.id).slots[pad.index] : undefined;
-    // An 808 is a bass sound told apart by its name.
-    const retyped: Pad = { ...pad, category, index: -1, is808: category === "bass" && is808Name(pad.name), ...(pad.tuneLocked ? {} : { tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) }) };
-    const sameType = Object.values(spares).filter((p) => p.category === pad.category);
-    const replacement = sameType.find((p) => !!p.is808 === !!pad.is808) ?? sameType[0];
-    const nextSpares = { ...spares };
-    if (replacement) delete nextSpares[replacement.origIndex];
-    nextSpares[pad.origIndex] = retyped;
-    setHidden(nextSpares);
-    setPads((prev) => ({
-      ...prev,
-      [pad.index]: replacement
-        ? { ...replacement, index: pad.index, tune: tuneDefault(replacement.tuneLocked, replacement.tune, replacement.category, replacement.detectedMidi, tunedTarget) }
-        : makePlaceholderPad(slot ? { index: pad.index, kind: "missing", label: `add ${slot.label}` } : { index: pad.index, kind: "empty", label: EMPTY_PAD_LABEL }),
-    }));
-  };
-
+  /** Changes a sound's type in place. Tune follows the new type unless the user set it by hand. The pad stays where it is: only the loaders place sounds. */
   const classifyPad = (pad: Pad, category: CategoryId) => {
     if (pad.category === category) return;
-    if (isReal(pad) && Object.keys(latest.current.hidden).length > 0) return retypeIntoPool(pad, category);
-    const slot = layout.on && pad.index < 16 && !pad.placeholder && !pad.ghost ? layoutById(layout.id).slots[pad.index] : undefined;
-    if (slot && slot.category !== category) {
-      // The sound no longer belongs in its finger-drumming slot: a sound of the slot's type takes its place.
-      recordEdit();
-      setPads((prev) => {
-        const retyped = { ...prev, [pad.index]: { ...prev[pad.index], category, ...(pad.tuneLocked ? {} : { tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) }) } };
-        return replaceMisfit(retyped, pad.index, slot.category, slot.label);
-      });
-      return;
-    }
     patchPad(pad.index, pad.tuneLocked ? { category } : { category, tune: tuneDefault(false, false, category, pad.detectedMidi, tunedTarget) });
   };
 
@@ -984,7 +782,7 @@ function App() {
       // The sections go on bank D (the chop is the only thing that ever does), and a new chop replaces the last one.
       const opened = await ensureProject();
       if (!opened) return;
-      if (opened.started) setMix(true);
+      if (opened.started) setOrganize(true);
       const without = Object.fromEntries(Object.entries(latest.current.pads).filter(([, p]) => !p.section));
       const { pads: sections } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(without), palette.colors);
       if (sections.length === 0) {
@@ -1044,7 +842,7 @@ function App() {
         pad.sampleRate,
         shiftFor(pad, tunedTarget, a4),
         pad.tune && toneOn ? (pad.keyPc ?? keyPc) : null,
-        focus?.started ? "oneshot" : padMode(pad),
+        padMode(pad),
         undefined,
         normalize ? pad.knobDb : undefined,
       ),
@@ -1293,105 +1091,10 @@ function App() {
 
   // Sorting: bring each unknown sound's pad up and play it once, so the user hears what they are naming.
   useEffect(() => {
-    if (!focus?.started) return;
-    const pad = Object.values(latest.current.pads).find((p) => isReal(p) && p.origIndex === focus.queue[focus.pos]);
-    if (!pad) return;
-    setSelected(pad.index);
-    setBank(Math.floor(pad.index / 16));
-    pressPad(pad.index);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus?.started, focus?.pos]);
-
-  useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 4500);
     return () => window.clearTimeout(timer);
   }, [notice]);
-
-  /** Ends the sorting: every sound has a type, so Drum layouts unlocks. */
-  const finishOrganize = () => {
-    setFocus(null);
-    setOrganize(true);
-    setOrganized(true);
-    setNotice("Sounds sorted. Drum layouts is now available in the menu.");
-  };
-
-  /** Organize: file names settle the obvious sounds, then the rest are put to the user one at a time. */
-  const startOrganize = () => {
-    const list = Object.values(latest.current.pads)
-      .filter(isReal)
-      .sort((a, b) => a.index - b.index);
-    const plan = planOrganize(list.map((p) => ({ key: p.origIndex, name: p.name, known: categoryHints.current[p.origIndex] !== undefined })));
-    if (plan.byName.size > 0) {
-      recordEdit();
-      setPads((prev) =>
-        Object.fromEntries(
-          Object.entries(prev).map(([i, p]) => {
-            const category = isReal(p) ? plan.byName.get(p.origIndex) : undefined;
-            if (!category || p.category === category) return [i, p];
-            return [i, { ...p, category, ...(p.tuneLocked ? {} : { tune: tuneDefault(false, false, category, p.detectedMidi, tunedTargetRef.current) }) }];
-          }),
-        ),
-      );
-    }
-    if (plan.ask.length === 0) return finishOrganize();
-    setMenuOpen(false);
-    setMode("type");
-    setFocus({ queue: plan.ask, pos: 0, started: false });
-  };
-
-  const toggleOrganize = (on: boolean) => {
-    setOrganize(on);
-    if (on && !organized) startOrganize();
-  };
-
-  /** The introduction was read: the first sound plays. */
-  const beginSorting = () => setFocus((f) => (f ? { ...f, started: true } : f));
-
-  /** "Not now" on the introduction: nothing is sorted, Organize goes back off. */
-  const cancelIntro = () => {
-    setFocus(null);
-    setOrganize(false);
-  };
-
-  /** Stops whatever is still playing, with a short fade (sorting plays each sound through, so an answer has to cut it). */
-  const cutAll = () => {
-    for (const handle of releasePad.current.values()) handle.cut();
-    releasePad.current.clear();
-  };
-
-  /** Next unknown sound, or the end of the sorting. */
-  const nextFocus = () => {
-    if (!focus) return;
-    cutAll();
-    if (focus.pos + 1 < focus.queue.length) setFocus({ ...focus, pos: focus.pos + 1 });
-    else finishOrganize();
-  };
-
-  /** The trash key: the sound is deleted (undo brings it back) and the next one plays. */
-  const trashFocused = (pad: Pad) => {
-    deletePad(pad);
-    nextFocus();
-  };
-
-  /** The skip key: the sound is marked as the unknown type ("Other") and the next one plays. */
-  const skipFocused = (pad: Pad) => {
-    classifyPad(pad, "other");
-    nextFocus();
-  };
-
-  /** The cross: leave the sorting early. The sounds already sorted keep their types; Organize and Drum layouts stay off until it is done. */
-  const leaveOrganize = () => {
-    if (
-      !window.confirm(
-        "Sorting your sounds lets KoalaTune colour and label every pad and place each one in the right spot of a drum layout. Drum layouts stays locked until all of them are sorted.\n\nSounds you have already sorted keep their type. Leave anyway?",
-      )
-    )
-      return;
-    cutAll();
-    setFocus(null);
-    setOrganize(false);
-  };
 
   /**
    * Picking a key retargets every pad. Pads whose Tune switch the user has set by hand keep it,
@@ -1506,7 +1209,7 @@ function App() {
         ghostExports.push({
           index: gp.index,
           label: GHOST_LABEL[gp.ghost!.kind],
-          color: autoColor ? autoColorOf(gp) : undefined,
+          color: autoColorOf(gp),
           sourceSampleId: source.sampleId,
           sampleRate: source.sampleRate,
           channelData: makeGhostAudio(audio, source.sampleRate, gp.ghost!.kind),
@@ -1525,14 +1228,14 @@ function App() {
           if (settings) playback.set(p.sampleId, settings);
         }
       }
+      // The pads the loaders made (Kick 1, Snare 2, Loop 3...) are written with the colour and label they show in the app; a sound from a project that was
+      // opened keeps the colour and label it already had.
       const colors = new Map<number, { color: string; label: string }>();
-      if (autoColor) {
-        for (const p of allPads) {
-          // The label is what the pad's caption says in the app, without its number.
-          if (p.category) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
-        }
+      for (const p of allPads) {
+        // The label is what the pad's caption says in the app, without its number.
+        if (p.category && numberedLabel(p)) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: routeBuses, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: sidechainActive, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -1552,9 +1255,8 @@ function App() {
     if (!slots.some((r) => now.get(r.pad) !== r.pad)) return undefined;
     return new Map(slots.map((r) => [r.pad, now.get(r.pad) ?? null]));
   };
-  const arrangement = analyzing === 0 ? arrangementOf(pads) : undefined;
 
-  const palette = paletteById(paletteId);
+  const palette = paletteById(DEFAULT_PALETTE_ID);
     const shownBank = bank;
   /** Palette colour for a sound, by its own category. Where it sits (including on a layout's slots) never changes it. */
   const autoColorOf = (p: Pad): string => {
@@ -1568,13 +1270,14 @@ function App() {
   const sectionLabel = (p: Pad): string => `${CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
   const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? sectionLabel(p) : (numberedLabel(p)?.label ?? padLabel(p)));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
-  const canExport =
-    (arrangement !== undefined ||
-      Object.values(pads).some((p) => p.ghost || p.section) ||
-      (normalize || autoColor || routeBuses || masterChain || autoPlayback ? Object.keys(pads).length > 0 : Object.values(pads).some((p) => p.tune))) &&
-    analyzing === 0 &&
-    !exporting;
   const hasProject = Object.keys(pads).length > 0;
+  /** The loaders have already placed, labelled and coloured every sound, so a project with sounds in it can always be exported. */
+  const canExport = hasProject && analyzing === 0 && !exporting;
+  /** The sidechain needs something to duck (a bass or 808) and something to duck to (a kick). Hot-swap spares do not count: only sounds on pads. */
+  const hasKick = Object.values(pads).some((p) => isReal(p) && p.category === "kick");
+  const hasBass = Object.values(pads).some((p) => isReal(p) && p.category === "bass");
+  const sidechainReady = organize && hasKick && hasBass;
+  const sidechainActive = sidechainReady && sidechainOn;
   const longPads = Object.values(pads)
     .filter((p) => longSamples.includes(p.origIndex))
     .sort((a, b) => a.index - b.index);
@@ -1583,7 +1286,7 @@ function App() {
   /** Hot swap only exists with the finger-drumming layout; without it the screen starts on Tune. */
   /** Hot swap works on a drum layout, or once a loader has left spare sounds to swap in. */
   const canSwap = layout.on || Object.keys(hidden).length > 0;
-  const shownMode: Mode | null = focus ? "type" : mode === null ? null : mode === "swap" && !canSwap ? "tune" : mode;
+  const shownMode: Mode | null = mode === null ? null : mode === "swap" && !canSwap ? "tune" : mode;
   /** The note a pad is tuned to, or "--" when its tuning is off or there is no key yet. */
   const keyNameOf = (pad: Pad) => {
     const pc = pad.tune ? (pad.keyPc ?? keyPc) : null;
@@ -1756,19 +1459,19 @@ function App() {
               Clear project
             </button>
             <Switch
-              label="Mix"
-              hint="Balances levels, routes sounds to buses (bass ducks to the kick), sets each sound type's settings and spreads melodic pads"
-              on={mix}
-              onChange={setMix}
+              label="Organize"
+              hint="Levels, each sound type's settings, bus routing, the melodic spread and the master chain. Never moves, labels or colours pads: the Load Bank steps do that"
+              on={organize}
+              disabled={!hasProject}
+              onChange={setOrganize}
             />
-            <button className="menu__button" disabled={!mix || !hasProject || normalizing} onClick={normalizeNow}>
+            <button className="menu__button" disabled={!organize || !hasProject || normalizing} onClick={normalizeNow}>
               {normalizing ? "Normalizing…" : "Normalize now"}
             </button>
-            <Switch label="Master chain" hint="Heavy, warm glue, saturation and limiting on the main output" on={masterChain} onChange={setMasterChain} />
             <select
               className="menu__select"
               value={masterStyle}
-              disabled={!masterChain}
+              disabled={!organize}
               onChange={(e) => setMasterStyle(e.target.value as MasterStyle)}
               aria-label="Master chain style"
             >
@@ -1779,42 +1482,20 @@ function App() {
               ))}
             </select>
             <Switch
-              label="Organize"
-              hint="Colours and labels the pads by sound type. Asks about any sound whose name does not say what it is"
-              on={organize}
-              disabled={!hasProject || analyzing > 0}
-              onChange={toggleOrganize}
+              label="Sidechain"
+              hint={
+                sidechainReady
+                  ? "The bass and 808 duck to the kick"
+                  : !organize
+                    ? "Turn Organize on first. The sidechain also needs a kick and a bass or 808 on the pads"
+                    : !hasKick
+                      ? "Load a drum kit with a kick first"
+                      : "Load a bass or 808 first"
+              }
+              on={sidechainReady && sidechainOn}
+              disabled={!sidechainReady}
+              onChange={setSidechainOn}
             />
-            <Switch
-              label="Drum layouts"
-              hint={organized ? "Arranges the pads for finger drumming" : "Available once Organize has sorted every sound"}
-              on={layout.on}
-              disabled={!hasProject || analyzing > 0 || (!organized && !layout.on)}
-              onChange={toggleLayout}
-            />
-            <select
-              className="menu__select"
-              value={layout.id}
-              onChange={(e) => chooseLayout(e.target.value)}
-              disabled={analyzing > 0 || (!organized && !layout.on)}
-              aria-label="Finger drumming layout"
-            >
-              {FINGER_LAYOUTS.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-            <button
-              className="menu__button"
-              disabled={!organized && !layout.on}
-              onClick={() => {
-                setLayoutPickerOpen(true);
-                setMenuOpen(false);
-              }}
-            >
-              Layouts
-            </button>
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
@@ -1912,15 +1593,6 @@ function App() {
                 Reset to A440
               </button>
             )}
-            <button
-              className="menu__button"
-              onClick={() => {
-                setPaletteOpen(true);
-                setMenuOpen(false);
-              }}
-            >
-              Color palette: {palette.name}
-            </button>
             <div className="menu__version">
               KoalaTune v{__APP_VERSION__} · {__APP_BUILD__}
               <br />
@@ -1974,7 +1646,7 @@ function App() {
         </div>
 
         {/* The screen: a black OLED in Silkscreen, with a title bar in inverse video. It grows over the deck's place in Swap mode. */}
-        <div className={`screen-wrap screen-wrap--${shownMode ?? "swap"}${focus?.started ? " screen-wrap--focus" : ""}`}>
+        <div className={`screen-wrap screen-wrap--${shownMode ?? "swap"}`}>
           <section className="screen" aria-label={`Display: ${shownMode ?? "sample"}`}>
             <div className="oled">
               {selectedPad && (
@@ -2018,17 +1690,6 @@ function App() {
                     <span className="dropzone__short">Pick a drum folder</span>
                   </button>
                 </label>
-              ) : focus?.started ? (
-                <div className="sort-keys">
-                  <button className="sort-key" aria-label="Delete this sound" disabled={!selectedPad} onClick={() => selectedPad && trashFocused(selectedPad)}>
-                    <PixelIcon rows={TRASH_ICON} />
-                    <span>Delete</span>
-                  </button>
-                  <button className="sort-key" aria-label="Skip: mark this sound as unknown" disabled={!selectedPad} onClick={() => selectedPad && skipFocused(selectedPad)}>
-                    <PixelIcon rows={SKIP_ICON} />
-                    <span>Skip</span>
-                  </button>
-                </div>
               ) : !selectedPad ? (
                 <div className="screen__message">
                   <strong>{projectName}</strong>
@@ -2094,14 +1755,11 @@ function App() {
 
         {/* The deck under the screen: the sound type keys, or the piano with its two keys. Hot swap has none, its list takes the room. */}
         {shownMode === "type" && (
-          <div className={`deck${focus?.started ? " deck--focus" : ""}`}>
+          <div className="deck">
             <TypeKeys
               pad={selectedPad && isReal(selectedPad) ? selectedPad : null}
               palette={palette}
-              onClassify={(pad, category) => {
-                classifyPad(pad, category);
-                if (focus?.started) nextFocus();
-              }}
+              onClassify={classifyPad}
             />
           </div>
         )}
@@ -2129,8 +1787,8 @@ function App() {
         </div>
 
         <div className="lower">
-        <div className={`padzone${focus?.started ? " padzone--focus" : ""}`}>
-          <div className={`pads${focus?.started ? " pads--focus" : ""}`}>
+        <div className="padzone">
+          <div className="pads">
             {Array.from({ length: 16 }, (_, slot) => {
               const index = shownBank * 16 + slot;
               const pad = pads[index];
@@ -2140,7 +1798,6 @@ function App() {
                 pad?.placeholder && "pad--placeholder",
                 pad?.tune && "pad--tuned",
                 selected === index && "pad--selected",
-                focus?.started && selected === index && "pad--focus",
                 drag?.from === index && "pad--dragging",
                 hover === `pad:${index}` && "pad--target",
               ]
@@ -2204,51 +1861,7 @@ function App() {
         </div>
         </div>
 
-        {focus && !focus.started && (
-          <div className="focus focus--intro" role="dialog" aria-label="Sort your sounds">
-            <div className="focus__card">
-              <div className="focus__title">Let's sort your sounds</div>
-              <p>
-                {focus.queue.length === 1 ? "One sound has a name" : `${focus.queue.length} sounds have names`} that don't say what{" "}
-                {focus.queue.length === 1 ? "it is" : "they are"}. Each one plays all the way through. Tap the sound type that fits and the next one plays. Tap or hold its pad to hear it again.
-              </p>
-              <div className="focus__actions">
-                <button className="menu__button" onClick={cancelIntro}>
-                  Not now
-                </button>
-                <button className="menu__button menu__button--primary" onClick={beginSorting}>
-                  OK
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {focus?.started && (
-          <div className="focus" role="dialog" aria-label="Sort your sounds">
-            <button className="focus__close" aria-label="Leave sorting" onClick={leaveOrganize}>
-              <svg viewBox="0 0 12 12" aria-hidden="true">
-                <path d="M2 2l8 8M10 2l-8 8" />
-              </svg>
-            </button>
-            <div className="focus__text">
-              <div className="focus__title">What kind of sound is this?</div>
-              <div className="focus__name">{selectedPad ? displayName(selectedPad.name, tags) : ""}</div>
-              <div className="focus__count">
-                {focus.pos + 1} of {focus.queue.length}
-              </div>
-            </div>
-          </div>
-        )}
         {notice && <div className="notice">{notice}</div>}
-
-        {layoutPickerOpen && (
-          <LayoutPicker
-            palette={palette}
-            selectedId={layout.id}
-            onSelect={chooseLayout}
-            onClose={() => setLayoutPickerOpen(false)}
-          />
-        )}
 
         {longPads.length > 0 && (
           <LongSamplesModal pads={longPads} maxSeconds={MAX_SAMPLE_SECONDS} onDelete={deletePad} onChop={openChop} onClose={() => setLongSamples([])} />
@@ -2276,7 +1889,6 @@ function App() {
           />
         )}
 
-        {paletteOpen && <PalettePicker selectedId={paletteId} onSelect={setPaletteId} onClose={() => setPaletteOpen(false)} />}
       </div>
       {drag && pads[drag.from] && (
         <div

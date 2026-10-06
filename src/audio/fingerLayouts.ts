@@ -33,8 +33,8 @@ const FX = slot("fx");
 const VOX = slot("vox");
 const PERC = slot("perc");
 
-// Research: docs/finger-drumming-layouts.md. Kick, snare and both hats on the bottom row is the MPC default;
-// a ghost snare or soft kick sits beside (or above) the hit it is a quieter copy of.
+// Research: docs/finger-drumming-layouts.md. Kick, snare and both hats on the bottom row is the MPC default, and the only layout: Load Bank A: Drums
+// writes it, and nothing rearranges the pads afterwards. A ghost snare or soft kick sits beside (or above) the hit it is a quieter copy of.
 export const FINGER_LAYOUTS: FingerLayout[] = [
   {
     id: "horizontal",
@@ -45,39 +45,6 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
       PERC, PERC, PERC, PERC,
       SOFT, GHOST, CLAP, FX,
       KICK, SNARE, CHAT, OHAT,
-    ],
-  },
-  {
-    id: "quest-for-groove",
-    name: "Quest for Groove 4x4",
-    description: "Kick pair between two cymbals, snares flanked by ghost snares, hats and a cymbal, percussion on top.",
-    slots: [
-      PERC, PERC, PERC, CYM,
-      CHAT, OHAT, CHAT, CYM,
-      GHOST, SNARE, SNARE, GHOST,
-      CYM, KICK, KICK, CYM,
-    ],
-  },
-  {
-    id: "mirrored",
-    name: "Mirrored kit (Xpress Pads)",
-    description: "Kicks on the outside and snares above them, hats in the middle, percussion, cymbals, vox and FX higher.",
-    slots: [
-      CYM, CYM, FX, VOX,
-      PERC, PERC, PERC, CLAP,
-      SNARE, OHAT, OHAT, GHOST,
-      KICK, CHAT, CHAT, SOFT,
-    ],
-  },
-  {
-    id: "controller-split",
-    name: "Controller split (two hands)",
-    description: "Left two columns are the core kit for one hand; the right two are percussion, cymbals and extras for the other.",
-    slots: [
-      CLAP, OHAT, CYM, CYM,
-      GHOST, CHAT, PERC, PERC,
-      SNARE, CHAT, PERC, PERC,
-      KICK, SOFT, FX, VOX,
     ],
   },
 ];
