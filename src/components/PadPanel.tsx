@@ -147,8 +147,9 @@ export function PadPanel({
           onChange={onTrim}
           onDragStart={onHoldStart}
           onDragEnd={onHoldEnd}
+          onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={(cents) => formatTrim(pad.tune ? autoShift * 100 + cents : cents)}
-          title="Pitch of the sound: hold and slide along the slider to repitch it by semitones, drag down for fine steps. Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold."
+          title="Pitch of the sound: hold and slide along the slider to repitch it by semitones, drag down for fine steps. Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset."
         />
         {chords && above && (
           <>
