@@ -1,5 +1,5 @@
 // Minimal Web Audio playback for the pad grid: held, looping, monophonic pad playback with a
-// pitch shift and optional reference tone (a soft saw minor chord on the key), and the same chord held for the key picker.
+// pitch shift and optional reference tone (a sine on the key, or for a melodic loop a soft saw chord on it), and a held sine tone for the key picker.
 import { getAudioContext } from "./decode";
 import { midiToFrequency, semitonesToRatio } from "./theory";
 
@@ -28,11 +28,12 @@ function readyContext(): AudioContext {
 }
 
 /**
- * The reference tone: a soft saw-wave minor chord on the key (its root, a minor third and a fifth), so a loop can be judged against a whole key and not one
- * note. Two slightly detuned saws per note give it some width, and a low-pass keeps it soft. `out` carries the chord at roughly 1.3 times the amplitude of one
- * saw; set the level on a gain after it.
+ * The reference tone. For a single sound it is a sine on the key's note. For a melodic loop it is a soft saw-wave chord on the key (its root, a third and
+ * a fifth: a minor chord, or a major one), so the loop can be judged against a whole key and not one note. Two slightly detuned saws per note give the
+ * chord some width, and a low-pass keeps it soft. `out` carries the chord at roughly 1.3 times the amplitude of one saw; set the level on a gain after it.
  */
-const CHORD_INTERVALS = [0, 3, 7];
+export type ReferenceTone = "sine" | "minor" | "major";
+const CHORD_INTERVALS: Record<"minor" | "major", number[]> = { minor: [0, 3, 7], major: [0, 4, 7] };
 const CHORD_DETUNE_CENTS = [-6, 6];
 const CHORD_CUTOFF_HZ = 1200;
 interface ChordTone {
@@ -44,14 +45,20 @@ interface ChordTone {
   onEnded: (fn: () => void) => void;
 }
 
-/** The chord on `pitchClass` (0 = C), in the octave from middle C like the single tone it replaces. */
-function createChord(ctx: AudioContext, pitchClass: number): ChordTone {
+/** The reference tone on `pitchClass` (0 = C), in the octave from middle C. */
+function createTone(ctx: AudioContext, pitchClass: number, kind: ReferenceTone): ChordTone {
+  if (kind === "sine") {
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = midiToFrequency(60 + pitchClass, a4Reference);
+    return { out: osc, start: () => osc.start(), stop: (when) => osc.stop(when), onEnded: (fn) => { osc.onended = fn; } };
+  }
   const lowpass = ctx.createBiquadFilter();
   lowpass.type = "lowpass";
   lowpass.frequency.value = CHORD_CUTOFF_HZ;
   lowpass.Q.value = 0.5;
   const voices: OscillatorNode[] = [];
-  for (const interval of CHORD_INTERVALS) {
+  for (const interval of CHORD_INTERVALS[kind]) {
     for (const cents of CHORD_DETUNE_CENTS) {
       const osc = ctx.createOscillator();
       osc.type = "sawtooth";
@@ -131,7 +138,7 @@ export type PadMode = "loop" | "hold" | "oneshot";
  * Starts a pad for as long as it is held, cutting off any earlier hit of the same pad (monophonic).
  * Preview only: nothing here touches the project's own play settings. The shift is applied as a
  * playback-rate change (a resample), exactly how the tuned sample would sound once baked in.
- * With a tone pitch class, the reference chord plays at the sample's RMS level on its own gain, so it always
+ * With a tone pitch class, the reference tone plays at the sample's RMS level on its own gain, so it always
  * decays at the fixed TONE_FADE rate however long or short the sample is. Release holds briefly,
  * then fades both voices out smoothly.
  */
@@ -148,6 +155,8 @@ export function startPad(
   levelDb = 0,
   /** Seconds into the audio to start from. */
   startSeconds = 0,
+  /** What the reference tone is: a sine on the key's note (the default), or for a melodic loop a soft saw minor or major chord on the key. */
+  toneKind: ReferenceTone = "sine",
 ): PadHandle {
   const ctx = readyContext();
   activePads.get(pad)?.stop(0, CUT_FADE);
@@ -169,12 +178,17 @@ export function startPad(
   let osc: ChordTone | null = null;
   let toneGain: GainNode | null = null;
   if (tonePitchClass !== null) {
-    osc = createChord(ctx, tonePitchClass);
+    osc = createTone(ctx, tonePitchClass, toneKind);
     toneGain = ctx.createGain();
-    // The chord is six saws through a low-pass: about 1.3 times the RMS of one saw (0.58 of its amplitude), so this brings it to the sample's RMS.
-    const target = Math.min(MAX_TONE_GAIN, rms(channelData) * level);
-    toneGain.gain.setValueAtTime(0, ctx.currentTime);
-    toneGain.gain.linearRampToValueAtTime(target / 0.75, ctx.currentTime + CHORD_ATTACK);
+    if (toneKind === "sine") {
+      // A sine of amplitude a has RMS a / sqrt(2), so this matches the sample's RMS.
+      toneGain.gain.value = Math.min(MAX_TONE_GAIN, rms(channelData) * Math.SQRT2 * level);
+    } else {
+      // The chord is six saws through a low-pass: about 1.3 times the RMS of one saw (0.58 of its amplitude), so this brings it to the sample's RMS.
+      const target = Math.min(MAX_TONE_GAIN, rms(channelData) * level);
+      toneGain.gain.setValueAtTime(0, ctx.currentTime);
+      toneGain.gain.linearRampToValueAtTime(target / 0.75, ctx.currentTime + CHORD_ATTACK);
+    }
     osc.out.connect(toneGain).connect(gain);
     osc.start();
   }
@@ -231,22 +245,24 @@ export function startPad(
   };
 }
 
-/** Starts the reference chord (the minor chord on `pitchClass`, 0 = C) and returns a function that releases it. */
-export function startChord(pitchClass: number): () => void {
+/** Starts a sine tone on `pitchClass` (0 = C) in the octave from middle C; returns a function that releases it. */
+export function startSine(pitchClass: number): () => void {
   const ctx = readyContext();
-  const chord = createChord(ctx, pitchClass);
+  const osc = ctx.createOscillator();
   const gain = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.value = midiToFrequency(60 + pitchClass, a4Reference);
   const now = ctx.currentTime;
   gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.22, now + CHORD_ATTACK);
-  chord.out.connect(gain).connect(ctx.destination);
-  chord.start();
+  gain.gain.linearRampToValueAtTime(0.3, now + 0.01);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
   return () => {
     const t = ctx.currentTime;
     gain.gain.cancelScheduledValues(t);
     gain.gain.setValueAtTime(gain.gain.value, t);
     gain.gain.linearRampToValueAtTime(0, t + 0.08);
-    chord.stop(t + 0.1);
+    osc.stop(t + 0.1);
   };
 }
 

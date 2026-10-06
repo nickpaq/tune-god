@@ -57,6 +57,8 @@ export interface SavedState {
   selected?: number | null;
   keyPc?: number | null;
   tunedTarget?: number | null;
+  /** The key picked on the piano is a major key (the Tune screen's switch); the default is a minor key. */
+  keyMajor?: boolean;
   pads?: Record<number, SavedPad>;
   /** Finger-drumming layout chosen in the menu (kept across projects). */
   layoutId?: string;

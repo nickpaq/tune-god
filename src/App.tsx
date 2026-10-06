@@ -15,7 +15,7 @@ import {
   trimRangeOf,
   type ParsedKoalaProject,
 } from "./audio/koalaProject";
-import { setReferencePitch, startPad, type PadHandle, type PadMode } from "./audio/player";
+import { setReferencePitch, startPad, type PadHandle, type PadMode, type ReferenceTone } from "./audio/player";
 import { buildTunedKoala, downloadBlob, masterEffectNames, type GhostPadExport, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
@@ -97,9 +97,11 @@ const MAX_SPREAD_PERCENT = 40;
  * Total semitone shift for a pad: the shortest move (never more than 6 up or
  * down) from its exact detected pitch onto the target note, plus the manual trim.
  */
-function shiftFor(pad: Pad, projectKey: number | null, a4: number): number {
+function shiftFor(pad: Pad, projectKey: number | null, a4: number, major = false): number {
   if (!pad.tune) return 0;
-  const target = pad.keyPc ?? projectKey;
+  let target = pad.keyPc ?? projectKey;
+  // A loop's detected pitch is its key's relative minor. The key picked on the piano is a minor key (the default) or a major one, whose relative minor is a minor third below.
+  if (target !== null && pad.category === "melodicLoop" && major) target = (target + 9) % 12;
   let base = 0;
   if (target !== null && pad.detectedMidi != null) {
     base = (((target - pad.detectedMidi) % 12) + 12) % 12;
@@ -119,6 +121,9 @@ const isReal = (p: Pad) => !p.placeholder && !p.ghost && !p.section;
  * Preview only (the project's own play settings are untouched). Every pad plays while held and fades
  * out smoothly on release; bass, melodic and melodic loops also loop for as long as they are held.
  */
+/** A melodic loop is judged against a soft saw chord on the key (minor, or major with the switch); every other sound against a plain sine on its note. */
+const toneKindOfPad = (pad: Pad, major: boolean): ReferenceTone => (pad.category === "melodicLoop" ? (major ? "major" : "minor") : "sine");
+
 function padMode(pad: Pad): PadMode {
   if (pad.section) return "oneshot"; // a song section plays through, like it will in Koala
   return isTunedCategory(pad.category) ? "loop" : "hold";
@@ -186,6 +191,8 @@ function App() {
   const [selected, setSelected] = useState<number | null>(saved.selected ?? null);
   const [keyPc, setKeyPc] = useState<number | null>(saved.keyPc ?? null);
   const [tunedTarget, setTunedTarget] = useState<number | null>(saved.tunedTarget ?? null);
+  /** The key picked on the piano is a major key (its melodic loops go to the relative minor a minor third below) instead of the default minor key. */
+  const [keyMajor, setKeyMajor] = useState(saved.keyMajor ?? false);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
@@ -417,8 +424,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget });
-  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget]);
+    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget, keyMajor });
+  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, tuneAll, a4, bank, selected, keyPc, tunedTarget, keyMajor]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -834,6 +841,8 @@ function App() {
   /** What plays for a pad: its raw audio, or the normalized version once Normalize now has run. */
   const audioOf = (pad: Pad) => (normalize && normalizedData[pad.origIndex]) || pad.channelData;
 
+  const toneKindOf = (pad: Pad) => toneKindOfPad(pad, keyMajor);
+
   const pressPad = (index: number) => {
     const pad = pads[index];
     if (!pad) return;
@@ -850,11 +859,13 @@ function App() {
         index,
         audioOf(pad),
         pad.sampleRate,
-        shiftFor(pad, tunedTarget, a4),
+        shiftFor(pad, tunedTarget, a4, keyMajor),
         pad.tune && toneOn ? (pad.keyPc ?? keyPc) : null,
         padMode(pad),
         undefined,
         normalize ? pad.knobDb : undefined,
+        0,
+        toneKindOf(pad),
       ),
     );
   };
@@ -981,7 +992,7 @@ function App() {
     if (!pad || pad.placeholder) return;
     holdVoice.current?.release();
     holdIndex.current = index;
-    holdVoice.current = startPad(-2, audioOf(pad), pad.sampleRate, shiftFor(pad, tunedTarget, a4), null, "loop", undefined, normalize ? pad.knobDb : undefined);
+    holdVoice.current = startPad(-2, audioOf(pad), pad.sampleRate, shiftFor(pad, tunedTarget, a4, keyMajor), null, "loop", undefined, normalize ? pad.knobDb : undefined);
   };
 
   /**
@@ -997,14 +1008,14 @@ function App() {
     holdIndex.current = null;
     releasePad.current.get(pad.index)?.release();
     releasePad.current.delete(pad.index);
-    const shift = shiftFor(pad, tunedTarget, a4);
+    const shift = shiftFor(pad, tunedTarget, a4, keyMajor);
     const soundsAt = pad.detectedMidi != null ? pad.detectedMidi + shift : null;
     // The lift lives only in this preview voice, and goes with it when the slider is let go.
     const lift = pad.category === "bass" && soundsAt !== null ? bassLiftSemitones(soundsAt, pc) : 0;
     matchVoice.current = {
       lift,
       index: pad.index,
-      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, pc, "loop", undefined, normalize ? pad.knobDb : undefined),
+      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, pc, "loop", undefined, normalize ? pad.knobDb : undefined, 0, toneKindOf(pad)),
     };
   };
 
@@ -1018,7 +1029,7 @@ function App() {
     const trim = Math.max(-1200, Math.min(1200, cents));
     patchPad(pad.index, { ...splitTrim(trim), tune: true, tuneLocked: true });
     const match = matchVoice.current;
-    if (match) match.handle.setShift(shiftFor({ ...pad, ...splitTrim(trim), tune: true }, latest.current.tunedTarget, a4) + match.lift);
+    if (match) match.handle.setShift(shiftFor({ ...pad, ...splitTrim(trim), tune: true }, latest.current.tunedTarget, a4, keyMajor) + match.lift);
   };
 
   /** The slider was let go (or the pad or screen changed): the sound and the tone fade out. The pad keeps the pitch it was left at. */
@@ -1040,11 +1051,11 @@ function App() {
   useEffect(() => {
     for (const [index, handle] of releasePad.current) {
       const pad = pads[index];
-      if (pad) handle.setShift(shiftFor(pad, tunedTarget, a4));
+      if (pad) handle.setShift(shiftFor(pad, tunedTarget, a4, keyMajor));
     }
     const held = holdIndex.current === null ? undefined : pads[holdIndex.current];
-    if (held) holdVoice.current?.setShift(shiftFor(held, tunedTarget, a4));
-  }, [pads, tunedTarget, a4]);
+    if (held) holdVoice.current?.setShift(shiftFor(held, tunedTarget, a4, keyMajor));
+  }, [pads, tunedTarget, a4, keyMajor]);
 
   useEffect(() => setReferencePitch(a4), [a4]);
 
@@ -1133,7 +1144,7 @@ function App() {
       let done = 0;
       for (const pad of allPads) {
         setExportProgress(`${done++}/${allPads.length}`);
-        const shift = shiftFor(pad, tunedTarget, a4);
+        const shift = shiftFor(pad, tunedTarget, a4, keyMajor);
         const retimed = pad.tune && Math.abs(shift) >= 1e-6;
         if (!retimed && !normalize) continue;
         // The pad's audio was already cut to Koala's start/end points on load, so a stretched loop stays in time.
@@ -1261,8 +1272,10 @@ function App() {
     <PadPanel
       pad={selectedPad}
       keyName={keyNameOf(selectedPad)}
-      autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4)}
+      autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4, keyMajor)}
       needsKey={(selectedPad.keyPc ?? keyPc) === null}
+      keyMajor={keyMajor}
+      onKeyMajor={setKeyMajor}
       onTrim={moveTrim}
       onHoldStart={startMatch}
       onHoldEnd={stopMatch}
@@ -1680,7 +1693,7 @@ function App() {
                     <span>Key {keyNameOf(selectedPad)}</span>
                     <span>
                       {(() => {
-                        const shift = selectedPad.tune ? shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4) + trimCents(selectedPad.semis, selectedPad.cents) / 100 : 0;
+                        const shift = selectedPad.tune ? shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4, keyMajor) + trimCents(selectedPad.semis, selectedPad.cents) / 100 : 0;
                         return `${shift < 0 ? "-" : "+"}${Math.abs(shift).toFixed(2)}st`;
                       })()}
                     </span>

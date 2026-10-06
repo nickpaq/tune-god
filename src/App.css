@@ -374,6 +374,11 @@
 }
 
 /* drawn by the screen itself: an outlined box, in inverse video when on */
+.pad-panel__toggles {
+  display: flex;
+  gap: calc(var(--cell) * 2);
+}
+
 .tune-toggle {
   height: calc(var(--cell) * 10);
   padding: 0 var(--cell);

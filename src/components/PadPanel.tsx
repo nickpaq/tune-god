@@ -63,6 +63,8 @@ export function PadPanel({
   autoShift,
   keyName,
   needsKey,
+  keyMajor,
+  onKeyMajor,
   onTrim,
   onHoldStart,
   onHoldEnd,
@@ -75,6 +77,9 @@ export function PadPanel({
   keyName: string;
   /** No key is chosen yet, so there is no tone to hold the sound against: the slider is locked. */
   needsKey: boolean;
+  /** The piano's key is a major key (default: minor). It sets the chord a melodic loop is judged against and where the loop is moved to. */
+  keyMajor: boolean;
+  onKeyMajor: (major: boolean) => void;
   /** The pitch slider moved: the pad's pitch trim, in cents. */
   onTrim: (cents: number) => void;
   /** The slider was grabbed: the pad loops with a tone on the key, until it is let go. */
@@ -93,13 +98,23 @@ export function PadPanel({
           {keyName}
         </div>
         <div className="pad-panel__lines">
-          <button
-            className={`tune-toggle${pad.tune ? " tune-toggle--on" : ""}`}
-            onClick={() => onChange({ tune: !pad.tune })}
-            aria-pressed={pad.tune}
-          >
-            {pad.tune ? "Tune on" : "Tune off"}
-          </button>
+          <div className="pad-panel__toggles">
+            <button
+              className={`tune-toggle${pad.tune ? " tune-toggle--on" : ""}`}
+              onClick={() => onChange({ tune: !pad.tune })}
+              aria-pressed={pad.tune}
+            >
+              {pad.tune ? "Tune on" : "Tune off"}
+            </button>
+            <button
+              className="tune-toggle"
+              onClick={() => onKeyMajor(!keyMajor)}
+              aria-label={`The key is ${keyMajor ? "major" : "minor"}: tap to switch`}
+              title="Major or minor: the chord a melodic loop is played against, and the key it is moved to (a major key takes the loop to its relative minor, a minor third below)."
+            >
+              {keyMajor ? "Major" : "Minor"}
+            </button>
+          </div>
           <div>Shift {pad.tune ? `${total >= 0 ? "+" : "-"}${Math.abs(total).toFixed(2)}` : "0.00"}st</div>
           <div>Trim {formatTrim(trim)}st</div>
         </div>
