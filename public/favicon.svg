@@ -9,19 +9,20 @@
   <!-- halo -->
   <ellipse cx="50" cy="15" rx="30" ry="12" fill="url(#glow)"/>
   <ellipse cx="50" cy="15" rx="21" ry="5.5" fill="none" stroke="#f7cf5a" stroke-width="4"/>
-  <!-- long, flowing white hair behind the head -->
-  <path d="M50 26 C27 26 19 44 20 64 C21 78 15 86 10 93 C20 93 25 90 29 86 C30 91 27 95 24 98 L76 98 C73 95 70 91 71 86 C75 90 80 93 90 93 C85 86 79 78 80 64 C81 44 73 26 50 26 Z" fill="#f3f3f8" stroke="#c9cad8" stroke-width="1.200" stroke-linejoin="round"/>
-  <path d="M26 60 C25 72 21 80 17 87 M32 66 C32 76 30 84 27 91 M74 66 C74 76 76 84 79 91 M68 60 C69 72 73 80 77 87" fill="none" stroke="#d3d4e0" stroke-width="1.200" stroke-linecap="round"/>
+  <!-- long, wavy brown hair behind the head -->
+  <path d="M50 25 C27 25 19 44 20 64 C21 76 15 84 11 90 C16 96 25 95 29 90 C30 94 33 97 38 97 L62 97 C67 97 70 94 71 90 C75 95 84 96 89 90 C85 84 79 76 80 64 C81 44 73 25 50 25 Z" fill="#6b4328" stroke="#3d2415" stroke-width="1.200" stroke-linejoin="round"/>
+  <path d="M25 62 C24 72 21 79 17 86 M31 68 C31 77 29 85 26 91 M75 68 C75 77 77 85 80 91 M69 62 C70 72 74 79 78 86" fill="none" stroke="#8a5a34" stroke-width="1.400" stroke-linecap="round"/>
   <!-- face -->
-  <ellipse cx="50" cy="56" rx="25" ry="29" fill="#f4d9c6"/>
-  <!-- beard: a short one along the jaw, with the mouth in it -->
-  <path d="M25.500 60 C26 76 36 85 50 85 C64 85 74 76 74.500 60 C71 67 64 69 58 68 Q50 65.500 42 68 C36 69 29 67 25.500 60 Z" fill="#f3f3f8" stroke="#c9cad8" stroke-width="1.200" stroke-linejoin="round"/>
-  <path d="M44.500 74.500 Q50 77.500 55.500 74.500" fill="none" stroke="#a8552f" stroke-width="2.200" stroke-linecap="round"/>
-  <!-- fringe, swept to one side -->
-  <path d="M25.500 52 C24 36 36 29 50 29 C64 29 76 36 74.500 52 C71 44 66 40 58 38.500 C50 41 40 40 32 44 C29 46 27 49 25.500 52 Z" fill="#f3f3f8" stroke="#c9cad8" stroke-width="1.200" stroke-linejoin="round"/>
+  <ellipse cx="50" cy="56" rx="25" ry="29" fill="#f1cdb0"/>
+  <!-- beard, with a short point at the chin -->
+  <path d="M25.500 60 C26 74 34 82 44 86 L50 91 L56 86 C66 82 74 74 74.500 60 C71 67 64 69 58 68 Q50 65.500 42 68 C36 69 29 67 25.500 60 Z" fill="#7a4a2a" stroke="#3d2415" stroke-width="1.200" stroke-linejoin="round"/>
+  <path d="M44.500 74 Q50 76.500 55.500 74" fill="none" stroke="#e7a58f" stroke-width="2.200" stroke-linecap="round"/>
+  <!-- hair parted in the middle, falling to both sides -->
+  <path d="M25.500 56 C23 38 34 28 50 27 C66 28 77 38 74.500 56 C73 47 69 40 61 36 C56 34.500 52 34 50 32 C48 34 44 34.500 39 36 C31 40 27 47 25.500 56 Z" fill="#6b4328" stroke="#3d2415" stroke-width="1.200" stroke-linejoin="round"/>
+  <path d="M50 28 L50 33" fill="none" stroke="#3d2415" stroke-width="1.400" stroke-linecap="round"/>
   <!-- brows, eyes, nose -->
-  <path d="M33 47.500 Q39 45 45 47.500" fill="none" stroke="#b9bac8" stroke-width="2.400" stroke-linecap="round"/>
-  <path d="M55 47.500 Q61 45 67 47.500" fill="none" stroke="#b9bac8" stroke-width="2.400" stroke-linecap="round"/>
+  <path d="M33 47.500 Q39 45 45 47.500" fill="none" stroke="#6b4328" stroke-width="2.400" stroke-linecap="round"/>
+  <path d="M55 47.500 Q61 45 67 47.500" fill="none" stroke="#6b4328" stroke-width="2.400" stroke-linecap="round"/>
   <circle cx="39" cy="53" r="3.200" fill="#2a2230"/>
   <circle cx="61" cy="53" r="3.200" fill="#2a2230"/>
   <circle cx="40" cy="52" r="1" fill="#fff"/>
