@@ -52,8 +52,6 @@ export interface Pad {
   keyPc?: number;
   /** Set once the user toggles Tune by hand; "Tune all" then leaves this pad's choice alone. */
   tuneLocked?: boolean;
-  /** A melodic loop whose reference chord is the relative key's of the project key (the user switched it with the Minor and Major squares). */
-  refRelative?: boolean;
   /** Manual trim on top of the computed shift. */
   semis: number;
   cents: number;
