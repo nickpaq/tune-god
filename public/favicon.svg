@@ -47,8 +47,12 @@
   <path d="M30 58 C28 72 32 80 36 84 L38 91 L42 85 L44 94 L48 87 L50 96 L53 87 L57 94 L59 85 L63 91 L64 84 C68 80 72 72 70 58 C66 64 60 66 56 65 Q50 62 44 65 C40 66 34 64 30 58 Z" fill="#2a1722"/>
   <path d="M43 68 Q50 65.500 57 68 Q50 75 43 68 Z" fill="#f08a96" stroke="#2a1722" stroke-width="0.8"/>
   <path d="M45 68.800 Q50 70.300 55 68.800" fill="none" stroke="#fff" stroke-width="1.300" stroke-linecap="round"/>
-  <!-- tattoos: a teardrop under the left eye, ticks on the brow -->
-  <path d="M39 53 C36 57 36 60.500 39 60.500 C42 60.500 42 57 39 53 Z" fill="#3f5fe0" stroke="#2a1722" stroke-width="1"/>
+  <!-- tattoos: ticks on the brow -->
   <g stroke="#2a1722" stroke-width="1.600" stroke-linecap="round"><path d="M45 35 V39"/><path d="M50 34 V38"/><path d="M55 35 V39"/></g>
   <path d="M62 52 C64 56 64 60 62 63" fill="none" stroke="#2a1722" stroke-width="1.400" stroke-linecap="round"/>
+  <!-- gold chain with a pendant, hanging over the robe -->
+  <path d="M31 80 Q50 110 69 80" fill="none" stroke="#2a1722" stroke-width="5" stroke-linecap="round"/>
+  <path d="M31 80 Q50 110 69 80" fill="none" stroke="#ffd34d" stroke-width="3" stroke-linecap="round" stroke-dasharray="3.200 1.200"/>
+  <circle cx="50" cy="95.500" r="4.200" fill="#ffd34d" stroke="#2a1722" stroke-width="1.600"/>
+  <circle cx="50" cy="95.500" r="1.500" fill="#2a1722"/>
 </g></svg>
