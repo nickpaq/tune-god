@@ -48,6 +48,7 @@ import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemito
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { useSafeArea } from "./components/useSafeArea";
+import { SIDECHAIN_HINT, sidechainStatus } from "./audio/sidechain";
 import { ACTIVE_MIX_PRESET, MASTER_STYLES, type MasterStyle } from "./audio/mixPresets";
 import "./App.css";
 
@@ -1273,10 +1274,9 @@ function App() {
   const hasProject = Object.keys(pads).length > 0;
   /** The loaders have already placed, labelled and coloured every sound, so a project with sounds in it can always be exported. */
   const canExport = hasProject && analyzing === 0 && !exporting;
-  /** The sidechain needs something to duck (a bass or 808) and something to duck to (a kick). Hot-swap spares do not count: only sounds on pads. */
-  const hasKick = Object.values(pads).some((p) => isReal(p) && p.category === "kick");
-  const hasBass = Object.values(pads).some((p) => isReal(p) && p.category === "bass");
-  const sidechainReady = organize && hasKick && hasBass;
+  /** Worked out from the sounds on the pads every time, so a hot swap or a new drum kit locks or unlocks the sidechain at once. Spares do not count. */
+  const sidechain = sidechainStatus(Object.values(pads).filter(isReal).map((p) => p.category), organize);
+  const sidechainReady = sidechain.ready;
   const sidechainActive = sidechainReady && sidechainOn;
   const longPads = Object.values(pads)
     .filter((p) => longSamples.includes(p.origIndex))
@@ -1483,15 +1483,7 @@ function App() {
             </select>
             <Switch
               label="Sidechain"
-              hint={
-                sidechainReady
-                  ? "The bass and 808 duck to the kick"
-                  : !organize
-                    ? "Turn Organize on first. The sidechain also needs a kick and a bass or 808 on the pads"
-                    : !hasKick
-                      ? "Load a drum kit with a kick first"
-                      : "Load a bass or 808 first"
-              }
+              hint={SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
               on={sidechainReady && sidechainOn}
               disabled={!sidechainReady}
               onChange={setSidechainOn}
