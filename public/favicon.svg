@@ -1,41 +1,54 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><clipPath id="r"><rect width="100" height="100" rx="22"/></clipPath><g clip-path="url(#r)">
   <defs>
-    <radialGradient id="sky" cx="50%" cy="44%" r="70%">
-      <stop offset="0" stop-color="#7a4fb0"/>
-      <stop offset="0.55" stop-color="#3a2468"/>
-      <stop offset="1" stop-color="#150d28"/>
-    </radialGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#ffe08a" stop-opacity="0.9"/>
-      <stop offset="1" stop-color="#ffe08a" stop-opacity="0"/>
-    </radialGradient>
+    <pattern id="dots" width="2.600" height="2.600" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <circle cx="1.300" cy="1.300" r="0.800" fill="#b8564f"/>
+    </pattern>
+    <clipPath id="faceclip"><path d="M30 46 C30 33 38 27 50 27 C62 27 70 33 70 46 C70 63 62 72 50 74 C38 72 30 63 30 46 Z"/></clipPath>
   </defs>
-  <rect width="100" height="100" fill="url(#sky)"/>
-  <g fill="#ffd966" opacity="0.16"><path d="M50 46 L140.0 46.0 L138.9 60.1 Z"/><path d="M50 46 L134.6 76.8 L128.7 89.6 Z"/><path d="M50 46 L118.9 103.9 L109.0 113.9 Z"/><path d="M50 46 L95.0 123.9 L82.3 130.0 Z"/><path d="M50 46 L65.6 134.6 L51.6 136.0 Z"/><path d="M50 46 L34.4 134.6 L20.7 131.1 Z"/><path d="M50 46 L5.0 123.9 L-6.6 115.9 Z"/><path d="M50 46 L-18.9 103.9 L-27.1 92.4 Z"/><path d="M50 46 L-34.6 76.8 L-38.3 63.2 Z"/><path d="M50 46 L-40.0 46.0 L-38.9 31.9 Z"/><path d="M50 46 L-34.6 15.2 L-28.7 2.4 Z"/><path d="M50 46 L-18.9 -11.9 L-9.0 -21.9 Z"/><path d="M50 46 L5.0 -31.9 L17.7 -38.0 Z"/><path d="M50 46 L34.4 -42.6 L48.4 -44.0 Z"/><path d="M50 46 L65.6 -42.6 L79.3 -39.1 Z"/><path d="M50 46 L95.0 -31.9 L106.6 -23.9 Z"/><path d="M50 46 L118.9 -11.9 L127.1 -0.4 Z"/><path d="M50 46 L134.6 15.2 L138.3 28.8 Z"/></g>
-  <circle cx="50" cy="46" r="40" fill="url(#glow)" opacity="0.55"/>
-  <!-- robe -->
-  <path d="M10 100 C12 84 28 78 38 76 L62 76 C72 78 88 84 90 100 Z" fill="#f6f2ee"/>
-  <path d="M10 100 C12 84 24 79 33 77 L37 100 Z" fill="#c8362f"/>
-  <path d="M40 76 L50 90 L60 76 Z" fill="#e2b99a"/>
-  <!-- hair behind -->
-  <path d="M50 22 C30 22 22 38 23 56 C24 68 19 76 14 82 C20 88 30 86 34 80 L66 80 C70 86 80 88 86 82 C81 76 76 68 77 56 C78 38 70 22 50 22 Z" fill="#6a4128"/>
-  <path d="M27 60 C26 70 23 76 19 81 M73 60 C74 70 77 76 81 81" fill="none" stroke="#8d5c35" stroke-width="1.600" stroke-linecap="round"/>
-  <!-- face -->
-  <path d="M30 50 C30 36 38 30 50 30 C62 30 70 36 70 50 C70 66 62 76 50 76 C38 76 30 66 30 50 Z" fill="#f2cfb2"/>
-  <!-- beard -->
-  <path d="M30 56 C31 70 39 76 50 80 C61 76 69 70 70 56 C66 63 60 65 56 64 Q50 61.500 44 64 C40 65 34 63 30 56 Z" fill="#7b4a2b"/>
-  <path d="M45 70 Q50 72.500 55 70" fill="none" stroke="#e9a893" stroke-width="2" stroke-linecap="round"/>
-  <!-- hair parting -->
-  <path d="M30 52 C28 36 38 27 50 27 C62 27 72 36 70 52 C69 43 65 38 58 35.500 C54 34.500 51 33 50 31 C49 33 46 34.500 42 35.500 C35 38 31 43 30 52 Z" fill="#6a4128"/>
-  <!-- brows and downcast eyes -->
-  <path d="M35 46 Q40 43.500 45 46" fill="none" stroke="#5a3820" stroke-width="2" stroke-linecap="round"/>
-  <path d="M55 46 Q60 43.500 65 46" fill="none" stroke="#5a3820" stroke-width="2" stroke-linecap="round"/>
-  <path d="M36 50.500 Q40 53.500 44 50.500" fill="none" stroke="#2a1a14" stroke-width="2.200" stroke-linecap="round"/>
-  <path d="M56 50.500 Q60 53.500 64 50.500" fill="none" stroke="#2a1a14" stroke-width="2.200" stroke-linecap="round"/>
-  <path d="M50 51 L48 60 Q50 61.500 52 60" fill="none" stroke="#cf9d83" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- the teardrop tattoo under his left eye -->
-  <path d="M39.500 55 C37 58.500 37 61.500 39.500 61.500 C42 61.500 42 58.500 39.500 55 Z" fill="#2f6fdb"/>
+  <rect width="100" height="100" fill="#e079cf"/>
+  <g fill="none" stroke="#fff" stroke-width="2.400" opacity="0.92"><circle cx="50" cy="52" r="10"/><circle cx="50" cy="52" r="17"/><circle cx="50" cy="52" r="24"/><circle cx="50" cy="52" r="31"/><circle cx="50" cy="52" r="38"/><circle cx="50" cy="52" r="45"/><circle cx="50" cy="52" r="52"/><circle cx="50" cy="52" r="59"/><circle cx="50" cy="52" r="66"/><circle cx="50" cy="52" r="73"/><circle cx="50" cy="52" r="80"/><circle cx="50" cy="52" r="87"/><circle cx="50" cy="52" r="94"/></g>
   <!-- halo -->
-  <ellipse cx="50" cy="17" rx="19" ry="5.500" fill="none" stroke="#fff3bf" stroke-width="5" opacity="0.5"/>
-  <ellipse cx="50" cy="17" rx="19" ry="5.500" fill="none" stroke="#ffd34d" stroke-width="3.200"/>
+  <ellipse cx="50" cy="12.500" rx="20" ry="5.500" fill="none" stroke="#2a1722" stroke-width="6"/>
+  <ellipse cx="50" cy="12.500" rx="20" ry="5.500" fill="none" stroke="#ffd34d" stroke-width="3"/>
+  <!-- robe showing between the falls of hair -->
+  <path d="M26 100 C28 84 38 76 50 76 C62 76 72 84 74 100 Z" fill="#f6efe4" stroke="#2a1722" stroke-width="2"/>
+  <path d="M38 82 L50 100 L62 82" fill="none" stroke="#2a1722" stroke-width="1.600" stroke-linejoin="round"/>
+  <!-- long dark hair with blue highlights -->
+  <path d="M50 17 C30 17 21 33 21 52 C21 66 14 78 6 92 L4 100 L33 100 C35 90 40 83 50 82 C60 83 65 90 67 100 L96 100 L94 92 C86 78 79 66 79 52 C79 33 70 17 50 17 Z" fill="#2a1722"/>
+  <g fill="none" stroke="#3f5fe0" stroke-width="2.400" stroke-linecap="round">
+    <path d="M44 20 C32 22 24 34 24 50 C24 62 18 74 12 88"/>
+    <path d="M56 20 C68 22 76 34 76 50 C76 62 82 74 88 88"/>
+    <path d="M36 24 C28 30 26 40 27 52"/>
+    <path d="M64 24 C72 30 74 40 73 52"/>
+    <path d="M18 70 C16 78 12 86 8 94"/>
+    <path d="M82 70 C84 78 88 86 92 94"/>
+  </g>
+  <!-- face -->
+  <path d="M30 46 C30 33 38 27 50 27 C62 27 70 33 70 46 C70 63 62 72 50 74 C38 72 30 63 30 46 Z" fill="#ea9680" stroke="#2a1722" stroke-width="2"/>
+  <g clip-path="url(#faceclip)">
+    <path d="M50 24 L74 24 L74 80 L52 80 C58 70 56 60 58 50 C60 40 56 32 50 24 Z" fill="url(#dots)"/>
+    <path d="M30 30 L40 30 C36 40 36 52 40 62 L30 62 Z" fill="url(#dots)"/>
+  </g>
+  <!-- hair falling over the forehead -->
+  <path d="M29 48 C26 30 38 22 50 22 C62 22 74 30 71 48 C70 40 66 34 60 32 C54 31 50 28 49 24 C47 29 42 32 36 34 C31 37 29.500 42 29 48 Z" fill="#2a1722"/>
+  <path d="M44 25 C40 29 34 31 31 38 M56 25 C60 29 66 31 69 38" fill="none" stroke="#3f5fe0" stroke-width="1.600" stroke-linecap="round"/>
+  <!-- eyes looking up -->
+  <path d="M33 45 Q39 41 45 45" fill="none" stroke="#2a1722" stroke-width="2.600" stroke-linecap="round"/>
+  <path d="M55 45 Q61 41 67 45" fill="none" stroke="#2a1722" stroke-width="2.600" stroke-linecap="round"/>
+  <path d="M34.500 48 Q39 44.500 44 48 Q39 52 34.500 48 Z" fill="#fff" stroke="#2a1722" stroke-width="1.400" stroke-linejoin="round"/>
+  <path d="M56 48 Q61 44.500 65.500 48 Q61 52 56 48 Z" fill="#fff" stroke="#2a1722" stroke-width="1.400" stroke-linejoin="round"/>
+  <circle cx="39" cy="46.300" r="2" fill="#3f5fe0"/>
+  <circle cx="61" cy="46.300" r="2" fill="#3f5fe0"/>
+  <circle cx="39" cy="46.300" r="0.800" fill="#2a1722"/>
+  <circle cx="61" cy="46.300" r="0.800" fill="#2a1722"/>
+  <!-- nose -->
+  <path d="M50 46 C48 52 46 56 46.500 59 C48 61 52 61 53.500 59 M46.500 59 Q50 57.500 53.500 59" fill="none" stroke="#2a1722" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- beard -->
+  <path d="M30 58 C28 72 32 80 36 84 L38 91 L42 85 L44 94 L48 87 L50 96 L53 87 L57 94 L59 85 L63 91 L64 84 C68 80 72 72 70 58 C66 64 60 66 56 65 Q50 62 44 65 C40 66 34 64 30 58 Z" fill="#2a1722"/>
+  <path d="M43 68 Q50 65.500 57 68 Q50 75 43 68 Z" fill="#f08a96" stroke="#2a1722" stroke-width="0.8"/>
+  <path d="M45 68.800 Q50 70.300 55 68.800" fill="none" stroke="#fff" stroke-width="1.300" stroke-linecap="round"/>
+  <!-- tattoos: a teardrop under the left eye, ticks on the brow -->
+  <path d="M39 53 C36 57 36 60.500 39 60.500 C42 60.500 42 57 39 53 Z" fill="#3f5fe0" stroke="#2a1722" stroke-width="1"/>
+  <g stroke="#2a1722" stroke-width="1.600" stroke-linecap="round"><path d="M45 35 V39"/><path d="M50 34 V38"/><path d="M55 35 V39"/></g>
+  <path d="M62 52 C64 56 64 60 62 63" fill="none" stroke="#2a1722" stroke-width="1.400" stroke-linecap="round"/>
 </g></svg>
