@@ -1914,3 +1914,11 @@
   line-height: 1.45;
   opacity: 0.75;
 }
+
+/* the key-check song pad's explanation: two short lines in place of the tempo row */
+.pad-panel__keynote {
+  flex: none;
+  max-height: calc(var(--cell) * 19);
+  overflow: hidden;
+  line-height: calc(var(--cell) * 9);
+}

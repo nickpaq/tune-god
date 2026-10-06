@@ -47,6 +47,8 @@ export interface Pad {
   is808?: boolean;
   /** Set on a pad that is one section of a chopped song: made from the song's pad, written to the export as a new pad with a pattern of its own. */
   section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Whole bars in the section. */ bars: number; /** The colour it was given in the chop editor, as a place in the selected palette. */ colorIndex?: number; /** The colour (hex) it was given in the chop editor, kept as it was: the section pads keep it whatever palette is chosen later. */ color?: string; /** Semitones the key picked on the piano moves it, written to Koala's pitch knob. */ pitch?: number };
+  /** Set on the original song that acapella mode puts on bank D's last pad: it is tuned like a melodic loop, and its pitch shift is also written to Koala's pitch knob on every chop. */
+  keyCheck?: boolean;
   /** Set on the pad Chopper mode makes: Koala's own chopper holding the whole sample, written to the export as one new pad with the slices in it. */
   chopper?: { sourceSampleId: number; slices: number; bpm: number; beatsPerBar: number; pitch: number; layout: { starts: number[]; sections: { slice: number; bars: number }[] }; color?: string };
   /** The tempo the file name states ("140bpm"), when it does: a loop of this tempo can be stretched to the project's. */
@@ -102,6 +104,7 @@ export function PadPanel({
   onTrim,
   onHoldStart,
   onHoldEnd,
+  note,
   onChange,
 }: {
   pad: Pad;
@@ -126,6 +129,8 @@ export function PadPanel({
   onHoldStart: () => void;
   /** The slider was let go: the sound and the tone stop. */
   onHoldEnd: () => void;
+  /** A line of explanation shown in place of the tempo row (the key-check song pad says what its tuning does). */
+  note?: string;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "stretch">>) => void;
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
@@ -157,7 +162,8 @@ export function PadPanel({
         </div>
       </div>
       <NameLine name={name} fileName={pad.name} />
-      {(pad.bpm || isLoopSound) && (
+      {note && <div className="pad-panel__keynote">{note}</div>}
+      {!note && (pad.bpm || isLoopSound) && (
         <div className="pad-panel__toggles pad-panel__tempo">
           <span aria-label="Tempo of the sound">{pad.bpm ? (pad.stretch ? `${pad.bpm}>${projectBpm}` : pad.bpm) : "--"} BPM</span>
           <button

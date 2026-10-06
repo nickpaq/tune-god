@@ -159,6 +159,10 @@ function limitPeak(channelData: Float32Array[]): Float32Array[] {
 
 /** A sample longer than this is flagged on import: samples this long make export very slow. */
 const MAX_SAMPLE_SECONDS = 60;
+/** The last pad of bank D holds the original song, and this is what it is called (in the app and in Koala). */
+const KEY_CHECK_LABEL = "check in tuner to verify key";
+const KEY_CHECK_SLOT = 63;
+const KEY_CHECK_NOTE = "Tuning this pad corrects the vocal once exported: it sets Koala's pitch knob on every chop.";
 /** Stable id of the chopper pad (above the section pads' ids). */
 const CHOPPER_ORIG_INDEX = 3500;
 
@@ -834,13 +838,19 @@ function App() {
     setChop({ mode: "chopper", song, vocals: song, beatsPerBar });
   };
 
+  /** The key-check song pad's total pitch shift (automatic tuning plus the trim): what every chop's Koala pitch knob is set to. Null when there is no such pad. */
+  const keyCheckShift = (): number | null => {
+    const pad = Object.values(latest.current.pads).find((p) => p.keyCheck);
+    return pad ? shiftFor(pad, latest.current.tunedTarget, a4, keyMajor) : null;
+  };
+
   /** The song sections as the export writes them: their pads, audio, bars, labels, colours and the tempo. */
   const songExportOf = (sectionPads: Pad[]): SongExport | undefined => {
     const sorted = [...sectionPads].sort((a, b) => a.section!.number - b.section!.number);
     if (!sorted.length) return undefined;
     // No bpm: acapella mode never touches the project's tempo (the sections are stretched to whatever it is). The key offset goes on every pad's pitch knob.
     return {
-      pitch: sorted[0].section!.pitch,
+      pitch: keyCheckShift() ?? sorted[0].section!.pitch,
       beatsPerBar: sorted[0].section!.beatsPerBar,
       sampleRate: sorted[0].sampleRate,
       sourceSampleId: sorted[0].section!.sourceSampleId,
@@ -981,9 +991,25 @@ function App() {
       const { song, vocals } = job;
       const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
       // The sections overwrite everything on bank D (the chop is the only thing that ever goes there).
-      const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => !inChopBank(p.index)));
-      const { pads: made } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(without), palette.colors);
-      const sections = made.map((p) => ({ ...p, section: { ...p.section!, pitch: offset } }));
+      // The original song goes on bank D's last pad, rendered in the picked key and tuned like a melodic loop. Its pitch shift is what every chop's pitch knob
+      // is set to (see keyCheckShift), so the key can be checked, and corrected, by ear on that one pad. Wherever the song was before, it moves there.
+      const minorPc = settings.key ? (settings.key.minor ? settings.key.pc : (settings.key.pc + 9) % 12) : null;
+      const songPad: Pad = {
+        ...song,
+        index: KEY_CHECK_SLOT,
+        category: "melodicLoop",
+        tune: true,
+        tuneLocked: true,
+        keyPc: undefined,
+        keyFromName: false,
+        detectedMidi: minorPc !== null ? 48 + minorPc : song.detectedMidi,
+        keyCheck: true,
+      };
+      const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => !inChopBank(p.index) && p.origIndex !== song.origIndex));
+      const withSong = { ...without, [KEY_CHECK_SLOT]: songPad };
+      const { pads: made } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(withSong), palette.colors);
+      const shift = shiftFor(songPad, cur.tunedTarget, a4, keyMajor);
+      const sections = made.map((p) => ({ ...p, section: { ...p.section!, pitch: shift } }));
       if (sections.length === 0) {
         window.alert("There are no sections to put on Bank D, so nothing was changed.");
         return;
@@ -1000,14 +1026,16 @@ function App() {
         return;
       }
       recordEdit();
-      const grid: Record<number, Pad> = { ...without };
+      const grid: Record<number, Pad> = { ...withSong };
       for (const section of sections) grid[section.index] = section;
       setPads(grid);
+      setHidden((prev) => Object.fromEntries(Object.entries(prev).filter(([, p]) => p.origIndex !== song.origIndex)));
       setSelected(null);
       setBank(3);
       setChop(null);
       setLongSamples([]);
-      setNotice(`${sections.length} chop${sections.length === 1 ? "" : "s"} on Bank D, stretched to the project's tempo.${pitchNote}`);
+      const pitched = Math.abs(shift) > 1e-6 ? ` Pitched ${shift > 0 ? "+" : ""}${shift} on Koala's pitch knob to match the key: check the song on the last pad.` : "";
+      setNotice(`${sections.length} chop${sections.length === 1 ? "" : "s"} on Bank D, stretched to the project's tempo.${pitched}`);
     } finally {
       chopping.current = false;
     }
@@ -1403,7 +1431,8 @@ function App() {
       const colors = new Map<number, { color: string; label: string }>();
       for (const p of allPads) {
         // The label is what the pad's caption says in the app, without its number.
-        if (p.category && numberedLabel(p)) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
+        if (p.keyCheck) colors.set(p.sampleId, { color: autoColorOf(p), label: KEY_CHECK_LABEL });
+        else if (p.category && numberedLabel(p)) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, { bpm: projectBpm, stretch, vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: sidechainActive, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport, chopper: chopperPad ? chopperExportOf(chopperPad) : undefined });
       downloadBlob(blob, filename);
@@ -1441,7 +1470,7 @@ function App() {
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
   const sectionLabel = (p: Pad): string => `${CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
-  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.chopper ? "Chopper" : p.section ? sectionLabel(p) : (numberedLabel(p)?.label ?? padLabel(p)));
+  const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.chopper ? "Chopper" : p.keyCheck ? KEY_CHECK_LABEL : p.section ? sectionLabel(p) : (numberedLabel(p)?.label ?? padLabel(p)));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   const hasProject = Object.keys(pads).length > 0 || Object.keys(hidden).length > 0;
   /** The 16 pads of a bank as the sequencer shows them: the app's own labels and colours, or null where there is no sound. */
@@ -1486,6 +1515,7 @@ function App() {
       }
       relative={refRelative}
       onRelative={setRefRelative}
+      note={selectedPad.keyCheck ? KEY_CHECK_NOTE : undefined}
       projectBpm={projectBpm}
       onTrim={moveTrim}
       onHoldStart={startMatch}
@@ -1544,6 +1574,7 @@ function App() {
     if (!pad) return "";
     if (pad.section) return `${CATEGORIES[categoryIndex("vox")].short} ${pad.section.number}`;
     if (pad.chopper) return "Chopper";
+    if (pad.keyCheck) return KEY_CHECK_LABEL;
     if (pad.placeholder || pad.ghost) return labelOf(pad);
     return isReal(pad) && pad.category ? (numberedLabel(pad)?.caption ?? CATEGORIES[categoryIndex(pad.category)].short) : "";
   };
@@ -2089,7 +2120,7 @@ function App() {
             pad={chop.song}
             palette={palette}
             beatsPerBar={chop.beatsPerBar}
-            freeSlots={chop.mode === "chopper" ? CHOPPER_MAX_SLICES - 2 : PADS_PER_BANK}
+            freeSlots={chop.mode === "chopper" ? CHOPPER_MAX_SLICES - 2 : PADS_PER_BANK - 1}
             unit={chop.mode === "chopper" ? "chop" : "pattern"}
             onConfirm={(settings) => chopSong(chop, settings)}
             onClose={() => setChop(null)}
