@@ -18,7 +18,7 @@
   html, body { position: fixed; top: 0; left: 0; right: 0; height: 100%; overflow: hidden; }
   body { font: 600 12px/1.45 ui-monospace, Menlo, monospace; display: flex; flex-direction: column; gap: 8px; padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px calc(env(safe-area-inset-bottom, 0px) + 8px); }
   #panel { white-space: pre; background: #000; border-radius: 8px; padding: 8px 10px; color: #eef2ec; }
-  .opts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   label { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #9a968b; letter-spacing: .08em; text-transform: uppercase; }
   select, button.small { font: 600 13px ui-monospace, Menlo, monospace; color: #dcd8cc; background: #3c3e43; border: 0; border-radius: 6px; padding: 8px 6px; }
   #pad { flex: 1; min-height: 0; border: 0; border-radius: 14px; font: 700 26px/1.2 ui-monospace, Menlo, monospace; color: #14151a; background: #ff8a4c; touch-action: none; -webkit-tap-highlight-color: transparent; }
@@ -30,6 +30,7 @@
 <body>
 <div id="panel">starting...</div>
 <div class="opts">
+  <label>Sound<select id="snd"><option value="click">click</option><option value="tick">hat tick</option><option value="snap">rim snap</option><option value="kick">short kick</option><option value="blip">blip 2k</option><option value="impulse">impulse</option><option value="thump">click + thump</option></select></label>
   <label>Fires on<select id="evt"><option value="pointerdown">pointerdown</option><option value="touchstart">touchstart</option><option value="click">click</option></select></label>
   <label>Latency hint<select id="hint"><option value="interactive">interactive</option><option value="balanced">balanced</option><option value="playback">playback</option></select></label>
   <label>Audio session<select id="sess"><option value="playback">playback</option><option value="auto">auto</option></select></label>
@@ -39,19 +40,27 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const pad = $("pad"), panel = $("panel"), evtSel = $("evt"), hintSel = $("hint"), sessSel = $("sess");
-  let ctx = null, buf = null, hits = 0, jsSum = 0, jsLast = 0, jsMax = 0, boundEvt = null, boundFn = null;
+  const pad = $("pad"), panel = $("panel"), evtSel = $("evt"), hintSel = $("hint"), sessSel = $("sess"), sndSel = $("snd");
+  let ctx = null, bufs = null, hits = 0, jsSum = 0, jsLast = 0, jsMax = 0, boundEvt = null, boundFn = null;
 
-  // A click (1 ms of noise at full level) on top of a short 90 Hz thump: a sharp start is easy to find in a waveform.
-  function makeBuffer(sr) {
-    const n = Math.round(sr * 0.25), b = ctx.createBuffer(1, n, sr), d = b.getChannelData(0);
-    for (let i = 0; i < n; i++) {
-      const t = i / sr;
-      let v = Math.sin(2 * Math.PI * 90 * t) * Math.exp(-t * 30) * 0.8;
-      if (t < 0.003) v += (Math.random() * 2 - 1) * (1 - t / 0.003);
-      d[i] = Math.max(-1, Math.min(1, v * 0.9));
-    }
-    return b;
+  // Very short sounds that start at full level on the first sample (no fade in), so the onset is easy to find in a recording.
+  function makeBuffers(sr) {
+    const make = (seconds, fn) => {
+      const n = Math.max(2, Math.round(sr * seconds)), b = ctx.createBuffer(1, n, sr), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.max(-1, Math.min(1, fn(i / sr, i)));
+      return b;
+    };
+    const noise = () => Math.random() * 2 - 1;
+    let prev = 0;
+    return {
+      click: make(0.012, (t) => noise() * Math.exp(-t * 400)),
+      tick: make(0.04, (t) => { const n = noise(); const v = n - prev; prev = n; return v * 0.8 * Math.exp(-t * 150); }),
+      snap: make(0.06, (t) => (Math.sin(2 * Math.PI * 1800 * t + 1.5708) * 0.6 + noise() * 0.5) * Math.exp(-t * 90)),
+      kick: make(0.12, (t) => Math.cos(2 * Math.PI * (50 * t + 100 * (1 - Math.exp(-t * 40)) / 40)) * Math.exp(-t * 35)),
+      blip: make(0.03, (t) => Math.cos(2 * Math.PI * 2000 * t) * Math.exp(-t * 120)),
+      impulse: make(0.005, (t, i) => (i < 2 ? 1 : 0)),
+      thump: make(0.25, (t) => { let v = Math.sin(2 * Math.PI * 90 * t) * Math.exp(-t * 30) * 0.8; if (t < 0.003) v += noise() * (1 - t / 0.003); return v * 0.9; }),
+    };
   }
 
   async function setup() {
@@ -60,7 +69,7 @@
     }
     if (ctx) { try { await ctx.close(); } catch (e) { /* already closed */ } }
     ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: hintSel.value });
-    buf = makeBuffer(ctx.sampleRate);
+    bufs = makeBuffers(ctx.sampleRate);
     try { await ctx.resume(); } catch (e) { /* needs a touch */ }
     // warm up: one silent start so the first real hit is not the first start
     const s = ctx.createBufferSource();
@@ -77,7 +86,7 @@
   function hit(e) {
     if (!ctx || ctx.state !== "running") { if (ctx) ctx.resume(); return; }
     const src = ctx.createBufferSource();
-    src.buffer = buf;
+    src.buffer = bufs[sndSel.value];
     src.connect(ctx.destination);
     src.start();
     const now = performance.now();
