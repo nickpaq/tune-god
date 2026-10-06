@@ -16,6 +16,8 @@ export interface SavedPad {
   category?: CategoryId;
   /** A bass sound that is an 808 (see Pad.is808). */
   is808?: boolean;
+  /** The Tune screen's Stretch key was on for this loop (see Pad.stretch). */
+  stretch?: boolean;
   /** Knob level of a sample pack sound (see Pad.knobDb). */
   knobDb?: number;
   /** Where the sound sits now, if the user moved it. Pads are keyed by their original slot. */
@@ -57,6 +59,8 @@ export interface SavedState {
   tunedTarget?: number | null;
   /** The key picked on the piano is a major key (the Tune screen's switch); the default is a minor key. */
   keyMajor?: boolean;
+  /** The project tempo (the menu's BPM). */
+  bpm?: number;
   pads?: Record<number, SavedPad>;
   /** Finger-drumming layout chosen in the menu (kept across projects). */
   layoutId?: string;

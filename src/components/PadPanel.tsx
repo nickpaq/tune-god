@@ -47,6 +47,10 @@ export interface Pad {
   is808?: boolean;
   /** Set on a pad that is one section of a chopped song: made from the song's pad, written to the export as a new pad with a pattern of its own. */
   section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Whole bars in the section. */ bars: number; /** The colour it was given in the chop editor, as a place in the selected palette. */ colorIndex?: number; /** The colour (hex) it was given in the chop editor, kept as it was: the section pads keep it whatever palette is chosen later. */ color?: string };
+  /** The tempo the file name states ("140bpm"), when it does: a loop of this tempo can be stretched to the project's. */
+  bpm?: number;
+  /** The loop is stretched from its own tempo to the project tempo (written to the export as Koala's stretch). */
+  stretch?: boolean;
   tune: boolean;
   /** A key chosen for this pad alone ("Tune one"); it overrides the project key. */
   keyPc?: number;
@@ -69,6 +73,7 @@ export function PadPanel({
   chords,
   relative,
   onRelative,
+  projectBpm,
   onTrim,
   onHoldStart,
   onHoldEnd,
@@ -86,17 +91,20 @@ export function PadPanel({
   /** The reference is the relative key's chord (picked with the squares shown while the slider is dragged up). */
   relative: boolean;
   onRelative: (relative: boolean) => void;
+  /** The project tempo: what a stretched loop goes to. */
+  projectBpm: number;
   /** The pitch slider moved: the pad's pitch trim, in cents. */
   onTrim: (cents: number) => void;
   /** The slider was grabbed: the pad loops with a tone on the key, until it is let go. */
   onHoldStart: () => void;
   /** The slider was let go: the sound and the tone stop. */
   onHoldEnd: () => void;
-  onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
+  onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "stretch">>) => void;
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
   const total = autoShift + trim / 100;
   const isLoop = chords !== null;
+  const isLoopSound = pad.category === "melodicLoop" || pad.category === "drumLoop";
   /** The two squares (minor left, major right) are shown while the slider is dragged up. */
   const [above, setAbove] = useState(false);
   const boxes = useRef<(HTMLDivElement | null)[]>([]);
@@ -121,6 +129,20 @@ export function PadPanel({
           <div>Shift {pad.tune ? formatTrim(total * 100) : "0.000"}st</div>
         </div>
       </div>
+      {(pad.bpm || isLoopSound) && (
+        <div className="pad-panel__toggles pad-panel__tempo">
+          <span aria-label="Tempo of the sound">{pad.bpm ? (pad.stretch ? `${pad.bpm}>${projectBpm}` : pad.bpm) : "--"} BPM</span>
+          <button
+            className={`tune-toggle${pad.stretch ? " tune-toggle--on" : ""}`}
+            disabled={!pad.bpm}
+            onClick={() => onChange({ stretch: !pad.stretch })}
+            aria-pressed={!!pad.stretch}
+            title="Stretch the loop from its own tempo (from its file name) to the project tempo, without changing its pitch. Needs a tempo in the file name."
+          >
+            Stretch
+          </button>
+        </div>
+      )}
 
       <Waveform channelData={pad.channelData} />
 

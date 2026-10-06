@@ -5,7 +5,7 @@ import type { ParsedKoalaProject } from "./koalaProject";
 
 /** Koala's sequencer resolution: ticks in one beat (see docs/koala-mixer-reference.md). */
 export const TICKS_PER_BEAT = 4096;
-const SEQUENCE_SLOTS = 32;
+export const SEQUENCE_SLOTS = 32;
 
 /**
  * How Koala stores the length a stretched pad is stretched to, in `pad.stretchLength`: in BEATS, not bars. Read from a project with one pad set to
@@ -62,7 +62,7 @@ export function songTemplate(samplerJson: any, sourceSampleId: number): SongTemp
 }
 
 /** A pattern slot as Koala writes it when nothing is recorded. */
-const emptySequence = () => ({ lastViewedPath: "", noteSequence: { pattern: { notes: null, numBars: 1 } }, parameterSequences: null });
+export const emptySequence = () => ({ lastViewedPath: "", noteSequence: { pattern: { notes: null, numBars: 1 } }, parameterSequences: null });
 
 const isEmpty = (seq: any) => !Array.isArray(seq?.noteSequence?.pattern?.notes) || seq.noteSequence.pattern.notes.length === 0;
 

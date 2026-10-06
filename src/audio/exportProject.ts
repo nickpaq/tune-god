@@ -5,7 +5,7 @@ import type { ParsedKoalaProject } from "./koalaProject";
 import type { MasterStyle } from "./mixPresets";
 import { appendAfterExisting, bassSidechain, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
-import { addSongSections, songTemplate, type SongExport } from "./exportSong";
+import { addSongSections, emptySequence, SEQUENCE_SLOTS, songTemplate, type SongExport } from "./exportSong";
 
 /** A ghost snare or soft kick the layout adds: a quieter copy of another pad, written as its own sample. */
 export interface GhostPadExport {
@@ -57,7 +57,9 @@ export async function buildTunedKoala(
     playback,
     ghosts,
     song,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; ghosts?: GhostPadExport[]; song?: SongExport } = {},
+    bpm,
+    stretch,
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; ghosts?: GhostPadExport[]; song?: SongExport; bpm?: number; stretch?: Map<number, number> } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -76,6 +78,12 @@ export async function buildTunedKoala(
       if (play.oneShot !== undefined) pad.oneshot = typeof pad.oneshot === "boolean" ? play.oneShot : String(play.oneShot);
       if (play.release !== undefined) pad.release = play.release;
       if (play.eq) applyPadEq(pad, play.eq);
+    }
+    const beats = stretch?.get(pad.sampleId);
+    if (beats !== undefined) {
+      // Koala writes some booleans as strings; keep whichever style the pad already uses.
+      pad.stretching = typeof pad.stretching === "string" ? "true" : true;
+      pad.stretchLength = beats;
     }
     const tint = colors?.get(pad.sampleId);
     if (tint) {
@@ -110,6 +118,7 @@ export async function buildTunedKoala(
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
   if (song?.sections.length) await addSongSections(project, samplerJson, song, template);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
+  if (bpm !== undefined) await writeBpm(project, bpm);
   if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, melodicEq: sidechain, master: masterChain, masterStyle });
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
@@ -136,6 +145,14 @@ function applyPadEq(pad: any, eq: PadEq): void {
   const base = { enabled: "true", lo: { type: "highpass", freq: 20, gain: -18, q: 1 }, mid: { type: "peaking", freq: 1000, gain: 0, q: 1 }, hi: { type: "highshelf", freq: 8000, gain: 0, q: 1 } };
   const cur = pad.eq ?? base;
   pad.eq = { ...base, ...cur, enabled: typeof cur.enabled === "boolean" ? true : "true", lo: { ...base.lo, ...cur.lo, freq: eq.highpassHz }, hi: { ...base.hi, ...cur.hi, ...(eq.highShelfDb !== undefined ? { gain: eq.highShelfDb } : {}) } };
+}
+
+/** The project tempo, in sequence.json (a project that has none gets Koala's default settings around it). */
+export async function writeBpm(project: ParsedKoalaProject, bpm: number): Promise<void> {
+  const entry = project.zip.file("sequence.json");
+  const sequence = entry ? JSON.parse(await entry.async("string")) : { autoPlay: "next", beatsPerBar: 4, currSequenceId: 0, quantizeDivision: 16, quantizing: true, seqSnap: "Sequence", sequences: Array.from({ length: SEQUENCE_SLOTS }, emptySequence), swing: 0 };
+  sequence.bpm = bpm;
+  project.zip.file("sequence.json", JSON.stringify(sequence));
 }
 
 /** A mixer strip as Koala writes it: five empty effect slots, unmuted, at 0 dB. */

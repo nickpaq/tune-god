@@ -469,60 +469,37 @@ function PatternPage() {
   );
 }
 
-function TempoPage({ bpm, onBpm }: { bpm: number; onBpm: (v: number) => void }) {
+function TempoPage({ bpm }: { bpm: number }) {
+  // The tempo itself is the project's (menu): this page only shows it. Quantize, swing and humanize are interface only, wired up later.
   const [swing, setSwing] = useState(0);
+  const [humanize, setHumanize] = useState(0);
   const [quantize, setQuantize] = useState(true);
   const [metronome, setMetronome] = useState(false);
   const [autoEnable, setAutoEnable] = useState(false);
-  const digits = String(bpm).padStart(3, "0").split("").map(Number);
-  /** Dragging a column up or down steps its digit; one step per 28 pixels. */
-  const stepColumn = (place: number) => {
-    let start = 0;
-    let base = bpm;
-    return {
-      onPointerDown: (e: PointerEvent<HTMLDivElement>) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        start = e.clientY;
-        base = bpm;
-      },
-      onPointerMove: (e: PointerEvent<HTMLDivElement>) => {
-        if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-        const steps = Math.round((start - e.clientY) / 28);
-        onBpm(Math.min(300, Math.max(20, base + steps * 10 ** place)));
-      },
-    };
-  };
   return (
     <div className="s-page s-page--tempo">
-      <section className="screen s-screen s-screen--wheel" aria-label="Tempo">
+      <section className="screen s-screen s-screen--bar" aria-label="Timing">
         <div className="oled">
           <div className="oled__head">
-            <span>Tempo</span>
-            <span>BPM</span>
-          </div>
-          <div className="s-wheel">
-            {digits.map((d, i) => (
-              <div key={i} className="s-wheel__col" {...stepColumn(2 - i)}>
-                <span>{(d + 9) % 10}</span>
-                <span className="cur">{d}</span>
-                <span>{(d + 1) % 10}</span>
-              </div>
-            ))}
+            <span>Timing</span>
+            <span>{bpm} BPM</span>
           </div>
         </div>
       </section>
-      <button type="button" className="s-tap">
-        Tap
-      </button>
       <div className="s-group">
+        <div className="s-row">
+          <span>Quantize</span>
+          <SwitchKey label="Quantize" on={quantize} onChange={setQuantize} />
+        </div>
         <div className="s-row">
           <span className="s-row__label">Swing</span>
           <Slider value={swing} onChange={setSwing} label="Swing" />
           <span className="s-readout">{Math.round(swing * 100)}%</span>
         </div>
         <div className="s-row">
-          <span>Quantize</span>
-          <SwitchKey label="Quantize" on={quantize} onChange={setQuantize} />
+          <span className="s-row__label">Humanize</span>
+          <Slider value={humanize} onChange={setHumanize} label="Humanize" />
+          <span className="s-readout">{Math.round(humanize * 100)}%</span>
         </div>
       </div>
       <div className="s-group">
@@ -919,12 +896,11 @@ function EditPage({ pad, slotName }: { pad: SeqPad | null; slotName: string }) {
 
 /** ---- the whole sequencer screen ---- */
 
-export function SeqScreen({ padsOfBank, soundsFor, onBack }: { padsOfBank: (bank: number) => (SeqPad | null)[]; soundsFor: (bank: number, slot: number) => ReactNode; onBack: () => void }) {
+export function SeqScreen({ bpm, padsOfBank, soundsFor, onBack }: { /** The project tempo (set in the menu). */ bpm: number; padsOfBank: (bank: number) => (SeqPad | null)[]; soundsFor: (bank: number, slot: number) => ReactNode; onBack: () => void }) {
   const [page, setPage] = useState<SeqPage>("play");
   const [bank, setBank] = useState(0);
   const [selected, setSelected] = useState(15);
   const [hit, setHit] = useState<number | null>(null);
-  const [bpm, setBpm] = useState(85);
   const [playing, setPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
   const [looping, setLooping] = useState(true);
@@ -963,7 +939,7 @@ export function SeqScreen({ padsOfBank, soundsFor, onBack }: { padsOfBank: (bank
         {page === "vel" && <VelocityPage />}
         {page === "pattern" && <PatternPage />}
         {page === "keys" && <KeysPage />}
-        {page === "tempo" && <TempoPage bpm={bpm} onBpm={setBpm} />}
+        {page === "tempo" && <TempoPage bpm={bpm} />}
         {page === "mixer" && <MixerPage bank={bank} onBank={setBank} />}
         {page === "edit" && <EditPage pad={pads[selected]} slotName={slotName} />}
         {page === "sounds" && <SoundsPage list={soundsFor(bank, selected)} slotName={slotName} />}

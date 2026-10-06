@@ -430,6 +430,17 @@
   text-transform: inherit;
 }
 
+.tune-toggle:disabled {
+  opacity: 0.4;
+}
+
+.pad-panel__tempo {
+  flex: none;
+  align-items: center;
+  gap: calc(var(--cell) * 4);
+  white-space: nowrap;
+}
+
 .tune-toggle--on {
   background: var(--oled);
   color: #000;

@@ -6,7 +6,7 @@ Status: UI drawn and built (not connected to audio or patterns yet). The drawing
 
 A fourth mode key (TUNE, TYPE, SWAP, **SEQ**). Pressing it swaps the whole screen for the sequencer (transport, pattern strip, pads, banks, bottom nav). The **Back** key, first in the transport row where Koala has Stop, returns to the other modes. It edits the same pads and the same four banks as the rest of the app, and writes patterns into `sequence.json` in the Koala export, so what is played in the app is what Koala loads.
 
-Pages (bottom nav and transport): **Play** (pads + OLED readout), **Vel** (default and live-play velocity, input quantize), **Pattern** (patterns 1 to 4, length, clear, double, step mode, erase, mute, undo, redo, history), **Edit** (the selected pad: tune, gain, pan, one-shot, choke, reverse, colour), **Sounds** (the hot-swap list), plus **Tempo** (BPM wheel, tap, swing, quantize, metronome) and **Mixer** (four bank strips, FX1/FX2 sends, mute) from the transport row. Bank D in SEQ is the keys page (piano on the selected pad), as in Koala.
+Pages (bottom nav and transport): **Play** (pads + OLED readout), **Vel** (default and live-play velocity, input quantize), **Pattern** (patterns 1 to 4, length, clear, double, step mode, erase, mute, undo, redo, history), **Edit** (the selected pad: tune, gain, pan, one-shot, choke, reverse, colour), **Sounds** (the hot-swap list), plus **Tempo** (timing: quantize, swing, humanize, metronome; the BPM is the project BPM from the menu) and **Mixer** (four bank strips, FX1/FX2 sends, mute) from the transport row. Bank D in SEQ is the keys page (piano on the selected pad), as in Koala.
 
 ## 2. Safe areas
 

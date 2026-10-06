@@ -308,10 +308,6 @@
   height: calc(var(--c) * 10 + 4cqw);
 }
 
-.seq .s-screen--wheel {
-  height: calc(var(--c) * 12 + var(--c) * 66 + 4cqw);
-}
-
 .seq .s-screen--fill {
   flex: 1;
 }
@@ -673,56 +669,6 @@
 
 .s-mx i.h {
   background: #46c3cf;
-}
-
-/* tempo */
-.s-wheel {
-  flex: 1;
-  display: flex;
-  align-items: center;
-}
-
-.s-wheel__col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-size: calc(var(--c) * 16);
-  line-height: 1;
-  touch-action: none;
-}
-
-.s-wheel__col span {
-  height: calc(var(--c) * 22);
-  display: grid;
-  place-items: center;
-  width: 100%;
-  opacity: 0.22;
-}
-
-.s-wheel__col span.cur {
-  opacity: 1;
-  border-top: var(--cl, 1px) solid rgba(238, 242, 236, 0.4);
-  border-bottom: var(--cl, 1px) solid rgba(238, 242, 236, 0.4);
-}
-
-.s-tap {
-  flex: none;
-  height: calc(var(--px) * 84);
-  border: 0;
-  border-radius: calc(var(--px) * 8);
-  color: var(--ink);
-  font: 600 calc(var(--px) * 26)/1 "Barlow Semi Condensed", sans-serif;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  background: linear-gradient(180deg, var(--key-hi), var(--key));
-  box-shadow: 0 calc(var(--px) * 3) 0 var(--key-edge), 0 calc(var(--px) * 5) calc(var(--px) * 8) rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  touch-action: manipulation;
-}
-
-.s-tap:active {
-  transform: translateY(calc(var(--px) * 2));
-  box-shadow: inset 0 calc(var(--px) * 2) calc(var(--px) * 4) rgba(0, 0, 0, 0.35), 0 1px 0 var(--key-edge);
 }
 
 /* mixer */

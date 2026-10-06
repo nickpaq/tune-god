@@ -201,6 +201,9 @@ function App() {
   const [tunedTarget, setTunedTarget] = useState<number | null>(saved.tunedTarget ?? null);
   /** The key picked on the piano is a major key (its melodic loops go to the relative minor a minor third below) instead of the default minor key. */
   const [keyMajor, setKeyMajor] = useState(saved.keyMajor ?? false);
+  /** The project's tempo: the menu edits it, the Tune screen's stretch button and the sequencer's tempo read it, and the export writes it to the project's sequence. */
+  const [projectBpm, setProjectBpm] = useState(saved.bpm ?? 120);
+  const [bpmText, setBpmText] = useState(String(saved.bpm ?? 120));
   const [projectName, setProjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
@@ -319,6 +322,11 @@ function App() {
         setBank(Math.min(3, Math.floor(project.pads[0].pad / 16)));
         void saveProjectFile(file);
         saveState({ pads: {} });
+        // The project's own tempo becomes the project tempo.
+        const { bpm } = await projectTimeSignature(project);
+        if (token !== loadToken.current) return;
+        setProjectBpm(bpm);
+        setBpmText(String(bpm));
       }
       setProjectName(project.originalName.replace(/\.koala$/i, ""));
 
@@ -361,8 +369,8 @@ function App() {
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
-          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined }))
-          .then(({ midi: detectedMidi, category: guessed, detail, centroid }) => {
+          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null }))
+          .then(({ midi: detectedMidi, category: guessed, detail, centroid, bpm }) => {
             if (token !== loadToken.current) return;
             const category = categoryHints.current[ref.pad] ?? guessed;
             const remembered = restorePads.current[ref.pad];
@@ -372,6 +380,7 @@ function App() {
               detectedMidi,
               detail,
               centroid,
+              bpm: bpm ?? undefined,
               ...(remembered
                 ? {
                     tune: remembered.tune,
@@ -379,6 +388,7 @@ function App() {
                     keyPc: remembered.keyPc,
                     semis: remembered.semis,
                     cents: remembered.cents,
+                    stretch: remembered.stretch,
                     category: cat,
                   }
                 : { category }),
@@ -431,8 +441,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor });
-  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor]);
+    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
+  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -449,11 +459,12 @@ function App() {
         category: p.category,
         knobDb: p.knobDb,
         is808: p.is808,
+        stretch: p.stretch,
         position: p.index,
       };
     }
     for (const p of Object.values(hidden)) {
-      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, hidden: true };
+      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, stretch: p.stretch, hidden: true };
     }
     // Sounds the user deleted stay deleted when the project is reopened.
     for (const ref of projectRef.current?.pads ?? []) {
@@ -613,10 +624,10 @@ function App() {
       for (const pad of fresh) {
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.name, pad.category === "melodicLoop")
-          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined }))
-          .then(({ midi: detectedMidi, detail, centroid }) => {
+          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null }))
+          .then(({ midi: detectedMidi, detail, centroid, bpm }) => {
             if (token !== loadToken.current) return;
-            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
+            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, bpm: bpm ?? undefined, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
             setPads((prev) => {
               const at = Object.keys(prev).find((k) => prev[Number(k)].origIndex === pad.origIndex);
               return at === undefined ? prev : { ...prev, [Number(at)]: analysed(prev[Number(at)]) };
@@ -714,6 +725,13 @@ function App() {
     if (!next || analyzing > 0) return;
     past.current.push(latest.current);
     restore(next);
+  };
+
+  /** Sets the project tempo (the menu, a project that was opened and a chopped song all come through here). */
+  const changeBpm = (bpm: number) => {
+    const clamped = Math.min(300, Math.max(20, Math.round(bpm * 100) / 100));
+    setProjectBpm(clamped);
+    setBpmText(String(clamped));
   };
 
   const patchPad = (index: number, patch: Partial<Pad>) => {
@@ -830,6 +848,8 @@ function App() {
       const grid: Record<number, Pad> = { ...without };
       for (const section of sections) grid[section.index] = section;
       setPads(grid);
+      // The song's tempo is the project's tempo now: the sections are stretched to it.
+      changeBpm(settings.bpm);
       setSelected(null);
       setBank(3);
       setChop(null);
@@ -1220,12 +1240,17 @@ function App() {
       }
       // The pads the loaders made (Kick 1, Snare 2, Loop 3...) are written with the colour and label they show in the app; a sound from a project that was
       // opened keeps the colour and label it already had.
+      // A stretched loop is written with Koala's stretch, as long (in beats) as it is at its own tempo; Koala then plays it at the project's tempo.
+      const stretch = new Map<number, number>();
+      for (const p of allPads) {
+        if (p.stretch && p.bpm) stretch.set(p.sampleId, Math.max(1, Math.round((p.channelData[0].length / p.sampleRate) * (p.bpm / 60))));
+      }
       const colors = new Map<number, { color: string; label: string }>();
       for (const p of allPads) {
         // The label is what the pad's caption says in the app, without its number.
         if (p.category && numberedLabel(p)) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: sidechainActive, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { bpm: projectBpm, stretch, vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: sidechainActive, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);
@@ -1301,6 +1326,7 @@ function App() {
       }
       relative={refRelative}
       onRelative={setRefRelative}
+      projectBpm={projectBpm}
       onTrim={moveTrim}
       onHoldStart={startMatch}
       onHoldEnd={stopMatch}
@@ -1443,6 +1469,24 @@ function App() {
         />
         {menuOpen && (
           <div className="menu">
+            <label className="menu__a4">
+              Project BPM
+              <input
+                type="number"
+                inputMode="decimal"
+                min={20}
+                max={300}
+                step={1}
+                value={bpmText}
+                onChange={(e) => {
+                  setBpmText(e.target.value);
+                  const bpm = parseFloat(e.target.value);
+                  if (Number.isFinite(bpm) && bpm >= 20 && bpm <= 300) setProjectBpm(bpm);
+                }}
+                onBlur={() => setBpmText(String(projectBpm))}
+                aria-label="Project BPM"
+              />
+            </label>
             <button
               className="menu__button menu__button--primary"
               disabled={!canExport}
@@ -1602,7 +1646,7 @@ function App() {
         )}
 
         {seqOpen ? (
-          <SeqScreen padsOfBank={seqPadsOfBank} soundsFor={(bank, slot) => (pads[bank * 16 + slot] ? swapListFor(pads[bank * 16 + slot]) : null)} onBack={() => setSeqOpen(false)} />
+          <SeqScreen bpm={projectBpm} padsOfBank={seqPadsOfBank} soundsFor={(bank, slot) => (pads[bank * 16 + slot] ? swapListFor(pads[bank * 16 + slot]) : null)} onBack={() => setSeqOpen(false)} />
         ) : (
         <>
         <div className="upper">
