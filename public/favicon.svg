@@ -1,33 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><clipPath id="r"><rect width="100" height="100" rx="22"/></clipPath><g clip-path="url(#r)">
   <defs>
+    <radialGradient id="sky" cx="50%" cy="44%" r="70%">
+      <stop offset="0" stop-color="#7a4fb0"/>
+      <stop offset="0.55" stop-color="#3a2468"/>
+      <stop offset="1" stop-color="#150d28"/>
+    </radialGradient>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#f7cf5a" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#f7cf5a" stop-opacity="0"/>
+      <stop offset="0" stop-color="#ffe08a" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffe08a" stop-opacity="0"/>
     </radialGradient>
   </defs>
-  <rect x="2.5" y="2.5" width="95" height="95" rx="22" fill="#18131e" stroke="#f4f1f7" stroke-width="3"/>
-  <!-- halo -->
-  <ellipse cx="50" cy="15" rx="30" ry="12" fill="url(#glow)"/>
-  <ellipse cx="50" cy="15" rx="21" ry="5.5" fill="none" stroke="#f7cf5a" stroke-width="4"/>
-  <!-- long, wavy brown hair behind the head -->
-  <path d="M50 25 C27 25 19 44 20 64 C21 76 15 84 11 90 C16 96 25 95 29 90 C30 94 33 97 38 97 L62 97 C67 97 70 94 71 90 C75 95 84 96 89 90 C85 84 79 76 80 64 C81 44 73 25 50 25 Z" fill="#6b4328" stroke="#3d2415" stroke-width="1.200" stroke-linejoin="round"/>
-  <path d="M25 62 C24 72 21 79 17 86 M31 68 C31 77 29 85 26 91 M75 68 C75 77 77 85 80 91 M69 62 C70 72 74 79 78 86" fill="none" stroke="#8a5a34" stroke-width="1.400" stroke-linecap="round"/>
+  <rect width="100" height="100" fill="url(#sky)"/>
+  <g fill="#ffd966" opacity="0.16"><path d="M50 46 L140.0 46.0 L138.9 60.1 Z"/><path d="M50 46 L134.6 76.8 L128.7 89.6 Z"/><path d="M50 46 L118.9 103.9 L109.0 113.9 Z"/><path d="M50 46 L95.0 123.9 L82.3 130.0 Z"/><path d="M50 46 L65.6 134.6 L51.6 136.0 Z"/><path d="M50 46 L34.4 134.6 L20.7 131.1 Z"/><path d="M50 46 L5.0 123.9 L-6.6 115.9 Z"/><path d="M50 46 L-18.9 103.9 L-27.1 92.4 Z"/><path d="M50 46 L-34.6 76.8 L-38.3 63.2 Z"/><path d="M50 46 L-40.0 46.0 L-38.9 31.9 Z"/><path d="M50 46 L-34.6 15.2 L-28.7 2.4 Z"/><path d="M50 46 L-18.9 -11.9 L-9.0 -21.9 Z"/><path d="M50 46 L5.0 -31.9 L17.7 -38.0 Z"/><path d="M50 46 L34.4 -42.6 L48.4 -44.0 Z"/><path d="M50 46 L65.6 -42.6 L79.3 -39.1 Z"/><path d="M50 46 L95.0 -31.9 L106.6 -23.9 Z"/><path d="M50 46 L118.9 -11.9 L127.1 -0.4 Z"/><path d="M50 46 L134.6 15.2 L138.3 28.8 Z"/></g>
+  <circle cx="50" cy="46" r="40" fill="url(#glow)" opacity="0.55"/>
+  <!-- robe -->
+  <path d="M10 100 C12 84 28 78 38 76 L62 76 C72 78 88 84 90 100 Z" fill="#f6f2ee"/>
+  <path d="M10 100 C12 84 24 79 33 77 L37 100 Z" fill="#c8362f"/>
+  <path d="M40 76 L50 90 L60 76 Z" fill="#e2b99a"/>
+  <!-- hair behind -->
+  <path d="M50 22 C30 22 22 38 23 56 C24 68 19 76 14 82 C20 88 30 86 34 80 L66 80 C70 86 80 88 86 82 C81 76 76 68 77 56 C78 38 70 22 50 22 Z" fill="#6a4128"/>
+  <path d="M27 60 C26 70 23 76 19 81 M73 60 C74 70 77 76 81 81" fill="none" stroke="#8d5c35" stroke-width="1.600" stroke-linecap="round"/>
   <!-- face -->
-  <ellipse cx="50" cy="56" rx="25" ry="29" fill="#f1cdb0"/>
-  <!-- beard, with a short point at the chin -->
-  <path d="M25.500 60 C26 74 34 82 44 86 L50 91 L56 86 C66 82 74 74 74.500 60 C71 67 64 69 58 68 Q50 65.500 42 68 C36 69 29 67 25.500 60 Z" fill="#7a4a2a" stroke="#3d2415" stroke-width="1.200" stroke-linejoin="round"/>
-  <path d="M44.500 74 Q50 76.500 55.500 74" fill="none" stroke="#e7a58f" stroke-width="2.200" stroke-linecap="round"/>
-  <!-- hair parted in the middle, falling to both sides -->
-  <path d="M25.500 56 C23 38 34 28 50 27 C66 28 77 38 74.500 56 C73 47 69 40 61 36 C56 34.500 52 34 50 32 C48 34 44 34.500 39 36 C31 40 27 47 25.500 56 Z" fill="#6b4328" stroke="#3d2415" stroke-width="1.200" stroke-linejoin="round"/>
-  <path d="M50 28 L50 33" fill="none" stroke="#3d2415" stroke-width="1.400" stroke-linecap="round"/>
-  <!-- brows, eyes, nose -->
-  <path d="M33 47.500 Q39 45 45 47.500" fill="none" stroke="#6b4328" stroke-width="2.400" stroke-linecap="round"/>
-  <path d="M55 47.500 Q61 45 67 47.500" fill="none" stroke="#6b4328" stroke-width="2.400" stroke-linecap="round"/>
-  <circle cx="39" cy="53" r="3.200" fill="#2a2230"/>
-  <circle cx="61" cy="53" r="3.200" fill="#2a2230"/>
-  <circle cx="40" cy="52" r="1" fill="#fff"/>
-  <circle cx="62" cy="52" r="1" fill="#fff"/>
-  <path d="M50 54 L47.500 63 Q50 65 52.500 63" fill="none" stroke="#c99a82" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- the teardrop tattoo, just under his left eye -->
-  <path d="M38.500 58 C35.500 62 35.500 65.500 38.500 65.500 C41.500 65.500 41.500 62 38.500 58 Z" fill="#2f6fdb"/>
-</svg>
+  <path d="M30 50 C30 36 38 30 50 30 C62 30 70 36 70 50 C70 66 62 76 50 76 C38 76 30 66 30 50 Z" fill="#f2cfb2"/>
+  <!-- beard -->
+  <path d="M30 56 C31 70 39 76 50 80 C61 76 69 70 70 56 C66 63 60 65 56 64 Q50 61.500 44 64 C40 65 34 63 30 56 Z" fill="#7b4a2b"/>
+  <path d="M45 70 Q50 72.500 55 70" fill="none" stroke="#e9a893" stroke-width="2" stroke-linecap="round"/>
+  <!-- hair parting -->
+  <path d="M30 52 C28 36 38 27 50 27 C62 27 72 36 70 52 C69 43 65 38 58 35.500 C54 34.500 51 33 50 31 C49 33 46 34.500 42 35.500 C35 38 31 43 30 52 Z" fill="#6a4128"/>
+  <!-- brows and downcast eyes -->
+  <path d="M35 46 Q40 43.500 45 46" fill="none" stroke="#5a3820" stroke-width="2" stroke-linecap="round"/>
+  <path d="M55 46 Q60 43.500 65 46" fill="none" stroke="#5a3820" stroke-width="2" stroke-linecap="round"/>
+  <path d="M36 50.500 Q40 53.500 44 50.500" fill="none" stroke="#2a1a14" stroke-width="2.200" stroke-linecap="round"/>
+  <path d="M56 50.500 Q60 53.500 64 50.500" fill="none" stroke="#2a1a14" stroke-width="2.200" stroke-linecap="round"/>
+  <path d="M50 51 L48 60 Q50 61.500 52 60" fill="none" stroke="#cf9d83" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- the teardrop tattoo under his left eye -->
+  <path d="M39.500 55 C37 58.500 37 61.500 39.500 61.500 C42 61.500 42 58.500 39.500 55 Z" fill="#2f6fdb"/>
+  <!-- halo -->
+  <ellipse cx="50" cy="17" rx="19" ry="5.500" fill="none" stroke="#fff3bf" stroke-width="5" opacity="0.5"/>
+  <ellipse cx="50" cy="17" rx="19" ry="5.500" fill="none" stroke="#ffd34d" stroke-width="3.200"/>
+</g></svg>
