@@ -1615,7 +1615,6 @@ function App() {
     />
   );
   /** The type the selected pad's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */
-  const slotCategory = selectedPad && (layout.on && selectedPad.index < 16 ? layoutById(layout.id).slots[selectedPad.index]?.category : undefined) || selectedPad?.category;
   /** Swaps a hidden spare onto the selected pad; the sound it replaces goes back into the hot-swap menu, so the swap can be undone by swapping again. */
   const swapInHidden = (other: Pad, target: Pad) => {
     recordEdit();
@@ -1630,26 +1629,33 @@ function App() {
   };
   /** Pack tags the project's sounds share ("Rio - ..."), left out of the names in the swap list. */
   const tags = packTags([...Object.values(pads).filter(isReal), ...Object.values(hidden)].map((p) => p.name));
-  const swapList = selectedPad && (
+  /** The hot-swap list for a pad: the sounds that can take its place. Used by the Swap screen and by the sequencer's Sounds page. */
+  const swapListFor = (target: Pad) => {
+    /** The type the target's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */
+    const slotCategory = (layout.on && target.index < 16 ? layoutById(layout.id).slots[target.index]?.category : undefined) || target.category;
+    return (
     <SwapList
-      slotLabel={selectedPad.ghost ? `${GHOST_LABEL[selectedPad.ghost.kind]} (made on export unless filled)` : `PAD ${(selectedPad.index % 16) + 1}`}
+      slotLabel={target.ghost ? `${GHOST_LABEL[target.ghost.kind]} (made on export unless filled)` : `PAD ${(target.index % 16) + 1}`}
       candidates={sortForSlot(
         [
           // A pack's hidden spares: the same type as the slot, or for a drum slot any drum.
           ...Object.values(hidden).filter((p) => (isKitCategory(slotCategory) ? isKitCategory(p.category) : p.category === slotCategory)),
-          ...Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index >= 16 && p.index !== selectedPad.index && isKitCategory(slotCategory)),
+          ...Object.values(pads).filter((p) => isReal(p) && isKitCategory(p.category) && p.index >= 16 && p.index !== target.index && isKitCategory(slotCategory)),
         ],
         slotCategory,
-      ).sort((a, b) => (slotCategory === "bass" ? Number(!!a.is808 !== !!selectedPad.is808) - Number(!!b.is808 !== !!selectedPad.is808) : 0))}
+      ).sort((a, b) => (slotCategory === "bass" ? Number(!!a.is808 !== !!target.is808) - Number(!!b.is808 !== !!target.is808) : 0))}
       audioOf={audioOf}
       nameOf={(p) => displayName(p.name, tags)}
       onSwap={(other) => {
-        if (hidden[other.origIndex]) return swapInHidden(other, selectedPad);
+        if (hidden[other.origIndex]) return swapInHidden(other, target);
         recordEdit();
-        setPads((prev) => (selectedPad.ghost ? fillGhostSlot(prev, selectedPad.index, other.index) : movePad(prev, selectedPad.index, other.index)));
+        setPads((prev) => (target.ghost ? fillGhostSlot(prev, target.index, other.index) : movePad(prev, target.index, other.index)));
       }}
     />
   );
+  };
+  const swapList = selectedPad && swapListFor(selectedPad);
+
 
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
   /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
@@ -1939,7 +1945,7 @@ function App() {
         )}
 
         {seqOpen ? (
-          <SeqScreen padsOfBank={seqPadsOfBank} onBack={() => setSeqOpen(false)} />
+          <SeqScreen padsOfBank={seqPadsOfBank} soundsFor={(bank, slot) => (pads[bank * 16 + slot] ? swapListFor(pads[bank * 16 + slot]) : null)} onBack={() => setSeqOpen(false)} />
         ) : (
         <>
         <div className="upper">

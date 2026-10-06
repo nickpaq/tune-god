@@ -723,16 +723,29 @@ function KeysPage() {
   );
 }
 
-/** A pixel-screen block of text standing in for a page that is not drawn yet. */
-function SoundsPage() {
+/** The hot-swap list for the selected pad, on the same pixel screen the Swap mode uses. */
+function SoundsPage({ list, slotName }: { list: ReactNode; slotName: string }) {
   return (
     <div className="s-page">
       <section className="screen s-screen s-screen--fill" aria-label="Sounds">
         <div className="oled">
-          <div className="oled__head">
-            <span>Sounds</span>
-          </div>
-          <div className="s-oled-center">Not connected yet</div>
+          {list ? (
+            <>
+              <div className="oled__head">
+                <span>Hot swap</span>
+                <span>{slotName}</span>
+              </div>
+              {list}
+            </>
+          ) : (
+            <>
+              <div className="oled__head">
+                <span>Hot swap</span>
+                <span>{slotName}</span>
+              </div>
+              <div className="s-oled-center">Tap a pad with a sound on it</div>
+            </>
+          )}
         </div>
       </section>
     </div>
@@ -813,7 +826,7 @@ function EditPage({ pad, slotName }: { pad: SeqPad | null; slotName: string }) {
 
 /** ---- the whole sequencer screen ---- */
 
-export function SeqScreen({ padsOfBank, onBack }: { padsOfBank: (bank: number) => (SeqPad | null)[]; onBack: () => void }) {
+export function SeqScreen({ padsOfBank, soundsFor, onBack }: { padsOfBank: (bank: number) => (SeqPad | null)[]; soundsFor: (bank: number, slot: number) => ReactNode; onBack: () => void }) {
   const [page, setPage] = useState<SeqPage>("play");
   const [bank, setBank] = useState(0);
   const [selected, setSelected] = useState(15);
@@ -860,7 +873,7 @@ export function SeqScreen({ padsOfBank, onBack }: { padsOfBank: (bank: number) =
         {page === "tempo" && <TempoPage bpm={bpm} onBpm={setBpm} />}
         {page === "mixer" && <MixerPage bank={bank} onBank={setBank} />}
         {page === "edit" && <EditPage pad={pads[selected]} slotName={slotName} />}
-        {page === "sounds" && <SoundsPage />}
+        {page === "sounds" && <SoundsPage list={soundsFor(bank, selected)} slotName={slotName} />}
       </div>
       {(showBanks || showNav) && (
         <div className="s-lower">
