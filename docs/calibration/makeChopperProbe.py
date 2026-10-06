@@ -20,7 +20,9 @@ def sample() -> bytes:
     return buf.getvalue()
 
 def velocity(slice_, count):  # same as sliceVelocity in src/audio/exportChopper.ts
-    return min(127, max(1, int(math.floor(((slice_ + 0.5) * 127) / count + 0.5 + 0.5))))
+    lo = (slice_ * 128 + count - 1) // count
+    hi = ((slice_ + 1) * 128 + count - 1) // count - 1
+    return min(127, max(1, (lo + hi) // 2))
 
 ref = zipfile.ZipFile(os.path.join(HERE, "chopper-reference.koala"))
 sampler = json.loads(ref.read("sampler/sampler.json"))
