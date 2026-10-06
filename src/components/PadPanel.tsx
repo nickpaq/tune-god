@@ -59,6 +59,7 @@ export function PadPanel({
   toneOffset,
   needsKey,
   onToneOffset,
+  onToneRelease,
   onCorrect,
   onChange,
 }: {
@@ -72,6 +73,8 @@ export function PadPanel({
   /** No key is chosen yet, so there is no tone to match: the slider is locked. */
   needsKey: boolean;
   onToneOffset: (cents: number) => void;
+  /** The pitch slider was let go (the sound and tone stop; the slider stays where it was left). */
+  onToneRelease: () => void;
   /** Correct was pressed: the pad moves by the opposite of the tone's offset, so it sits on the key. */
   onCorrect: () => void;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents">>) => void;
@@ -112,9 +115,10 @@ export function PadPanel({
           bipolar
           disabled={needsKey}
           onChange={onToneOffset}
+          onDragEnd={onToneRelease}
           onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={formatTrim}
-          title="Pitch of the sound: slide the tone until it matches what you hear, then press Correct to move the sound onto the key. Back in the middle, the sound and tone fade."
+          title="Pitch of the sound: hold and slide the tone until it matches what you hear; the sound and tone stop when you let go. Press Correct to move the sound onto the key."
         />
         <div className="pad-panel__scale">
           {needsKey ? (

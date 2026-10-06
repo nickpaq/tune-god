@@ -963,142 +963,168 @@
   height: calc(var(--px) * 44);
 }
 
-/* keys */
-.s-octave {
-  flex: 1.7;
-  align-items: center;
-}
-
-.s-cap--step {
-  flex: none;
-  width: calc(var(--px) * 36);
-  height: calc(var(--px) * 34);
-}
-
-.s-cap--step svg {
-  width: calc(var(--px) * 8);
-  height: calc(var(--px) * 14);
-}
-
-.s-readout--oct {
-  flex: 1;
-  width: auto;
-  height: calc(var(--px) * 34);
-}
-
-.s-board {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--px) * 6);
-}
-
-.s-scale {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: calc(var(--px) * 3);
-  padding: 0 1px;
-  height: calc(var(--px) * 7);
-  flex: none;
-}
-
-.s-scale i {
-  border-radius: calc(var(--px) * 2);
-  background: #0a0a0b;
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6), 0 1px 0 var(--seam-l);
-}
-
-.s-scale i.in {
-  background: #7a3a24;
-}
-
-.s-scale i.root {
-  background: var(--accent);
-  box-shadow: 0 0 calc(var(--px) * 6) var(--accent), 0 0 calc(var(--px) * 12) rgba(255, 91, 36, 0.5);
-}
-
-.s-piano {
+/* keys: the Koala keys screen's exact shapes, positioned in --px units by SeqScreen */
+.s-kb {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  flex: none;
+  /* edge to edge: the page is padded, the reference is not */
+  margin-inline: calc(var(--px) * -16);
+  width: calc(var(--px) * 402);
+  height: calc(var(--px) * 404);
 }
 
-.s-naturals {
-  display: flex;
-  gap: calc(var(--px) * 2);
-  height: 100%;
+.s-kb__divider {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--seam-d);
+  box-shadow: 0 1px 0 var(--seam-l);
 }
 
-.s-nat {
-  position: relative;
-  flex: 1;
-  border: 0;
-  padding: 0 0 calc(var(--px) * 10);
-  border-radius: 0 0 calc(var(--px) * 6) calc(var(--px) * 6);
-  color: var(--ink);
-  background: linear-gradient(180deg, var(--key-hi), var(--key));
-  box-shadow: 0 calc(var(--px) * 3) 0 var(--key-edge), 0 calc(var(--px) * 5) calc(var(--px) * 8) rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  font: 600 calc(var(--px) * 11)/1 "Barlow Semi Condensed", sans-serif;
-  letter-spacing: 0.08em;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
+.s-octbar {
+  position: absolute;
+  border-radius: calc(var(--px) * 3);
+  background: var(--well);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35), 0 1px 0 var(--seam-l);
   touch-action: none;
 }
 
-.s-nat--on,
-.s-sharp--on {
-  transform: translateY(calc(var(--px) * 2));
-  box-shadow: inset 0 calc(var(--px) * 2) calc(var(--px) * 4) rgba(0, 0, 0, 0.35), 0 1px 0 var(--key-edge);
+.s-octbar__line {
+  position: absolute;
+  height: 0;
+  border-top: 1px solid #3a3c40;
 }
 
-.s-sharp {
+.s-octbar__arrow {
   position: absolute;
   top: 0;
-  width: calc(var(--px) * 28);
-  height: 58%;
+  bottom: 0;
+  width: calc(var(--px) * 33);
   border: 0;
-  padding: 0 0 calc(var(--px) * 8);
-  border-radius: 0 0 calc(var(--px) * 5) calc(var(--px) * 5);
-  color: #bdb9ae;
-  background: linear-gradient(180deg, #26272b, #141517);
-  box-shadow: 0 calc(var(--px) * 3) 0 #000, 0 calc(var(--px) * 5) calc(var(--px) * 8) rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  font: 600 calc(var(--px) * 10)/1 "Barlow Semi Condensed", sans-serif;
-  letter-spacing: 0.06em;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  left: calc((var(--i) + 1) * (100% - var(--px) * 12) / 7 + var(--i) * var(--px) * 2 + var(--px) - var(--px) * 14);
-  touch-action: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: none;
+  color: var(--ink3);
 }
 
-.s-dot {
+.s-octbar__arrow svg {
+  width: calc(var(--px) * 9);
+  height: calc(var(--px) * 16);
+  fill: none;
+  stroke: currentColor;
+}
+
+.s-octbar__thumb {
   position: absolute;
-  left: 50%;
-  width: calc(var(--px) * 6);
-  height: calc(var(--px) * 6);
-  margin-left: calc(var(--px) * -3);
-  border-radius: 50%;
-  background: var(--led-off);
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--px) * 4);
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 var(--key-edge), 0 5px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  font: 600 calc(var(--px) * 17) / 1 "Barlow Semi Condensed", sans-serif;
+  letter-spacing: 0.04em;
+  pointer-events: none;
 }
 
-.s-nat .s-dot {
-  bottom: calc(var(--px) * 30);
+.s-wk,
+.s-bk {
+  position: absolute;
 }
 
-.s-sharp .s-dot {
-  bottom: calc(var(--px) * 26);
+.s-wk svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.s-dot--in {
-  background: #8a4a31;
+.s-wk__edge {
+  fill: var(--key-edge);
 }
 
-.s-dot--root {
-  background: var(--accent);
-  box-shadow: 0 0 calc(var(--px) * 5) var(--accent), 0 0 calc(var(--px) * 12) rgba(255, 91, 36, 0.6);
+.s-wk__face {
+  fill: url(#s-key-grad);
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 3;
+}
+
+.s-wk button,
+.s-bk button {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-wk__name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: 600 calc(var(--px) * 11) / 1 "Barlow Semi Condensed", sans-serif;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.s-wk--down svg {
+  transform: translateY(calc(var(--px) * 2));
+}
+
+.s-wk--down .s-wk__edge {
+  opacity: 0.25;
+}
+
+.s-wk--picked .s-wk__face {
+  stroke: #fff;
+  stroke-width: 6;
+}
+
+/* a black key: a lit frame with the key itself inset in it */
+.s-bk__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--px) * 9);
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 var(--key-edge), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.s-bk__cap {
+  position: absolute;
+  inset: calc(var(--px) * 4);
+  border-radius: calc(var(--px) * 5);
+  background: linear-gradient(180deg, #2a2b2f, #141517);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 0 1px #000;
+}
+
+.s-bk__name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--px) * 9);
+  text-align: center;
+  font: 600 calc(var(--px) * 10) / 1 "Barlow Semi Condensed", sans-serif;
+  letter-spacing: 0.06em;
+  color: #bdb9ae;
+  pointer-events: none;
+}
+
+.s-bk--down .s-bk__cap {
+  background: linear-gradient(180deg, #111214, #26272b);
+}
+
+.s-bk--picked .s-bk__ring {
+  box-shadow: 0 3px 0 var(--key-edge), 0 0 0 2px #fff;
 }
 
 /* the sample page */

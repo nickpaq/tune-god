@@ -991,7 +991,7 @@ function App() {
 
   /**
    * Pitch slider grabbed: the selected pad loops at its current tuning (bass lifted by octaves to sit near the tone)
-   * and a tone on the key plays until the slider is let go. Sliding moves the tone, never the pad.
+   * and a tone on the key plays for as long as the slider is held (see `releaseTone`). Sliding moves the tone, never the pad.
    */
   const startMatch = () => {
     const pad = selected !== null ? pads[selected] : undefined;
@@ -1014,8 +1014,8 @@ function App() {
   };
 
   /**
-   * The pitch slider moved. Off the middle, the selected pad loops at its current tuning with a tone on the key (the tone switches on by itself) and
-   * the slider stays where it is let go, so the two can be compared for as long as it takes. Back in the middle, the sound and the tone fade.
+   * The pitch slider moved. Off the middle, the selected pad loops at its current tuning with a tone on the key (the tone switches on by itself),
+   * for as long as the slider is held. Back in the middle, the sound and the tone fade.
    */
   const moveTone = (cents: number) => {
     matchRun.current++;
@@ -1025,6 +1025,13 @@ function App() {
     if (!matchVoice.current) startMatch();
     matchVoice.current?.handle.setToneOffset(cents);
     setToneOn(true);
+  };
+
+  /** The slider was let go: the sound and tone fade out, and the slider stays where it was left so Correct can still use it. */
+  const releaseTone = () => {
+    if (toneOffsetRef.current === 0) return;
+    matchRun.current++;
+    stopMatch();
   };
 
   /** Fades the matching sound and tone out, leaving the pad as it is. */
@@ -1050,8 +1057,14 @@ function App() {
    */
   const correctMatch = () => {
     const offset = toneOffsetRef.current;
-    const match = matchVoice.current;
     if (offset === 0) return;
+    // The sound stopped when the slider was let go: it starts again, with the tone where the slider was left, so the correction can be heard.
+    const running = () => matchVoice.current;
+    if (!running()) {
+      startMatch();
+      running()?.handle.setToneOffset(offset);
+    }
+    const match = running();
     const pad = match ? latest.current.pads[match.index] : selected !== null ? latest.current.pads[selected] : undefined;
     if (!pad) return;
     const trim = Math.max(-1200, Math.min(1200, trimCents(pad.semis, pad.cents) - offset));
@@ -1321,6 +1334,7 @@ function App() {
       toneOffset={toneOffset}
       needsKey={(selectedPad.keyPc ?? keyPc) === null}
       onToneOffset={moveTone}
+      onToneRelease={releaseTone}
       onCorrect={correctMatch}
       onChange={(patch) => {
         if ("tune" in patch) patchPad(selectedPad.index, { ...patch, tuneLocked: true });
@@ -1834,8 +1848,8 @@ function App() {
                 >
                   <span className="pad__number">
                     <span key={captionOf(pad)}>
-                      {slot + 1}
-                      {captionOf(pad) && ` ${captionOf(pad)}`}
+                      {/* A sound's own name ("Loop 6", "Kick 1") already numbers it; the pad number is only for pads with nothing to say. */}
+                      {captionOf(pad) || slot + 1}
                     </span>
                   </span>
                   {padSymbols && symbolOf(pad) && <PadSymbol category={symbolOf(pad)!} />}

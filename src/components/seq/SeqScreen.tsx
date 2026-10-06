@@ -656,68 +656,161 @@ function VelocityPage() {
   );
 }
 
-const NOTES = ["C", "D", "E", "F", "G", "A", "B"];
-const SHARPS: { i: number; name: string }[] = [
-  { i: 0, name: "C#" },
-  { i: 1, name: "D#" },
-  { i: 3, name: "F#" },
-  { i: 4, name: "G#" },
-  { i: 5, name: "A#" },
-];
-/** The notes of C major as semitones above the root, lit on the scale lamps. */
-const IN_SCALE = [true, false, true, false, true, true, false, true, false, true, false, true];
+/**
+ * The keyboard, drawn to the Koala keys screen's exact shape and size. Every number below is a pixel of that reference (a 1206 px wide image
+ * of a 402 pt wide screen), divided by three when it is drawn. White keys are L-shaped (or plain) caps and the black keys float above them in
+ * their own frames; two octaves sit one above the other under a full-width octave bar.
+ */
+const REF = 3;
+/** A length in points, from a pixel of the reference image. */
+const P = (px: number) => `calc(var(--px) * ${(px / REF).toFixed(3)})`;
+/** The reference's top edge of the octave bar is at y 55; the block starts a little above it. */
+const TOP = 47;
+const OCTAVE_STEP = 565;
+const TALL_Y = 277;
+const SHORT_Y = 480;
+const WHITE_BOTTOM = 680;
+const BLACK_Y = 247;
+const BLACK_H = 203;
 
-function Octave({ held, onHold }: { held: string | null; onHold: (n: string | null) => void }) {
+interface WhiteKey {
+  note: string;
+  x: number;
+  w: number;
+  /** "L": tall on the left; "R": tall on the right; "S": the short plain key. */
+  kind: "L" | "R" | "S";
+  /** Width of the tall part. */
+  tall?: number;
+}
+
+const WHITE_KEYS: WhiteKey[] = [
+  { note: "C", x: 30, w: 138, kind: "L", tall: 55 },
+  { note: "D", x: 202, w: 136, kind: "S" },
+  { note: "E", x: 368, w: 135, kind: "R", tall: 51 },
+  { note: "F", x: 538, w: 134, kind: "L", tall: 52 },
+  { note: "G", x: 707, w: 133, kind: "S" },
+  { note: "A", x: 873, w: 135, kind: "S" },
+  { note: "B", x: 1038, w: 137, kind: "R", tall: 53 },
+];
+
+const BLACK_KEYS: { note: string; x: number; w: number }[] = [
+  { note: "C#", x: 117, w: 133 },
+  { note: "D#", x: 287, w: 133 },
+  { note: "F#", x: 622, w: 133 },
+  { note: "G#", x: 792, w: 133 },
+  { note: "A#", x: 953, w: 134 },
+];
+
+/** The outline of a white key in its own box (w by h, in reference pixels), corners rounded 8 px. */
+function whitePath(k: WhiteKey, h: number): string {
+  const { w } = k;
+  const r = 8;
+  const step = SHORT_Y - TALL_Y;
+  if (k.kind === "S") return `M${r} 0H${w - r}Q${w} 0 ${w} ${r}V${h - r}Q${w} ${h} ${w - r} ${h}H${r}Q0 ${h} 0 ${h - r}V${r}Q0 0 ${r} 0Z`;
+  const t = k.tall ?? 52;
+  if (k.kind === "L") return `M${r} 0H${t - r}Q${t} 0 ${t} ${r}V${step}H${w - r}Q${w} ${step} ${w} ${step + r}V${h - r}Q${w} ${h} ${w - r} ${h}H${r}Q0 ${h} 0 ${h - r}V${r}Q0 0 ${r} 0Z`;
+  return `M${w - t + r} 0H${w - r}Q${w} 0 ${w} ${r}V${h - r}Q${w} ${h} ${w - r} ${h}H${r}Q0 ${h} 0 ${h - r}V${step + r}Q0 ${step} ${r} ${step}H${w - t}V${r}Q${w - t} 0 ${w - t + r} 0Z`;
+}
+
+/** The shape a key answers to, so a tap in the notch beside a tall key goes to the black key or nothing, not to the white key. */
+function whiteClip(k: WhiteKey, h: number): string | undefined {
+  if (k.kind === "S") return undefined;
+  const step = ((SHORT_Y - TALL_Y) / h) * 100;
+  const t = ((k.tall ?? 52) / k.w) * 100;
+  return k.kind === "L" ? `polygon(0 0, ${t}% 0, ${t}% ${step}%, 100% ${step}%, 100% 100%, 0 100%)` : `polygon(${100 - t}% 0, 100% 0, 100% 100%, 0 100%, 0 ${step}%, ${100 - t}% ${step}%)`;
+}
+
+function KeyboardOctave({ octave, down, picked, onDown, onUp }: { octave: 0 | 1; down: string | null; picked: string | null; onDown: (id: string) => void; onUp: () => void }) {
+  const dy = octave * OCTAVE_STEP;
   return (
     <>
-      <div className="s-scale">
-        {IN_SCALE.map((on, i) => (
-          <i key={i} className={i === 0 ? "root" : on ? "in" : ""} />
-        ))}
-      </div>
-      <div className="s-piano">
-        <div className="s-naturals">
-          {NOTES.map((n, k) => (
-            <button key={n} type="button" className={`s-nat${held === n ? " s-nat--on" : ""}`} aria-label={n} onPointerDown={() => onHold(n)} onPointerUp={() => onHold(null)} onPointerLeave={() => onHold(null)}>
-              <span className={`s-dot${k === 0 ? " s-dot--root" : " s-dot--in"}`} />
-              {n}
-            </button>
-          ))}
-        </div>
-        {SHARPS.map((s) => (
-          <button key={s.name} type="button" className={`s-sharp${held === s.name ? " s-sharp--on" : ""}`} style={{ ["--i" as string]: s.i }} aria-label={`${s.name}`} onPointerDown={() => onHold(s.name)} onPointerUp={() => onHold(null)} onPointerLeave={() => onHold(null)}>
-            <span className="s-dot" />
-            {s.name}
-          </button>
-        ))}
-      </div>
+      {WHITE_KEYS.map((k) => {
+        const id = `${octave}${k.note}`;
+        const tallPart = k.kind !== "S";
+        const top = (tallPart ? TALL_Y : SHORT_Y) + dy - TOP;
+        const h = WHITE_BOTTOM - (tallPart ? TALL_Y : SHORT_Y);
+        return (
+          <div key={id} className={`s-wk${down === id ? " s-wk--down" : ""}${picked === id ? " s-wk--picked" : ""}`} style={{ left: P(k.x), top: P(top), width: P(k.w), height: P(h) }}>
+            <svg viewBox={`0 0 ${k.w} ${h}`} preserveAspectRatio="none" aria-hidden="true">
+              <path className="s-wk__edge" d={whitePath(k, h)} transform="translate(0 9)" />
+              <path className="s-wk__face" d={whitePath(k, h)} />
+            </svg>
+            <span className="s-wk__name" style={{ top: P(h - 70) }}>
+              {k.note}
+            </span>
+            <button type="button" aria-label={k.note} style={{ clipPath: whiteClip(k, h) }} onPointerDown={() => onDown(id)} onPointerUp={onUp} onPointerLeave={onUp} onPointerCancel={onUp} />
+          </div>
+        );
+      })}
+      {BLACK_KEYS.map((k) => {
+        const id = `${octave}${k.note}`;
+        return (
+          <div key={id} className={`s-bk${down === id ? " s-bk--down" : ""}${picked === id ? " s-bk--picked" : ""}`} style={{ left: P(k.x), top: P(BLACK_Y + dy - TOP), width: P(k.w), height: P(BLACK_H) }}>
+            <span className="s-bk__ring" />
+            <span className="s-bk__cap" />
+            <span className="s-bk__name">{k.note}</span>
+            <button type="button" aria-label={k.note} onPointerDown={() => onDown(id)} onPointerUp={onUp} onPointerLeave={onUp} onPointerCancel={onUp} />
+          </div>
+        );
+      })}
     </>
   );
 }
 
+/** The octave bar's track runs from x 135 to 1071 of the reference; C3 sits at x 707. */
+const OCT_MIN = 0;
+const OCT_MAX = 4;
+const OCT_C0_X = 135;
+const OCT_STEP_X = (707 - 135) / 3;
+
 function KeysPage() {
   const [scale, setScale] = useState(false);
   const [chord, setChord] = useState(false);
-  const [octave, setOctave] = useState(2);
-  const [held, setHeld] = useState<string | null>(null);
+  const [octave, setOctave] = useState(3);
+  const [down, setDown] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>("1C");
+  const trackRef = useRef<HTMLDivElement>(null);
+  const hold = (id: string) => {
+    setDown(id);
+    setPicked(id);
+  };
+  const dragOctave = (e: PointerEvent<HTMLDivElement>) => {
+    const r = trackRef.current!.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * 1156 + 27 - 0;
+    setOctave(Math.min(OCT_MAX, Math.max(OCT_MIN, Math.round((x - OCT_C0_X) / OCT_STEP_X))));
+  };
   return (
     <div className="s-page s-page--keys">
       <div className="s-keys2">
         <Key legend="Scale" on={scale} label="Scale" onClick={() => setScale((x) => !x)} />
         <Key legend="Chord" on={chord} label="Chord" onClick={() => setChord((x) => !x)} />
-        <div className="s-tray s-octave">
-          <button type="button" className="s-cap s-cap--step" aria-label="Octave down" onClick={() => setOctave((o) => Math.max(-2, o - 1))}>
+      </div>
+      <div className="s-kb">
+        <svg width="0" height="0" aria-hidden="true" style={{ position: "absolute" }}>
+          <defs>
+            <linearGradient id="s-key-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" style={{ stopColor: "var(--key-hi)" }} />
+              <stop offset="1" style={{ stopColor: "var(--key)" }} />
+            </linearGradient>
+          </defs>
+        </svg>
+        <div ref={trackRef} className="s-octbar" style={{ left: P(27), top: P(55 - TOP), width: P(1156), height: P(117) }} role="slider" aria-label="Octave" aria-valuemin={OCT_MIN} aria-valuemax={OCT_MAX} aria-valuenow={octave}
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); dragOctave(e); }}
+          onPointerMove={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) dragOctave(e); }}>
+          <span className="s-octbar__line" style={{ left: P(135 - 27), width: P(1071 - 135), top: P(113 - 55) }} />
+          <button type="button" className="s-octbar__arrow" style={{ left: P(85 - 27 - 50) }} aria-label="Octave down" onPointerDown={(e) => e.stopPropagation()} onClick={() => setOctave((o) => Math.max(OCT_MIN, o - 1))}>
             <Icon name="left" />
           </button>
-          <div className="s-readout s-readout--oct">C{octave}</div>
-          <button type="button" className="s-cap s-cap--step" aria-label="Octave up" onClick={() => setOctave((o) => Math.min(8, o + 1))}>
+          <button type="button" className="s-octbar__arrow" style={{ left: P(1125 - 27 - 50) }} aria-label="Octave up" onPointerDown={(e) => e.stopPropagation()} onClick={() => setOctave((o) => Math.min(OCT_MAX, o + 1))}>
             <Icon name="right" />
           </button>
+          <span className="s-octbar__thumb" style={{ left: P(OCT_C0_X + octave * OCT_STEP_X - 67.5 - 27), top: P(3), width: P(135), height: P(112) }}>
+            C{octave}
+          </span>
         </div>
-      </div>
-      <div className="s-board">
-        <Octave held={held} onHold={setHeld} />
-        <Octave held={null} onHold={setHeld} />
+        <span className="s-kb__divider" style={{ top: P(755 - TOP) }} />
+        <KeyboardOctave octave={0} down={down} picked={picked} onDown={hold} onUp={() => setDown(null)} />
+        <KeyboardOctave octave={1} down={down} picked={picked} onDown={hold} onUp={() => setDown(null)} />
       </div>
     </div>
   );
