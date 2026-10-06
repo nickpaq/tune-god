@@ -1034,8 +1034,12 @@ function App() {
       setBank(3);
       setChop(null);
       setLongSamples([]);
+      // With no key picked there is nothing built yet to keep in time with, so the project takes the acapella's tempo (the pitch knobs stay at 0). With a key
+      // picked the project's tempo is left alone and the chops are stretched to it.
       const pitched = Math.abs(shift) > 1e-6 ? ` Pitched ${shift > 0 ? "+" : ""}${shift} on Koala's pitch knob to match the key: check the song on the last pad.` : "";
-      setNotice(`${sections.length} chop${sections.length === 1 ? "" : "s"} on Bank D, stretched to the project's tempo.${pitched}`);
+      const keyless = cur.tunedTarget === null;
+      if (keyless) changeBpm(settings.bpm);
+      setNotice(`${sections.length} chop${sections.length === 1 ? "" : "s"} on Bank D, ${keyless ? `and the project tempo is now ${Math.round(settings.bpm * 100) / 100} BPM (no key was picked, so the pitch knobs are at 0)` : "stretched to the project's tempo"}.${pitched}`);
     } finally {
       chopping.current = false;
     }
