@@ -4,7 +4,6 @@ import { FINGER_LAYOUTS, layoutById } from "./fingerLayouts";
 import { classifyByName, classifySample, type CategoryId } from "./classify";
 
 const horizontal = layoutById("horizontal");
-const quest = layoutById("quest-for-groove");
 
 let next = 0;
 const sound = (category: CategoryId, extra: Partial<ArrangeSound> = {}): ArrangeSound => ({ key: next++, category, ...extra });
@@ -85,9 +84,9 @@ describe("arrangeFingerDrumming", () => {
   it("backfills drums the layout had no slot for from the end of bank C, never bank D", () => {
     const pad = sound("melodic", { midi: 60 });
     const kit = [drum("kick"), drum("snare"), drum("closedHat")];
-    // Quest for Groove has three perc slots, so a fourth and fifth perc are left over.
-    const toms = Array.from({ length: 5 }, () => drum("perc"));
-    const a = arrangeFingerDrumming([...kit, ...toms, pad], quest);
+    // The layout has four perc slots, so a fifth and sixth perc are left over.
+    const toms = Array.from({ length: 6 }, () => drum("perc"));
+    const a = arrangeFingerDrumming([...kit, ...toms, pad], horizontal);
     const extra = toms.map((s) => indexOf(a, s)!).filter((i) => i >= 16).sort((x, y) => x - y);
     expect(extra).toEqual([46, 47]);
     expect(indexOf(a, pad)).toBe(16);
@@ -131,14 +130,6 @@ describe("ghost slots", () => {
     const a = arrangeFingerDrumming([drum("kick")], horizontal);
     expect(a.ghosts.map((g) => g.kind)).toEqual(["softKick"]);
     expect(a.placeholders.find((p) => p.index === 9)?.label).toBe("add Snare");
-  });
-
-  it("copies the first snare the layout fills (bottom row first) in Quest for Groove", () => {
-    const first = drum("snare");
-    const second = drum("snare");
-    const a = arrangeFingerDrumming([first, second, drum("kick")], quest);
-    expect(a.ghosts).toHaveLength(2);
-    expect(a.ghosts.every((g) => g.kind === "ghostSnare" && g.sourceKey === first.key)).toBe(true);
   });
 });
 

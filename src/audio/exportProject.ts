@@ -2,18 +2,10 @@ import { applyGainDb } from "./gain";
 import type { PadEq, PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
-import { PLACEHOLDER_FRAMES, PLACEHOLDER_SAMPLE_RATE } from "./placeholderPads";
 import type { MasterStyle } from "./mixPresets";
 import { appendAfterExisting, bassSidechain, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
 import { addSongSections, songTemplate, type SongExport } from "./exportSong";
-
-/** A silent pad the finger-drumming layout adds: where it sits, what Koala shows on it, and its colour. */
-export interface PlaceholderPad {
-  index: number;
-  label: string;
-  color: string;
-}
 
 /** A ghost snare or soft kick the layout adds: a quieter copy of another pad, written as its own sample. */
 export interface GhostPadExport {
@@ -63,10 +55,9 @@ export async function buildTunedKoala(
     pans,
     colors,
     playback,
-    placeholders,
     ghosts,
     song,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; placeholders?: PlaceholderPad[]; ghosts?: GhostPadExport[]; song?: SongExport } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; ghosts?: GhostPadExport[]; song?: SongExport } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -116,7 +107,6 @@ export async function buildTunedKoala(
   // The song's own pad is usually deleted by the arrangement, so its settings are taken before that.
   const template = song ? (song.template ?? songTemplate(samplerJson, song.sourceSampleId)) : undefined;
   if (arrangement) await applyArrangement(project, samplerJson, arrangement);
-  if (placeholders?.length) await addPlaceholderPads(project, samplerJson, placeholders);
   if (ghosts?.length) await addGhostPads(project, samplerJson, ghosts);
   if (song?.sections.length) await addSongSections(project, samplerJson, song, template);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
@@ -283,49 +273,6 @@ async function applyArrangement(project: ParsedKoalaProject, samplerJson: any, a
 }
 
 /**
- * Adds the layout's silent pads. They all point at one shared silent sample (a few milliseconds of
- * zeros), and each takes its settings from an existing pad so it carries every field Koala expects.
- * A placeholder whose slot a real pad already holds is skipped.
- */
-async function addPlaceholderPads(project: ParsedKoalaProject, samplerJson: any, placeholders: PlaceholderPad[]): Promise<void> {
-  const pads: any[] = (samplerJson.pads = Array.isArray(samplerJson.pads) ? samplerJson.pads : []);
-  const samples: any[] = (samplerJson.samples = Array.isArray(samplerJson.samples) ? samplerJson.samples : []);
-  const base = project.padBase;
-  const ids = [...samples.map((s) => s.id), ...pads.map((p) => p.sampleId)].filter((id) => typeof id === "number");
-  const sampleId = Math.max(0, ...ids) + 1;
-  // With no real pad left in the project (a chopped song's own pads are deleted), a placeholder still needs every field Koala reads: a bare pad
-  // fails to load ("type must be number, but is null").
-  const padTemplate = pads.find((p) => p.type === "sample") ?? defaultPad();
-  const sampleTemplate = samples[0];
-
-  const silence = encodeWav({ sampleRate: PLACEHOLDER_SAMPLE_RATE, channelData: [new Float32Array(PLACEHOLDER_FRAMES)], bitDepth: 16 });
-  project.zip.file(`sampler/${sampleId}.wav`, await silence.arrayBuffer());
-  samples.push({
-    ...(sampleTemplate ? JSON.parse(JSON.stringify(sampleTemplate)) : {}),
-    id: sampleId,
-    metadata: { ...(sampleTemplate?.metadata ?? {}), originalPath: "silence.wav" },
-  });
-
-  const taken = new Set(pads.map((p) => Number(p.pad) - base));
-  for (const ph of placeholders) {
-    if (taken.has(ph.index)) continue;
-    const pad: any = padTemplate ? JSON.parse(JSON.stringify(padTemplate)) : {};
-    pad.pad = typeof padTemplate?.pad === "string" ? String(ph.index + base) : ph.index + base;
-    pad.type = "sample";
-    pad.sampleId = sampleId;
-    pad.label = ph.label;
-    pad.color = ph.color;
-    // Reset the settings that belong to the template's own sample.
-    if ("start" in pad) Object.assign(pad, { start: 0, zoomStart: 0, end: PLACEHOLDER_FRAMES, zoomEnd: PLACEHOLDER_FRAMES });
-    if ("pitch" in pad) pad.pitch = 0;
-    if ("vol" in pad) pad.vol = 1;
-    if ("pan" in pad) pad.pan = 0.5;
-    pads.push(pad);
-  }
-  pads.sort((a, b) => Number(a.pad) - Number(b.pad));
-}
-
-/**
  * Adds the layout's ghost snares and soft kicks. Each gets its own 24-bit WAV and its own sample entry,
  * and its pad is a clone of the source pad (bus, pan, everything Koala expects) with the trim points reset
  * and the volume knob at 0 dB, since the level is baked into the audio. A ghost whose slot is already taken, or whose source pad is gone, is skipped.
@@ -361,16 +308,6 @@ async function addGhostPads(project: ParsedKoalaProject, samplerJson: any, ghost
     taken.add(g.index);
   }
   pads.sort((a, b) => Number(a.pad) - Number(b.pad));
-}
-
-/** A pad as Koala writes a fresh one (read from a project it saved), for when the project has no pad to copy. */
-function defaultPad(): any {
-  return {
-    attack: 0.00011000000085914508, bus: -1, channel: 0, chokeGroup: 0, cyclicPeriod: 20, end: 0, hasLoopPoint: "false", loopPoint: -1, looping: "false", muted: false,
-    oneshot: "true", pad: "0", pan: 0.5, pingpong: "false", pitch: 0, release: 0, reverse: "false", sampleId: 0, start: 0, stretch: 1, stretchLength: 0, stretching: false,
-    tone: 0, type: "sample", vol: 1, xfade: 200, zoomEnd: 0, zoomStart: 0,
-    eq: { enabled: "false", hi: { freq: 8000, gain: 0, q: 1, type: "highshelf" }, lo: { freq: 100, gain: 0, q: 1, type: "lowshelf" }, mid: { freq: 1000, gain: 0, q: 1, type: "peaking" } },
-  };
 }
 
 /** The names of the effects already on a project's master strip: the master chain would wipe them out. */

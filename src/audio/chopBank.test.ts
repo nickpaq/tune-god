@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { Pad } from "../components/PadPanel";
 import { withoutExtraDrums } from "./extraDrums";
-import { inChopBank, nextEmptyPad, replaceMisfit } from "./padMoves";
+import { inChopBank, nextEmptyPad } from "./padMoves";
 
 const pad = (index: number, extra: Partial<Pad> = {}): Pad => ({ index, origIndex: index, name: `p${index}`, sampleId: index, sampleRate: 48000, channelData: [new Float32Array(4)], tune: false, semis: 0, cents: 0, ...extra });
 const grid = (indices: number[], extra: Partial<Pad> = {}) => Object.fromEntries(indices.map((i) => [i, pad(i, extra)]));
@@ -13,12 +13,6 @@ describe("bank D is the chops' bank", () => {
     for (const bank of [0, 1, 2, 3]) expect(nextEmptyPad(full, bank)).toBe(47);
     expect(nextEmptyPad(grid(Array.from({ length: 48 }, (_, i) => i)), 3)).toBeNull();
     expect(nextEmptyPad({}, 3)).toBe(32);
-  });
-
-  it("the misfit swap never takes a sound from bank D", () => {
-    const pads = { ...grid([0], { category: "kick" }), ...grid([50], { category: "snare" }), ...grid(Array.from({ length: 47 }, (_, i) => i + 1).filter((i) => i !== 0)) };
-    const next = replaceMisfit(pads, 0, "snare", "add snare");
-    expect(next[50]).toBe(pads[50]);
   });
 
   it("deleting extra drums leaves bank D alone", () => {

@@ -1,8 +1,6 @@
 // Pure helpers for rearranging pads across the 4 banks x 16 slots grid. A pad carries all of its
 // data (colour category, tuning, trims) with it, so moving or swapping only changes `index`.
 import type { Pad } from "../components/PadPanel";
-import type { CategoryId } from "./classify";
-import { makePlaceholderPad } from "./placeholderPads";
 
 export const PAD_COUNT = 64;
 export const PADS_PER_BANK = 16;
@@ -49,22 +47,4 @@ export function emptyPadInBank(pads: Record<number, Pad>, bank: number): number 
     if (!pads[index]) return index;
   }
   return null;
-}
-
-/**
- * After the sound at `index` (on a finger-drumming page) has been re-typed so it no longer fits its slot, puts a
- * sound of the slot's category there instead. The replacement comes from a later bank (swapping places with the
- * misfit); with none available the misfit moves to the first free later pad and the slot becomes a "missing" gap.
- */
-export function replaceMisfit(pads: Record<number, Pad>, index: number, slotCategory: CategoryId, slotLabel: string): Record<number, Pad> {
-  const isSound = (p: Pad) => !p.placeholder && !p.ghost;
-  const replacement = Object.values(pads)
-    .filter((p) => isSound(p) && p.index >= PADS_PER_BANK && p.index < TOOL_PAD_COUNT && p.category === slotCategory)
-    .sort((a, b) => a.index - b.index)[0];
-  if (replacement) return movePad(pads, index, replacement.index);
-  const free = nextEmptyPad(pads, 1);
-  if (free === null || free < PADS_PER_BANK) return pads;
-  const next = movePad(pads, index, free);
-  next[index] = makePlaceholderPad({ index, kind: "missing", label: slotLabel });
-  return next;
 }
