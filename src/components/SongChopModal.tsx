@@ -25,6 +25,8 @@ import { buildPyramid } from "../audio/song/waveform";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
 import { Knob } from "./Knob";
 import { useSongPlayer } from "./useSongPlayer";
+import { padTitle } from "../audio/song/stems";
+import { loadChopMarks, saveChopMarks } from "../storage";
 import type { Pad } from "./PadPanel";
 
 export interface ChopSettings {
@@ -91,10 +93,22 @@ export function SongChopModal({
   const colorOf = (i: number) => palette.colors[i % palette.colors.length];
 
   const [detected, setDetected] = useState<Detected | "none" | null>(null);
-  const [history, setHistory] = useState(() => startHistory<Marks>(NO_MARKS));
+  // The markers are kept under the song's name and length, so they come back after the editor is closed or the app is reopened.
+  const songKey = `${padTitle(pad)}|${totalFrames}|${sampleRate}`;
+  const [history, setHistory] = useState(() => {
+    const saved = loadChopMarks(songKey);
+    return startHistory<Marks>(saved ?? NO_MARKS);
+  });
   const marks = history.present;
   /** What the last press did, for the readout. */
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(() => (history.present === NO_MARKS ? "" : "Your saved markers are back"));
+  useEffect(() => {
+    saveChopMarks(songKey, marks);
+  }, [songKey, marks]);
+  /** X (or a tap outside) asks first, so a stray tap cannot throw the editor away. The markers stay saved either way. */
+  const askClose = () => {
+    if (window.confirm("Close the chopper? Your chop markers are saved and will be here when you open it again.")) onClose();
+  };
   /** Whether scrubbing pulls the line onto grid lines and markers; off, to place a marker exactly where the sound is. */
   const [magnetOn, setMagnetOn] = useState(true);
 
@@ -318,13 +332,13 @@ export function SongChopModal({
   const readoutTwo = status || `${lines.length} chop${lines.length === 1 ? "" : "s"}, ${marks.downbeats.length} downbeat${marks.downbeats.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="palette-backdrop chop-backdrop" onClick={onClose}>
+    <div className="palette-backdrop chop-backdrop" onClick={askClose}>
       <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
         <div className="chop__head">
           <span>
             Chop the song<span className="chop__version">v{__APP_VERSION__}</span>
           </span>
-          <button onClick={onClose} aria-label="Close">
+          <button onClick={askClose} aria-label="Close">
             X
           </button>
         </div>

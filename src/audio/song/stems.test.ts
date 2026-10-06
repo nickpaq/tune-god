@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Pad } from "../../components/PadPanel";
-import { baseName, checkStems, isVocalsName, padTitle, songNameOfVocals, vocalsNameFor } from "./stems";
+import { baseName, checkStems, findAcapellaPair, isVocalsName, padTitle, songNameOfVocals, vocalsNameFor } from "./stems";
 
 const pad = (name: string, seconds = 100, sampleRate = 44100, index = 0, label?: string): Pad => ({
   index,
@@ -129,5 +129,32 @@ describe("checkStems", () => {
   it("allows a few milliseconds of difference, and compares in time so sample rates may differ", () => {
     expect(checkStems(song, [song, pad("Toxic VOCALS.wav", 199.51, 44100, 4)]).ok).toBe(true);
     expect(checkStems(song, [song, pad("Toxic VOCALS.wav", 199.5, 48000, 4)]).ok).toBe(true);
+  });
+});
+
+describe("findAcapellaPair", () => {
+  it("takes bank D's first two pads when they are the song and its stem", () => {
+    const song = pad("a.wav", 100, 44100, 48, "Toxic");
+    const vocals = pad("b.wav", 100, 44100, 49, "Toxic VOCALS");
+    const found = findAcapellaPair(song, vocals, [pad("x.wav", 100, 44100, 3, "Toxic"), pad("y.wav", 100, 44100, 4, "Toxic VOCALS")]);
+    expect(found.ok && found.song === song && found.vocals === vocals).toBe(true);
+  });
+
+  it("looks through the rest of the project when bank D does not hold them", () => {
+    const all = [pad("k.wav", 1, 44100, 0, "Kick 1"), pad("s.wav", 100, 44100, 20, "Toxic"), pad("v.wav", 100, 44100, 33, "Toxic VOCALS")];
+    const found = findAcapellaPair(undefined, undefined, all);
+    expect(found.ok && found.song === all[1] && found.vocals === all[2]).toBe(true);
+  });
+
+  it("says both files are needed when there is no pair", () => {
+    const found = findAcapellaPair(undefined, undefined, [pad("s.wav", 100, 44100, 20, "Toxic"), pad("k.wav", 1, 44100, 0, "Kick 1")]);
+    expect(!found.ok && found.reason === "no-pair" && found.message).toMatch(/needs both files/);
+    const stemOnly = findAcapellaPair(undefined, undefined, [pad("v.wav", 100, 44100, 33, "Toxic VOCALS")]);
+    expect(!stemOnly.ok && stemOnly.reason).toBe("no-pair");
+  });
+
+  it("reports a pair whose lengths differ", () => {
+    const found = findAcapellaPair(undefined, undefined, [pad("s.wav", 100, 44100, 20, "Toxic"), pad("v.wav", 90, 44100, 21, "Toxic VOCALS")]);
+    expect(!found.ok && found.reason).toBe("length");
   });
 });

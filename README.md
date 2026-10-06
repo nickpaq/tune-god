@@ -16,7 +16,7 @@ A local-first web app for [Koala Sampler](https://koalasampler.com) projects. Dr
 - **Load Bank B: Melodic Loops** takes a folder that holds **only sound files, no subfolders** (a folder with subfolders is refused). 12 are taken at random for the top three rows of bank B, plus 4 spares; sounds over 30 seconds are skipped (`MAX_LOAD_SECONDS`).
 - **Load Bank B: 808 & Bass** takes a drum pack with 808 or bass subfolders: two basses and two 808s on the bottom row of bank B (a shortage of one kind is made up from the other), and four spares of each kind.
 - **Load Bank C: One Shots** takes a folder with only sound files, like the loops: 16 at random on bank C plus 4 spares, 30 seconds at most.
-- **Load Bank D: Acapella (Koala project)** is bank D: see below and `docs/song-chop.md`.
+- **Load Bank D: Acapella** is bank D: see below and `docs/song-chop.md`.
 
 Everything the pads cannot hold is a hidden spare in the hot-swap pool (the swap list offers the spares of the selected pad's type; swapping puts the old sound back in the list). The export drops every sound that is not on a pad. Hidden sounds are numbered from pad 64 in the project, past the grid, and are saved with the project when it is reopened. New sounds are levelled against the sounds already in the project and written into the saved project; loading clears undo history.
 

@@ -40,7 +40,30 @@ const sameName = (a: string, b: string) => baseName(a).toLowerCase() === baseNam
 const answersTo = (pad: Pad, title: string) => sameName(padTitle(pad), title) || sameName(pad.name, title);
 const seconds = (pad: Pad) => pad.channelData[0].length / pad.sampleRate;
 
-export type StemCheck = { ok: true; song: Pad; vocals: Pad } | { ok: false; reason: "no-vocals" | "no-song" | "length"; message: string };
+export type StemCheck = { ok: true; song: Pad; vocals: Pad } | { ok: false; reason: "no-vocals" | "no-song" | "length" | "no-pair"; message: string };
+
+/** What the user is told when the project holds no song with its vocal stem. */
+export const NEEDS_BOTH_MESSAGE = `The project needs both files to continue: a song, and its vocal stem labelled exactly like the song with VOCALS after it (for example "Night Drive" and "Night Drive VOCALS"). Run Stem Split in Koala on the song, keep both pads in the project, and try again.`;
+
+/**
+ * Finds the acapella's song and vocal stem in a project. Bank D's first two slots are checked first (`first` and `second`, the song and its
+ * stem); when they do not hold the pair, `all` (every sound of the project, in the order to look) is searched for a pad labelled `{label}` and
+ * another labelled `{label} VOCALS`. When there is no such pair the message says both files are needed; a pair whose lengths do not match says that.
+ */
+export function findAcapellaPair(first: Pad | undefined, second: Pad | undefined, all: Pad[]): StemCheck {
+  if (first && second) {
+    const direct = checkStems(first, [first, second]);
+    if (direct.ok) return direct;
+  }
+  let problem: StemCheck | null = null;
+  for (const pad of all) {
+    if (!isVocalsName(padTitle(pad))) continue;
+    const check = checkStems(pad, all);
+    if (check.ok) return check;
+    if (check.reason === "length" && !problem) problem = check;
+  }
+  return problem ?? { ok: false, reason: "no-pair", message: NEEDS_BOTH_MESSAGE };
+}
 
 /**
  * Finds the song and its vocal stem for the sound that was tapped (either of them), and checks they can be used together. `pads` are the sounds

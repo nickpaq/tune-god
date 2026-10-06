@@ -3,7 +3,6 @@ import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { blankProject, entriesOfDrop, findPackInEntries, findPackInFileList, writeBankSounds, type FoundPack } from "./audio/packProject";
 import { BANK_ZONES, bankTakes, MAX_LOAD_SECONDS, numberedLabel, placeBank, planBank, type BankLoad } from "./audio/bankLoad";
-import { readAcapellaZip } from "./audio/acapella";
 import { displayName, packTags } from "./audio/sampleName";
 import { packByteBudget, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
@@ -22,7 +21,7 @@ import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/lo
 import { balancedSpread } from "./audio/spread";
 import { CATEGORIES, categoryIndex, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
-import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
+import { CHOP_BANK_START, emptyPadInBank, inChopBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
@@ -36,7 +35,7 @@ import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
 import { scalePlans } from "./audio/song/tapGrid";
-import { checkStems } from "./audio/song/stems";
+import { checkStems, findAcapellaPair } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
 import { addSongSections, songTemplate, type SongExport, type SongTemplate } from "./audio/exportSong";
@@ -291,7 +290,7 @@ function App() {
   /** What the drop zone says while a pack is being measured and levelled. */
   const [importStatus, setImportStatus] = useState("");
 
-  const loadProject = useCallback(async (file: File, restore = false) => {
+  const loadProject = useCallback(async (file: File, restore = false, ignoreLong = false) => {
     const token = ++loadToken.current;
     setLoading(true);
     try {
@@ -425,7 +424,8 @@ function App() {
           return next;
         });
       }
-      if (!restore && tooLong.length > 0) setLongSamples(tooLong);
+      // The acapella chopper works on a long song, so it never asks about the length limit.
+      if (!restore && !ignoreLong && tooLong.length > 0) setLongSamples(tooLong);
     } catch (err) {
       // Not a usable project: stay on the drop screen rather than showing an error.
       console.error(err);
@@ -447,7 +447,7 @@ function App() {
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
-    if (analyzing > 0 || loading || Object.keys(pads).length === 0) return;
+    if (analyzing > 0 || loading || (Object.keys(pads).length === 0 && Object.keys(hidden).length === 0)) return;
     const out: Record<number, SavedPad> = {};
     for (const p of Object.values(pads)) {
       if (!isReal(p)) continue;
@@ -650,30 +650,47 @@ function App() {
     }
   };
 
-  /**
-   * Bank D: takes the song and its vocal stem out of an acapella Koala project and opens the chop editor on them. The project itself is not
-   * loaded; only the two sounds are read, and the sections the chop makes go on bank D.
-   */
+  /** Set while a Koala project picked for the acapella is loading: the chopper starts as soon as it is in. */
+  const acapellaPending = useRef(false);
+
+  /** The acapella's picker: opens the Koala project like any other (long sounds are fine) and then looks for the song and its vocal stem in it. */
   const loadAcapella = async (file: File) => {
     if (addPackStatus || loading) return;
-    setAddPackStatus("Reading…");
-    try {
-      const result = await readAcapellaZip(file);
-      if (!result.ok) {
-        window.alert(result.message);
-        return;
-      }
-      const { song, vocals, beatsPerBar, template } = result.acapella;
-      acapellaTemplate.current = template;
-      setMenuOpen(false);
-      setChop({ song, vocals, beatsPerBar });
-    } catch (err) {
-      console.error(err);
-      window.alert("That acapella project could not be read.");
-    } finally {
-      setAddPackStatus("");
+    acapellaPending.current = true;
+    await loadProject(file, false, true);
+    await new Promise((resolve) => setTimeout(resolve));
+    if (Object.keys(latest.current.pads).length === 0 && Object.keys(latest.current.hidden).length === 0) {
+      acapellaPending.current = false;
+      window.alert("That file could not be opened as a Koala project.");
     }
   };
+
+  /**
+   * Bank D: the acapella chopper. The song and its vocal stem are looked for in bank D's first two slots, then anywhere else in the project
+   * (a pad labelled like the song and one labelled like the song with VOCALS after it). With no pair the user is told both are needed.
+   */
+  const startAcapella = async () => {
+    if (addPackStatus || loading || analyzing > 0) return;
+    const cur = latest.current;
+    const onPads = Object.values(cur.pads)
+      .filter(isReal)
+      .sort((a, b) => a.index - b.index);
+    const found = findAcapellaPair(cur.pads[CHOP_BANK_START], cur.pads[CHOP_BANK_START + 1], [...onPads, ...Object.values(cur.hidden)]);
+    if (!found.ok) {
+      window.alert(found.message);
+      return;
+    }
+    setMenuOpen(false);
+    await launchChop(found.song, found.vocals);
+  };
+
+  useEffect(() => {
+    if (!acapellaPending.current || loading || analyzing > 0 || !hasProject) return;
+    acapellaPending.current = false;
+    void startAcapella();
+    // starts once, when the picked project has finished loading
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, analyzing, pads, hidden]);
 
   /** A drop: a .koala file loads as a project, a folder as a sample pack. */
   const handleDrop = (data: DataTransfer) => {
@@ -758,10 +775,30 @@ function App() {
       window.alert(check.message);
       return;
     }
+    await launchChop(check.song, check.vocals);
+  };
+
+  /**
+   * Opens the chop editor on the song and its vocal stem. The chops go on bank D, possibly on every pad of it, so a song or stem sitting there is
+   * first moved into the hot-swap pool: the pool is part of the saved project (the project file and the saved pad state both live on the device),
+   * so the two sounds survive the chop and the app being closed. The chops never write over them.
+   */
+  const launchChop = async (song: Pad, vocals: Pad) => {
     const project = projectRef.current;
     const { beatsPerBar } = project ? await projectTimeSignature(project) : { beatsPerBar: 4 };
+    const onBankD = [song, vocals].filter((p) => inChopBank(p.index) && latest.current.pads[p.index]?.origIndex === p.origIndex);
+    if (onBankD.length > 0) {
+      recordEdit();
+      setPads((prev) => {
+        const next = { ...prev };
+        for (const p of onBankD) if (next[p.index]?.origIndex === p.origIndex) delete next[p.index];
+        return next;
+      });
+      setHidden((prev) => ({ ...prev, ...Object.fromEntries(onBankD.map((p) => [p.origIndex, { ...p, index: -1 }])) }));
+      setSelected((sel) => (sel !== null && onBankD.some((p) => p.index === sel) ? null : sel));
+    }
     acapellaTemplate.current = undefined;
-    setChop({ song: check.song, vocals: check.vocals, beatsPerBar });
+    setChop({ song: { ...song, index: -1 }, vocals: { ...vocals, index: -1 }, beatsPerBar });
   };
 
   /** The song sections as the export writes them: their pads, audio, bars, labels, colours and the tempo. */
@@ -1288,7 +1325,7 @@ function App() {
   const sectionLabel = (p: Pad): string => `${CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
   const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.section ? sectionLabel(p) : (numberedLabel(p)?.label ?? padLabel(p)));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
-  const hasProject = Object.keys(pads).length > 0;
+  const hasProject = Object.keys(pads).length > 0 || Object.keys(hidden).length > 0;
   /** The 16 pads of a bank as the sequencer shows them: the app's own labels and colours, or null where there is no sound. */
   const seqPadsOfBank = (b: number): (SeqPad | null)[] =>
     Array.from({ length: 16 }, (_, slot) => {
@@ -1463,7 +1500,7 @@ function App() {
         <input
           ref={acapellaInput}
           type="file"
-          accept=".koala,.zip"
+          accept=".koala"
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -1591,13 +1628,16 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose a Koala project that holds only a song and its vocal stem. It is not opened as the project: its two sounds go to the chop editor, and the sections go on Bank D."
+              title="Opens the acapella chopper on the song and its vocal stem (a pad labelled like the song, and one with VOCALS after it): Bank D's first two pads are checked, then the rest of the project. With no project open it asks for a Koala project first. The sections go on Bank D."
               onClick={() => {
-                acapellaInput.current?.click();
-                setMenuOpen(false);
+                if (hasProject) void startAcapella();
+                else {
+                  acapellaInput.current?.click();
+                  setMenuOpen(false);
+                }
               }}
             >
-              {addPackStatus || "Load Bank D: Acapella (Koala project)"}
+              {addPackStatus || "Load Bank D: Acapella"}
             </button>
             <Switch label="Show symbols on pads" on={padSymbols} onChange={setPadSymbols} />
             <label className="menu__a4">

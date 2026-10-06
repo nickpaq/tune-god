@@ -5,7 +5,7 @@
 //   Bank B  "Load Bank B: Melodic Loops" a folder of sound files and nothing else; twelve of them at random go on the top three rows.
 //           "Fill Bank B: 808 & Bass"   a pack with 808 or bass subfolders; the bottom row holds two basses and two 808s.
 //   Bank C  "Fill Bank C: One Shots"    a folder of sound files and nothing else; sixteen at random.
-//   Bank D  the acapella chop, see acapella.ts.
+//   Bank D  the acapella chop, see findAcapellaPair in song/stems.ts and startAcapella in App.tsx.
 //
 // Every sound is named by its type and a number ("Kick 1", "Snare 2", "808 1"), not by its file name, and written to the project under that
 // name. Whatever a bank's pads do not hold stays in the hot-swap pool as a spare. Bass, melodic loops and one-shots are tuned by default.
