@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SEQ Velocity</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="seq.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Silkscreen&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="dev">
+  <div class="island"></div>
+  <div class="guide guide--top"><span>CURVE STARTS · 62</span></div>
+  <div class="guide guide--bot"><span>CURVE STARTS · 812</span></div>
+  <div class="area">
+    <div class="upper">
+      <div class="tray transport">
+        <button class="cap" aria-label="Back to the other pages"><span class="led"></span><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="M11.5 6.5 8 10l3.5 3.5"/></svg>Back</button>
+        <button class="bpm" aria-label="Tempo 85"><b>85</b><i>BPM</i></button>
+        <button class="cap" aria-label="Play"><span class="led"></span><svg viewBox="0 0 20 20"><path class="f" d="M6 3.5v13l11-6.5z"/></svg>Play</button>
+        <button class="cap" aria-label="Record"><span class="led"></span><svg viewBox="0 0 20 20"><circle class="f" cx="10" cy="10" r="6.5"/></svg>Rec</button>
+        <button class="cap" aria-label="Mixer"><span class="led"></span><svg viewBox="0 0 20 20"><path d="M5 3v14M10 3v14M15 3v14"/><rect class="f" x="3" y="11" width="4" height="3" rx="1"/><rect class="f" x="8" y="5" width="4" height="3" rx="1"/><rect class="f" x="13" y="8" width="4" height="3" rx="1"/></svg>Mix</button>
+      </div>
+      <div class="strip">
+        <button class="cap cap--on" aria-label="Loop"><span class="led"></span><svg viewBox="0 0 20 20"><path d="M5 9V8a3 3 0 0 1 3-3h7l-2.2-2.2M15 11v1a3 3 0 0 1-3 3H5l2.2 2.2"/></svg></button>
+        <div class="scenes">
+          <div class="scene scene--sel">
+            <div class="lane" style="--lc:var(--bA)">1</div>
+            <div class="lane" style="--lc:var(--bB)">1</div>
+            <div class="lane" style="--lc:var(--bC)">1</div>
+            <div class="lane lane--off"></div>
+          </div>
+          <div class="scene scene--dim">
+            <div class="lane" style="--lc:var(--bA)">2</div>
+            <div class="lane" style="--lc:var(--bB)">2</div>
+            <div class="lane" style="--lc:var(--bC)">1</div>
+            <div class="lane" style="--lc:var(--bD)">1</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="velrow">
+        <div class="screen screen--a">
+          <div class="oled">
+            <div class="oled__head"><span>Default</span></div>
+            <div class="plot">
+              <div class="mm" style="top:6px">Max</div>
+              <div class="g" style="top:19%"></div><div class="g" style="top:32%"></div><div class="g" style="top:45%"></div><div class="g" style="top:58%"></div><div class="g" style="top:71%"></div><div class="g" style="top:84%"></div>
+              <div class="lvl" style="top:56%"></div>
+              <div class="mm" style="bottom:6px">Min</div>
+            </div>
+          </div>
+        </div>
+        <div class="screen screen--b">
+          <div class="oled">
+            <div class="oled__head"><span>Live play</span></div>
+            <div class="plot">
+              <div class="mm" style="top:6px">Max</div>
+              <div class="g" style="top:19%"></div><div class="g" style="top:32%"></div><div class="g" style="top:45%"></div><div class="g" style="top:58%"></div><div class="g" style="top:71%"></div><div class="g" style="top:84%"></div>
+              <div class="mm" style="bottom:6px">Min</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quant">
+        <button class="cap cap--off cap--txt" style="flex:none;width:52px;height:44px;font-size:13px" aria-label="Quantize off"><span class="led"></span>Off</button>
+        <div class="tray">
+          <button class="cap cap--on cap--txt" aria-label="Quantize 1/4"><span class="led"></span>1/4</button>
+          <button class="cap cap--txt" aria-label="Quantize 1/8"><span class="led"></span>1/8</button>
+          <button class="cap cap--txt" aria-label="Quantize 1/16"><span class="led"></span>1/16</button>
+          <button class="cap cap--txt" aria-label="Quantize 1/16 triplet"><span class="led"></span>1/16T</button>
+          <button class="cap cap--txt" aria-label="Quantize 1/32"><span class="led"></span>1/32</button>
+        </div>
+      </div>
+    </div>
+    <div class="lower">
+      <div class="tray nav">
+        <button class="cap" aria-label="Play pads"><span class="led"></span><svg viewBox="0 0 20 20"><circle class="f" cx="5" cy="14.5" r="2.2"/><circle class="f" cx="14" cy="12.5" r="2.2"/><path d="M7.2 14.5V5l9-2v9.5M7.2 7.5l9-2"/></svg>Play</button>
+        <button class="cap cap--on" aria-label="Velocity"><span class="led"></span><svg viewBox="0 0 20 20"><path d="M4 17V9M8 17V4M12 17V11M16 17V7"/></svg>Vel</button>
+        <button class="cap" aria-label="Pattern"><span class="led"></span><svg viewBox="0 0 20 20"><path class="f" d="M3.5 15.5 10 5l6.5 10.5z"/></svg>Pattern</button>
+        <button class="cap" aria-label="Sample edit"><span class="led"></span><svg viewBox="0 0 20 20"><path d="M1.5 10h2.2l1.6-5 2.4 10 2.2-8 1.6 5 1.4-2h5.6"/></svg>Edit</button>
+        <button class="cap" aria-label="Sounds"><span class="led"></span><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m12.8 12.8 5 5"/></svg>Sounds</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":402,"height":874}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

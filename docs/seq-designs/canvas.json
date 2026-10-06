@@ -1,0 +1,31 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-06T12:00:00Z" },
+  "title": "KoalaTune SEQ",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 402, "h": 874, "title": "1 · Play" },
+    "Pattern.dc.html": { "x": 482, "y": 0, "w": 402, "h": 874, "title": "2 · Pattern" },
+    "Tempo.dc.html": { "x": 964, "y": 0, "w": 402, "h": 874, "title": "3 · Tempo" },
+    "Mixer.dc.html": { "x": 1446, "y": 0, "w": 402, "h": 874, "title": "4 · Mixer" },
+    "Velocity.dc.html": { "x": 0, "y": 994, "w": 402, "h": 874, "title": "5 · Velocity" },
+    "Keys.dc.html": { "x": 482, "y": 994, "w": 402, "h": 874, "title": "6 · Keys" },
+    "Sample.dc.html": { "x": 964, "y": 994, "w": 402, "h": 874, "title": "7 · Sample" },
+    "EntryKey.dc.html": { "x": 1446, "y": 994, "w": 402, "h": 110, "title": "8 · SEQ key in the header" }
+  },
+  "order": [
+    "Main.dc.html",
+    "Pattern.dc.html",
+    "Tempo.dc.html",
+    "Mixer.dc.html",
+    "Velocity.dc.html",
+    "Keys.dc.html",
+    "Sample.dc.html",
+    "EntryKey.dc.html"
+  ],
+  "notes": {
+    "head": { "x": 0, "y": -260, "text": "KoalaTune · SEQ pages", "kind": "title1", "maxW": 1848 }
+  },
+  "designSystems": []
+}

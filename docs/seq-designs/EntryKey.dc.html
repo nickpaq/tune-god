@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SEQ key in the header</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="seq.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Silkscreen&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="dev" style="height:110px;border-radius:0;background:var(--c1)">
+  <div class="head" style="margin-top:28px">
+    <div class="tray tray--m">
+      <button class="cap cap--on" aria-label="Tune mode"><span class="led"></span>Tune</button>
+      <button class="cap" aria-label="Sound type mode"><span class="led"></span>Type</button>
+      <button class="cap" aria-label="Hot swap mode"><span class="led"></span>Swap</button>
+      <button class="cap" aria-label="Sequencer"><span class="led"></span>Seq</button>
+    </div>
+    <div class="tray tray--b">
+      <button class="cap cap--on" aria-label="Bank A"><span class="led"></span>A</button>
+      <button class="cap" aria-label="Bank B"><span class="led"></span>B</button>
+      <button class="cap" aria-label="Bank C"><span class="led"></span>C</button>
+      <button class="cap" aria-label="Bank D"><span class="led"></span>D</button>
+    </div>
+    <button class="cap cap--menu" aria-label="Menu"><svg viewBox="0 0 20 20" style="width:16px;height:16px"><path d="M3 5.5h14M3 10h14M3 14.5h14"/></svg>Menu</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":402,"height":110}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

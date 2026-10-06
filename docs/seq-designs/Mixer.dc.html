@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SEQ Mixer</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="seq.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Silkscreen&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="dev">
+  <div class="island"></div>
+  <div class="guide guide--top"><span>CURVE STARTS · 62</span></div>
+  <div class="guide guide--bot"><span>CURVE STARTS · 812</span></div>
+  <div class="area">
+    <div class="upper" style="padding-bottom:10px">
+      <div class="tray transport">
+        <button class="cap" aria-label="Back to the other pages"><span class="led"></span><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="M11.5 6.5 8 10l3.5 3.5"/></svg>Back</button>
+        <button class="bpm" aria-label="Tempo 85"><b>85</b><i>BPM</i></button>
+        <button class="cap" aria-label="Play"><span class="led"></span><svg viewBox="0 0 20 20"><path class="f" d="M6 3.5v13l11-6.5z"/></svg>Play</button>
+        <button class="cap" aria-label="Record"><span class="led"></span><svg viewBox="0 0 20 20"><circle class="f" cx="10" cy="10" r="6.5"/></svg>Rec</button>
+        <button class="cap cap--on" aria-label="Mixer"><span class="led"></span><svg viewBox="0 0 20 20"><path d="M5 3v14M10 3v14M15 3v14"/><rect class="f" x="3" y="11" width="4" height="3" rx="1"/><rect class="f" x="8" y="5" width="4" height="3" rx="1"/><rect class="f" x="13" y="8" width="4" height="3" rx="1"/></svg>Mix</button>
+      </div>
+
+      <div class="tray banks"><button class="cap cap--on" style="--lc:var(--bA)" aria-label="Bank A"><span class="lamp"></span>A<svg viewBox="0 0 22 22"><path d="M3 3h16v16H3zM3 8.3h16M3 13.7h16M8.3 3v16M13.7 3v16"/></svg></button><button class="cap" style="--lc:var(--bB)" aria-label="Bank B"><span class="lamp"></span>B<svg viewBox="0 0 22 22"><path d="M3 3h16v16H3zM3 8.3h16M3 13.7h16M8.3 3v16M13.7 3v16"/></svg></button><button class="cap" style="--lc:var(--bC)" aria-label="Bank C"><span class="lamp"></span>C<svg viewBox="0 0 22 22"><path d="M3 3h16v16H3zM3 8.3h16M3 13.7h16M8.3 3v16M13.7 3v16"/></svg></button><button class="cap" style="--lc:var(--bD)" aria-label="Bank D"><span class="lamp"></span>D<svg viewBox="0 0 22 22"><path d="M3 3h16v16H3zM8.3 3v16M13.7 3v16"/><rect class="f" x="6.6" y="3" width="3.4" height="9"/><rect class="f" x="12" y="3" width="3.4" height="9"/></svg></button></div>
+
+      <div style="display:flex;gap:6px;flex:1;min-height:0">
+        <div class="chan" style="--lc:var(--bA)">
+          <div class="fx"><button class="cap" aria-label="Kick FX 1"><span class="led"></span>FX1</button><button class="cap cap--on" aria-label="Kick FX 2"><span class="led"></span>FX2</button></div>
+          <div class="fader"><div class="meter"><u style="--lv:62%"></u></div><div class="travel" style="--p:.58"><span class="ticks l"></span><span class="ticks"></span><b></b></div></div>
+          <div class="readout">-4.2</div>
+          <button class="cap cap--mute" aria-label="Mute bank A">Mute</button>
+        </div>
+        <div class="chan" style="--lc:var(--bB)">
+          <div class="fx"><button class="cap" aria-label="Bass FX 1"><span class="led"></span>FX1</button><button class="cap cap--on" aria-label="Bass FX 2"><span class="led"></span>FX2</button></div>
+          <div class="fader"><div class="meter"><u style="--lv:48%"></u></div><div class="travel" style="--p:.72"><span class="ticks l"></span><span class="ticks"></span><b></b></div></div>
+          <div class="readout">-2.0</div>
+          <button class="cap cap--mute" aria-label="Mute bank B">Mute</button>
+        </div>
+        <div class="chan" style="--lc:var(--bC)">
+          <div class="fx"><button class="cap" aria-label="Drums FX 1"><span class="led"></span>FX1</button><button class="cap cap--on" aria-label="Drums FX 2"><span class="led"></span>FX2</button></div>
+          <div class="fader"><div class="meter"><u style="--lv:70%"></u></div><div class="travel" style="--p:.54"><span class="ticks l"></span><span class="ticks"></span><b></b></div></div>
+          <div class="readout">-5.1</div>
+          <button class="cap cap--mute" aria-label="Mute bank C">Mute</button>
+        </div>
+        <div class="chan" style="--lc:var(--bD)">
+          <div class="fx"><button class="cap" aria-label="Melodic FX 1"><span class="led"></span>FX1</button><button class="cap cap--on" aria-label="Melodic FX 2"><span class="led"></span>FX2</button></div>
+          <div class="fader"><div class="meter"><u style="--lv:34%"></u></div><div class="travel" style="--p:.78"><span class="ticks l"></span><span class="ticks"></span><b></b></div></div>
+          <div class="readout">-1.4</div>
+          <button class="cap cap--mute" aria-label="Mute bank D">Mute</button>
+        </div>
+      </div>
+    </div>
+    <div class="lower">
+      <div class="segs">
+        <button class="cap cap--on" aria-label="Mixer"><span class="led"></span>Mixer</button>
+        <button class="cap" aria-label="FX 1"><span class="led"></span>FX1</button>
+        <button class="cap" aria-label="FX 2"><span class="led"></span>FX2</button>
+      </div>
+      <div class="tray nav">
+        <button class="cap" aria-label="Play pads"><span class="led"></span><svg viewBox="0 0 20 20"><circle class="f" cx="5" cy="14.5" r="2.2"/><circle class="f" cx="14" cy="12.5" r="2.2"/><path d="M7.2 14.5V5l9-2v9.5M7.2 7.5l9-2"/></svg>Play</button>
+        <button class="cap" aria-label="Velocity"><span class="led"></span><svg viewBox="0 0 20 20"><path d="M4 17V9M8 17V4M12 17V11M16 17V7"/></svg>Vel</button>
+        <button class="cap" aria-label="Pattern"><span class="led"></span><svg viewBox="0 0 20 20"><path class="f" d="M3.5 15.5 10 5l6.5 10.5z"/></svg>Pattern</button>
+        <button class="cap" aria-label="Sample edit"><span class="led"></span><svg viewBox="0 0 20 20"><path d="M1.5 10h2.2l1.6-5 2.4 10 2.2-8 1.6 5 1.4-2h5.6"/></svg>Edit</button>
+        <button class="cap" aria-label="Sounds"><span class="led"></span><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m12.8 12.8 5 5"/></svg>Sounds</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":402,"height":874}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

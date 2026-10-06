@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SEQ Tempo</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="seq.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Silkscreen&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="dev">
+  <div class="island"></div>
+  <div class="guide guide--top"><span>CURVE STARTS · 62</span></div>
+  <div class="guide guide--bot"><span>CURVE STARTS · 812</span></div>
+  <div class="area">
+    <div class="upper" style="padding-bottom:16px;gap:10px">
+      <div class="tray transport">
+        <button class="cap" aria-label="Back to the other pages"><span class="led"></span><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="M11.5 6.5 8 10l3.5 3.5"/></svg>Back</button>
+        <button class="bpm bpm--on" aria-label="Tempo 85"><b>85</b><i>BPM</i></button>
+        <button class="cap" aria-label="Play"><span class="led"></span><svg viewBox="0 0 20 20"><path class="f" d="M6 3.5v13l11-6.5z"/></svg>Play</button>
+        <button class="cap" aria-label="Record"><span class="led"></span><svg viewBox="0 0 20 20"><circle class="f" cx="10" cy="10" r="6.5"/></svg>Rec</button>
+        <button class="cap" aria-label="Mixer"><span class="led"></span><svg viewBox="0 0 20 20"><path d="M5 3v14M10 3v14M15 3v14"/><rect class="f" x="3" y="11" width="4" height="3" rx="1"/><rect class="f" x="8" y="5" width="4" height="3" rx="1"/><rect class="f" x="13" y="8" width="4" height="3" rx="1"/></svg>Mix</button>
+      </div>
+
+      <div class="screen" style="flex:none;height:228px">
+        <div class="oled">
+          <div class="oled__head"><span>Tempo</span><span>BPM</span></div>
+          <div class="wheel" style="flex:1;align-items:center">
+            <div class="col"><span>9</span><span class="cur">0</span><span>1</span></div>
+            <div class="col"><span>7</span><span class="cur">8</span><span>9</span></div>
+            <div class="col"><span>4</span><span class="cur">5</span><span>6</span></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="tap" style="height:84px;flex:none" aria-label="Tap tempo">Tap</button>
+
+      <div class="group">
+        <div class="row"><span class="row__label" style="width:56px">Swing</span><div class="slider"><i style="left:0;width:2%"></i><b style="left:2%"></b></div><span class="readout">0%</span></div>
+        <div class="row"><span class="row__label">Quantize</span><button class="cap cap--side cap--on" role="switch" aria-checked="true" aria-label="Quantize"><span class="led"></span>On</button></div>
+      </div>
+      <div class="group">
+        <div class="row"><span class="row__label">Metronome</span><button class="cap cap--side" role="switch" aria-checked="false" aria-label="Metronome"><span class="led"></span>Off</button></div>
+        <div class="row"><span class="row__label">Auto-enable when recording</span><button class="cap cap--side" role="switch" aria-checked="false" aria-label="Auto-enable when recording"><span class="led"></span>Off</button></div>
+      </div>
+      <div class="group">
+        <div class="row"><span class="row__label">Ableton Link</span><span class="row__value">Disabled</span><svg class="chev" viewBox="0 0 8 14"><path d="M1.5 1.5 6.5 7l-5 5.5"/></svg></div>
+      </div>
+    </div>
+    <div class="lower" style="height:2px;padding:0"></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":402,"height":874}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
