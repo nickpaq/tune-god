@@ -29,8 +29,8 @@ export default defineConfig({
       workbox: {
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,wasm,svg,png,ico,woff2}"],
-        // the viewport test page is its own little app, not part of this one
-        navigateFallbackDenylist: [/^\/viewport-test/],
+        // the viewport and latency test pages are their own little apps, not part of this one
+        navigateFallbackDenylist: [/^\/viewport-test/, /^\/latency-test/],
       },
       manifest: {
         name: "KoalaTune",

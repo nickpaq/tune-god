@@ -1,0 +1,23 @@
+{
+  "name": "Latency Test",
+  "short_name": "Latency",
+  "description": "Measures touch-to-sound delay of Web Audio when installed as a web app.",
+  "display": "standalone",
+  "start_url": "/latency-test/",
+  "scope": "/latency-test/",
+  "background_color": "#222326",
+  "theme_color": "#222326",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

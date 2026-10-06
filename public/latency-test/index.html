@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- The same viewport and web app meta tags as KoalaTune, so it installs and runs the same way. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#222326" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Latency Test" />
+<link rel="manifest" href="/latency-test/manifest.webmanifest" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<title>Latency Test</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #1a1b1d; color: #dcd8cc; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; }
+  html, body { position: fixed; top: 0; left: 0; right: 0; height: 100%; overflow: hidden; }
+  body { font: 600 12px/1.45 ui-monospace, Menlo, monospace; display: flex; flex-direction: column; gap: 8px; padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px calc(env(safe-area-inset-bottom, 0px) + 8px); }
+  #panel { white-space: pre; background: #000; border-radius: 8px; padding: 8px 10px; color: #eef2ec; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  label { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #9a968b; letter-spacing: .08em; text-transform: uppercase; }
+  select, button.small { font: 600 13px ui-monospace, Menlo, monospace; color: #dcd8cc; background: #3c3e43; border: 0; border-radius: 6px; padding: 8px 6px; }
+  #pad { flex: 1; min-height: 0; border: 0; border-radius: 14px; font: 700 26px/1.2 ui-monospace, Menlo, monospace; color: #14151a; background: #ff8a4c; touch-action: none; -webkit-tap-highlight-color: transparent; }
+  #pad.on { background: #fff; }
+  #pad.idle { background: #3c3e43; color: #dcd8cc; }
+  .note { font-size: 10px; color: #9a968b; font-weight: 500; }
+</style>
+</head>
+<body>
+<div id="panel">starting...</div>
+<div class="opts">
+  <label>Fires on<select id="evt"><option value="pointerdown">pointerdown</option><option value="touchstart">touchstart</option><option value="click">click</option></select></label>
+  <label>Latency hint<select id="hint"><option value="interactive">interactive</option><option value="balanced">balanced</option><option value="playback">playback</option></select></label>
+  <label>Audio session<select id="sess"><option value="playback">playback</option><option value="auto">auto</option></select></label>
+</div>
+<button id="pad" class="idle">TAP TO START</button>
+<div class="note">Screen-record with the mic on, volume up, phone speaker. Tap the glass firmly with a fingertip. In the recording, the gap between the tap's thump and the click is touch-to-sound.</div>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const pad = $("pad"), panel = $("panel"), evtSel = $("evt"), hintSel = $("hint"), sessSel = $("sess");
+  let ctx = null, buf = null, hits = 0, jsSum = 0, jsLast = 0, jsMax = 0, boundEvt = null, boundFn = null;
+
+  // A click (1 ms of noise at full level) on top of a short 90 Hz thump: a sharp start is easy to find in a waveform.
+  function makeBuffer(sr) {
+    const n = Math.round(sr * 0.25), b = ctx.createBuffer(1, n, sr), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      let v = Math.sin(2 * Math.PI * 90 * t) * Math.exp(-t * 30) * 0.8;
+      if (t < 0.003) v += (Math.random() * 2 - 1) * (1 - t / 0.003);
+      d[i] = Math.max(-1, Math.min(1, v * 0.9));
+    }
+    return b;
+  }
+
+  async function setup() {
+    if (navigator.audioSession) {
+      try { navigator.audioSession.type = sessSel.value === "playback" ? "playback" : "auto"; } catch (e) { /* not supported */ }
+    }
+    if (ctx) { try { await ctx.close(); } catch (e) { /* already closed */ } }
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: hintSel.value });
+    buf = makeBuffer(ctx.sampleRate);
+    try { await ctx.resume(); } catch (e) { /* needs a touch */ }
+    // warm up: one silent start so the first real hit is not the first start
+    const s = ctx.createBufferSource();
+    s.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    s.connect(ctx.destination);
+    s.start();
+    hits = jsSum = jsMax = 0;
+    pad.classList.remove("idle");
+    pad.textContent = "TAP";
+    bind();
+  }
+
+  // The hit path: start the sound first, touch nothing else until it has started.
+  function hit(e) {
+    if (!ctx || ctx.state !== "running") { if (ctx) ctx.resume(); return; }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start();
+    const now = performance.now();
+    jsLast = now - e.timeStamp;
+    hits++; jsSum += jsLast; if (jsLast > jsMax) jsMax = jsLast;
+    pad.classList.add("on");
+    setTimeout(() => pad.classList.remove("on"), 90);
+  }
+
+  function bind() {
+    if (boundEvt) pad.removeEventListener(boundEvt, boundFn);
+    boundEvt = evtSel.value;
+    boundFn = (e) => { if (boundEvt === "touchstart") e.preventDefault(); hit(e); };
+    pad.addEventListener(boundEvt, boundFn, { passive: boundEvt !== "touchstart" });
+  }
+
+  function show() {
+    const f = (x) => (typeof x === "number" ? x.toFixed(1) : "n/a");
+    const base = ctx && typeof ctx.baseLatency === "number" ? (ctx.baseLatency * 1000).toFixed(1) + " ms" : "n/a";
+    const out = ctx && typeof ctx.outputLatency === "number" ? (ctx.outputLatency * 1000).toFixed(1) + " ms" : "n/a";
+    const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+    panel.textContent = [
+      "state          " + (ctx ? ctx.state : "not started"),
+      "sample rate    " + (ctx ? ctx.sampleRate + " Hz" : "-"),
+      "baseLatency    " + base,
+      "outputLatency  " + out,
+      "audioSession   " + (navigator.audioSession ? navigator.audioSession.type : "unsupported"),
+      "installed app  " + (standalone ? "yes" : "no (browser tab)"),
+      "hits           " + hits,
+      "event->start() " + f(jsLast) + " ms  avg " + f(hits ? jsSum / hits : NaN) + "  max " + f(jsMax),
+    ].join("\n");
+  }
+
+  pad.addEventListener("pointerdown", () => { if (!ctx) setup(); }, { once: true });
+  pad.addEventListener("click", () => { if (!ctx) setup(); }, { once: true });
+  evtSel.addEventListener("change", bind);
+  hintSel.addEventListener("change", setup);
+  sessSel.addEventListener("change", setup);
+  setInterval(show, 300);
+  show();
+})();
+</script>
+</body>
+</html>
