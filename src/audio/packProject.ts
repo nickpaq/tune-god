@@ -103,6 +103,8 @@ export interface WrittenSound {
   sampleId: number;
   /** "Kick 1.wav": the name the sound was written under. */
   fileName: string;
+  /** The name of the file it was taken from ("Dark_Keys_Am_120bpm.wav"): the written name is only a number, and the key and tempo are read from this one. */
+  sourceName: string;
   category: CategoryId;
   is808: boolean;
   knobDb: number;
@@ -205,7 +207,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
     samples.push({ id: sampleId, metadata: { originalPath: fileName } });
     pads.push({ pad: pad + base, type: "sample", sampleId, vol: volFromDb(knobDb), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
     project.pads.push({ pad, sampleId, fileName });
-    sounds.push({ pad, sampleId, fileName, category, is808: !!is808, knobDb, group, number });
+    sounds.push({ pad, sampleId, fileName, sourceName: file.name, category, is808: !!is808, knobDb, group, number });
   }
   project.zip.file("sampler/sampler.json", JSON.stringify(json));
   const blob = await project.zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true });

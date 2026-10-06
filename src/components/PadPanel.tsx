@@ -21,6 +21,8 @@ export interface Pad {
   origIndex: number;
   /** The sample's file name in the project, shown in the classifier. */
   name: string;
+  /** For a sound a bank loader wrote (named "Loop 3.wav"): the name of the file it came from. Its key and tempo are read from this, and the Tune screen's name line shows it. */
+  sourceName?: string;
   /** The label on the pad in Koala, when the project had one: it is what a vocal stem is found by (see audio/song/stems.ts). */
   label?: string;
   /** The sample's id inside the .koala project, used when writing tuned audio back. */
@@ -156,7 +158,7 @@ export function PadPanel({
           <div>Shift {pad.tune ? formatTrim(total * 100) : "0.000"}st</div>
         </div>
       </div>
-      <NameLine name={name} fileName={pad.name} />
+      <NameLine name={name} fileName={pad.sourceName ?? pad.name} />
       {(pad.bpm || isLoopSound) && (
         <div className="pad-panel__toggles pad-panel__tempo">
           <span aria-label="Tempo of the sound">{pad.bpm ? (pad.stretch ? `${pad.bpm}>${projectBpm}` : pad.bpm) : "--"} BPM</span>

@@ -976,6 +976,11 @@
   flex: 1;
 }
 
+.menu__row .menu__button--shuffle {
+  flex: none;
+  width: 22cqw;
+}
+
 /* Marching ants, like a lasso selection: white dashes crawling along a dark outline. */
 .dropzone__ants {
   position: absolute;

@@ -368,7 +368,7 @@ function App() {
         if (!spare && decoded.channelData[0].length / decoded.sampleRate > MAX_SAMPLE_SECONDS) tooLong.push(ref.pad);
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
-          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
+          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, restorePads.current[ref.pad]?.sourceName ?? ref.fileName)
           .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, named: false }))
           .then(({ midi: detectedMidi, category: guessed, detail, centroid, bpm, named }) => {
             if (token !== loadToken.current) return;
@@ -391,6 +391,7 @@ function App() {
                     cents: remembered.cents,
                     stretch: remembered.stretch,
                     locked: remembered.locked,
+                    sourceName: remembered.sourceName,
                     category: cat,
                   }
                 : { category }),
@@ -463,11 +464,12 @@ function App() {
         is808: p.is808,
         stretch: p.stretch,
         locked: p.locked,
+        sourceName: p.sourceName,
         position: p.index,
       };
     }
     for (const p of Object.values(hidden)) {
-      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, stretch: p.stretch, hidden: true };
+      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, stretch: p.stretch, sourceName: p.sourceName, hidden: true };
     }
     // Sounds the user deleted stay deleted when the project is reopened.
     for (const ref of projectRef.current?.pads ?? []) {
@@ -531,6 +533,24 @@ function App() {
     return projectRef.current ? { project: projectRef.current, started } : null;
   };
 
+  /** The folder each loader last read, kept while the app is open so a bank can be reshuffled from the same folder without choosing it again. */
+  const lastPacks = useRef<Partial<Record<BankLoad, FoundPack>>>({});
+  /** The menu's Shuffle key beside a loader: loads the bank again from the folder it last read, with a new random pick. */
+  const shuffleButton = (bank: BankLoad) => (
+    <button
+      className="menu__button menu__button--shuffle"
+      disabled={!lastPacks.current[bank] || analyzing > 0 || loading || !!addPackStatus}
+      aria-label="Shuffle: load this bank again from the same folder"
+      title={lastPacks.current[bank] ? "Load this bank again from the same folder with a new random pick. Locked pads stay as they are." : "Load a folder first: the app keeps the folder you chose until it is closed."}
+      onClick={() => {
+        setMenuOpen(false);
+        void loadBank(bank, () => lastPacks.current[bank]!);
+      }}
+    >
+      Shuffle
+    </button>
+  );
+
   /** The bank that is shown once a loader has filled its pads. */
   const BANK_SHOWN: Record<BankLoad, number> = { drums: 0, loops: 1, bass: 1, oneShots: 2 };
 
@@ -544,6 +564,7 @@ function App() {
     setAddPackStatus("Reading…");
     try {
       const found = await find();
+      lastPacks.current[bank] = found;
       const plan = planBank(bank, found.files);
       if (plan.problem) {
         window.alert(plan.problem);
@@ -592,6 +613,7 @@ function App() {
           index: lockedSlots.has(placement.positions.get(sound.pad) ?? -1) ? -1 : (placement.positions.get(sound.pad) ?? -1),
           origIndex: sound.pad,
           name: sound.fileName,
+          sourceName: sound.sourceName,
           sampleId: sound.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
@@ -628,7 +650,7 @@ function App() {
       if (result.skipped > 0) setNotice(`${result.skipped} sound${result.skipped === 1 ? "" : "s"} could not be filled: no other file was short enough (under ${MAX_LOAD_SECONDS} s), small enough for the project size limit or readable`);
       for (const pad of fresh) {
         nextAnalysisWorker()
-          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.name, pad.category === "melodicLoop")
+          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.sourceName ?? pad.name, pad.category === "melodicLoop")
           .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, named: false }))
           .then(({ midi: detectedMidi, detail, centroid, bpm, named }) => {
             if (token !== loadToken.current) return;
@@ -1558,50 +1580,62 @@ function App() {
               disabled={!sidechainReady}
               onChange={setSidechainOn}
             />
-            <button
-              className="menu__button"
-              disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose a drum pack with subfolders (Kicks, Snares, Hi Hats...). Sounds are taken by subfolder name: 10 kicks, 10 snares, 5 closed and 5 open hats, 5 of every other drum type, named Kick 1, Snare 2 and so on."
-              onClick={() => {
-                drumsInput.current?.click();
-                setMenuOpen(false);
-              }}
-            >
-              {addPackStatus || "Load Bank A: Drums"}
-            </button>
-            <button
-              className="menu__button"
-              disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose a folder that holds only sound files, no subfolders. 12 are taken at random for the top three rows of Bank B (sounds over 1 minute are passed over for another) and tuned by default."
-              onClick={() => {
-                loopsInput.current?.click();
-                setMenuOpen(false);
-              }}
-            >
-              {addPackStatus || "Load Bank B: Melodic Loops"}
-            </button>
-            <button
-              className="menu__button"
-              disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose a folder that holds only sound files, no subfolders. 16 are taken at random for Bank C (sounds over 1 minute are passed over for another) and tuned by default."
-              onClick={() => {
-                oneShotsInput.current?.click();
-                setMenuOpen(false);
-              }}
-            >
-              {addPackStatus || "Load Bank C: One Shots"}
-            </button>
-            <button
-              className="menu__button"
-              disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose a drum pack with 808 or bass subfolders. Two basses and two 808s fill the bottom row of Bank B and are tuned by default."
-              onClick={() => {
-                bassInput.current?.click();
-                setMenuOpen(false);
-              }}
-            >
-              {addPackStatus || "Load Bank B: 808 & Bass"}
-            </button>
+            <div className="menu__row">
+              <button
+                className="menu__button"
+                disabled={analyzing > 0 || loading || !!addPackStatus}
+                title="Choose a drum pack with subfolders (Kicks, Snares, Hi Hats...). Sounds are taken by subfolder name: 10 kicks, 10 snares, 5 closed and 5 open hats, 5 of every other drum type, named Kick 1, Snare 2 and so on."
+                onClick={() => {
+                  drumsInput.current?.click();
+                  setMenuOpen(false);
+                }}
+              >
+                {addPackStatus || "Load Bank A: Drums"}
+              </button>
+              {shuffleButton("drums")}
+            </div>
+            <div className="menu__row">
+              <button
+                className="menu__button"
+                disabled={analyzing > 0 || loading || !!addPackStatus}
+                title="Choose a folder that holds only sound files, no subfolders. 12 are taken at random for the top three rows of Bank B (sounds over 1 minute are passed over for another) and tuned by default."
+                onClick={() => {
+                  loopsInput.current?.click();
+                  setMenuOpen(false);
+                }}
+              >
+                {addPackStatus || "Load Bank B: Melodic Loops"}
+              </button>
+              {shuffleButton("loops")}
+            </div>
+            <div className="menu__row">
+              <button
+                className="menu__button"
+                disabled={analyzing > 0 || loading || !!addPackStatus}
+                title="Choose a folder that holds only sound files, no subfolders. 16 are taken at random for Bank C (sounds over 1 minute are passed over for another) and tuned by default."
+                onClick={() => {
+                  oneShotsInput.current?.click();
+                  setMenuOpen(false);
+                }}
+              >
+                {addPackStatus || "Load Bank C: One Shots"}
+              </button>
+              {shuffleButton("oneShots")}
+            </div>
+            <div className="menu__row">
+              <button
+                className="menu__button"
+                disabled={analyzing > 0 || loading || !!addPackStatus}
+                title="Choose a drum pack with 808 or bass subfolders. Two basses and two 808s fill the bottom row of Bank B and are tuned by default."
+                onClick={() => {
+                  bassInput.current?.click();
+                  setMenuOpen(false);
+                }}
+              >
+                {addPackStatus || "Load Bank B: 808 & Bass"}
+              </button>
+              {shuffleButton("bass")}
+            </div>
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}

@@ -18,6 +18,8 @@ export interface SavedPad {
   is808?: boolean;
   /** The Tune screen's Stretch key was on for this loop (see Pad.stretch). */
   stretch?: boolean;
+  /** The file a loader's sound came from (see Pad.sourceName). */
+  sourceName?: string;
   /** The pad is locked (see Pad.locked). */
   locked?: boolean;
   /** Knob level of a sample pack sound (see Pad.knobDb). */
