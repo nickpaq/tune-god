@@ -49,6 +49,8 @@ export interface Pad {
   section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Whole bars in the section. */ bars: number; /** The colour it was given in the chop editor, as a place in the selected palette. */ colorIndex?: number; /** The colour (hex) it was given in the chop editor, kept as it was: the section pads keep it whatever palette is chosen later. */ color?: string };
   /** The tempo the file name states ("140bpm"), when it does: a loop of this tempo can be stretched to the project's. */
   bpm?: number;
+  /** A melodic loop whose key is major (from its file name, else from the notes it holds); minor and unknown are false. Its pad is shaded darker. */
+  loopMajor?: boolean;
   /** The loop is stretched from its own tempo to the project tempo (written to the export as Koala's stretch). */
   stretch?: boolean;
   tune: boolean;

@@ -11,6 +11,8 @@ export interface LoopKey {
   minorPc: number;
   /** The same note as a whole MIDI number (octave 3), so it can be used where a detected pitch is. */
   midi: number;
+  /** The loop is in a minor key (false: a major key). Only its mode: the tonic above is the relative minor either way. */
+  minor: boolean;
   /** 0..1: how far the best key stands above its nearest real rival. */
   confidence: number;
 }
@@ -21,5 +23,5 @@ export function loopKey(mono: Float32Array, sampleRate: number): LoopKey | null 
   if (!chroma.some((v) => v > 0)) return null;
   const key = keyOfChroma(chroma);
   const minorPc = key.minor ? key.pc : (key.pc + 9) % 12;
-  return { minorPc, midi: 48 + minorPc, confidence: key.confidence };
+  return { minorPc, midi: 48 + minorPc, minor: key.minor, confidence: key.confidence };
 }

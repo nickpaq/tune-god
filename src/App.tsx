@@ -21,7 +21,7 @@ import { applyGainDb } from "./audio/gain";
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
 import { CATEGORIES, categoryIndex, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
-import { colorFor, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
+import { colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { emptyPadInBank, movePad, nextEmptyPad, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { sortForSlot } from "./audio/swapOrder";
@@ -369,8 +369,8 @@ function App() {
         // Analysis runs on a worker while the next pad decodes.
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, ref.fileName)
-          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null }))
-          .then(({ midi: detectedMidi, category: guessed, detail, centroid, bpm }) => {
+          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, major: null }))
+          .then(({ midi: detectedMidi, category: guessed, detail, centroid, bpm, major }) => {
             if (token !== loadToken.current) return;
             const category = categoryHints.current[ref.pad] ?? guessed;
             const remembered = restorePads.current[ref.pad];
@@ -381,6 +381,7 @@ function App() {
               detail,
               centroid,
               bpm: bpm ?? undefined,
+              loopMajor: major ?? undefined,
               ...(remembered
                 ? {
                     tune: remembered.tune,
@@ -460,11 +461,12 @@ function App() {
         knobDb: p.knobDb,
         is808: p.is808,
         stretch: p.stretch,
+        loopMajor: p.loopMajor,
         position: p.index,
       };
     }
     for (const p of Object.values(hidden)) {
-      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, stretch: p.stretch, hidden: true };
+      out[p.origIndex] = { tune: p.tune, tuneLocked: p.tuneLocked, keyPc: p.keyPc, semis: p.semis, cents: p.cents, category: p.category, knobDb: p.knobDb, is808: p.is808, stretch: p.stretch, loopMajor: p.loopMajor, hidden: true };
     }
     // Sounds the user deleted stay deleted when the project is reopened.
     for (const ref of projectRef.current?.pads ?? []) {
@@ -624,10 +626,10 @@ function App() {
       for (const pad of fresh) {
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.name, pad.category === "melodicLoop")
-          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null }))
-          .then(({ midi: detectedMidi, detail, centroid, bpm }) => {
+          .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, major: null }))
+          .then(({ midi: detectedMidi, detail, centroid, bpm, major }) => {
             if (token !== loadToken.current) return;
-            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, bpm: bpm ?? undefined, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
+            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, bpm: bpm ?? undefined, loopMajor: major ?? undefined, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
             setPads((prev) => {
               const at = Object.keys(prev).find((k) => prev[Number(k)].origIndex === pad.origIndex);
               return at === undefined ? prev : { ...prev, [Number(at)]: analysed(prev[Number(at)]) };
@@ -1278,7 +1280,9 @@ function App() {
     // A section of a chopped song keeps the palette colour it was given when it was picked.
     if (p.section) return p.section.color ?? palette.colors[(p.section.colorIndex ?? 0) % palette.colors.length];
     const base = colorFor(palette, p.category ?? "other");
-    return p.ghost ? shade(base, 2) : base;
+    if (p.ghost) return shade(base, 2);
+    // A melodic loop in a major key is a slightly darker shade of the loop colour.
+    return p.category === "melodicLoop" && p.loopMajor ? darker(base) : base;
   };
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */

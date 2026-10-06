@@ -188,6 +188,12 @@ export function shade(hex: string, steps: number): string {
   return oklchToHex(l < 0.62 ? l + steps * SHADE_STEP : l - steps * SHADE_STEP, c, h);
 }
 
+/** `hex` a little darker (the same hue and chroma, `steps` shades down in lightness). */
+export function darker(hex: string, steps = 1): string {
+  const [l, c, h] = hexToOklch(hex);
+  return oklchToHex(Math.max(0, l - steps * SHADE_STEP), c, h);
+}
+
 /** A category's pad colour: its tone's base colour, shaded so related sounds (snare and clap) read as family. */
 export function colorFor(palette: Palette, category: CategoryId): string {
   if (palette.categories) return palette.categories[category];
