@@ -43,6 +43,8 @@ interface ChordTone {
   stop: (when?: number) => void;
   /** Called once, when the last voice has stopped. */
   onEnded: (fn: () => void) => void;
+  /** Glides the chord to another root and quality while it plays (a chord tone only). */
+  retune: (pitchClass: number, kind: ReferenceTone) => void;
 }
 
 /** The reference tone on `pitchClass` (0 = C), in the octave from middle C. */
@@ -51,7 +53,7 @@ function createTone(ctx: AudioContext, pitchClass: number, kind: ReferenceTone):
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = midiToFrequency(60 + pitchClass, a4Reference);
-    return { out: osc, start: () => osc.start(), stop: (when) => osc.stop(when), onEnded: (fn) => { osc.onended = fn; } };
+    return { out: osc, start: () => osc.start(), stop: (when) => osc.stop(when), onEnded: (fn) => { osc.onended = fn; }, retune: () => {} };
   }
   const lowpass = ctx.createBiquadFilter();
   lowpass.type = "lowpass";
@@ -75,6 +77,11 @@ function createTone(ctx: AudioContext, pitchClass: number, kind: ReferenceTone):
     onEnded: (fn) => {
       voices[0].onended = fn;
     },
+    retune: (pc, to) => {
+      if (to === "sine") return;
+      const t = ctx.currentTime;
+      voices.forEach((osc, i) => osc.frequency.setTargetAtTime(midiToFrequency(60 + pc + CHORD_INTERVALS[to][Math.floor(i / CHORD_DETUNE_CENTS.length)], a4Reference), t, 0.015));
+    },
   };
 }
 
@@ -97,6 +104,8 @@ export interface PadHandle {
   cut: () => void;
   /** Retunes the playing pad immediately, without restarting it. */
   setShift: (semitones: number) => void;
+  /** Moves the reference chord to another root and quality while it plays. No-op without a chord. */
+  setTone: (pitchClass: number, kind: ReferenceTone) => void;
   /** Where the sound is now, in seconds from the start of the audio (the start offset plus the time it has played). */
   position: () => number;
 }
@@ -242,6 +251,7 @@ export function startPad(
     position: () => startSeconds + (ctx.currentTime - startedAt) * source.playbackRate.value,
     setShift: (semitones) =>
       source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
+    setTone: (pitchClass, kind) => osc?.retune(pitchClass, kind),
   };
 }
 

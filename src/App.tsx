@@ -121,8 +121,16 @@ const isReal = (p: Pad) => !p.placeholder && !p.ghost && !p.section;
  * Preview only (the project's own play settings are untouched). Every pad plays while held and fades
  * out smoothly on release; bass, melodic and melodic loops also loop for as long as they are held.
  */
-/** A melodic loop is judged against a soft saw chord on the key (minor, or major with the switch); every other sound against a plain sine on its note. */
-const toneKindOfPad = (pad: Pad, major: boolean): ReferenceTone => (pad.category === "melodicLoop" ? (major ? "major" : "minor") : "sine");
+/**
+ * The reference a pad is judged against. A single sound gets a sine on the key's note. A melodic loop gets a soft saw chord: the chord of the project's key
+ * (minor, or major when the key is major), or with `relative` its relative key's chord (a minor key's relative major, a major key's relative minor), which
+ * is what a loop in the other mode is tuned against.
+ */
+function referenceFor(pad: Pad, keyPc: number, major: boolean, relative: boolean): { pc: number; kind: ReferenceTone } {
+  if (pad.category !== "melodicLoop") return { pc: keyPc, kind: "sine" };
+  if (!major) return relative ? { pc: (keyPc + 3) % 12, kind: "major" } : { pc: keyPc, kind: "minor" };
+  return relative ? { pc: (keyPc + 9) % 12, kind: "minor" } : { pc: keyPc, kind: "major" };
+}
 
 function padMode(pad: Pad): PadMode {
   if (pad.section) return "oneshot"; // a song section plays through, like it will in Koala
@@ -841,7 +849,21 @@ function App() {
   /** What plays for a pad: its raw audio, or the normalized version once Normalize now has run. */
   const audioOf = (pad: Pad) => (normalize && normalizedData[pad.origIndex]) || pad.channelData;
 
-  const toneKindOf = (pad: Pad) => toneKindOfPad(pad, keyMajor);
+  /** Dragged up with a melodic loop selected: the reference chord is the relative key's. Back to the project key's when the finger comes back. */
+  const [refRelative, setRefRelativeState] = useState(false);
+  const refRelativeRef = useRef(false);
+  const setRefRelative = (flag: boolean) => {
+    if (refRelativeRef.current === flag) return;
+    refRelativeRef.current = flag;
+    setRefRelativeState(flag);
+    const match = matchVoice.current;
+    const pad = match ? latest.current.pads[match.index] : undefined;
+    const key = pad ? (pad.keyPc ?? latest.current.keyPc) : null;
+    if (match && pad && key !== null) {
+      const ref = referenceFor(pad, key, keyMajor, flag);
+      match.handle.setTone(ref.pc, ref.kind);
+    }
+  };
 
   const pressPad = (index: number) => {
     const pad = pads[index];
@@ -853,6 +875,8 @@ function App() {
     holdVoice.current = null;
     holdIndex.current = null;
     releasePad.current.get(index)?.release();
+    const toneKey = pad.keyPc ?? keyPc;
+    const toneRef = pad.tune && toneOn && toneKey !== null ? referenceFor(pad, toneKey, keyMajor, false) : null;
     releasePad.current.set(
       index,
       startPad(
@@ -860,12 +884,12 @@ function App() {
         audioOf(pad),
         pad.sampleRate,
         shiftFor(pad, tunedTarget, a4, keyMajor),
-        pad.tune && toneOn ? (pad.keyPc ?? keyPc) : null,
+        toneRef ? toneRef.pc : null,
         padMode(pad),
         undefined,
         normalize ? pad.knobDb : undefined,
         0,
-        toneKindOf(pad),
+        toneRef ? toneRef.kind : "sine",
       ),
     );
   };
@@ -1012,10 +1036,14 @@ function App() {
     const soundsAt = pad.detectedMidi != null ? pad.detectedMidi + shift : null;
     // The lift lives only in this preview voice, and goes with it when the slider is let go.
     const lift = pad.category === "bass" && soundsAt !== null ? bassLiftSemitones(soundsAt, pc) : 0;
+    // Grabbing the slider always starts on the project key's own chord.
+    refRelativeRef.current = false;
+    setRefRelativeState(false);
+    const ref = referenceFor(pad, pc, keyMajor, false);
     matchVoice.current = {
       lift,
       index: pad.index,
-      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, pc, "loop", undefined, normalize ? pad.knobDb : undefined, 0, toneKindOf(pad)),
+      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, ref.pc, "loop", undefined, normalize ? pad.knobDb : undefined, 0, ref.kind),
     };
   };
 
@@ -1036,6 +1064,8 @@ function App() {
   const stopMatch = () => {
     const match = matchVoice.current;
     matchVoice.current = null;
+    refRelativeRef.current = false;
+    setRefRelativeState(false);
     match?.handle.release();
   };
 
@@ -1276,6 +1306,13 @@ function App() {
       needsKey={(selectedPad.keyPc ?? keyPc) === null}
       keyMajor={keyMajor}
       onKeyMajor={setKeyMajor}
+      chords={
+        selectedPad.category === "melodicLoop" && (selectedPad.keyPc ?? keyPc) !== null
+          ? [referenceFor(selectedPad, (selectedPad.keyPc ?? keyPc)!, keyMajor, false), referenceFor(selectedPad, (selectedPad.keyPc ?? keyPc)!, keyMajor, true)].map((r) => `${NOTE_NAMES[r.pc]} ${r.kind}`) as [string, string]
+          : null
+      }
+      relative={refRelative}
+      onRelative={setRefRelative}
       onTrim={moveTrim}
       onHoldStart={startMatch}
       onHoldEnd={stopMatch}
