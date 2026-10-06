@@ -1,7 +1,7 @@
 {
   "v": 3,
   "createdOnFiles": { "v": 1, "at": "2026-10-06T12:00:00Z" },
-  "title": "KoalaTune SEQ",
+  "title": "TuneGod SEQ",
   "launch": { "view": "canvas" },
   "pages": [],
   "boards": {
@@ -25,7 +25,7 @@
     "EntryKey.dc.html"
   ],
   "notes": {
-    "head": { "x": 0, "y": -260, "text": "KoalaTune · SEQ pages", "kind": "title1", "maxW": 1848 }
+    "head": { "x": 0, "y": -260, "text": "TuneGod · SEQ pages", "kind": "title1", "maxW": 1848 }
   },
   "designSystems": []
 }

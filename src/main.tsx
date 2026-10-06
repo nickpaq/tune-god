@@ -7,6 +7,9 @@ import '@fontsource/silkscreen/400.css'
 import '@fontsource/silkscreen/700.css'
 import './index.css'
 import App from './App.tsx'
+import { askPersistentStorage } from './storage'
+
+void askPersistentStorage()
 
 // Belt and braces for iOS Safari, which can still scroll, rubber-band or pinch-zoom a page that is
 // `overflow: hidden`: cancel page-level touch moves and pinch gestures. The palette list, hot-swap list and chop editor are the

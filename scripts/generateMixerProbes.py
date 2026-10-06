@@ -7,7 +7,7 @@
                                           with different settings on Main, against a plain reference. The transfer function of each
                                           shows what the lo, mid and hi bands really are (highpass, shelf or bell) and what gain does.
 
-Load them straight into Koala (no KoalaTune export needed), render the one long pattern as a single WAV,
+Load them straight into Koala (no TuneGod export needed), render the one long pattern as a single WAV,
 and run scripts/analyzeMixerProbes.py on it. Run: python3 scripts/generateMixerProbes.py
 """
 import importlib.util, io, json, random, sys, zipfile

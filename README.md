@@ -1,4 +1,4 @@
-# KoalaTune (tune-god)
+# TuneGod (tune-god)
 
 A local-first web app for [Koala Sampler](https://koalasampler.com) projects. Drop in a `.koala` file, pick a key on the on-screen piano, and the app tunes the right pads to it, balances their loudness, colours and labels them, routes them to buses, and lets you rearrange them. Then it exports a new `.koala` file ready to open in Koala. Everything runs on-device in the browser; nothing is uploaded. It installs to an iOS home screen as a PWA and works offline after the first load.
 

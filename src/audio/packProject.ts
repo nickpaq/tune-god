@@ -250,7 +250,7 @@ export const BLANK_SOUND_NAME = "silence.wav";
  * A project with no sounds in it, for a bank loader to fill when nothing is open: Koala projects need at least one pad, so it holds one
  * silent pad (named like the layout's silent placeholders, which loading leaves out, and which the export drops).
  */
-export async function blankProject(name = "KoalaTune"): Promise<File> {
+export async function blankProject(name = "TuneGod"): Promise<File> {
   const zip = new JSZip();
   const frames = 88;
   zip.file("sampler/1.wav", await encodeWav({ sampleRate: 44100, channelData: [new Float32Array(frames)], bitDepth: 24 }).arrayBuffer());

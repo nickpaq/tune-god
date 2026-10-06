@@ -95,6 +95,24 @@ export function saveState(patch: SavedState): void {
   }
 }
 
+let persistAsked = false;
+
+/**
+ * Asks the browser to keep this app's data (the saved project, in IndexedDB) rather than clear it when the device is short of space. It is a request,
+ * not a promise: iOS decides, and a granted request lasts. Asked once per visit, at start-up and again when a project is first saved.
+ */
+export async function askPersistentStorage(): Promise<boolean> {
+  try {
+    if (!navigator.storage?.persist) return false;
+    if (await navigator.storage.persisted?.()) return true;
+    if (persistAsked) return false;
+    persistAsked = true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
@@ -105,6 +123,7 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 export async function saveProjectFile(file: File): Promise<void> {
+  void askPersistentStorage();
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {

@@ -33,8 +33,8 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/viewport-test/],
       },
       manifest: {
-        name: "KoalaTune",
-        short_name: "KoalaTune",
+        name: "TuneGod",
+        short_name: "TuneGod",
         description: "Tune a Koala project's pads to a key — on-device.",
         theme_color: "#222326",
         background_color: "#222326",

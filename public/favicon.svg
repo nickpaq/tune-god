@@ -1,11 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#f7cf5a" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#f7cf5a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
   <rect x="2.5" y="2.5" width="95" height="95" rx="22" fill="#18131e" stroke="#f4f1f7" stroke-width="3"/>
-  <circle cx="26" cy="35" r="15" fill="#332b3c" stroke="#f4f1f7" stroke-width="3"/>
-  <circle cx="74" cy="35" r="15" fill="#332b3c" stroke="#f4f1f7" stroke-width="3"/>
-  <circle cx="26" cy="35" r="7" fill="#ef4f70"/>
-  <circle cx="74" cy="35" r="7" fill="#ef4f70"/>
-  <circle cx="50" cy="57" r="29" fill="#332b3c" stroke="#f4f1f7" stroke-width="3"/>
-  <circle cx="38" cy="53" r="4.4" fill="#f4f1f7"/>
-  <circle cx="62" cy="53" r="4.4" fill="#f4f1f7"/>
+  <!-- halo -->
+  <ellipse cx="50" cy="15" rx="30" ry="12" fill="url(#glow)"/>
+  <ellipse cx="50" cy="15" rx="21" ry="5.5" fill="none" stroke="#f7cf5a" stroke-width="4"/>
+  <!-- ears, as on the koala -->
+  <circle cx="24" cy="38" r="14" fill="#332b3c" stroke="#f4f1f7" stroke-width="3"/>
+  <circle cx="76" cy="38" r="14" fill="#332b3c" stroke="#f4f1f7" stroke-width="3"/>
+  <circle cx="24" cy="38" r="6.5" fill="#ef4f70"/>
+  <circle cx="76" cy="38" r="6.5" fill="#ef4f70"/>
+  <!-- face -->
+  <circle cx="50" cy="58" r="29" fill="#332b3c" stroke="#f4f1f7" stroke-width="3"/>
+  <!-- face tattoos: a mark on the brow, slashes and dots on the cheeks, ticks under the eyes -->
+  <g fill="none" stroke="#b3a6f2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50 33 V43"/>
+    <path d="M45.5 37 L50 33 L54.5 37"/>
+    <path d="M30 62 L36 68"/>
+    <path d="M28 68 L34 74"/>
+    <path d="M70 62 L64 68"/>
+    <path d="M72 68 L66 74"/>
+  </g>
+  <g fill="#b3a6f2">
+    <circle cx="26" cy="58" r="1.4"/>
+    <circle cx="74" cy="58" r="1.4"/>
+    <circle cx="50" cy="46.5" r="1.4"/>
+  </g>
+  <circle cx="38.500" cy="54" r="4.4" fill="#f4f1f7"/>
+  <circle cx="61.500" cy="54" r="4.4" fill="#f4f1f7"/>
   <ellipse cx="50" cy="66" rx="10.5" ry="8" fill="#ef4f70"/>
 </svg>

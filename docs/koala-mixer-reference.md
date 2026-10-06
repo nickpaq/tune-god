@@ -112,7 +112,7 @@ From `mix-calibration.koala` exported by the app, saved by Koala, and rendered a
 
 ### Next render
 
-Export the updated calibration project from KoalaTune with **Heavy, warm master chain OFF**, route to buses ON and **Settings by sound type ON**, save it from Koala, and render the 6 patterns again. With the master chain off the limiter no longer hides the kick bus clipper or the sidechain, and the per-pad EQ is exercised. Run `python3 scripts/analyzeMixRender.py render.wav exported.koala`.
+Export the updated calibration project from TuneGod with **Heavy, warm master chain OFF**, route to buses ON and **Settings by sound type ON**, save it from Koala, and render the 6 patterns again. With the master chain off the limiter no longer hides the kick bus clipper or the sidechain, and the per-pad EQ is exercised. Run `python3 scripts/analyzeMixRender.py render.wav exported.koala`.
 
 ## Reference mix (the user's gold standard)
 
@@ -143,7 +143,7 @@ The app's export and the project saved by Koala are identical again (pads, mixer
 
 ### Next renders
 
-Two small projects measure Koala's mixer directly (no KoalaTune export needed; load them in Koala and render with Loops export): `docs/calibration/probe-sidechain.koala` and `docs/calibration/probe-eq.koala`, timelines in `probe-timeline.md`, read with `python3 scripts/analyzeMixerProbes.py sidechain|eq <zip>`. After those, one more full run with the master chain on and the limiter at -1 dB, to tune it to a 12 dB peak-to-loudness ratio.
+Two small projects measure Koala's mixer directly (no TuneGod export needed; load them in Koala and render with Loops export): `docs/calibration/probe-sidechain.koala` and `docs/calibration/probe-eq.koala`, timelines in `probe-timeline.md`, read with `python3 scripts/analyzeMixerProbes.py sidechain|eq <zip>`. After those, one more full run with the master chain on and the limiter at -1 dB, to tune it to a 12 dB peak-to-loudness ratio.
 
 ## Round 3: probe renders (master chain off, read with `analyzeMixerProbes.py`)
 
