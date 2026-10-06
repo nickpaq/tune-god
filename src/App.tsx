@@ -250,6 +250,8 @@ function App() {
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
+  /** The reference tone's volume knob, 0 to 1: 0.5 is the level the tone is matched to, so the multiplier is twice the knob. */
+  const [toneVolume, setToneVolume] = useState(saved.toneVolume ?? 0.5);
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
   const [a4Text, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
@@ -451,8 +453,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
-  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
+    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
+  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -1095,6 +1097,7 @@ function App() {
         normalize ? pad.knobDb : undefined,
         0,
         toneRef ? toneRef.kind : "sine",
+        toneVolume * 2,
       ),
     );
   };
@@ -1261,11 +1264,12 @@ function App() {
     // Grabbing the slider always starts on the project key's own chord.
     refRelativeRef.current = false;
     setRefRelativeState(false);
-    const ref = referenceFor(pad, pc, keyMajor, false);
+    // The Tone key switches the tone for the slider as well as for a tapped pad: off, the sound plays alone.
+    const ref = toneOn ? referenceFor(pad, pc, keyMajor, false) : null;
     matchVoice.current = {
       lift,
       index: pad.index,
-      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, ref.pc, "loop", undefined, normalize ? pad.knobDb : undefined, 0, ref.kind),
+      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, ref ? ref.pc : null, "loop", undefined, normalize ? pad.knobDb : undefined, 0, ref ? ref.kind : "sine", toneVolume * 2),
     };
   };
 
@@ -1280,6 +1284,13 @@ function App() {
     patchPad(pad.index, { ...splitTrim(trim), tune: true, tuneLocked: true });
     const match = matchVoice.current;
     if (match) match.handle.setShift(shiftFor({ ...pad, ...splitTrim(trim), tune: true }, latest.current.tunedTarget, a4, keyMajor) + match.lift);
+  };
+
+  /** The tone's volume knob turned: the tones that are playing follow it at once. */
+  const changeToneVolume = (volume: number) => {
+    setToneVolume(volume);
+    matchVoice.current?.handle.setToneVolume(volume * 2);
+    for (const handle of releasePad.current.values()) handle.setToneVolume(volume * 2);
   };
 
   /** The slider was let go (or the pad or screen changed): the sound and the tone fade out. The pad keeps the pitch it was left at. */
@@ -1535,6 +1546,9 @@ function App() {
       }
       relative={refRelative}
       onRelative={setRefRelative}
+      toneVolume={toneVolume}
+      onToneVolume={changeToneVolume}
+      toneOn={toneOn}
       projectBpm={projectBpm}
       onTrim={moveTrim}
       onHoldStart={startMatch}

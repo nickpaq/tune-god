@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { PrecisionSlider } from "./PrecisionSlider";
+import { ToneKnob } from "./ToneKnob";
 import { Waveform } from "./Waveform";
 import type { CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
@@ -104,6 +105,9 @@ export function PadPanel({
   onTrim,
   onHoldStart,
   onHoldEnd,
+  toneVolume,
+  onToneVolume,
+  toneOn,
   onChange,
 }: {
   pad: Pad;
@@ -128,6 +132,10 @@ export function PadPanel({
   onHoldStart: () => void;
   /** The slider was let go: the sound and the tone stop. */
   onHoldEnd: () => void;
+  /** The tone's volume knob (0 to 1), drawn on the screen at the right of the top row, and whether the tone is switched on (the knob dims when it is not). */
+  toneVolume: number;
+  onToneVolume: (volume: number) => void;
+  toneOn: boolean;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "stretch">>) => void;
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
@@ -157,6 +165,7 @@ export function PadPanel({
           </div>
           <div>Shift {pad.tune ? formatTrim(total * 100) : "0.000"}st</div>
         </div>
+        <ToneKnob value={toneVolume} onChange={onToneVolume} dim={!toneOn} />
       </div>
       <NameLine name={name} fileName={pad.name} />
       {(pad.bpm || isLoopSound) && (

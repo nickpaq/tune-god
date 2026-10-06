@@ -1921,3 +1921,25 @@
   width: 100% !important;
   height: 100% !important;
 }
+
+/* the reference tone's volume knob, drawn in lit cells at the right of the Tune screen's top row */
+.tone-knob {
+  flex: none;
+  margin-left: auto;
+  width: calc(var(--cell) * 19);
+  height: calc(var(--cell) * 19);
+  display: grid;
+  place-items: center;
+  color: var(--oled);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.tone-knob svg {
+  width: calc(var(--cell) * 17);
+  height: calc(var(--cell) * 17);
+}
+
+.tone-knob--dim {
+  opacity: 0.35;
+}

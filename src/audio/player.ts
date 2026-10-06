@@ -109,6 +109,8 @@ export interface PadHandle {
   setShift: (semitones: number) => void;
   /** Moves the reference chord to another root and quality while it plays. No-op without a chord. */
   setTone: (pitchClass: number, kind: ReferenceTone) => void;
+  /** Turns the reference tone up or down while it plays (a multiplier, as `toneVolume`). No-op without a tone. */
+  setToneVolume: (volume: number) => void;
   /** Where the sound is now, in seconds from the start of the audio (the start offset plus the time it has played). */
   position: () => number;
 }
@@ -169,6 +171,8 @@ export function startPad(
   startSeconds = 0,
   /** What the reference tone is: a sine on the key's note (the default), or for a melodic loop a soft saw minor or major chord on the key. */
   toneKind: ReferenceTone = "sine",
+  /** The tone's volume knob as a multiplier (1 = the level matched to the sound, 0 = silent, 2 = twice as loud). */
+  toneVolume = 1,
 ): PadHandle {
   const ctx = readyContext();
   activePads.get(pad)?.stop(0, CUT_FADE);
@@ -189,6 +193,7 @@ export function startPad(
 
   let osc: ChordTone | null = null;
   let toneGain: GainNode | null = null;
+  let toneVol: GainNode | null = null;
   if (tonePitchClass !== null) {
     osc = createTone(ctx, tonePitchClass, toneKind);
     toneGain = ctx.createGain();
@@ -201,7 +206,9 @@ export function startPad(
       toneGain.gain.setValueAtTime(0, ctx.currentTime);
       toneGain.gain.linearRampToValueAtTime(Math.min(MAX_TONE_GAIN, toneTarget) / CHORD_RMS, ctx.currentTime + CHORD_ATTACK);
     }
-    osc.out.connect(toneGain).connect(gain);
+    toneVol = ctx.createGain();
+    toneVol.gain.value = toneVolume;
+    osc.out.connect(toneGain).connect(toneVol).connect(gain);
     osc.start();
   }
   const startedAt = ctx.currentTime;
@@ -255,6 +262,7 @@ export function startPad(
     setShift: (semitones) =>
       source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
     setTone: (pitchClass, kind) => osc?.retune(pitchClass, kind),
+    setToneVolume: (volume) => toneVol?.gain.setTargetAtTime(volume, ctx.currentTime, 0.01),
   };
 }
 
