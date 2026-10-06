@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
-import { CHOPPER_MAX_SLICES, fitPlans, sliceLayout, sliceVelocity } from "./exportChopper";
+import { CHOPPER_MAX_SLICES, fitPlans, sliceLayout, sliceOfVelocity, sliceVelocity } from "./exportChopper";
 import type { ParsedKoalaProject } from "./koalaProject";
 import type { SectionPlan } from "./song/chop";
 
@@ -35,6 +35,17 @@ describe("sliceLayout", () => {
 });
 
 describe("sliceVelocity", () => {
+  it("plays its own slice for every slice count, by the rule measured in Koala (velocity x count / 128)", () => {
+    for (let count = 1; count <= 127; count++) for (let slice = 0; slice < count; slice++) expect(sliceOfVelocity(sliceVelocity(slice, count), count)).toBe(slice);
+  });
+  it("matches the render of the probe: with 16 slices velocities 1 + 8i and 4 + 8i both play slice i", () => {
+    for (let i = 0; i < 16; i++) {
+      expect(sliceOfVelocity(1 + 8 * i, 16)).toBe(i);
+      expect(sliceOfVelocity(4 + 8 * i, 16)).toBe(i);
+      expect(sliceVelocity(i, 16)).toBe(3 + 8 * i);
+    }
+    expect(sliceOfVelocity(127, 16)).toBe(15);
+  });
   it("is slice + 1 with 127 slices, and spread over 1 to 127 with fewer", () => {
     expect(sliceVelocity(0, 127)).toBe(1);
     expect(sliceVelocity(126, 127)).toBe(127);

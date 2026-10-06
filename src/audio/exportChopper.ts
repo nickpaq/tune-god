@@ -1,7 +1,7 @@
 // Chopper mode in the export: ONE pad that holds the whole sample and Koala's own chopper (synth "CHOPPER", engine "slicer") with the chop points in it,
 // read from docs/calibration/chopper-reference.koala. A slice runs from its start frame to the next slice's start (the last to the end of the sample),
-// and the velocity of a note picks the slice: the 127 velocities are shared out over the slices, so one note from the lowest to the highest velocity
-// plays every slice in turn. The pad plays at the sample's own tempo (no stretch), so the project tempo is written to match it.
+// and the velocity of a note picks the slice (`TRIGGER MODE` 1): the velocities are shared out over the slices, so one note from the lowest to the highest
+// velocity plays every slice in turn. The note's own pitch transposes the slice (0 here), and the pad pitch knob is in semitones. The pad plays at the sample's own tempo (no stretch), so the project tempo is written to match it.
 import type { SectionPlan } from "./song/chop";
 import { emptySequence, isEmpty, SEQUENCE_SLOTS, TICKS_PER_BEAT } from "./exportSong";
 import { encodeWav } from "./wavEncode";
@@ -44,12 +44,16 @@ export function fitPlans(plans: readonly SectionPlan[], totalFrames: number): Se
 }
 
 /**
- * The velocity that plays slice `slice` of `count`: the middle of that slice's share of 1 to 127 (with 127 slices, exactly slice + 1). Which velocity
- * range Koala gives each slice when there are fewer than 127 is not measured, so the middle keeps it safe against either rounding.
+ * The slice a velocity plays, measured from a render of docs/calibration/probe-chopper.koala: the 128 velocity steps are shared out evenly, so velocity v
+ * plays slice floor(v x count / 128) (with 16 slices, 1 to 7 is slice 0, 8 to 15 is slice 1 ...; with 127, velocity v plays slice v - 1).
  */
+export const sliceOfVelocity = (velocity: number, count: number): number => Math.floor((velocity * count) / 128);
+
+/** The velocity that plays slice `slice` of `count`: the middle of the whole velocities that play it (never 0). */
 export function sliceVelocity(slice: number, count: number): number {
-  if (count >= CHOPPER_MAX_SLICES) return Math.min(127, slice + 1);
-  return Math.min(127, Math.max(1, Math.round(((slice + 0.5) * 127) / count + 0.5)));
+  const lowest = Math.floor((slice * 128 + count - 1) / count);
+  const highest = Math.floor(((slice + 1) * 128 + count - 1) / count) - 1;
+  return Math.min(127, Math.max(1, Math.floor((lowest + highest) / 2)));
 }
 
 export interface ChopperExport {
