@@ -1942,14 +1942,24 @@ function App() {
           </section>
 
           {drag && !expanded && (
-            <div className={`hold-zone${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
-              HOLD
-            </div>
+            <>
+              <div className={`hold-zone hold-zone--short${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
+                HOLD
+              </div>
+              <div className="drop-targets drop-targets--bottom">
+                <div className={`drop-target drop-target--trash${hover === "trash:" ? " drop-target--hot" : ""}`} data-drop="trash">
+                  🗑 Delete
+                </div>
+                <div className={`drop-target drop-target--unused${hover === "unused:" ? " drop-target--hot" : ""}`} data-drop="unused">
+                  Unused pad
+                </div>
+              </div>
+            </>
           )}
           {drag && expanded && (
             <div className="drop-targets">
               <div className={`drop-target drop-target--trash${hover === "trash:" ? " drop-target--hot" : ""}`} data-drop="trash">
-                🗑
+                🗑 Delete
               </div>
               <div className={`drop-target drop-target--unused${hover === "unused:" ? " drop-target--hot" : ""}`} data-drop="unused">
                 Unused pad

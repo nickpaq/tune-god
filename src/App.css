@@ -1064,8 +1064,17 @@
 
 .drop-target--trash {
   flex: none;
-  width: 30cqw;
-  font-size: 6cqw;
+  width: 36cqw;
+}
+
+/* while a pad is dragged: HOLD fills the screen above, with Delete and Unused pad in a strip along the bottom */
+.hold-zone--short {
+  bottom: 16cqw;
+}
+
+.drop-targets--bottom {
+  top: auto;
+  bottom: 0;
 }
 
 .drop-target--hot {
