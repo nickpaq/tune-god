@@ -105,7 +105,7 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
       "PLAY THRU": 0.0,
       SENSITIVITY: 0.5,
       "SLICE MODE": 0.0,
-      "TRIGGER MODE": 0.0,
+      "TRIGGER MODE": 1.0, // 0 = the key played picks the slice, 1 = the velocity does (read from a project Koala saved with the mode switched)
       padParams: {
         bus: chopper.bus ?? -1,
         channel: 0,

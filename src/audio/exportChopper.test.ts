@@ -62,7 +62,7 @@ describe("the chopper in the export", () => {
     expect(pad.type).toBe("synth");
     expect(pad.sampleId).toBe(source.sampleId);
     expect(pad.chops.slices.map((s: any) => s.start)).toEqual([0, 1000]);
-    expect(pad.synthParams).toMatchObject({ MONO: 1, "ONE SHOT": 1, "PLAY THRU": 0, synth: "slicer" });
+    expect(pad.synthParams).toMatchObject({ MONO: 1, "ONE SHOT": 1, "PLAY THRU": 0, "TRIGGER MODE": 1, synth: "slicer" });
     expect(pad.synthParams.padParams).toMatchObject({ bus: 3, pitch: 2, label: "Song chopper" });
     // the song's file is shared, not written twice
     expect(sampler.pads.filter((p: any) => p.sampleId === source.sampleId).length).toBeGreaterThanOrEqual(2);

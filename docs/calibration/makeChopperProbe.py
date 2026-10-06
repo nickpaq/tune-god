@@ -34,10 +34,11 @@ def pad(index, one_shot, pitch, label, color_in_params=None, color_top=None):
     p["chops"] = {"slices": slices}
     sp = p["synthParams"]
     sp["ONE SHOT"] = 1.0 if one_shot else 0.0
+    sp["TRIGGER MODE"] = 1.0  # velocity picks the slice (0 = the key played)
     sp["padParams"]["label"] = label
     sp["padParams"]["pitch"] = pitch
     if color_in_params: sp["padParams"]["color"] = color_in_params
-    if color_top: p["color"] = color_top
+    if color_top: p["color"] = color_top  # Koala dropped this one when it saved: a synth pad keeps its colour in padParams
     return p
 
 sampler["pads"] = [
