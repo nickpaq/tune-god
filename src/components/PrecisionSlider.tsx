@@ -112,22 +112,25 @@ export function PrecisionSlider({
     const track = trackRef.current;
     if (!drag || !track || drag.pointerId !== e.pointerId) return;
     e.preventDefault();
-    const trackWidth = track.getBoundingClientRect().width || 1;
+    const rect = track.getBoundingClientRect();
+    const trackWidth = rect.width || 1;
     const dx = e.clientX - drag.lastX;
     drag.lastX = e.clientX;
+    const above = e.clientY < rect.top - 12;
+    onAbove?.(above ? { x: e.clientX, y: e.clientY } : null);
+    // Dragged up the thumb stays where it was: the finger is free to move sideways (to the squares) without pitching anything,
+    // and nothing jumps when it comes back down to the slider's level.
+    if (above) return;
     // 0 level with the touch (or above it), 1 at the bottom of the screen. The sweep per track width goes from the
     // whole range down to fineSpan along a geometric curve, so every bit of extra downward travel feels the same.
     const down = Math.min(1, Math.max(0, (e.clientY - drag.startY) / drag.room));
     const sweep = (max - min) * Math.pow(fineSpan / (max - min), down);
     const deltaValue = (dx / trackWidth) * sweep;
     drag.value = Math.min(max, Math.max(min, drag.value + deltaValue));
-    const rect = track.getBoundingClientRect();
     const overTrack = e.clientY >= rect.top - 12 && e.clientY <= rect.bottom + 12;
-    const above = e.clientY < rect.top - 12;
-    onAbove?.(above ? { x: e.clientX, y: e.clientY } : null);
     const clamp = (v: number) => Math.min(max, Math.max(min, v));
     // Whole steps from where the drag began, so any cents offset the value already had stays until a double-tap resets it.
-    if (coarseStep && (overTrack || above)) onChange(clamp(snapWhole(drag.value - drag.offset) + drag.offset));
+    if (coarseStep && overTrack) onChange(clamp(snapWhole(drag.value - drag.offset) + drag.offset));
     else onChange(snapToStep(drag.value));
   };
 
