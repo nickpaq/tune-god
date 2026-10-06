@@ -8,10 +8,9 @@ import { formatTrim, trimCents } from "../audio/theory";
 /** The trim slider reaches 12 semitones either way. */
 const TRIM_RANGE_CENTS = 1200;
 /**
- * Where the pitch slider stops while the finger is over its track: the offsets YIN gets a note wrong by, in cents. Its classic mistake is locking onto a
+ * Where the pitch slider stops while the finger is dragged up above its track (over the track it goes by semitones, below it goes fine): the offsets YIN gets a note wrong by, in cents. Its classic mistake is locking onto a
  * harmonic or subharmonic: the 3rd harmonic sits an octave and a fifth up (so the note name is a fifth out: +7, or -5 from the other side) and a tripled
- * period an octave and a fifth down (-7, or +5); an octave error (12) keeps the note name and only matters for the octave it plays in. Below the track
- * the slider goes fine, as before.
+ * period an octave and a fifth down (-7, or +5); an octave error (12) keeps the note name and only matters for the octave it plays in.
  */
 const YIN_MISTAKES_CENTS = [-1200, -700, -500, 0, 500, 700, 1200];
 
@@ -115,6 +114,7 @@ export function PadPanel({
           step={1}
           keyStep={10}
           fineSpan={100}
+          coarseStep={100}
           coarseStops={YIN_MISTAKES_CENTS}
           value={trim}
           bipolar
@@ -124,7 +124,7 @@ export function PadPanel({
           onDragEnd={onHoldEnd}
           onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={formatTrim}
-          title="Pitch of the sound: hold and slide to repitch it against a tone on the key. The sound and tone play only while you hold. Double-tap to reset."
+          title="Pitch of the sound: hold and slide along the slider to repitch it by semitones, drag up for the offsets a pitch detector gets wrong by (fifths and octaves), drag down for fine steps. The sound and a tone on the key play only while you hold. Double-tap to reset."
         />
         <div className="pad-panel__scale">
           {needsKey ? (
