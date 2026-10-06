@@ -848,17 +848,14 @@ function App() {
   /** What plays for a pad: its raw audio, or the normalized version once Normalize now has run. */
   const audioOf = (pad: Pad) => (normalize && normalizedData[pad.origIndex]) || pad.channelData;
 
-  /** Dragged up with a melodic loop selected: the reference chord is the relative key's. Back to the project key's when the finger comes back. */
-  const [refRelative, setRefRelativeState] = useState(false);
-  const refRelativeRef = useRef(false);
+  /** A melodic loop is its project key's mode until the user says otherwise (the Minor and Major squares): then the reference is the relative key's, and the pad remembers it. */
   const setRefRelative = (flag: boolean) => {
-    if (refRelativeRef.current === flag) return;
-    refRelativeRef.current = flag;
-    setRefRelativeState(flag);
     const match = matchVoice.current;
     const pad = match ? latest.current.pads[match.index] : undefined;
-    const key = pad ? (pad.keyPc ?? latest.current.keyPc) : null;
-    if (match && pad && key !== null) {
+    if (!match || !pad || !!pad.refRelative === flag) return;
+    patchPad(pad.index, { refRelative: flag });
+    const key = pad.keyPc ?? latest.current.keyPc;
+    if (key !== null) {
       const ref = referenceFor(pad, key, keyMajor, flag);
       match.handle.setTone(ref.pc, ref.kind);
     }
@@ -1035,10 +1032,8 @@ function App() {
     const soundsAt = pad.detectedMidi != null ? pad.detectedMidi + shift : null;
     // The lift lives only in this preview voice, and goes with it when the slider is let go.
     const lift = pad.category === "bass" && soundsAt !== null ? bassLiftSemitones(soundsAt, pc) : 0;
-    // Grabbing the slider always starts on the project key's own chord.
-    refRelativeRef.current = false;
-    setRefRelativeState(false);
-    const ref = referenceFor(pad, pc, keyMajor, false);
+    // The loop starts on the project key's own chord, or on the relative key's if the user switched this pad.
+    const ref = referenceFor(pad, pc, keyMajor, !!pad.refRelative);
     matchVoice.current = {
       lift,
       index: pad.index,
@@ -1063,8 +1058,6 @@ function App() {
   const stopMatch = () => {
     const match = matchVoice.current;
     matchVoice.current = null;
-    refRelativeRef.current = false;
-    setRefRelativeState(false);
     match?.handle.release();
   };
 
@@ -1299,7 +1292,7 @@ function App() {
           ? [referenceFor(selectedPad, (selectedPad.keyPc ?? keyPc)!, keyMajor, false), referenceFor(selectedPad, (selectedPad.keyPc ?? keyPc)!, keyMajor, true)].map((r) => `${NOTE_NAMES[r.pc]} ${r.kind}`) as [string, string]
           : null
       }
-      relative={refRelative}
+      relative={!!selectedPad.refRelative}
       onRelative={setRefRelative}
       onTrim={moveTrim}
       onHoldStart={startMatch}
