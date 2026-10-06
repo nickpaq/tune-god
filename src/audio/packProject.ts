@@ -115,7 +115,7 @@ export interface WriteResult {
   /** The project file with the new sounds in it, to keep for the next visit. */
   file: File;
   sounds: WrittenSound[];
-  /** Files left out because they were too long, too big or unreadable. */
+  /** Sounds wanted that no file in the folder could fill (every other candidate was too long, too big or unreadable). A file that was passed over and replaced by another does not count. */
   skipped: number;
 }
 
@@ -132,8 +132,8 @@ export interface WriteOptions {
   onProgress?: (text: string) => void;
 }
 
-/** Most files tried per sound wanted, so a folder full of over-long files does not get decoded end to end. */
-const TRIES_PER_SOUND = 8;
+/** Most files decoded per sound wanted, so a folder full of over-long files does not get decoded end to end. A file too big to take is passed over without being decoded, so it costs no try. */
+const TRIES_PER_SOUND = 16;
 
 /**
  * Pulls each group's sounds out of its files (skipping any that cannot be read, are over `maxSeconds`, or would pass the byte budget),
@@ -161,16 +161,12 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
     let tries = 0;
     for (const file of group.candidates) {
       if (got >= group.want || tries >= group.want * TRIES_PER_SOUND) break;
+      if (file.size <= 0 || file.size > maxFileBytes || bytes + file.size > byteBudget) continue;
       tries++;
-      if (file.size <= 0 || file.size > maxFileBytes || bytes + file.size > byteBudget) {
-        skipped++;
-        continue;
-      }
       onProgress?.(`Measuring ${taken.length + 1}`);
       try {
         const decoded = await decodeNative(await file.source());
         if (maxSeconds !== undefined && decoded.channelData[0].length / decoded.sampleRate > maxSeconds) {
-          skipped++;
           continue;
         }
         stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: group.category }));
@@ -178,9 +174,10 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
         taken.push({ file, group: g, number: ++got });
       } catch (err) {
         console.error(err);
-        skipped++;
       }
     }
+    // Every other candidate has been tried: what is still missing is left empty (the pad count says how many).
+    skipped += Math.max(0, group.want - got);
   }
   if (!taken.length) return null;
   const balance = balanceFromStats(stats, FILE_CEILING_DB);

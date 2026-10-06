@@ -53,6 +53,8 @@ export interface Pad {
   keyFromName?: boolean;
   /** The loop is stretched from its own tempo to the project tempo (written to the export as Koala's stretch). */
   stretch?: boolean;
+  /** The pad is locked (dragged onto the lock zone): importing another pack leaves its sound on the pad and only swaps the hot-swap options for it. */
+  locked?: boolean;
   tune: boolean;
   /** A key chosen for this pad alone ("Tune one"); it overrides the project key. */
   keyPc?: number;

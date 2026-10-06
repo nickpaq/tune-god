@@ -50,7 +50,7 @@ import { useOledCell } from "./components/useOledCell";
 import { SeqScreen, type SeqPad } from "./components/seq/SeqScreen";
 import { useSafeArea } from "./components/useSafeArea";
 import { SIDECHAIN_HINT, sidechainStatus } from "./audio/sidechain";
-import { ACAPELLA_ICON, DRUM_ICON, K_ICON, KEYS_ICON } from "./components/dropIcons";
+import { ACAPELLA_ICON, DRUM_ICON, K_ICON, KEYS_ICON, DELETE_ICON, HOLD_ICON, LOCK_ICON, UNLOCK_ICON } from "./components/dropIcons";
 import { ACTIVE_MIX_PRESET, MASTER_STYLES, type MasterStyle } from "./audio/mixPresets";
 import "./App.css";
 
@@ -390,6 +390,7 @@ function App() {
                     semis: remembered.semis,
                     cents: remembered.cents,
                     stretch: remembered.stretch,
+                    locked: remembered.locked,
                     category: cat,
                   }
                 : { category }),
@@ -461,6 +462,7 @@ function App() {
         knobDb: p.knobDb,
         is808: p.is808,
         stretch: p.stretch,
+        locked: p.locked,
         position: p.index,
       };
     }
@@ -556,10 +558,12 @@ function App() {
       const cur = latest.current;
       const lay = layoutById(layout.id);
       // What this load replaces: the real sounds on its pads, and the spares of its kind in the hot-swap pool.
-      const replacedPads = Object.values(cur.pads).filter((p) => isReal(p) && inZone(p));
+      // A locked pad keeps its sound: it is not replaced, and what the pack brings for its place goes to the hot-swap options instead.
+      const lockedSlots = new Set(Object.values(cur.pads).filter((p) => p.locked && inZone(p)).map((p) => p.index));
+      const replacedPads = Object.values(cur.pads).filter((p) => isReal(p) && inZone(p) && !p.locked);
       const replacedSpares = Object.values(cur.hidden).filter((p) => (bank === "drums" ? isKitCategory(p.category) : bankTakes(bank, p.category)));
       const replaced = [...replacedPads, ...replacedSpares];
-      const kept = [...Object.values(cur.pads).filter((p) => isReal(p) && !inZone(p)), ...Object.values(cur.hidden).filter((p) => !replacedSpares.includes(p))];
+      const kept = [...Object.values(cur.pads).filter((p) => isReal(p) && (!inZone(p) || p.locked)), ...Object.values(cur.hidden).filter((p) => !replacedSpares.includes(p))];
       const bytesOf = (p: Pad) => p.channelData.reduce((n, ch) => n + ch.length * 3, 0);
       const budget = Math.max(0, packByteBudget(packMemory) - Math.max(0, (projectFile.current?.size ?? 0) - replaced.reduce((n, p) => n + bytesOf(p), 0)));
       const result = await writeBankSounds(project, plan.groups, {
@@ -585,7 +589,7 @@ function App() {
         if (token !== loadToken.current) return;
         categoryHints.current = { ...categoryHints.current, [sound.pad]: sound.category };
         fresh.push({
-          index: placement.positions.get(sound.pad) ?? -1,
+          index: lockedSlots.has(placement.positions.get(sound.pad) ?? -1) ? -1 : (placement.positions.get(sound.pad) ?? -1),
           origIndex: sound.pad,
           name: sound.fileName,
           sampleId: sound.sampleId,
@@ -603,13 +607,13 @@ function App() {
       const spares = fresh.filter((p) => p.index < 0);
       setPads((prev) => {
         const next: Record<number, Pad> = {};
-        for (const p of Object.values(prev)) if (!inZone(p)) next[p.index] = p;
+        for (const p of Object.values(prev)) if (!inZone(p) || p.locked) next[p.index] = p;
         for (const p of onPads) next[p.index] = p;
         if (bank === "drums") {
-          for (const ph of placement.placeholders) next[ph.index] = makePlaceholderPad(ph);
+          for (const ph of placement.placeholders) if (!lockedSlots.has(ph.index)) next[ph.index] = makePlaceholderPad(ph);
           for (const g of placement.ghosts) {
             const source = onPads.find((p) => p.origIndex === g.sourceKey);
-            if (source) next[g.index] = makeGhostPad(g.index, g.kind, source);
+            if (source && !lockedSlots.has(g.index)) next[g.index] = makeGhostPad(g.index, g.kind, source);
           }
         }
         return next;
@@ -621,7 +625,7 @@ function App() {
       setSelected(null);
       setBank(BANK_SHOWN[bank]);
       setAnalyzing((n) => n + fresh.length);
-      if (result.skipped > 0) setNotice(`${result.skipped} file${result.skipped === 1 ? "" : "s"} skipped: too long, too big for the project size limit or unreadable`);
+      if (result.skipped > 0) setNotice(`${result.skipped} sound${result.skipped === 1 ? "" : "s"} could not be filled: no other file was short enough (under ${MAX_LOAD_SECONDS} s), small enough for the project size limit or readable`);
       for (const pad of fresh) {
         nextAnalysisWorker()
           .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.name, pad.category === "melodicLoop")
@@ -958,6 +962,16 @@ function App() {
     if (kind === "pad" || kind === "cell") dest = Number(rest);
     else if (kind === "bank") dest = emptyPadInBank(cur, Number(rest));
     else if (kind === "unused") dest = nextEmptyPad(cur, bank);
+    if (kind === "lock") {
+      // The lock zone toggles the pad's lock; nothing moves.
+      recordEdit();
+      setPads((prev) => (prev[from] ? { ...prev, [from]: { ...prev[from], locked: !prev[from].locked } } : prev));
+      return;
+    }
+    if (kind === "trash" && cur[from]?.locked) {
+      setNotice("That pad is locked: unlock it first to delete it");
+      return;
+    }
     if (kind === "trash") next = removePad(cur, from);
     else if (dest !== null) next = movePad(cur, from, dest);
     if (next === cur) return;
@@ -1558,7 +1572,7 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose a folder that holds only sound files, no subfolders. 12 are taken at random for the top three rows of Bank B (sounds over 30 seconds are skipped) and tuned by default."
+              title="Choose a folder that holds only sound files, no subfolders. 12 are taken at random for the top three rows of Bank B (sounds over 1 minute are passed over for another) and tuned by default."
               onClick={() => {
                 loopsInput.current?.click();
                 setMenuOpen(false);
@@ -1569,7 +1583,7 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose a folder that holds only sound files, no subfolders. 16 are taken at random for Bank C (sounds over 30 seconds are skipped) and tuned by default."
+              title="Choose a folder that holds only sound files, no subfolders. 16 are taken at random for Bank C (sounds over 1 minute are passed over for another) and tuned by default."
               onClick={() => {
                 oneShotsInput.current?.click();
                 setMenuOpen(false);
@@ -1783,8 +1797,19 @@ function App() {
           </section>
 
           {drag && !expanded && (
-            <div className={`hold-zone${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
-              HOLD
+            <div className="hold-zone" aria-hidden="true">
+              {(
+                [
+                  { kind: "trash", word: "Delete", icon: DELETE_ICON },
+                  { kind: "hold", word: "Hold", icon: HOLD_ICON },
+                  { kind: "lock", word: pads[drag.from]?.locked ? "Unlock" : "Lock", icon: pads[drag.from]?.locked ? UNLOCK_ICON : LOCK_ICON },
+                ] as const
+              ).map((zone) => (
+                <div key={zone.kind} className={`hold-zone__part${hover === `${zone.kind}:` ? " hold-zone__part--target" : ""}`} data-drop={zone.kind}>
+                  <PixelIcon rows={zone.icon} scale={2} />
+                  <span>{zone.word}</span>
+                </div>
+              ))}
             </div>
           )}
           {drag && expanded && (
@@ -1845,6 +1870,7 @@ function App() {
                 pad && "pad--loaded",
                 pad?.placeholder && "pad--placeholder",
                 pad?.tune && "pad--tuned",
+                pad?.locked && "pad--locked",
                 selected === index && "pad--selected",
                 drag?.from === index && "pad--dragging",
                 hover === `pad:${index}` && "pad--target",
@@ -1870,6 +1896,11 @@ function App() {
                     </span>
                   </span>
                   {padSymbols && symbolOf(pad) && <PadSymbol category={symbolOf(pad)!} />}
+                  {pad?.locked && (
+                    <span className="pad__lock">
+                      <PixelIcon rows={LOCK_ICON} scale={1} />
+                    </span>
+                  )}
                 </button>
               );
             })}
