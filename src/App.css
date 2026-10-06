@@ -259,9 +259,13 @@
   text-align: center;
 }
 
+.screen .dropzone {
+  /* inside the marching-ants outline, with a cell of air */
+  padding: calc(var(--cell) * 3);
+}
+
 .dropzone {
   position: relative;
-  cursor: pointer;
   border-radius: 3cqw;
 }
 
@@ -270,6 +274,27 @@
   font-size: calc(var(--cell) * 16);
   font-weight: 400;
   line-height: calc(var(--cell) * 19.52);
+  /* never taller than the screen can hold: a long project name or import status is cut with an ellipsis, not run off the glass */
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.screen__message strong {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* a screen with few rows of text (set by useOledCell) leaves out the words under the start-screen icons, so it is never taller than the glass */
+.oled[data-tight="1"] .dropzone__btn span {
+  display: none;
 }
 
 /* the title of a Type screen, the sample and the key/shift line */
@@ -1607,13 +1632,24 @@
   outline: 0.9cqw solid var(--accent);
   outline-offset: -0.9cqw;
 }
-/* A small text button under the drop zone's prompt for choosing a sample pack folder. */
-.dropzone__pack {
-  margin-top: 0;
-  padding: 0 calc(var(--cell) * 2);
-  height: calc(var(--cell) * 10);
+/* The four start-screen choices: outlined boxes like the hot-swap buttons, in inverse video while pressed. */
+.dropzone__choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--cell) * 2);
+  width: 100%;
+}
+
+.dropzone__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--cell) * 2);
+  min-width: 0;
+  padding: calc(var(--cell) * 2);
   font: inherit;
-  line-height: calc(var(--cell) * 7.76);
+  line-height: calc(var(--cell) * 9.76);
   text-transform: uppercase;
   color: inherit;
   background: none;
@@ -1622,32 +1658,9 @@
   cursor: pointer;
 }
 
-.dropzone__short {
-  display: none;
-}
-
-/*
- * A short screen (a phone with a big safe area) cannot hold the full drop zone, whose headline is twice the size of the other text.
- * The aspect ratio of the screen is the same in cells on every phone, so wider than 2:1 means short: use the plain size, drop the
- * "or" lines (the whole zone is tappable) and shorten the button.
- */
-@container (min-aspect-ratio: 2/1) {
-  .screen .dropzone strong {
-    font-size: calc(var(--cell) * 8);
-    line-height: calc(var(--cell) * 9.76);
-  }
-
-  .screen .dropzone > span {
-    display: none;
-  }
-
-  .screen .dropzone .dropzone__long {
-    display: none;
-  }
-
-  .screen .dropzone .dropzone__short {
-    display: inline;
-  }
+.dropzone__btn:active {
+  background: var(--oled);
+  color: #000;
 }
 
 /* ---- the song chop editor: a chassis panel like the other modals, keycap buttons, and the waveform on a small OLED screen (drawn at full quality, not on the pixel grid) ---- */

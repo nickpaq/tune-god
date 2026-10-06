@@ -39,6 +39,10 @@
 }
 
 html {
+  /* iOS WebKit may otherwise inflate text in blocks it judges too small, by an amount that depends on how much text the block holds (the hot-swap list
+     read huge with two sounds and tiny with many). The screen's text is sized in cells and must stay exactly that size. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   /* if a browser ever draws more than it reports, the extra strip takes the lower panel's colour and reads as part of it */
   background: var(--chassis2);
 }
