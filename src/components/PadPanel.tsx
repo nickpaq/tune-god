@@ -1,7 +1,4 @@
-import { useState } from "react";
-import { createPortal } from "react-dom";
-import { PitchGuide } from "./PitchGuide";
-import { PrecisionSlider, type SliderGuide } from "./PrecisionSlider";
+import { PrecisionSlider } from "./PrecisionSlider";
 import { Waveform } from "./Waveform";
 import type { CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
@@ -69,7 +66,6 @@ export function PadPanel({
   keyMajor,
   onKeyMajor,
   chords,
-  relative,
   onRelative,
   onTrim,
   onHoldStart,
@@ -89,7 +85,6 @@ export function PadPanel({
   /** For a melodic loop: the reference chord of the project's key and of its relative key (e.g. "C minor", "D# major"); null for any other sound. */
   chords: [string, string] | null;
   /** The reference is the relative key's chord (the slider was dragged up). */
-  relative: boolean;
   onRelative: (relative: boolean) => void;
   /** The pitch slider moved: the pad's pitch trim, in cents. */
   onTrim: (cents: number) => void;
@@ -102,9 +97,6 @@ export function PadPanel({
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
   const total = autoShift + trim / 100;
   const isLoop = chords !== null;
-  /** Drawn over the screen while the slider is held. */
-  const [guide, setGuide] = useState<SliderGuide | null>(null);
-  const phone = typeof document === "undefined" ? null : document.querySelector<HTMLElement>(".phone");
 
   return (
     <div className="pad-panel">
@@ -149,7 +141,6 @@ export function PadPanel({
           onZoneChange={(zone) => {
             if (isLoop) onRelative(zone === "up");
           }}
-          onGuide={setGuide}
           value={trim}
           bipolar
           disabled={needsKey}
@@ -160,17 +151,6 @@ export function PadPanel({
           valueLabel={formatTrim}
           title="Pitch of the sound: hold and slide along the slider to repitch it by semitones, drag down for fine steps. Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset."
         />
-        {guide &&
-          phone &&
-          createPortal(
-            <PitchGuide
-              guide={guide}
-              phone={phone}
-              upLabel={chords ? `Up: relative ${chords[1]}` : "Up: fifths & octaves"}
-              reference={chords ? `Reference: ${relative ? chords[1] : chords[0]}` : null}
-            />,
-            phone,
-          )}
         <div className="pad-panel__scale">
           {needsKey ? (
             <span>Select a key first</span>

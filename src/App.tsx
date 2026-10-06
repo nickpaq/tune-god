@@ -850,7 +850,7 @@ function App() {
   const audioOf = (pad: Pad) => (normalize && normalizedData[pad.origIndex]) || pad.channelData;
 
   /** Dragged up with a melodic loop selected: the reference chord is the relative key's. Back to the project key's when the finger comes back. */
-  const [refRelative, setRefRelativeState] = useState(false);
+  const [, setRefRelativeState] = useState(false);
   const refRelativeRef = useRef(false);
   const setRefRelative = (flag: boolean) => {
     if (refRelativeRef.current === flag) return;
@@ -1311,7 +1311,6 @@ function App() {
           ? [referenceFor(selectedPad, (selectedPad.keyPc ?? keyPc)!, keyMajor, false), referenceFor(selectedPad, (selectedPad.keyPc ?? keyPc)!, keyMajor, true)].map((r) => `${NOTE_NAMES[r.pc]} ${r.kind}`) as [string, string]
           : null
       }
-      relative={refRelative}
       onRelative={setRefRelative}
       onTrim={moveTrim}
       onHoldStart={startMatch}
