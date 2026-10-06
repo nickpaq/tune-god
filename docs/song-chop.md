@@ -52,3 +52,6 @@ The editor panel has a fixed size (`.chop` in `App.css`, inside the safe areas: 
 The chop is not remembered across a page reload (the song pad comes back from the project file). Chop and export in one go. Between downbeat markers the grid is rigid: a live drummer who drifts needs a marker where it goes out. The marker arithmetic is tested; the editor's touch handling has not been tried on a phone yet.
 
 The older editor (detected tempo and bar 1, draggable markers that refined the grid, snap on/off) is in the history at v0.5.6.
+
+
+**Playback.** In Koala every section pad is a one-shot, all in one choke group (a section cuts the one before it), routed to bus D (Melodic). In Tune God a section previews like a melodic loop: it loops while the pad is held and stops on release (`padMode` in `App.tsx`).

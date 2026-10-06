@@ -132,7 +132,8 @@ function referenceFor(pad: Pad, keyPc: number, major: boolean, relative: boolean
 }
 
 function padMode(pad: Pad): PadMode {
-  if (pad.section) return "oneshot"; // a song section plays through, like it will in Koala
+  // A song section previews like a melodic loop: it loops while held and stops on release. (In Koala it is written as a one-shot, see exportSong.ts.)
+  if (pad.section) return "loop";
   return isTunedCategory(pad.category) ? "loop" : "hold";
 }
 
@@ -812,7 +813,7 @@ function App() {
       sourceSampleId: sorted[0].section!.sourceSampleId,
       template: acapellaTemplate.current,
       bars: 8,
-      sections: sorted.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColorOf(p) })),
+      sections: sorted.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColorOf(p), bus: CATEGORY_BUS.melodic })),
     };
   };
 
