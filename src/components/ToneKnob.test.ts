@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { knobRows } from "./ToneKnob";
+import { knobRows } from "./toneKnobRows";
 
 const lit = (rows: string[]) => rows.map((r) => [...r].filter((c) => c === "#").length).reduce((a, b) => a + b, 0);
 
