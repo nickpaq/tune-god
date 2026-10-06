@@ -18,6 +18,8 @@ export interface SavedPad {
   is808?: boolean;
   /** The Tune screen's Stretch key was on for this loop (see Pad.stretch). */
   stretch?: boolean;
+  /** The pad is locked (see Pad.locked). */
+  locked?: boolean;
   /** Knob level of a sample pack sound (see Pad.knobDb). */
   knobDb?: number;
   /** Where the sound sits now, if the user moved it. Pads are keyed by their original slot. */
@@ -51,6 +53,8 @@ export interface SavedState {
   packMemory?: "low" | "auto" | "high";
   paletteId?: string;
   toneOn?: boolean;
+  /** The reference tone's volume knob, 0 to 1 (0.5 is the level matched to the sound). */
+  toneVolume?: number;
   /** A4 reference pitch in Hz (440 = standard). */
   a4?: number;
   bank?: number;

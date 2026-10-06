@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { PrecisionSlider } from "./PrecisionSlider";
+import { ToneKnob } from "./ToneKnob";
 import { Waveform } from "./Waveform";
 import type { CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
@@ -57,6 +58,8 @@ export interface Pad {
   keyFromName?: boolean;
   /** The loop is stretched from its own tempo to the project tempo (written to the export as Koala's stretch). */
   stretch?: boolean;
+  /** The pad is locked (dragged onto the lock zone): a bank load leaves its sound on the pad and only swaps the hot-swap options for it. */
+  locked?: boolean;
   tune: boolean;
   /** A key chosen for this pad alone ("Tune one"); it overrides the project key. */
   keyPc?: number;
@@ -105,6 +108,9 @@ export function PadPanel({
   onHoldStart,
   onHoldEnd,
   note,
+  toneVolume,
+  onToneVolume,
+  toneOn,
   onChange,
 }: {
   pad: Pad;
@@ -131,6 +137,10 @@ export function PadPanel({
   onHoldEnd: () => void;
   /** A line of explanation shown in place of the tempo row (the key-check song pad says what its tuning does). */
   note?: string;
+  /** The tone's volume knob (0 to 1), drawn on the screen at the right of the top row, and whether the tone is switched on (the knob dims when it is not). */
+  toneVolume: number;
+  onToneVolume: (volume: number) => void;
+  toneOn: boolean;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "stretch">>) => void;
 }) {
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
@@ -160,6 +170,7 @@ export function PadPanel({
           </div>
           <div>Shift {pad.tune ? formatTrim(total * 100) : "0.000"}st</div>
         </div>
+        <ToneKnob value={toneVolume} onChange={onToneVolume} dim={!toneOn} />
       </div>
       <NameLine name={name} fileName={pad.name} />
       {note && <div className="pad-panel__keynote">{note}</div>}

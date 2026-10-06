@@ -1018,7 +1018,6 @@
     animation: none;
   }
 }
-.hold-zone,
 .drop-targets {
   position: absolute;
   left: 0;
@@ -1026,23 +1025,6 @@
   top: 0;
   z-index: 16;
   animation: hold-fade 0.2s ease-out;
-}
-
-.hold-zone {
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 1.2cqw;
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--edge);
-  font-size: 5cqw;
-  letter-spacing: 0.3em;
-}
-
-.hold-zone--target {
-  background: var(--accent);
-  color: var(--accent-ink);
 }
 
 .drop-targets {
@@ -1064,8 +1046,7 @@
 
 .drop-target--trash {
   flex: none;
-  width: 30cqw;
-  font-size: 6cqw;
+  width: 36cqw;
 }
 
 .drop-target--hot {
@@ -1442,9 +1423,18 @@
   cursor: pointer;
 }
 
-.dropzone__btn:active {
+.dropzone__btn:active,
+.dropzone__btn--on {
   background: var(--oled);
   color: #000;
+}
+
+/* the same screen laid over the real one while a pad is dragged: hold, delete, lock, chopper */
+.screen--drag {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  animation: hold-fade 0.2s ease-out;
 }
 
 /* ---- the song chop editor: a chassis panel like the other modals, keycap buttons, and the waveform on a small OLED screen (drawn at full quality, not on the pixel grid) ---- */
@@ -1921,4 +1911,43 @@
   max-height: calc(var(--cell) * 19);
   overflow: hidden;
   line-height: calc(var(--cell) * 9);
+}
+
+/* a locked pad carries a padlock in its lower left corner (an unlocked one has none); the sound type's symbol keeps the lower right */
+.pad__lock {
+  position: absolute;
+  bottom: 8%;
+  left: 7%;
+  width: 24%;
+  height: 24%;
+  color: rgba(20, 20, 22, 0.85);
+  pointer-events: none;
+}
+
+.pad__lock .pixel-icon {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* the reference tone's volume knob, drawn in lit cells at the right of the Tune screen's top row */
+.tone-knob {
+  flex: none;
+  margin-left: auto;
+  width: calc(var(--cell) * 19);
+  height: calc(var(--cell) * 19);
+  display: grid;
+  place-items: center;
+  color: var(--oled);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.tone-knob svg {
+  width: calc(var(--cell) * 17);
+  height: calc(var(--cell) * 17);
+}
+
+.tone-knob--dim {
+  opacity: 0.35;
 }

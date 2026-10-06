@@ -53,7 +53,7 @@ import { useOledCell } from "./components/useOledCell";
 import { SeqScreen, type SeqPad } from "./components/seq/SeqScreen";
 import { useSafeArea } from "./components/useSafeArea";
 import { SIDECHAIN_HINT, sidechainStatus } from "./audio/sidechain";
-import { ACAPELLA_ICON, DRUM_ICON, K_ICON, KEYS_ICON } from "./components/dropIcons";
+import { ACAPELLA_ICON, DELETE_ICON, DRUM_ICON, HOLD_ICON, K_ICON, KEYS_ICON, LOCK_ICON, UNLOCK_ICON } from "./components/dropIcons";
 import { ACTIVE_MIX_PRESET, MASTER_STYLES, type MasterStyle } from "./audio/mixPresets";
 import "./App.css";
 
@@ -254,6 +254,8 @@ function App() {
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({ on: false, id: layoutById(saved.layoutId).id, pre: {} });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
+  /** The reference tone's volume knob, 0 to 1: 0.5 is the level the tone is matched to, so the multiplier is twice the knob. */
+  const [toneVolume, setToneVolume] = useState(saved.toneVolume ?? 0.5);
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
   const [a4Text, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
@@ -401,6 +403,7 @@ function App() {
                     semis: remembered.semis,
                     cents: remembered.cents,
                     stretch: remembered.stretch,
+                    locked: remembered.locked,
                     category: cat,
                   }
                 : { category }),
@@ -454,8 +457,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
-  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
+    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
+  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -473,6 +476,7 @@ function App() {
         knobDb: p.knobDb,
         is808: p.is808,
         stretch: p.stretch,
+        locked: p.locked,
         position: p.index,
       };
     }
@@ -568,10 +572,12 @@ function App() {
       const cur = latest.current;
       const lay = layoutById(layout.id);
       // What this load replaces: the real sounds on its pads, and the spares of its kind in the hot-swap pool.
-      const replacedPads = Object.values(cur.pads).filter((p) => isReal(p) && inZone(p));
+      // A locked pad keeps its sound: it is not replaced, and what the pack brings for its place goes to the hot-swap options instead.
+      const lockedSlots = new Set(Object.values(cur.pads).filter((p) => p.locked && inZone(p)).map((p) => p.index));
+      const replacedPads = Object.values(cur.pads).filter((p) => isReal(p) && inZone(p) && !p.locked);
       const replacedSpares = Object.values(cur.hidden).filter((p) => (bank === "drums" ? isKitCategory(p.category) : bankTakes(bank, p.category)));
       const replaced = [...replacedPads, ...replacedSpares];
-      const kept = [...Object.values(cur.pads).filter((p) => isReal(p) && !inZone(p)), ...Object.values(cur.hidden).filter((p) => !replacedSpares.includes(p))];
+      const kept = [...Object.values(cur.pads).filter((p) => isReal(p) && (!inZone(p) || p.locked)), ...Object.values(cur.hidden).filter((p) => !replacedSpares.includes(p))];
       const bytesOf = (p: Pad) => p.channelData.reduce((n, ch) => n + ch.length * 3, 0);
       const budget = Math.max(0, packByteBudget(packMemory) - Math.max(0, (projectFile.current?.size ?? 0) - replaced.reduce((n, p) => n + bytesOf(p), 0)));
       const result = await writeBankSounds(project, plan.groups, {
@@ -597,7 +603,7 @@ function App() {
         if (token !== loadToken.current) return;
         categoryHints.current = { ...categoryHints.current, [sound.pad]: sound.category };
         fresh.push({
-          index: placement.positions.get(sound.pad) ?? -1,
+          index: lockedSlots.has(placement.positions.get(sound.pad) ?? -1) ? -1 : (placement.positions.get(sound.pad) ?? -1),
           origIndex: sound.pad,
           name: sound.fileName,
           sampleId: sound.sampleId,
@@ -615,13 +621,13 @@ function App() {
       const spares = fresh.filter((p) => p.index < 0);
       setPads((prev) => {
         const next: Record<number, Pad> = {};
-        for (const p of Object.values(prev)) if (!inZone(p)) next[p.index] = p;
+        for (const p of Object.values(prev)) if (!inZone(p) || p.locked) next[p.index] = p;
         for (const p of onPads) next[p.index] = p;
         if (bank === "drums") {
-          for (const ph of placement.placeholders) next[ph.index] = makePlaceholderPad(ph);
+          for (const ph of placement.placeholders) if (!lockedSlots.has(ph.index)) next[ph.index] = makePlaceholderPad(ph);
           for (const g of placement.ghosts) {
             const source = onPads.find((p) => p.origIndex === g.sourceKey);
-            if (source) next[g.index] = makeGhostPad(g.index, g.kind, source);
+            if (source && !lockedSlots.has(g.index)) next[g.index] = makeGhostPad(g.index, g.kind, source);
           }
         }
         return next;
@@ -670,14 +676,37 @@ function App() {
   const pickedMode = useRef<ChopMode | null>(null);
   const acapellaPending = useRef<ChopMode | null>(null);
 
-  const askChopMode = () => {
+  /** The sound a pad was dragged onto the Chopper zone with, while the mode is being asked. */
+  const [chopTarget, setChopTarget] = useState<Pad | null>(null);
+
+  const askChopMode = (target?: Pad) => {
     setMenuOpen(false);
+    setChopTarget(target ?? null);
     setModeAsk(true);
+  };
+
+  /**
+   * A pad was dragged onto the Chopper zone. Chopper mode takes it as the sample to chop (it must be over 10 seconds). Acapella mode looks for its pair by
+   * label: the pad and a pad labelled like it with VOCALS after it (or, when it is the stem, the song it is named after).
+   */
+  const chopPad = async (mode: ChopMode, pad: Pad) => {
+    if (addPackStatus || loading || analyzing > 0) return;
+    if (mode === "chopper") {
+      if (pad.channelData[0].length / pad.sampleRate < CHOPPER_MIN_SECONDS) return void window.alert(`Chopper mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`);
+      return void (await launchChopper(pad));
+    }
+    const cur = latest.current;
+    const check = checkStems(pad, [...Object.values(cur.pads).filter(isReal), ...Object.values(cur.hidden)]);
+    if (!check.ok) return void window.alert(check.message);
+    await launchAcapella(check.song, check.vocals);
   };
 
   /** A mode was chosen. With no project open a Koala project is picked first and opened like any other (a long song is fine: the 60 s limit is ignored). */
   const chooseChopMode = (mode: ChopMode) => {
     setModeAsk(false);
+    const target = chopTarget;
+    setChopTarget(null);
+    if (target) return void chopPad(mode, target);
     const open = Object.keys(latest.current.pads).length > 0 || Object.keys(latest.current.hidden).length > 0;
     if (open) return void beginChop(mode);
     pickedMode.current = mode;
@@ -821,8 +850,8 @@ function App() {
 
   /** Opens the chop editor in acapella mode. The chops overwrite everything on bank D, so the user is warned when something is there. */
   const launchAcapella = async (song: Pad, vocals: Pad) => {
-    const occupied = Object.values(latest.current.pads).filter((p) => inChopBank(p.index)).length;
-    if (occupied > 0 && !window.confirm(`Acapella mode overwrites everything on Bank D (${occupied} pad${occupied === 1 ? "" : "s"}). Continue?`)) return;
+    const occupied = Object.values(latest.current.pads).filter((p) => inChopBank(p.index) && !p.locked).length;
+    if (occupied > 0 && !window.confirm(`Acapella mode overwrites everything on Bank D except locked pads (${occupied} pad${occupied === 1 ? "" : "s"}). Continue?`)) return;
     const beatsPerBar = await beatsPerBarOfProject();
     acapellaTemplate.current = undefined;
     setMenuOpen(false);
@@ -1005,7 +1034,8 @@ function App() {
         detectedMidi: minorPc !== null ? 48 + minorPc : song.detectedMidi,
         keyCheck: true,
       };
-      const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => !inChopBank(p.index) && p.origIndex !== song.origIndex));
+      // (a locked pad on bank D stays, and its slot is not used)
+      const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => (!inChopBank(p.index) || p.locked) && p.origIndex !== song.origIndex));
       const withSong = { ...without, [KEY_CHECK_SLOT]: songPad };
       const { pads: made } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(withSong), palette.colors);
       const shift = shiftFor(songPad, cur.tunedTarget, a4, keyMajor);
@@ -1095,6 +1125,7 @@ function App() {
         normalize ? pad.knobDb : undefined,
         0,
         toneRef ? toneRef.kind : "sine",
+        toneVolume * 2,
       ),
     );
   };
@@ -1143,6 +1174,23 @@ function App() {
     if (kind === "pad" || kind === "cell") dest = Number(rest);
     else if (kind === "bank") dest = emptyPadInBank(cur, Number(rest));
     else if (kind === "unused") dest = nextEmptyPad(cur, bank);
+    if (kind === "lock") {
+      // The lock zone toggles the pad's lock; nothing moves.
+      recordEdit();
+      setPads((prev) => (prev[from] ? { ...prev, [from]: { ...prev[from], locked: !prev[from].locked } } : prev));
+      return;
+    }
+    if (kind === "chop") {
+      // The chopper zone chops the dragged sound: acapella or chopper mode is asked, and acapella mode looks for its pair.
+      const dragged = cur[from];
+      if (!dragged || !isReal(dragged)) setNotice("Only a sound from the project can be chopped");
+      else askChopMode(dragged);
+      return;
+    }
+    if (kind === "trash" && cur[from]?.locked) {
+      setNotice("That pad is locked: unlock it first to delete it");
+      return;
+    }
     if (kind === "trash") next = removePad(cur, from);
     else if (dest !== null) next = movePad(cur, from, dest);
     if (next === cur) return;
@@ -1244,11 +1292,12 @@ function App() {
     // Grabbing the slider always starts on the project key's own chord.
     refRelativeRef.current = false;
     setRefRelativeState(false);
-    const ref = referenceFor(pad, pc, keyMajor, false);
+    // The Tone key switches the tone for the slider as well as for a tapped pad: off, the sound plays alone.
+    const ref = toneOn ? referenceFor(pad, pc, keyMajor, false) : null;
     matchVoice.current = {
       lift,
       index: pad.index,
-      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, ref.pc, "loop", undefined, normalize ? pad.knobDb : undefined, 0, ref.kind),
+      handle: startPad(pad.index, audioOf(pad), pad.sampleRate, shift + lift, ref ? ref.pc : null, "loop", undefined, normalize ? pad.knobDb : undefined, 0, ref ? ref.kind : "sine", toneVolume * 2),
     };
   };
 
@@ -1263,6 +1312,13 @@ function App() {
     patchPad(pad.index, { ...splitTrim(trim), tune: true, tuneLocked: true });
     const match = matchVoice.current;
     if (match) match.handle.setShift(shiftFor({ ...pad, ...splitTrim(trim), tune: true }, latest.current.tunedTarget, a4, keyMajor) + match.lift);
+  };
+
+  /** The tone's volume knob turned: the tones that are playing follow it at once. */
+  const changeToneVolume = (volume: number) => {
+    setToneVolume(volume);
+    matchVoice.current?.handle.setToneVolume(volume * 2);
+    for (const handle of releasePad.current.values()) handle.setToneVolume(volume * 2);
   };
 
   /** The slider was let go (or the pad or screen changed): the sound and the tone fade out. The pad keeps the pitch it was left at. */
@@ -1520,6 +1576,9 @@ function App() {
       relative={refRelative}
       onRelative={setRefRelative}
       note={selectedPad.keyCheck ? KEY_CHECK_NOTE : undefined}
+      toneVolume={toneVolume}
+      onToneVolume={changeToneVolume}
+      toneOn={toneOn}
       projectBpm={projectBpm}
       onTrim={moveTrim}
       onHoldStart={startMatch}
@@ -1783,7 +1842,7 @@ function App() {
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
               title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, 16 chops, stretched to the project) or chopper mode (any sample over 10 seconds, 127 chops on one pad). With no project open it asks for a Koala project first."
-              onClick={askChopMode}
+              onClick={() => askChopMode()}
             >
               {addPackStatus || "Load Bank D: Chopper"}
             </button>
@@ -1973,14 +2032,42 @@ function App() {
           </section>
 
           {drag && !expanded && (
-            <div className={`hold-zone${hover === "hold:" ? " hold-zone--target" : ""}`} data-drop="hold">
-              HOLD
-            </div>
+            // The start screen's four choices, with other icons: dropping the pad on one does that (hold, delete, lock or unlock, chop).
+            <section className="screen screen--drag" aria-hidden="true">
+              <div
+                className="oled"
+                ref={(el) => {
+                  if (el) el.dataset.tight = document.querySelector<HTMLElement>(".screen:not(.screen--drag) .oled")?.dataset.tight ?? "";
+                }}
+              >
+                <div className="dropzone">
+                  <svg className="dropzone__ants" aria-hidden="true">
+                    <rect className="dropzone__ants-base" pathLength="280" />
+                    <rect className="dropzone__ants-dash" pathLength="280" />
+                  </svg>
+                  <div className="dropzone__choices">
+                    {(
+                      [
+                        { kind: "hold", word: "Hold", icon: HOLD_ICON },
+                        { kind: "trash", word: "Delete", icon: DELETE_ICON },
+                        { kind: "lock", word: pads[drag.from]?.locked ? "Unlock" : "Lock", icon: pads[drag.from]?.locked ? UNLOCK_ICON : LOCK_ICON },
+                        { kind: "chop", word: "Chopper", icon: ACAPELLA_ICON },
+                      ] as const
+                    ).map((zone) => (
+                      <div key={zone.kind} className={`dropzone__btn${hover === `${zone.kind}:` ? " dropzone__btn--on" : ""}`} data-drop={zone.kind}>
+                        <PixelIcon rows={zone.icon} scale={1} />
+                        <span>{zone.word}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
           )}
           {drag && expanded && (
             <div className="drop-targets">
               <div className={`drop-target drop-target--trash${hover === "trash:" ? " drop-target--hot" : ""}`} data-drop="trash">
-                🗑
+                🗑 Delete
               </div>
               <div className={`drop-target drop-target--unused${hover === "unused:" ? " drop-target--hot" : ""}`} data-drop="unused">
                 Unused pad
@@ -2035,6 +2122,7 @@ function App() {
                 pad && "pad--loaded",
                 pad?.placeholder && "pad--placeholder",
                 pad?.tune && "pad--tuned",
+                pad?.locked && "pad--locked",
                 selected === index && "pad--selected",
                 drag?.from === index && "pad--dragging",
                 hover === `pad:${index}` && "pad--target",
@@ -2060,6 +2148,11 @@ function App() {
                     </span>
                   </span>
                   {padSymbols && symbolOf(pad) && <PadSymbol category={symbolOf(pad)!} />}
+                  {pad?.locked && (
+                    <span className="pad__lock">
+                      <PixelIcon rows={LOCK_ICON} scale={1} />
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -2107,7 +2200,15 @@ function App() {
           <LongSamplesModal pads={longPads} maxSeconds={MAX_SAMPLE_SECONDS} onDelete={deletePad} onChop={openChop} onClose={() => setLongSamples([])} />
         )}
 
-        {modeAsk && <AcapellaModeModal onChoose={chooseChopMode} onCancel={() => setModeAsk(false)} />}
+        {modeAsk && (
+          <AcapellaModeModal
+            onChoose={chooseChopMode}
+            onCancel={() => {
+              setModeAsk(false);
+              setChopTarget(null);
+            }}
+          />
+        )}
 
         {sourcePick && (
           <ChopperSourceModal
