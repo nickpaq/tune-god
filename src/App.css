@@ -1919,14 +1919,19 @@
   }
 }
 
-/* a locked pad carries a small padlock in its corner */
+/* a locked pad carries a padlock in its lower left corner (an unlocked one has none); the sound type's symbol keeps the lower right */
 .pad__lock {
-  --cell: 0.28cqw;
   position: absolute;
-  right: 1.5cqw;
-  bottom: 1.5cqw;
-  display: block;
-  line-height: 0;
-  opacity: 0.75;
+  bottom: 8%;
+  left: 7%;
+  width: 24%;
+  height: 24%;
+  color: rgba(20, 20, 22, 0.85);
   pointer-events: none;
+}
+
+.pad__lock .pixel-icon {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
