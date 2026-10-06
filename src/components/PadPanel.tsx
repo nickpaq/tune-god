@@ -118,8 +118,7 @@ export function PadPanel({
               {pad.tune ? "Tune on" : "Tune off"}
             </button>
           </div>
-          <div>Shift {pad.tune ? `${total >= 0 ? "+" : "-"}${Math.abs(total).toFixed(2)}` : "0.00"}st</div>
-          <div>Trim {formatTrim(trim)}st</div>
+          <div>Shift {pad.tune ? formatTrim(total * 100) : "0.00"}st</div>
         </div>
       </div>
 
@@ -148,7 +147,7 @@ export function PadPanel({
           onChange={onTrim}
           onDragStart={onHoldStart}
           onDragEnd={onHoldEnd}
-          valueLabel={formatTrim}
+          valueLabel={(cents) => formatTrim(pad.tune ? autoShift * 100 + cents : cents)}
           title="Pitch of the sound: hold and slide along the slider to repitch it by semitones, drag down for fine steps. Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold."
         />
         {chords && above && (
