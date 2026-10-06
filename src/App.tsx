@@ -50,6 +50,7 @@ import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveStat
 import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, splitTrim, trimCents, bassLiftSemitones } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
+import { SeqScreen, type SeqPad } from "./components/seq/SeqScreen";
 import { useSafeArea } from "./components/useSafeArea";
 import { ACTIVE_MIX_PRESET, MASTER_STYLES, type MasterStyle } from "./audio/mixPresets";
 import { planOrganize } from "./audio/organize";
@@ -235,6 +236,8 @@ function App() {
   /** Pre-rendered normalized audio per pad (by original slot, so it follows a moved pad); only used for playback while Normalize is on. */
   const [normalizedData, setNormalizedData] = useState<Record<number, Float32Array[]>>({});
   const [menuOpen, setMenuOpen] = useState(false);
+  /** The sequencer screens (SEQ key). Interface only for now: nothing on them plays or records. */
+  const [seqOpen, setSeqOpen] = useState(false);
   // Off until the user turns it on (an earlier version defaulted it on, so the old saved value is not read).
   const [masterChain, setMasterChain] = useState(saved.masterChainOn ?? false);
   const [masterStyle, setMasterStyle] = useState<MasterStyle>(saved.masterStyle ?? "loud");
@@ -1575,6 +1578,12 @@ function App() {
     analyzing === 0 &&
     !exporting;
   const hasProject = Object.keys(pads).length > 0;
+  /** The 16 pads of a bank as the sequencer shows them: the app's own labels and colours, or null where there is no sound. */
+  const seqPadsOfBank = (b: number): (SeqPad | null)[] =>
+    Array.from({ length: 16 }, (_, slot) => {
+      const p = pads[b * 16 + slot];
+      return p && !p.placeholder ? { label: captionOf(p) || labelOf(p), color: litColor(p) } : null;
+    });
   const longPads = Object.values(pads)
     .filter((p) => longSamples.includes(p.origIndex))
     .sort((a, b) => a.index - b.index);
@@ -1929,6 +1938,10 @@ function App() {
           </div>
         )}
 
+        {seqOpen ? (
+          <SeqScreen padsOfBank={seqPadsOfBank} onBack={() => setSeqOpen(false)} />
+        ) : (
+        <>
         <div className="upper">
         {/* Header: the mode keys on the left, the four banks in the middle and the menu on the right, each key in a tray. */}
         <div className="controls">
@@ -1950,6 +1963,10 @@ function App() {
                 </button>
               );
             })}
+            <button className="cap cap--mode" aria-label="Sequencer" onClick={() => { setMenuOpen(false); setSeqOpen(true); }}>
+              <span className="cap__led" />
+              <span className="cap__legend">Seq</span>
+            </button>
           </div>
           <div className="tray">
             {BANKS.map((name, i) => {
@@ -2203,6 +2220,8 @@ function App() {
           )}
         </div>
         </div>
+        </>
+        )}
 
         {focus && !focus.started && (
           <div className="focus focus--intro" role="dialog" aria-label="Sort your sounds">
