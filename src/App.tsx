@@ -1320,7 +1320,7 @@ function App() {
   const panel = selectedPad && !selectedPad.placeholder && !selectedPad.ghost && (
     <PadPanel
       pad={selectedPad}
-      name={displayName(selectedPad.name, tags)}
+      name={labelOf(selectedPad)}
       keyName={keyNameOf(selectedPad)}
       autoShift={shiftFor({ ...selectedPad, semis: 0, cents: 0 }, tunedTarget, a4, keyMajor)}
       needsKey={(selectedPad.keyPc ?? keyPc) === null}
