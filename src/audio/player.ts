@@ -1,5 +1,5 @@
 // Minimal Web Audio playback for the pad grid: held, looping, monophonic pad playback with a
-// pitch shift and optional reference tone, and a held sine tone for the key picker.
+// pitch shift and optional reference tone (a soft saw minor chord on the key), and the same chord held for the key picker.
 import { getAudioContext } from "./decode";
 import { midiToFrequency, semitonesToRatio } from "./theory";
 
@@ -27,6 +27,50 @@ function readyContext(): AudioContext {
   return ctx;
 }
 
+/**
+ * The reference tone: a soft saw-wave minor chord on the key (its root, a minor third and a fifth), so a loop can be judged against a whole key and not one
+ * note. Two slightly detuned saws per note give it some width, and a low-pass keeps it soft. `out` carries the chord at roughly 1.3 times the amplitude of one
+ * saw; set the level on a gain after it.
+ */
+const CHORD_INTERVALS = [0, 3, 7];
+const CHORD_DETUNE_CENTS = [-6, 6];
+const CHORD_CUTOFF_HZ = 1200;
+interface ChordTone {
+  out: AudioNode;
+  start: () => void;
+  /** Stops every voice at the context time `when` (now by default). */
+  stop: (when?: number) => void;
+  /** Called once, when the last voice has stopped. */
+  onEnded: (fn: () => void) => void;
+}
+
+/** The chord on `pitchClass` (0 = C), in the octave from middle C like the single tone it replaces. */
+function createChord(ctx: AudioContext, pitchClass: number): ChordTone {
+  const lowpass = ctx.createBiquadFilter();
+  lowpass.type = "lowpass";
+  lowpass.frequency.value = CHORD_CUTOFF_HZ;
+  lowpass.Q.value = 0.5;
+  const voices: OscillatorNode[] = [];
+  for (const interval of CHORD_INTERVALS) {
+    for (const cents of CHORD_DETUNE_CENTS) {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.value = midiToFrequency(60 + pitchClass + interval, a4Reference);
+      osc.detune.value = cents;
+      osc.connect(lowpass);
+      voices.push(osc);
+    }
+  }
+  return {
+    out: lowpass,
+    start: () => voices.forEach((o) => o.start()),
+    stop: (when) => voices.forEach((o) => o.stop(when)),
+    onEnded: (fn) => {
+      voices[0].onended = fn;
+    },
+  };
+}
+
 /** Pad gain is held for this long after release before the fade starts. */
 const RELEASE_HOLD = 0.03;
 /** Length of the fade-out that follows the hold. */
@@ -36,6 +80,8 @@ const CUT_FADE = 0.008;
 /** The reference tone always fades out over exactly this long after release. */
 const TONE_FADE = 0.15;
 const MAX_TONE_GAIN = 0.7;
+/** The chord fades in over this long, so it never clicks in. */
+const CHORD_ATTACK = 0.03;
 
 export interface PadHandle {
   /** Holds briefly, then fades the pad (and tone) out. A "oneshot" pad ignores it and plays to its end. */
@@ -85,7 +131,7 @@ export type PadMode = "loop" | "hold" | "oneshot";
  * Starts a pad for as long as it is held, cutting off any earlier hit of the same pad (monophonic).
  * Preview only: nothing here touches the project's own play settings. The shift is applied as a
  * playback-rate change (a resample), exactly how the tuned sample would sound once baked in.
- * With a tone pitch class, a sine plays at the sample's RMS level on its own gain, so it always
+ * With a tone pitch class, the reference chord plays at the sample's RMS level on its own gain, so it always
  * decays at the fixed TONE_FADE rate however long or short the sample is. Release holds briefly,
  * then fades both voices out smoothly.
  */
@@ -120,16 +166,16 @@ export function startPad(
     source.connect(knob).connect(gain);
   }
 
-  let osc: OscillatorNode | null = null;
+  let osc: ChordTone | null = null;
   let toneGain: GainNode | null = null;
   if (tonePitchClass !== null) {
-    osc = ctx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.value = midiToFrequency(60 + tonePitchClass, a4Reference);
+    osc = createChord(ctx, tonePitchClass);
     toneGain = ctx.createGain();
-    // A sine of amplitude a has RMS a / sqrt(2), so this matches the sample's RMS.
-    toneGain.gain.value = Math.min(MAX_TONE_GAIN, rms(channelData) * Math.SQRT2 * level);
-    osc.connect(toneGain).connect(gain);
+    // The chord is six saws through a low-pass: about 1.3 times the RMS of one saw (0.58 of its amplitude), so this brings it to the sample's RMS.
+    const target = Math.min(MAX_TONE_GAIN, rms(channelData) * level);
+    toneGain.gain.setValueAtTime(0, ctx.currentTime);
+    toneGain.gain.linearRampToValueAtTime(target / 0.75, ctx.currentTime + CHORD_ATTACK);
+    osc.out.connect(toneGain).connect(gain);
     osc.start();
   }
   const startedAt = ctx.currentTime;
@@ -169,7 +215,7 @@ export function startPad(
       osc?.stop(end);
       if (osc) {
         source.onended = null;
-        osc.onended = finish;
+        osc.onEnded(finish);
       } else source.onended = finish;
     },
   };
@@ -185,24 +231,22 @@ export function startPad(
   };
 }
 
-/** Starts a sine tone on `pitchClass` (0 = C) in the octave from middle C; returns a function that releases it. */
-export function startSine(pitchClass: number): () => void {
+/** Starts the reference chord (the minor chord on `pitchClass`, 0 = C) and returns a function that releases it. */
+export function startChord(pitchClass: number): () => void {
   const ctx = readyContext();
-  const osc = ctx.createOscillator();
+  const chord = createChord(ctx, pitchClass);
   const gain = ctx.createGain();
-  osc.type = "sine";
-  osc.frequency.value = midiToFrequency(60 + pitchClass, a4Reference);
   const now = ctx.currentTime;
   gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.3, now + 0.01);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start();
+  gain.gain.linearRampToValueAtTime(0.22, now + CHORD_ATTACK);
+  chord.out.connect(gain).connect(ctx.destination);
+  chord.start();
   return () => {
     const t = ctx.currentTime;
     gain.gain.cancelScheduledValues(t);
     gain.gain.setValueAtTime(gain.gain.value, t);
-    gain.gain.linearRampToValueAtTime(0, t + 0.06);
-    osc.stop(t + 0.08);
+    gain.gain.linearRampToValueAtTime(0, t + 0.08);
+    chord.stop(t + 0.1);
   };
 }
 

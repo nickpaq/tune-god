@@ -104,8 +104,10 @@ function shiftFor(pad: Pad, projectKey: number | null, a4: number): number {
   if (target !== null && pad.detectedMidi != null) {
     base = (((target - pad.detectedMidi) % 12) + 12) % 12;
     if (base > 6) base -= 12;
-    // The detected pitch is measured against A440; a different A4 reference moves the target note with it.
-    base += referenceOffsetSemitones(a4);
+    // A loop is moved by whole semitones to the closest note of the key (no cents); anything it is off by, the user tweaks. A single sound's detected pitch
+    // is measured against A440, so a different A4 reference moves the target note with it.
+    if (pad.category === "melodicLoop") base = Math.round(base);
+    else base += referenceOffsetSemitones(a4);
   }
   return base + pad.semis + pad.cents / 100;
 }
@@ -596,7 +598,7 @@ function App() {
       if (result.skipped > 0) setNotice(`${result.skipped} file${result.skipped === 1 ? "" : "s"} skipped: too long, too big for the project size limit or unreadable`);
       for (const pad of fresh) {
         nextAnalysisWorker()
-          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.name)
+          .analyze(monoFromChannelData(pad.channelData), pad.sampleRate, pad.name, pad.category === "melodicLoop")
           .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined }))
           .then(({ midi: detectedMidi, detail, centroid }) => {
             if (token !== loadToken.current) return;

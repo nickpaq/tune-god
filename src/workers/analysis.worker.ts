@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import * as Comlink from "comlink";
 import { dominantPitch } from "../audio/pitch/yin";
+import { loopKey } from "../audio/pitch/loopKey";
 import { frequencyToMidi } from "../audio/theory";
 import { classifySample, extractFeatures, type CategoryId } from "../audio/classify";
 import { classifyDetail, type Detail } from "../audio/padLabels";
@@ -23,9 +24,13 @@ const api = {
     mono: Float32Array,
     sampleRate: number,
     fileName: string,
+    /** The sound is a melodic loop (a loader said so): its key is read from the notes it holds, not from one pitch. */
+    isLoop = false,
   ): { midi: number | null; category: CategoryId; detail: Detail | undefined; centroid: number | undefined } {
-    const midi = api.detectMidi(mono, sampleRate);
-    const category = classifySample(mono, sampleRate, fileName, midi);
+    const pitch = api.detectMidi(mono, sampleRate);
+    const category = classifySample(mono, sampleRate, fileName, pitch);
+    // A loop's "pitch" is the tonic of its key (as the relative minor), a whole note; the single-pitch detector is only the fallback.
+    const midi = isLoop || category === "melodicLoop" ? (loopKey(mono, sampleRate)?.midi ?? pitch) : pitch;
     // Spectral centroid feeds the finger-drumming layout (perc order, sort by frequency).
     const features = extractFeatures(mono, sampleRate);
     return { midi, category, detail: classifyDetail(fileName, category), centroid: features?.centroid };

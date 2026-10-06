@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { NOTE_NAMES } from "../audio/theory";
-import { startSine } from "../audio/player";
+import { startChord } from "../audio/player";
 
 /** The seven naturals left to right, then each sharp with the natural it sits just after. */
 const NATURALS = [0, 2, 4, 5, 7, 9, 11];
@@ -14,7 +14,7 @@ const SHARPS: { pc: number; after: number }[] = [
 
 /**
  * The twelve notes as a piano octave (seven naturals, five sharps standing over them), for choosing the key to tune to
- * (not for playing). Holding a note sounds a sine tone; the selected note is marked, and tapping it again deselects it.
+ * (not for playing). Holding a note sounds the minor chord on it (soft saw waves); the selected note is marked, and tapping it again deselects it.
  */
 export function Keyboard({ selected, onSelect }: { selected: number | null; onSelect: (pc: number) => void }) {
   const releaseRef = useRef<(() => void) | null>(null);
@@ -23,7 +23,7 @@ export function Keyboard({ selected, onSelect }: { selected: number | null; onSe
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     releaseRef.current?.();
-    releaseRef.current = startSine(pc);
+    releaseRef.current = startChord(pc);
     onSelect(pc);
   };
   const release = () => {
