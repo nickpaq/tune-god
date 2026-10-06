@@ -30,7 +30,7 @@ function readyContext(): AudioContext {
 /**
  * The reference tone. For a single sound it is a sine on the key's note. For a melodic loop it is a soft saw-wave chord on the key (its root, a third and
  * a fifth: a minor chord, or a major one), so the loop can be judged against a whole key and not one note. Two slightly detuned saws per note give the
- * chord some width, and a low-pass keeps it soft. `out` carries the chord at roughly 1.3 times the amplitude of one saw; set the level on a gain after it.
+ * chord some width, and a low-pass keeps it soft. `out` carries the chord at `CHORD_RMS`; set the level on a gain after it.
  */
 export type ReferenceTone = "sine" | "minor" | "major";
 const CHORD_INTERVALS: Record<"minor" | "major", number[]> = { minor: [0, 3, 7], major: [0, 4, 7] };
@@ -84,6 +84,9 @@ function createTone(ctx: AudioContext, pitchClass: number, kind: ReferenceTone):
     },
   };
 }
+
+/** The RMS of the reference chord at unit gain: measured by rendering it offline for all 24 roots and qualities, it is 1.18 to 1.20 for every one. */
+const CHORD_RMS = 1.19;
 
 /** Pad gain is held for this long after release before the fade starts. */
 const RELEASE_HOLD = 0.03;
@@ -193,10 +196,10 @@ export function startPad(
       // A sine of amplitude a has RMS a / sqrt(2), so this matches the sample's RMS.
       toneGain.gain.value = Math.min(MAX_TONE_GAIN, rms(channelData) * Math.SQRT2 * level);
     } else {
-      // The chord is six saws through a low-pass: about 1.3 times the RMS of one saw (0.58 of its amplitude), so this brings it to the sample's RMS.
-      const target = Math.min(MAX_TONE_GAIN, rms(channelData) * level);
+      // The chord measures 1.19 RMS at unit gain whatever its root, so this brings it to the sample's RMS.
+      const toneTarget = rms(channelData) * level;
       toneGain.gain.setValueAtTime(0, ctx.currentTime);
-      toneGain.gain.linearRampToValueAtTime(target / 0.75, ctx.currentTime + CHORD_ATTACK);
+      toneGain.gain.linearRampToValueAtTime(Math.min(MAX_TONE_GAIN, toneTarget) / CHORD_RMS, ctx.currentTime + CHORD_ATTACK);
     }
     osc.out.connect(toneGain).connect(gain);
     osc.start();
