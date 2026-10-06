@@ -374,6 +374,43 @@
 }
 
 /* drawn by the screen itself: an outlined box, in inverse video when on */
+/* shown on the screen while the pitch slider of a melodic loop is dragged up: the chord being played, minor on the left, major on the right */
+.chord-box {
+  position: absolute;
+  top: calc(var(--cell) * 12);
+  width: calc(var(--cell) * 44);
+  height: calc(var(--cell) * 36);
+  box-sizing: border-box;
+  border: var(--cell) solid var(--oled);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cell);
+  color: var(--oled);
+  background: #000;
+  font-size: calc(var(--cell) * 16);
+  pointer-events: none;
+}
+
+.chord-box--minor {
+  left: calc(var(--cell) * 2);
+}
+
+.chord-box--major {
+  right: calc(var(--cell) * 2);
+}
+
+.chord-box--on {
+  background: var(--oled);
+  color: #000;
+}
+
+.chord-box span {
+  font-size: calc(var(--cell) * 8);
+  text-transform: uppercase;
+}
+
 .pad-panel__toggles {
   display: flex;
   gap: calc(var(--cell) * 2);

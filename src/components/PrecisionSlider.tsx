@@ -3,9 +3,6 @@ import { useState, useRef } from "react";
 /** Below this much room between the touch and the bottom of the screen, the full fine-tune is reached in this many pixels. */
 const MIN_DRAG_ROOM_PX = 60;
 
-/** Where the finger is relative to the track while dragging: above it (dragged up), over it, or below it (dragged down, where the control gets finer). */
-export type SliderZone = "up" | "track" | "down";
-
 interface DragState {
   pointerId: number;
   lastX: number;
@@ -41,13 +38,12 @@ export function PrecisionSlider({
   keyStep = step,
   fineSpan,
   coarseStep,
-  coarseStops,
   value,
   onChange,
   onDoubleClick,
   onDragStart,
   onDragEnd,
-  onZoneChange,
+  onAbove,
   disabled,
   title,
   className,
@@ -63,8 +59,6 @@ export function PrecisionSlider({
   fineSpan: number;
   /** While the finger is directly over the track, the value snaps to multiples of this (e.g. whole semitones). */
   coarseStep?: number;
-  /** While the finger is above the track (dragged up), the only values the thumb stops on (e.g. the offsets a pitch detector gets wrong by). */
-  coarseStops?: number[];
   value: number;
   onChange: (value: number) => void;
   onDoubleClick?: () => void;
@@ -72,9 +66,8 @@ export function PrecisionSlider({
   onDragStart?: () => void;
   /** The drag (or the held key) ended; the value is whatever the last onChange reported. */
   onDragEnd?: () => void;
-  /** The finger crossed into another zone (reported at the start of a drag too, as "track"). */
-  onZoneChange?: (zone: SliderZone) => void;
-  /** Where the finger is and how the drag is scaled, for a guide drawn over the screen; null when the drag ends. */
+  /** Called as the finger moves: where it is while above the track (dragged up), null while it is anywhere else or the drag ended. */
+  onAbove?: (point: { x: number; y: number } | null) => void;
   /** Ignores the pointer and the keyboard. */
   disabled?: boolean;
   title?: string;
@@ -88,12 +81,9 @@ export function PrecisionSlider({
   const dragRef = useRef<DragState | null>(null);
   const [dragging, setDragging] = useState(false);
   const keyHeld = useRef(false);
-  const zoneRef = useRef<SliderZone>("track");
 
   /** The multiple of `coarseStep` nearest to `v`. */
   const snapWhole = (v: number) => (coarseStep ? Math.round(v / coarseStep) * coarseStep : v);
-  /** The stop in `coarseStops` nearest to `v`. */
-  const snapStop = (v: number) => (coarseStops?.length ? coarseStops.reduce((best, stop) => (Math.abs(stop - v) < Math.abs(best - v) ? stop : best), coarseStops[0]) : v);
 
   const snapToStep = (v: number) => {
     const stepped = Math.round(v / step) * step;
@@ -114,8 +104,6 @@ export function PrecisionSlider({
       room: Math.max(MIN_DRAG_ROOM_PX, (window.innerHeight - e.clientY) / 2),
     };
     setDragging(true);
-    zoneRef.current = "track";
-    onZoneChange?.("track");
     onDragStart?.();
   };
 
@@ -136,15 +124,10 @@ export function PrecisionSlider({
     const rect = track.getBoundingClientRect();
     const overTrack = e.clientY >= rect.top - 12 && e.clientY <= rect.bottom + 12;
     const above = e.clientY < rect.top - 12;
-    const zone: SliderZone = above ? "up" : e.clientY > rect.bottom + 12 ? "down" : "track";
-    if (zone !== zoneRef.current) {
-      zoneRef.current = zone;
-      onZoneChange?.(zone);
-    }
+    onAbove?.(above ? { x: e.clientX, y: e.clientY } : null);
     const clamp = (v: number) => Math.min(max, Math.max(min, v));
-    // Whole steps (or stops) from where the drag began, so any cents offset the value already had stays until a double-tap resets it.
-    if (coarseStops?.length && above) onChange(clamp(snapStop(drag.value - drag.offset) + drag.offset));
-    else if (coarseStep && (overTrack || above)) onChange(clamp(snapWhole(drag.value - drag.offset) + drag.offset));
+    // Whole steps from where the drag began, so any cents offset the value already had stays until a double-tap resets it.
+    if (coarseStep && (overTrack || above)) onChange(clamp(snapWhole(drag.value - drag.offset) + drag.offset));
     else onChange(snapToStep(drag.value));
   };
 
@@ -152,6 +135,7 @@ export function PrecisionSlider({
     if (dragRef.current?.pointerId === e.pointerId) {
       dragRef.current = null;
       setDragging(false);
+      onAbove?.(null);
       onDragEnd?.();
     }
   };

@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { PrecisionSlider } from "./PrecisionSlider";
 import { Waveform } from "./Waveform";
 import type { CategoryId } from "../audio/classify";
@@ -12,7 +13,6 @@ const TRIM_RANGE_CENTS = 1200;
  * harmonic or subharmonic: the 3rd harmonic sits an octave and a fifth up (so the note name is a fifth out: +7, or -5 from the other side) and a tripled
  * period an octave and a fifth down (-7, or +5); an octave error (12) keeps the note name and only matters for the octave it plays in.
  */
-const YIN_MISTAKES_CENTS = [-1200, -700, -500, 0, 500, 700, 1200];
 
 export interface Pad {
   /** 0-based grid slot across all four banks; changes when the pad is moved. */
@@ -57,6 +57,9 @@ export interface Pad {
   cents: number;
 }
 
+/** A chord name from the app ("C minor"). */
+const chordIsMinor = (chord: string) => chord.endsWith("minor");
+
 /** What the OLED shows for the selected pad in Tune mode: the key it follows, the tune switch, the shift, the waveform and the trim slider. */
 export function PadPanel({
   pad,
@@ -66,6 +69,7 @@ export function PadPanel({
   keyMajor,
   onKeyMajor,
   chords,
+  relative,
   onRelative,
   onTrim,
   onHoldStart,
@@ -84,7 +88,8 @@ export function PadPanel({
   onKeyMajor: (major: boolean) => void;
   /** For a melodic loop: the reference chord of the project's key and of its relative key (e.g. "C minor", "D# major"); null for any other sound. */
   chords: [string, string] | null;
-  /** The reference is the relative key's chord (the slider was dragged up). */
+  /** The reference is the relative key's chord (picked with the squares shown while the slider is dragged up). */
+  relative: boolean;
   onRelative: (relative: boolean) => void;
   /** The pitch slider moved: the pad's pitch trim, in cents. */
   onTrim: (cents: number) => void;
@@ -97,6 +102,10 @@ export function PadPanel({
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
   const total = autoShift + trim / 100;
   const isLoop = chords !== null;
+  /** The two squares (minor left, major right) are shown while the slider is dragged up. */
+  const [above, setAbove] = useState(false);
+  const boxes = useRef<(HTMLDivElement | null)[]>([]);
+  const shown = chords ? chords[relative ? 1 : 0] : null;
 
   return (
     <div className="pad-panel">
@@ -137,9 +146,14 @@ export function PadPanel({
           keyStep={10}
           fineSpan={100}
           coarseStep={100}
-          coarseStops={isLoop ? undefined : YIN_MISTAKES_CENTS}
-          onZoneChange={(zone) => {
-            if (isLoop) onRelative(zone === "up");
+          onAbove={(point) => {
+            if (!isLoop) return;
+            setAbove(point !== null);
+            if (!point) return;
+            for (const [i, box] of boxes.current.entries()) {
+              const r = box?.getBoundingClientRect();
+              if (r && point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom) onRelative((i === 0) !== chordIsMinor(chords![0]));
+            }
           }}
           value={trim}
           bipolar
@@ -151,6 +165,19 @@ export function PadPanel({
           valueLabel={formatTrim}
           title="Pitch of the sound: hold and slide along the slider to repitch it by semitones, drag down for fine steps. Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset."
         />
+        {chords && above && (
+          <>
+            {(["minor", "major"] as const).map((kind, i) => {
+              const chord = chords.find((c) => c.endsWith(kind)) ?? "";
+              return (
+                <div key={kind} ref={(el) => { boxes.current[i] = el; }} className={`chord-box chord-box--${kind}${shown?.endsWith(kind) ? " chord-box--on" : ""}`}>
+                  <span>{kind}</span>
+                  <b>{chord.split(" ")[0]}</b>
+                </div>
+              );
+            })}
+          </>
+        )}
         <div className="pad-panel__scale">
           {needsKey ? (
             <span>Select a key first</span>
