@@ -49,6 +49,8 @@ interface Detected {
 
 /** Where a downbeat marker looks for the sound's real attack, either side of the cursor (seconds). */
 const ATTACK_RADIUS_S = 0.02;
+/** Bar-jump presses this close together keep stepping from the line the last one went to. */
+const JUMP_REPEAT_MS = 2500;
 /** How far a rise must stand above the window's average level to count as an attack; below it the marker stays exactly at the cursor (a quiet intro has none). */
 const ATTACK_CONTRAST = 1.5;
 
@@ -221,18 +223,30 @@ export function SongChopModal({
     return true;
   };
 
+  /** The last jump's target line, direction and time: presses within JUMP_REPEAT_MS of each other keep stepping from it. */
+  const lastJump = useRef<{ line: number; direction: number; at: number } | null>(null);
   /** Jumps the line `bars` bars back or forward (`direction` -1 or 1) along the bar lines, and carries on playing from there if the song was playing. */
   const jump = (direction: number, bars: number) => {
     if (!grid) return;
     pausedAt.current = null;
     const cursor = timeline.current?.cursor() ?? 0;
-    const near = barLineNear(grid, cursor);
-    const nearFrame = lineFrame(grid, near);
-    // From a bar line, the whole distance; from between two, the bar line already ahead in that direction counts as the first.
-    const onLine = Math.abs(nearFrame - cursor) < grid.segments[0].beatFrames / 8;
-    const ahead = !onLine && (direction > 0 ? nearFrame > cursor : nearFrame < cursor);
-    const line = near + direction * grid.beatsPerBar * (ahead ? bars - 1 : bars);
+    const now = performance.now();
+    const last = lastJump.current;
+    lastJump.current = null;
+    let line: number;
+    if (last && last.direction === direction && now - last.at < JUMP_REPEAT_MS) {
+      // A repeat press soon after a jump counts from the line that jump went to, not from where the playing song has drifted since.
+      line = last.line + direction * grid.beatsPerBar * bars;
+    } else {
+      const near = barLineNear(grid, cursor);
+      const nearFrame = lineFrame(grid, near);
+      // From a bar line, the whole distance; from between two, the bar line already ahead in that direction counts as the first.
+      const onLine = Math.abs(nearFrame - cursor) < grid.segments[0].beatFrames / 8;
+      const ahead = !onLine && (direction > 0 ? nearFrame > cursor : nearFrame < cursor);
+      line = near + direction * grid.beatsPerBar * (ahead ? bars - 1 : bars);
+    }
     const frame = Math.min(totalFrames, Math.max(0, lineFrame(grid, line)));
+    lastJump.current = { line, direction, at: now };
     timeline.current?.setCursor(frame);
     if (player.playing) {
       player.start(frame);
