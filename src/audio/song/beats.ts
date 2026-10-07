@@ -278,10 +278,11 @@ export function pickDownbeat(onsets: Onsets, grid: BeatGrid, beatsPerBar: number
  * Moves a position onto the sound's real attack. The beat grid is accurate to a few milliseconds, but the first sample of
  * a kick is what a cut should land on. Looks within `radius` frames of `center` for the sharpest rise in loudness.
  */
-export function snapToAttack(mono: Float32Array, center: number, radius: number): number {
+export function snapToAttack(mono: Float32Array, center: number, radius: number, minContrast = 0): number {
   const smooth = 8;
   let best = -Infinity;
   let at = Math.round(center);
+  let level = 0;
   const from = Math.max(smooth, Math.round(center) - radius);
   const to = Math.min(mono.length - smooth - 1, Math.round(center) + radius);
   for (let i = from; i <= to; i++) {
@@ -292,11 +293,15 @@ export function snapToAttack(mono: Float32Array, center: number, radius: number)
       after += Math.abs(mono[i + j - 1]);
     }
     const rise = after - before;
+    level += after;
     if (rise > best) {
       best = rise;
       at = i;
     }
   }
+  // With a contrast asked for, a rise that is no bigger than the window's own level is noise or a swell, not an attack: stay where the caller pointed.
+  const count = Math.max(1, to - from + 1);
+  if (minContrast > 0 && best < minContrast * (level / count)) return Math.round(center);
   return at;
 }
 

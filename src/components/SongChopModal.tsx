@@ -49,6 +49,8 @@ interface Detected {
 
 /** Where a downbeat marker looks for the sound's real attack, either side of the cursor (seconds). */
 const ATTACK_RADIUS_S = 0.02;
+/** How far a rise must stand above the window's average level to count as an attack; below it the marker stays exactly at the cursor (a quiet intro has none). */
+const ATTACK_CONTRAST = 1.5;
 
 /** A length in bars for the list: whole bars as a whole number, otherwise to two places. */
 const barsText = (bars: number) => {
@@ -245,7 +247,7 @@ export function SongChopModal({
     const from = Math.max(0, Math.round(frame) - radius - 16);
     const to = Math.min(totalFrames, Math.round(frame) + radius + 16);
     if (to - from < 40) return Math.round(frame);
-    return from + snapToAttack(mono.subarray(from, to), Math.round(frame) - from, radius);
+    return from + snapToAttack(mono.subarray(from, to), Math.round(frame) - from, radius, ATTACK_CONTRAST);
   };
 
   const change = (next: Marks, message: string) => {
