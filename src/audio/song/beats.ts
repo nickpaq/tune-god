@@ -248,14 +248,14 @@ export interface Downbeat {
   confidence: number;
 }
 
-/** Which of the `beatsPerBar` beats is beat 1: the one the bass lands on hardest. */
-export function pickDownbeat(onsets: Onsets, grid: BeatGrid, beatsPerBar: number): Downbeat {
-  const sums = new Float64Array(beatsPerBar);
-  const counts = new Float64Array(beatsPerBar);
+/** How hard the bass (`low`) and the rest of the sound (`all`) hit on every beat of the grid, from the last beat before 0 that is still in the music's first moments. */
+function beatStrengths(onsets: Onsets, grid: BeatGrid): { k: number; low: number; all: number }[] {
   const lowAll = emphasize(onsets.low, onsets.hopSeconds);
   const fluxAll = emphasize(onsets.flux, onsets.hopSeconds);
+  const first = Math.ceil((-0.3 * grid.periodSeconds - grid.originSeconds) / grid.periodSeconds);
   const beats = Math.floor((onsets.flux.length * onsets.hopSeconds - grid.originSeconds) / grid.periodSeconds);
-  for (let k = 0; k <= beats; k++) {
+  const out: { k: number; low: number; all: number }[] = [];
+  for (let k = first; k <= beats; k++) {
     const frame = (grid.originSeconds - onsets.frameOffsetSeconds + k * grid.periodSeconds) / onsets.hopSeconds;
     // The strongest frame within a few around the beat, so a little timing slack does not lose the hit.
     let low = 0;
@@ -264,6 +264,29 @@ export function pickDownbeat(onsets: Onsets, grid: BeatGrid, beatsPerBar: number
       low = Math.max(low, at(lowAll, frame + d));
       all = Math.max(all, at(fluxAll, frame + d));
     }
+    out.push({ k, low, all });
+  }
+  return out;
+}
+
+/**
+ * The first beat (its number on the grid, which may be -1 for a hit at the very start) that is a big bass hit: most of the way up to a strong kick of the
+ * song. Producers put the first big kick on the 1. Null when the song has no bass hits to speak of.
+ */
+export function firstBigBeat(onsets: Onsets, grid: BeatGrid): number | null {
+  const beats = beatStrengths(onsets, grid);
+  const sorted = beats.map((b) => b.low).sort((x, y) => x - y);
+  const strong = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
+  const hit = strong > 0 ? beats.find((b) => b.low >= 0.6 * strong) : undefined;
+  return hit ? hit.k : null;
+}
+
+/** Which of the `beatsPerBar` beats is beat 1: the one the bass lands on hardest. */
+export function pickDownbeat(onsets: Onsets, grid: BeatGrid, beatsPerBar: number): Downbeat {
+  const sums = new Float64Array(beatsPerBar);
+  const counts = new Float64Array(beatsPerBar);
+  for (const { k, low, all } of beatStrengths(onsets, grid)) {
+    if (k < 0) continue;
     sums[k % beatsPerBar] += low + 0.5 * all;
     counts[k % beatsPerBar]++;
   }
@@ -464,7 +487,10 @@ export function analyzeSong(mono: Float32Array, sampleRate: number, beatsPerBar:
   const downbeat = pickDownbeat(onsets, grid, beatsPerBar);
 
   // The first bar line whose downbeat is a big hit, so a quiet intro of pads, risers or ghost notes does not count as where the music starts.
-  const rough = firstBigBar(onsets, grid, downbeat.phase, beatsPerBar);
+  // When the bass does not clearly favour one beat (a syncopated kick pattern ties two), the first big hit of the song is taken as the 1.
+  const first = downbeat.confidence < 0.5 ? firstBigBeat(onsets, grid) : null;
+  const phase = first === null ? downbeat.phase : ((first % beatsPerBar) + beatsPerBar) % beatsPerBar;
+  const rough = firstBigBar(onsets, grid, phase, beatsPerBar);
   const snapped = snapToAttack(mono, rough * sampleRate, Math.round(0.03 * sampleRate)) / sampleRate;
 
   const key = keyOfChroma(chromaOf(x, rate));
