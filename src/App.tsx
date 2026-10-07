@@ -1922,10 +1922,12 @@ function App() {
                 </button>
               );
             })}
+            {/* SEQ key hidden for now; the SEQ screen and its code stay in place.
             <button className="cap cap--mode" aria-label="Sequencer" onClick={() => { setMenuOpen(false); setSeqOpen(true); }}>
               <span className="cap__led" />
               <span className="cap__legend">Seq</span>
             </button>
+            */}
           </div>
           <div className="tray">
             {BANKS.map((name, i) => {
