@@ -275,6 +275,34 @@ export function pickDownbeat(onsets: Onsets, grid: BeatGrid, beatsPerBar: number
 }
 
 /**
+ * Where bar 1 goes: the first bar line (from the grid and the beat found to open the bar) whose downbeat is a big peak, at least half as strong as the
+ * song's typical downbeat. Intros are made of small, soft onsets that the first loud-ish frame would mistake for the start. Seconds from the start of the file.
+ */
+export function firstBigBar(onsets: Onsets, grid: BeatGrid, phase: number, beatsPerBar: number): number {
+  const lowAll = emphasize(onsets.low, onsets.hopSeconds);
+  const fluxAll = emphasize(onsets.flux, onsets.hopSeconds);
+  const bar = grid.periodSeconds * beatsPerBar;
+  const origin = grid.originSeconds + phase * grid.periodSeconds;
+  const end = onsets.flux.length * onsets.hopSeconds;
+  const first = Math.ceil((-0.3 * grid.periodSeconds - origin) / bar);
+  const last = Math.floor((end - origin) / bar);
+  const strengths: number[] = [];
+  for (let b = first; b <= last; b++) {
+    const frame = (origin + b * bar - onsets.frameOffsetSeconds) / onsets.hopSeconds;
+    let low = 0;
+    let all = 0;
+    for (let d = -2; d <= 2; d++) {
+      low = Math.max(low, at(lowAll, frame + d));
+      all = Math.max(all, at(fluxAll, frame + d));
+    }
+    strengths.push(low + 0.5 * all);
+  }
+  const typical = [...strengths].sort((a, b) => a - b)[Math.floor(strengths.length / 2)] ?? 0;
+  const index = typical > 0 ? strengths.findIndex((v) => v >= 0.5 * typical) : -1;
+  return origin + (first + Math.max(0, index)) * bar;
+}
+
+/**
  * Moves a position onto the sound's real attack. The beat grid is accurate to a few milliseconds, but the first sample of
  * a kick is what a cut should land on. Looks within `radius` frames of `center` for the sharpest rise in loudness.
  */
@@ -435,16 +463,8 @@ export function analyzeSong(mono: Float32Array, sampleRate: number, beatsPerBar:
   if (!grid) return null;
   const downbeat = pickDownbeat(onsets, grid, beatsPerBar);
 
-  // The first bar line at or after where the music starts (within a beat's worth of slack).
-  const sorted = Float32Array.from(onsets.flux).sort();
-  const loud = sorted[Math.floor(sorted.length * 0.95)] || 0;
-  let activeFrame = 0;
-  while (activeFrame < onsets.flux.length && onsets.flux[activeFrame] < 0.25 * loud) activeFrame++;
-  const activeSeconds = activeFrame * onsets.hopSeconds + onsets.frameOffsetSeconds;
-  const bar = grid.periodSeconds * beatsPerBar;
-  const barOrigin = grid.originSeconds + downbeat.phase * grid.periodSeconds;
-  const bars = Math.ceil((activeSeconds - 0.3 * grid.periodSeconds - barOrigin) / bar);
-  const rough = barOrigin + bars * bar;
+  // The first bar line whose downbeat is a big hit, so a quiet intro of pads, risers or ghost notes does not count as where the music starts.
+  const rough = firstBigBar(onsets, grid, downbeat.phase, beatsPerBar);
   const snapped = snapToAttack(mono, rough * sampleRate, Math.round(0.03 * sampleRate)) / sampleRate;
 
   const key = keyOfChroma(chromaOf(x, rate));

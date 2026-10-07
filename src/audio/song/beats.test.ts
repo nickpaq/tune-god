@@ -53,6 +53,18 @@ describe("analyzeSong", () => {
     });
   }
 
+  it("puts bar 1 on the first big downbeat, not on the soft hits of an intro", () => {
+    // 120 BPM: a bar is 2 s. Soft ghost pulses at a tenth of the level from the start, the full groove from the drop at 8 s.
+    const soft = song(120, 4, 0.5, 70);
+    const full = song(120, 4, 8.5, 70);
+    const mix = new Float32Array(soft.length);
+    const drop = Math.round(8.5 * RATE);
+    for (let i = 0; i < mix.length; i++) mix[i] = i < drop ? 0.1 * soft[i] : full[i];
+    const result = analyzeSong(mix, RATE, 4)!;
+    expect(result.bpm).toBeCloseTo(120, 1);
+    expect(Math.abs(result.downbeatSeconds - 8.5)).toBeLessThan(0.02);
+  });
+
   it("reads the key of the chords (C major)", () => {
     const result = analyzeSong(song(120, 4, 0.5, 40), RATE, 4)!;
     expect(result.key.pc).toBe(0);
