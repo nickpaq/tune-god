@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeSong, chromaOf, keyOfChroma } from "./beats";
+import { analyzeSong, chromaOf, keyOfChroma, playingAtStart } from "./beats";
 
 const RATE = 22050;
 
@@ -92,4 +92,10 @@ describe("chromaOf", () => {
     const chroma = chromaOf(x, RATE);
     expect(chroma.indexOf(Math.max(...chroma))).toBe(9);
   });
+});
+
+describe("playingAtStart", () => {
+  const tone = (from: number, seconds: number) => Float32Array.from({ length: seconds * RATE }, (_, i) => (i >= from * RATE ? 0.5 * Math.sin((2 * Math.PI * 220 * i) / RATE) : 0));
+  it("is true when the file opens on music at its usual loudness", () => expect(playingAtStart(tone(0, 20), RATE)).toBe(true));
+  it("is false after a silent start", () => expect(playingAtStart(tone(1, 20), RATE)).toBe(false));
 });

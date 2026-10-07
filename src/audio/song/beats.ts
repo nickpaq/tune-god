@@ -150,6 +150,45 @@ export function tempoCandidates(flux: Float32Array, hopSeconds: number, low?: Fl
   return chosen;
 }
 
+/**
+ * How well a tempo makes the music repeat: the bar-level loop of a beat (a pattern of 3-3-2 kicks reads as triplets at two thirds of the real tempo) comes
+ * back after 4, 8 or 16 whole beats, so the real tempo has the strongest self-similarity at those lags. 0..1.
+ */
+export function loopFit(onsets: Onsets, bpm: number): number {
+  const peak = (v: Float32Array) => v.reduce((m, q) => Math.max(m, q), 0) || 1;
+  const flux = emphasize(onsets.flux, onsets.hopSeconds);
+  const low = emphasize(onsets.low, onsets.hopSeconds);
+  const fluxPeak = peak(flux);
+  const lowPeak = peak(low);
+  const x = flux.map((v, i) => v / fluxPeak + (1.5 * low[i]) / lowPeak);
+  const correlation = (lag: number) => {
+    const whole = Math.floor(lag);
+    const frac = lag - whole;
+    let sum = 0;
+    for (let i = 0; i + whole + 1 < x.length; i++) sum += x[i] * (x[i + whole] * (1 - frac) + x[i + whole + 1] * frac);
+    return sum / (x.length - whole);
+  };
+  const zero = correlation(0);
+  const beat = 60 / bpm / onsets.hopSeconds;
+  const lags = [4, 8, 16].filter((k) => k * beat < x.length / 2);
+  if (zero <= 0 || lags.length === 0) return 0;
+  return lags.reduce((s, k) => s + correlation(k * beat) / zero, 0) / lags.length;
+}
+
+/**
+ * The tempo to use among the likely ones: the best-scored one, unless another that is almost as clear makes the music repeat clearly better (the
+ * best-scored one then cuts the pattern at a length that is not a whole number of beats).
+ */
+export function chooseTempo(onsets: Onsets, candidates: TempoGuess[]): TempoGuess {
+  const fits = candidates.map((c) => ({ c, fit: c.confidence >= 0.6 ? loopFit(onsets, c.bpm) : 0 }));
+  const top = fits[0];
+  const better = fits.filter((f) => f.fit > 1.3 * top.fit && f.fit > 0.1);
+  const best = better.length === 0 ? top.c : better.sort((a, b) => b.fit - a.fit)[0].c;
+  // A tempo picked for its repeat can be half of the usual one: a slow pick with a clear double that is a usual tempo is taken at the double.
+  const double = candidates.find((c) => c.confidence >= 0.6 && Math.abs(c.bpm / best.bpm - 2) < 0.06 && c.bpm <= 160);
+  return better.length > 0 && best.bpm < 80 && double ? double : best;
+}
+
 /** A value read between frames. */
 function at(x: Float32Array, position: number): number {
   const i = Math.floor(position);
@@ -246,6 +285,8 @@ export interface Downbeat {
   phase: number;
   /** 0..1: how much more bass weight that beat carries than the next best. */
   confidence: number;
+  /** The beats (best first) whose weight is within a tenth of the best one's: a tie between them is settled by the first big hit. */
+  near: number[];
 }
 
 /** How hard the bass (`low`) and the rest of the sound (`all`) hit on every beat of the grid, from the last beat before 0 that is still in the music's first moments. */
@@ -273,11 +314,11 @@ function beatStrengths(onsets: Onsets, grid: BeatGrid): { k: number; low: number
  * The first beat (its number on the grid, which may be -1 for a hit at the very start) that is a big bass hit: most of the way up to a strong kick of the
  * song. Producers put the first big kick on the 1. Null when the song has no bass hits to speak of.
  */
-export function firstBigBeat(onsets: Onsets, grid: BeatGrid): number | null {
+export function firstBigBeat(onsets: Onsets, grid: BeatGrid, allowed?: (k: number) => boolean): number | null {
   const beats = beatStrengths(onsets, grid);
   const sorted = beats.map((b) => b.low).sort((x, y) => x - y);
   const strong = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
-  const hit = strong > 0 ? beats.find((b) => b.low >= 0.6 * strong) : undefined;
+  const hit = strong > 0 ? beats.find((b) => b.low >= 0.6 * strong && (!allowed || allowed(b.k))) : undefined;
   return hit ? hit.k : null;
 }
 
@@ -287,21 +328,22 @@ export function pickDownbeat(onsets: Onsets, grid: BeatGrid, beatsPerBar: number
   const counts = new Float64Array(beatsPerBar);
   for (const { k, low, all } of beatStrengths(onsets, grid)) {
     if (k < 0) continue;
-    sums[k % beatsPerBar] += low + 0.5 * all;
+    sums[k % beatsPerBar] += low + 0.15 * all; // loud hats on the 2 and 4 must not outweigh the bass
     counts[k % beatsPerBar]++;
   }
   const means = Array.from(sums, (s, i) => (counts[i] ? s / counts[i] : 0));
   const order = means.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
   const best = order[0];
   const second = order[1] ?? { v: 0 };
-  return { phase: best.i, confidence: best.v > 0 ? Math.max(0, Math.min(1, (best.v - second.v) / best.v)) : 0 };
+  const near = order.filter((o) => o.v >= 0.9 * best.v).map((o) => o.i);
+  return { phase: best.i, near, confidence: best.v > 0 ? Math.max(0, Math.min(1, (best.v - second.v) / best.v)) : 0 };
 }
 
 /**
  * Where bar 1 goes: the first bar line (from the grid and the beat found to open the bar) whose downbeat is a big peak, at least half as strong as the
- * song's typical downbeat. Intros are made of small, soft onsets that the first loud-ish frame would mistake for the start. Seconds from the start of the file.
+ * song's typical downbeat (or the first bar line when the music is already playing at the start). Intros are made of small, soft onsets that the first loud-ish frame would mistake for the start. Seconds from the start of the file.
  */
-export function firstBigBar(onsets: Onsets, grid: BeatGrid, phase: number, beatsPerBar: number): number {
+export function firstBigBar(onsets: Onsets, grid: BeatGrid, phase: number, beatsPerBar: number, playingAtStart = false): number {
   const lowAll = emphasize(onsets.low, onsets.hopSeconds);
   const fluxAll = emphasize(onsets.flux, onsets.hopSeconds);
   const bar = grid.periodSeconds * beatsPerBar;
@@ -321,7 +363,8 @@ export function firstBigBar(onsets: Onsets, grid: BeatGrid, phase: number, beats
     strengths.push(low + 0.5 * all);
   }
   const typical = [...strengths].sort((a, b) => a - b)[Math.floor(strengths.length / 2)] ?? 0;
-  const index = typical > 0 ? strengths.findIndex((v) => v >= 0.5 * typical) : -1;
+  // A file that opens on music already playing (cut from a longer loop) has its bar 1 at its start, however soft that bar line's own onset is.
+  const index = playingAtStart ? 0 : typical > 0 ? strengths.findIndex((v) => v >= 0.5 * typical) : -1;
   return origin + (first + Math.max(0, index)) * bar;
 }
 
@@ -473,6 +516,20 @@ export interface SongAnalysis {
   key: KeyGuess;
 }
 
+/** Whether the file opens on music at close to its usual loudness (not a fade-in or a quiet intro): the first quarter second against the median quarter second. */
+export function playingAtStart(mono: Float32Array, sampleRate: number): boolean {
+  const size = Math.round(0.25 * sampleRate);
+  const blocks = Math.floor(mono.length / size);
+  if (blocks < 8) return false;
+  const rms = Array.from({ length: blocks }, (_, b) => {
+    let sum = 0;
+    for (let i = b * size; i < (b + 1) * size; i++) sum += mono[i] * mono[i];
+    return Math.sqrt(sum / size);
+  });
+  const median = [...rms].sort((a, b) => a - b)[Math.floor(blocks / 2)];
+  return median > 0 && rms[0] >= 0.5 * median;
+}
+
 /** Tempo, bar 1 and key of a song, from its mono mix. Null when no beat could be found. */
 export function analyzeSong(mono: Float32Array, sampleRate: number, beatsPerBar: number): SongAnalysis | null {
   const factor = Math.max(1, Math.round(sampleRate / ANALYSIS_RATE));
@@ -481,16 +538,16 @@ export function analyzeSong(mono: Float32Array, sampleRate: number, beatsPerBar:
   const onsets = onsetStrength(x, rate);
   const candidates = tempoCandidates(onsets.flux, onsets.hopSeconds, onsets.low);
   if (!candidates.length) return null;
-  const tempo = candidates[0];
+  const tempo = chooseTempo(onsets, candidates);
   const grid = fitBeatGrid(onsets, tempo.bpm);
   if (!grid) return null;
   const downbeat = pickDownbeat(onsets, grid, beatsPerBar);
 
   // The first bar line whose downbeat is a big hit, so a quiet intro of pads, risers or ghost notes does not count as where the music starts.
   // When the bass does not clearly favour one beat (a syncopated kick pattern ties two), the first big hit of the song is taken as the 1.
-  const first = downbeat.confidence < 0.5 ? firstBigBeat(onsets, grid) : null;
+  const first = downbeat.confidence < 0.5 ? firstBigBeat(onsets, grid, (k) => downbeat.near.includes(((k % beatsPerBar) + beatsPerBar) % beatsPerBar)) : null;
   const phase = first === null ? downbeat.phase : ((first % beatsPerBar) + beatsPerBar) % beatsPerBar;
-  const rough = firstBigBar(onsets, grid, phase, beatsPerBar);
+  const rough = firstBigBar(onsets, grid, phase, beatsPerBar, playingAtStart(mono, sampleRate));
   const snapped = snapToAttack(mono, rough * sampleRate, Math.round(0.03 * sampleRate)) / sampleRate;
 
   const key = keyOfChroma(chromaOf(x, rate));
