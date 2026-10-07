@@ -525,9 +525,19 @@ function App() {
     setMenuOpen(false);
   };
 
+  /**
+   * Opening a .koala project from the start screen leaves it exactly as it is: no long-sample question, and every menu option goes back off
+   * (Organize and Sidechain apply only if the user switches them on again after this load).
+   */
+  const openKoalaProject = (file: File) => {
+    setOrganize(false);
+    setSidechainOn(false);
+    void loadProject(file, false, true);
+  };
+
   const pickFile = (files: FileList | File[] | null | undefined) => {
     const file = Array.from(files ?? []).find(isKoalaFile);
-    if (file) void loadProject(file);
+    if (file) openKoalaProject(file);
   };
 
   /** Makes sure a project is open for a loader to write into: a blank one when nothing is. Returns whether one was started. */
@@ -789,7 +799,7 @@ function App() {
   /** A drop: a .koala file loads as a project, a folder as a sample pack. */
   const handleDrop = (data: DataTransfer) => {
     const file = Array.from(data.files).find(isKoalaFile);
-    if (file) return void loadProject(file);
+    if (file) return openKoalaProject(file);
     // The entries have to be taken now; the list is empty once this handler returns.
     const entries = entriesOfDrop(data.items);
     if (!entries.some((entry) => entry.isDirectory)) return;
