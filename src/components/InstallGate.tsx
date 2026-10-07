@@ -82,7 +82,7 @@ export function InstallGate() {
         </li>
         <li>
           <span>
-            Open KoalaTune from your <b>Home Screen</b>
+            Open it from your <b>Home Screen</b>
           </span>
         </li>
       </ol>

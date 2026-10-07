@@ -120,6 +120,12 @@
   gap: 12px;
   align-items: center;
   font-size: 17px;
+  white-space: nowrap;
+}
+.gate__steps li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .gate__steps li::before {
   content: counter(s);
