@@ -38,7 +38,8 @@ export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, d
 }
 
 /**
- * The grid with the markers applied. Every downbeat marker and the 1.1.1 is an anchor: a frame where a bar starts. The first anchor is where bars are
+ * The grid with the markers applied. Every downbeat marker is an anchor: a frame where a bar starts. The 1.1.1 is one too only while there is no downbeat
+ * marker; with one, it just names the bar line that is bar 1 and never moves the grid or the tempo. The first anchor is where bars are
  * counted from, and the lines tile backwards from it as well as forwards (a 1.1.1 set midway through the song gives the intro its grid too). With one
  * anchor the grid keeps the detected tempo. With more, the tempo is fitted through all of them (a straight line through anchor frame against bars
  * counted, so the BPM homes in on the exact one as markers are added) and is a single tempo for the whole song; each anchor then re-locks the phase from
@@ -47,7 +48,8 @@ export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, d
 export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "oneOne" | "tempoScale">): TapGrid {
   const bpb = base.beatsPerBar;
   const detected = base.segments[0].beatFrames / marks.tempoScale;
-  const frames = [...new Set(marks.oneOne === null ? marks.downbeats : [...marks.downbeats, marks.oneOne])].sort((a, b) => a - b);
+  // The 1.1.1 only says which bar is bar 1 once a downbeat marker has measured the grid; on its own it is the one anchor there is.
+  const frames = [...new Set(marks.oneOne === null || marks.downbeats.length > 0 ? marks.downbeats : [marks.oneOne])].sort((a, b) => a - b);
   if (frames.length === 0) return marks.tempoScale === 1 ? base : { ...base, segments: [{ ...base.segments[0], beatFrames: detected }] };
 
   let beat = detected;

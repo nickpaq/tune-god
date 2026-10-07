@@ -36,6 +36,12 @@ describe("gridWithMarks", () => {
     expect(barLineNear(grid, 1100)).toBe(-80);
   });
 
+  it("lets the 1.1.1 only name bar 1 once a downbeat marker has measured the grid", () => {
+    const measured = gridWithMarks(base, marks([3040]));
+    const withOne = gridWithMarks(base, marks([3040], 777));
+    expect(withOne).toEqual(measured);
+  });
+
   it("keeps the detected tempo with one anchor", () => {
     const grid = gridWithMarks(base, marks([3040]));
     expect(bpmAt(grid, 0)).toBeCloseTo(120, 9);
@@ -46,17 +52,17 @@ describe("gridWithMarks", () => {
     // the real tempo is 121 BPM (beat 495.87 frames); the detection said 120
     const beat = (60 * RATE) / 121;
     const at = (bars: number) => 2000 + bars * 4 * beat;
-    const two = gridWithMarks(base, marks([at(32)], at(0)));
+    const two = gridWithMarks(base, marks([at(0), at(32)]));
     expect(bpmAt(two, 0)).toBeCloseTo(121, 6);
-    const three = gridWithMarks(base, marks([at(32), at(60)], at(0)));
+    const three = gridWithMarks(base, marks([at(0), at(32), at(60)]));
     expect(bpmAt(three, 0)).toBeCloseTo(121, 6);
     // a marker a little off barely moves it
-    const off = gridWithMarks(base, marks([at(32) + 8, at(60) - 5], at(0)));
+    const off = gridWithMarks(base, marks([at(0), at(32) + 8, at(60) - 5]));
     expect(Math.abs(bpmAt(off, 0) - 121)).toBeLessThan(0.02);
   });
 
   it("is one tempo for the whole song, each anchor only re-locking the phase", () => {
-    const grid = gridWithMarks(base, marks([8030, 16010], 0));
+    const grid = gridWithMarks(base, marks([0, 8030, 16010]));
     const beats = new Set(grid.segments.map((s) => s.beatFrames));
     expect(beats.size).toBe(1);
     expect(lineFrame(grid, 16)).toBe(8030);
@@ -64,7 +70,7 @@ describe("gridWithMarks", () => {
   });
 
   it("does not let a stray marker bend the tempo far", () => {
-    const grid = gridWithMarks(base, marks([9000], 0)); // 4.5 bars on: counts as 5 bars, a 10 % slower tempo
+    const grid = gridWithMarks(base, marks([0, 9000])); // 4.5 bars on: counts as 5 bars, a 10 % slower tempo
     expect(Math.abs(bpmAt(grid, 0) - 120)).toBeLessThan(120 * 0.16);
   });
 

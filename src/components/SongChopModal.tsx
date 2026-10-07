@@ -322,7 +322,8 @@ export function SongChopModal({
     const old = marks.oneOne;
     const others = old === null ? marks.chops : marks.chops.filter((f) => f !== old);
     if (old !== null && Math.abs(old - cursor) <= grid.segments[0].beatFrames / 4) return change({ ...marks, oneOne: null, chops: others }, "1.1.1 removed");
-    const frame = attackNear(cursor);
+    // With a downbeat marker the grid is already measured: the 1.1.1 names a bar line, so it sits exactly on the nearest one instead of on a transient.
+    const frame = marks.downbeats.length > 0 ? lineFrame(grid, barLineNear(grid, cursor)) : attackNear(cursor);
     change({ ...marks, oneOne: frame, chops: [...others, frame] }, `1.1.1 and chop set at ${formatTime(frame / sampleRate)}`);
   };
 
