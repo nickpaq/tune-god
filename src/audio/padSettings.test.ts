@@ -18,5 +18,5 @@ describe("per-pad EQ by sound type", () => {
 });
 
 describe("melodic loops", () => {
-  it("are written with one-shot off", () => expect(playbackFor("melodicLoop")).toMatchObject({ oneShot: false }));
+  it("are written with one-shot and loop mode off", () => expect(playbackFor("melodicLoop")).toMatchObject({ oneShot: false, loop: false }));
 });

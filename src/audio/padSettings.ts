@@ -1,5 +1,5 @@
 // Koala's per-pad playback settings, chosen by sound category: mute group (`chokeGroup`, 0 = none), one-shot
-// (`oneshot`) and release time in seconds (`release`). Categories not listed are left as they came.
+// (`oneshot`), loop mode (`looping`) and release time in seconds (`release`). Categories not listed are left as they came.
 import { isDrumCategory, type CategoryId } from "./classify";
 import { ACTIVE_MIX_PRESET, type PadEq } from "./mixPresets";
 
@@ -9,6 +9,8 @@ export interface PadPlayback {
   eq?: PadEq;
   chokeGroup?: number;
   oneShot?: boolean;
+  /** Koala's loop mode (`looping`). */
+  loop?: boolean;
   release?: number;
 }
 
@@ -24,7 +26,7 @@ function basePlayback(category: CategoryId): PadPlayback | undefined {
   if (category === "closedHat" || category === "openHat") return { chokeGroup: HAT_MUTE_GROUP, oneShot: true };
   if (isDrumCategory(category)) return { oneShot: true };
   if (category === "bass") return { chokeGroup: BASS_MUTE_GROUP, oneShot: false, release: MELODIC_RELEASE };
-  if (category === "melodicLoop") return { oneShot: false };
+  if (category === "melodicLoop") return { oneShot: false, loop: false };
   if (category === "melodic") return { oneShot: false, release: MELODIC_RELEASE };
   return undefined;
 }

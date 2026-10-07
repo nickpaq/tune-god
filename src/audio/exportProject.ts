@@ -78,6 +78,7 @@ export async function buildTunedKoala(
       if (play.chokeGroup !== undefined) pad.chokeGroup = play.chokeGroup;
       // Koala writes some booleans as strings; keep whichever style the pad already uses.
       if (play.oneShot !== undefined) pad.oneshot = typeof pad.oneshot === "boolean" ? play.oneShot : String(play.oneShot);
+      if (play.loop !== undefined) pad.looping = typeof pad.looping === "boolean" ? play.loop : String(play.loop);
       if (play.release !== undefined) pad.release = play.release;
       if (play.eq) applyPadEq(pad, play.eq);
     }
