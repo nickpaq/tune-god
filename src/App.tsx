@@ -1466,8 +1466,8 @@ function App() {
       const chopperPad = Object.values(pads).find((p) => p.chopper);
       const buses = new Map<number, number>();
       for (const p of allPads) {
-        // Melodic loops always go to bus D; the rest follow the buses only with Organize.
-        if (routeBuses || p.category === "melodicLoop") buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
+        // Melodic loops (bus D) and bass and 808s (bus B) are always routed; the rest follow the buses only with Organize.
+        if (routeBuses || p.category === "melodicLoop" || p.category === "bass") buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
       }
       const playback = new Map<number, PadPlayback>();
       for (const p of allPads) {

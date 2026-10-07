@@ -40,5 +40,5 @@ describe("playback rules by sound type", () => {
     expect(STRETCH_MODE.beats).not.toBe(STRETCH_MODE.modern);
   });
 
-  it("808 and bass: one-shot on", () => expect(playbackFor("bass")!.oneShot).toBe(true));
+  it("808 and bass: one-shot on, mute group 6", () => expect(playbackFor("bass")).toMatchObject({ oneShot: true, chokeGroup: 6 }));
 });
