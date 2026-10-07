@@ -1,9 +1,9 @@
 import { applyGainDb } from "./gain";
-import type { PadEq, PadPlayback } from "./padSettings";
+import { STRETCH_MODE, type PadEq, type PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import type { MasterStyle } from "./mixPresets";
-import { appendAfterExisting, bassSidechain, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
+import { appendAfterExisting, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
 import { addChopperPad, type ChopperExport } from "./exportChopper";
 import { addSongSections, emptySequence, SEQUENCE_SLOTS, songTemplate, type SongExport } from "./exportSong";
@@ -29,7 +29,7 @@ export interface TunedSample {
   retimed: boolean;
   /** Frames cut from the front when the project was loaded; the written file starts at the pad's old start point, so its trim points reset (and a loop point moves back by this much). */
   trimmedFrom?: number;
-  /** Gain baked into the file while it is encoded, so no gained copy of the audio is ever held. */
+  /** Peak normalization applied while the file is encoded (the only gain a file holds; the mix is on the volume knob), so no gained copy of the audio is ever held. */
   gainDb?: number;
 }
 
@@ -37,9 +37,9 @@ export interface TunedSample {
  * Rebuilds the project zip with the tuned samples swapped in — same zip paths
  * and sample IDs, so sampler.json's pad->sample mapping stays valid. Each
  * retimed pad's trim points are reset to the new file length and its pitch
- * knob zeroed (the tuning is baked into the audio now). Samples that were only
- * gain-adjusted keep their trim points. `vols` maps sampleId to the pad's
- * volume knob (`vol`, linear: 1 = 0 dB), written to every pad using that sample, replaced or not. `arrangement` maps each pad's original slot to its new slot, or null when the user deleted it; it renumbers the pads, remaps recorded sequence notes and drops deleted sounds' audio. `sidechain` and `masterChain` add the bass-bus sidechain and the master chain (see mixerChain.ts). `buses` maps sampleId to a bus index (see BUS_MAIN and friends in routing.ts). `colors` maps sampleId to the hex colour and label that replace the pad's own. `pans` maps sampleId to a Koala pan value
+ * knob set to `pitches` (or zero) because the audio was resampled. Samples that were only
+ * normalized keep their trim points. `vols` maps sampleId to the pad's
+ * volume knob (`vol`, linear: 1 = 0 dB), written to every pad using that sample, replaced or not. `arrangement` maps each pad's original slot to its new slot, or null when the user deleted it; it renumbers the pads, remaps recorded sequence notes and drops deleted sounds' audio. `busEffects` and `masterChain` add the kick-bus clipper and melodic-bus EQ and the master chain (see mixerChain.ts). `pitches` maps sampleId to the pitch knob in semitones (every tuning lives there; only 808 and bass audio is resampled, to its nearest semitone). `buses` maps sampleId to a bus index (see BUS_MAIN and friends in routing.ts). `colors` maps sampleId to the hex colour and label that replace the pad's own. `pans` maps sampleId to a Koala pan value
  * (0..1, 0.5 = centre) written to every pad using that sample.
  */
 export async function buildTunedKoala(
@@ -49,7 +49,8 @@ export async function buildTunedKoala(
     vols,
     buses,
     busNames,
-    sidechain,
+    busEffects,
+    pitches,
     masterChain,
     masterStyle,
     arrangement,
@@ -61,7 +62,7 @@ export async function buildTunedKoala(
     chopper,
     bpm,
     stretch,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; sidechain?: boolean; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number> } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number> } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -80,14 +81,24 @@ export async function buildTunedKoala(
       if (play.oneShot !== undefined) pad.oneshot = typeof pad.oneshot === "boolean" ? play.oneShot : String(play.oneShot);
       if (play.loop !== undefined) pad.looping = typeof pad.looping === "boolean" ? play.loop : String(play.loop);
       if (play.release !== undefined) pad.release = play.release;
+      if (play.tone !== undefined) pad.tone = play.tone;
+      if (play.stretch === "off") {
+        pad.stretching = typeof pad.stretching === "string" ? "false" : false;
+      } else if (play.stretch) {
+        pad.stretch = STRETCH_MODE[play.stretch];
+        // Without a length in beats Koala has nothing to stretch to, so the mode is written but stretch stays as the pad had it.
+        if (stretch?.has(pad.sampleId)) pad.stretching = typeof pad.stretching === "string" ? "true" : true;
+      }
       if (play.eq) applyPadEq(pad, play.eq);
     }
     const beats = stretch?.get(pad.sampleId);
-    if (beats !== undefined) {
+    if (beats !== undefined && play?.stretch !== "off") {
       // Koala writes some booleans as strings; keep whichever style the pad already uses.
       pad.stretching = typeof pad.stretching === "string" ? "true" : true;
       pad.stretchLength = beats;
     }
+    const knob = pitches?.get(pad.sampleId);
+    if (knob !== undefined) pad.pitch = knob;
     const tint = colors?.get(pad.sampleId);
     if (tint) {
       pad.color = tint.color;
@@ -107,12 +118,12 @@ export async function buildTunedKoala(
     pad.zoomStart = 0;
     pad.end = frames;
     pad.zoomEnd = frames;
-    pad.pitch = 0;
+    if (knob === undefined) pad.pitch = 0;
   }
 
   for (const t of tuned) {
     const channelData = t.gainDb ? applyGainDb(t.channelData, t.gainDb) : t.channelData;
-    project.zip.file(`sampler/${t.sampleId}.wav`, encodeWav({ sampleRate: t.sampleRate, channelData, bitDepth: 24 }));
+    project.zip.file(`sampler/${t.sampleId}.wav`, await encodeWav({ sampleRate: t.sampleRate, channelData, bitDepth: 24 }).arrayBuffer());
     t.channelData = []; // the WAV holds it now; let the floats go
   }
   // The song's own pad is usually deleted by the arrangement, so its settings are taken before that.
@@ -123,7 +134,7 @@ export async function buildTunedKoala(
   if (chopper) await addChopperPad(project, samplerJson, chopper);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
   if (bpm !== undefined) await writeBpm(project, bpm);
-  if (busNames || sidechain || masterChain) await setupMixer(project, { names: busNames, sidechain, kickClip: sidechain, melodicEq: sidechain, master: masterChain, masterStyle });
+  if (busNames || busEffects || masterChain) await setupMixer(project, { names: busNames, kickClip: busEffects, melodicEq: busEffects, master: masterChain, masterStyle });
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
   const base = project.originalName.replace(/\.koala$/i, "");
@@ -163,22 +174,17 @@ export async function writeBpm(project: ParsedKoalaProject, bpm: number): Promis
 const emptyStrip = (name: string) => ({ chain: [null, null, null, null, null], mute: false, name, solo: false, volume: 0 });
 
 /**
- * Sets up the mixer in mixer.json: bus strip names, a sidechain from the kick bus onto the bass bus, a little clipping on the kick bus, an EQ on the melodic bus, and the master chain.
+ * Sets up the mixer in mixer.json: bus strip names, a little clipping on the kick bus, an EQ on the melodic bus, and the master chain.
  * Each bus keeps its effects and levels, and a new effect goes after the last one already there; the master chain replaces the master
  * strip's plugins (the app warns first). A project that has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
  */
-async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; sidechain?: boolean; master?: boolean; masterStyle?: MasterStyle; kickClip?: boolean; melodicEq?: boolean }): Promise<void> {
+async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; master?: boolean; masterStyle?: MasterStyle; kickClip?: boolean; melodicEq?: boolean }): Promise<void> {
   const entry = project.zip.file("mixer.json");
   const mixer = entry ? JSON.parse(await entry.async("string")) : { buses: [], master: emptyStrip("MAIN") };
   mixer.buses = Array.isArray(mixer.buses) ? mixer.buses : [];
   setup.names?.forEach((name, i) => {
     mixer.buses[i] = { ...(mixer.buses[i] ?? emptyStrip(name)), name };
   });
-  if (setup.sidechain) {
-    const bass = (mixer.buses[1] ??= emptyStrip(BUS_NAMES[1]));
-    bass.chain = Array.isArray(bass.chain) ? bass.chain : [null, null, null, null, null];
-    if (!bass.chain.some((fx: MixerSlot) => fx?.name === "SIDECHAIN")) appendAfterExisting(bass.chain, [bassSidechain()]);
-  }
   if (setup.kickClip) {
     const kick = (mixer.buses[0] ??= emptyStrip(BUS_NAMES[0]));
     kick.chain = Array.isArray(kick.chain) ? kick.chain : [null, null, null, null, null];
@@ -296,7 +302,7 @@ async function applyArrangement(project: ParsedKoalaProject, samplerJson: any, a
 /**
  * Adds the layout's ghost snares and soft kicks. Each gets its own 24-bit WAV and its own sample entry,
  * and its pad is a clone of the source pad (bus, pan, everything Koala expects) with the trim points reset
- * and the volume knob at 0 dB, since the level is baked into the audio. A ghost whose slot is already taken, or whose source pad is gone, is skipped.
+ * and the source pad's volume knob, so the ghost sits as far under its source as its audio is. A ghost whose slot is already taken, or whose source pad is gone, is skipped.
  */
 async function addGhostPads(project: ParsedKoalaProject, samplerJson: any, ghosts: GhostPadExport[]): Promise<void> {
   const pads: any[] = (samplerJson.pads = Array.isArray(samplerJson.pads) ? samplerJson.pads : []);
@@ -324,7 +330,6 @@ async function addGhostPads(project: ParsedKoalaProject, samplerJson: any, ghost
     if (g.color) pad.color = g.color;
     if ("start" in pad) Object.assign(pad, { start: 0, zoomStart: 0, end: frames, zoomEnd: frames });
     if ("pitch" in pad) pad.pitch = 0;
-    if ("vol" in pad) pad.vol = 1;
     pads.push(pad);
     taken.add(g.index);
   }

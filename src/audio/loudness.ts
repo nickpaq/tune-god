@@ -1,8 +1,6 @@
-// Perceptual loudness balancing. Each sample is measured with ITU-R BS.1770 K-weighting (the
-// same filter EBU R128 / LUFS meters use), taking the loudest 200 ms window so short one-shots
-// and long loops are compared fairly. The whole set is then gain-matched to a common loudness,
-// so quiet sounds come up and loud ones come down, with a peak ceiling so nothing clips. The mix
-// (a per-category trim: hats sit lower than kicks) is returned separately for the pad knobs.
+// Perceptual loudness. Each sample is measured with ITU-R BS.1770 K-weighting (the same filter EBU R128 / LUFS meters use), taking the
+// loudest 200 ms window so short one-shots and long loops are compared fairly. Every file is then peak-normalized, and the mix (each type's
+// target loudness) is returned separately as the Koala volume knob level: the audio itself is never turned down to make the mix.
 import type { CategoryId } from "./classify";
 import { ACTIVE_MIX_PRESET } from "./mixPresets";
 
@@ -12,19 +10,11 @@ const HOP_SECONDS = 0.01;
 /** Blocks quieter than this (LUFS) count as silence. */
 const ABSOLUTE_GATE_LUFS = -70;
 
-/** Small padding: the loudest peak in any exported file, so a pad knob at 0 dB plays at this level. */
+/** Every exported file is peak-normalized to this level (dBFS), a little under full scale so a file never clips when it is decoded. */
 export const FILE_CEILING_DB = -1;
 
-/**
- * Per-type mix and peak limits. The numbers live in the active mix preset (src/audio/mixPresets.ts, `loudness`): the pad knob trim by
- * type, the dB the kick and bass sit above the common loudness, the extra peak room per type, the most any peak may stand above the common
- * loudness and the fraction of pads allowed to fall short of it. Change them there, not here.
- */
-export const CATEGORY_TRIM_DB: Record<CategoryId, number> = ACTIVE_MIX_PRESET.loudness.categoryTrimDb;
-const PEAK_LIMITED_FRACTION = ACTIVE_MIX_PRESET.loudness.peakLimitedFraction;
-const MAX_CREST_DB = ACTIVE_MIX_PRESET.loudness.maxCrestDb;
-const LOUDNESS_BONUS_DB = ACTIVE_MIX_PRESET.loudness.bonusDb;
-const CREST_BONUS_DB = ACTIVE_MIX_PRESET.loudness.crestBonusDb;
+/** Where each sound type sits after the knob, in LUFS. The numbers live in the active mix preset (src/audio/mixPresets.ts, `loudness`). */
+const TARGET_LUFS: Record<CategoryId, number> = ACTIVE_MIX_PRESET.loudness.targetLufs;
 
 type Biquad = { b0: number; b1: number; b2: number; a1: number; a2: number };
 
@@ -105,18 +95,12 @@ export interface BalanceInput {
 }
 
 export interface Balance {
-  /** Gain to bake into each audio file, in dB. */
+  /** Gain that peak-normalizes each audio file, in dB. It is the only gain the file holds (it can be up or down: it is normalization). */
   gainDb: number[];
-  /** Level for each pad's volume knob, in dB (0 or below). */
+  /** Level for each pad's Koala volume knob, in dB (0 or below). All the mix lives here, never in the audio. */
   knobDb: number[];
 }
 
-/**
- * Baked gain per input so all sit at the same perceived loudness with every peak at or below
- * `ceilingDb`, plus the knob level that mixes them. The common loudness is the highest at which
- * (nearly) every sample still fits under the ceiling; the few peakiest are held at the ceiling
- * instead of dragging the rest down. Silent samples get 0 dB and a 0 dB knob.
- */
 export interface BalanceStats {
   loud: number | null;
   peakDb: number;
@@ -132,30 +116,14 @@ export function balanceStats(input: BalanceInput): BalanceStats {
   };
 }
 
+/**
+ * Every sound is normalized to `ceilingDb` at its peak, then its volume knob takes it down to its type's target loudness (the knob can only
+ * turn a sound down, so a sound already quieter than its target stays at 0 dB). Silent samples get 0 dB and a 0 dB knob.
+ */
 export function balanceFromStats(stats: BalanceStats[], ceilingDb: number): Balance {
-  const loud = stats.map((s) => s.loud);
-  const peakDb = stats.map((s) => s.peakDb);
-  // Highest common loudness each sample allows before its own peak would pass the ceiling.
-  const limits: number[] = [];
-  loud.forEach((l, i) => {
-    if (l !== null) limits.push(ceilingDb - peakDb[i] + l);
-  });
-  if (!limits.length) return { gainDb: stats.map(() => 0), knobDb: stats.map(() => 0) };
-  limits.sort((a, b) => a - b);
-  const target = limits[Math.min(limits.length - 1, Math.floor(limits.length * PEAK_LIMITED_FRACTION))];
-  const knobDb = stats.map((s, i) => (loud[i] === null ? 0 : CATEGORY_TRIM_DB[s.category ?? "other"]));
-  return {
-    gainDb: stats.map((_, i) =>
-      loud[i] === null
-        ? 0
-        : Math.min(
-            target + (LOUDNESS_BONUS_DB[stats[i].category!] ?? 0) - (loud[i] as number),
-            ceilingDb - peakDb[i],
-            target + MAX_CREST_DB + (CREST_BONUS_DB[stats[i].category!] ?? 0) - knobDb[i] - peakDb[i],
-          ),
-    ),
-    knobDb,
-  };
+  const gainDb = stats.map((s) => (s.loud === null ? 0 : ceilingDb - s.peakDb));
+  const knobDb = stats.map((s, i) => (s.loud === null ? 0 : Math.min(0, TARGET_LUFS[s.category ?? "other"] - (s.loud + gainDb[i]))));
+  return { gainDb, knobDb };
 }
 
 export function balanceMix(inputs: BalanceInput[], ceilingDb: number): Balance {

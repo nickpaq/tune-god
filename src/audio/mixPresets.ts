@@ -1,9 +1,9 @@
 // Every value that shapes how an export sounds, in one place, so a new genre is a new object here and not a hunt through the code.
 //
 // A preset sets:
-//   1. Loudness   how loud each sound type sits against the others (pad knob trims, kick and bass lift, peak limits).
+//   1. Loudness   how loud each sound type sits against the others: every file is peak-normalized and the Koala volume knob brings it to its type's target.
 //   2. Pad EQ     a highpass, and optionally a high-shelf cut, on each pad by sound type (Koala's per-pad EQ).
-//   3. Buses      the effects on the Kick, Bass and Melodic buses (clipper, sidechain, EQ).
+//   3. Buses      the effects on the Kick and Melodic buses (clipper, EQ), and the 808 fade-in that stands in for a sidechain.
 //   4. Master     the master chain, in order.
 //
 // To add a genre: copy HEAVY_WARM_HIP_HOP, change what you want (every field says what it does and its valid range), add it to MIX_PRESETS
@@ -35,22 +35,14 @@ export interface MixPreset {
   name: string;
   loudness: {
     /**
-     * Pad knob trim in dB (0 or below), applied after every sound is gain-matched to the same loudness. This is the mix: the
-     * lower the number, the further back that type sits. 0 is as loud as a pad can go.
+     * Where each sound type sits, as the loudest-200 ms loudness (LUFS, K-weighted) the sound reaches once the Koala volume knob has been
+     * applied to its peak-normalized file. The files are never turned down in the audio: the knob (0 dB or below) does it. The lower the
+     * number, the further back the type sits. A type whose file is already quieter than its target stays at 0 dB.
      */
-    categoryTrimDb: Record<CategoryId, number>;
-    /** Extra dB a type sits ABOVE the common loudness (before the trim). Raises the type and moves its peak up with it. */
-    bonusDb: Partial<Record<CategoryId, number>>;
-    /** Extra peak room in dB for a type on top of maxCrestDb. Positive lets it peak higher, negative holds the peak lower. */
-    crestBonusDb: Partial<Record<CategoryId, number>>;
-    /**
-     * Most a sample's peak (knob trim included) may stand above the common loudness, in dB. Lower tames transients (snares peak less),
-     * higher keeps them punchy. Typical 6 to 12.
-     */
-    maxCrestDb: number;
-    /** Fraction of pads (0 to 1) allowed below the common loudness because their peak already hits the file ceiling. */
-    peakLimitedFraction: number;
+    targetLufs: Record<CategoryId, number>;
   };
+  /** Koala's tone knob (a tilt EQ, 0 = the middle) by sound type. A type that is not listed keeps the tone it came with. */
+  padTone: Partial<Record<CategoryId, number>>;
   /** Per-pad EQ by sound type. A type that is not listed keeps the EQ it came with. */
   padEq: Partial<Record<CategoryId, PadEq>>;
   buses: {
@@ -65,15 +57,11 @@ export interface MixPreset {
       /** 1 = HQ (oversampled, less aliasing, more CPU), 0 = off. */
       oversample: number;
     };
-    /** SIDECHAIN on the Bass bus (bus B), ducked by the Kick bus. */
-    bassSidechain: {
-      /** Level the kick must pass before the bass ducks, dB, -60 to 0. Lower ducks on quieter kicks. */
-      threshold: number;
-      /** How fast the bass comes back after each kick, ms, 10 to 1000. Short is tight, long pumps. */
-      release: number;
-      /** Level after ducking, dB, -12 to +12. Not the duck depth, which Koala does not expose. */
-      output: number;
-    };
+    /**
+     * The 808s are not sidechained. Instead each gets a soft fade-in as long as the kick's main transient (the time its envelope stays within
+     * `withinDb` of its peak, see kickTransient.ts), kept between `minMs` and `maxMs`, so the kick's hit shows through.
+     */
+    fade808: { withinDb: number; minMs: number; maxMs: number };
     /** EQ on the Melodic bus (bus D): lo = low shelf, mid = bell, hi = high shelf (measured; gain 0 is flat). */
     melodicEq: PluginParams;
   };
@@ -99,28 +87,27 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
   id: "heavy-warm-hip-hop",
   name: "Heavy and warm hip-hop",
   loudness: {
-    categoryTrimDb: {
-      kick: 0, // the loudest thing in the mix
-      bass: 0, // 808s level with the kick: this is most of the "heavy"
-      snare: -2, // backbeat sits a little behind the kick
-      clap: -3, // under the snare
-      closedHat: -5, // hats and cymbals read bright on the meter, so they sit back (about 8 to 9 dB under the snare's peak in the calibration render)
-      openHat: -4,
-      cymbal: -3,
-      perc: -5,
-      melodic: -4,
-      vox: -3,
-      fx: -7,
-      drumLoop: -3, // loops already hold several parts, so they sit under the one-shots they play with
-      percLoop: -5,
-      melodicLoop: -5,
-      other: -3,
+    // Hip-hop, loud and warm. Measured on the 200 ms window of a peak-normalized file, so these are the levels after the knob. The kick leads;
+    // the 808 sits just under it; hats and cymbals are held well back so the top end stays smooth, not harsh.
+    targetLufs: {
+      kick: -13,
+      bass: -15,
+      snare: -19,
+      clap: -21,
+      closedHat: -29,
+      openHat: -27,
+      cymbal: -27,
+      perc: -23,
+      melodic: -21,
+      vox: -19,
+      fx: -27,
+      drumLoop: -22,
+      percLoop: -27,
+      melodicLoop: -22,
+      other: -22,
     },
-    bonusDb: { kick: 4, bass: 4 }, // kick and bass lifted 4 dB over the common loudness
-    crestBonusDb: { kick: 5, closedHat: -1, openHat: -1, cymbal: -1 }, // hats and cymbals held 1 dB lower so they never rival the snare. This cap, not the trim, is what held them down at -5/-4: with it, lowering the trim moves them and raising it does not
-    maxCrestDb: 8,
-    peakLimitedFraction: 0.1,
   },
+  padTone: { snare: -0.1 }, // slightly under the middle: a touch darker
   padEq: {
     closedHat: { highpassHz: 300, highShelfDb: -2 }, // highpass: clear of the 808; shelf: warmer
     openHat: { highpassHz: 300, highShelfDb: -2 },
@@ -137,7 +124,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
   },
   buses: {
     kickClipper: { input: 4, threshold: -6, output: 0, oversample: 1 }, // about 9 dB of drive into a soft clip
-    bassSidechain: { threshold: -17, release: 80, output: 0 }, // measured with the master chain off (probe-sidechain round 2, bass dB re no duck at +50 ms / deepest): -14: -2 to -3, -16: -7 / -8, -20: -14 / -20, -24: about -17 deepest. About 3.5 dB deeper per dB of threshold. Release 300 ms deepens it and takes 0.5 s to recover. -17 aims at a duck of about 8 to 10 dB that is back by 0.2 s
+    fade808: { withinDb: 6, minMs: 4, maxMs: 30 }, // very subtle: just room for the kick's transient
     melodicEq: {
       "lo freq": 150, "lo gain": -6, "lo Q": 0.7, // low SHELF (measured; it is not a highpass, and gain 0 is flat): -6 dB below 150 Hz leaves the low end to the kick and bass
       "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, // untouched

@@ -32,8 +32,8 @@ async function load(): Promise<ParsedKoalaProject> {
   return { zip, samplerJson, originalName: "calibration.koala", pads, padBase: 0 };
 }
 
-const exported = async (buses: Map<number, number>, sidechain: boolean) => {
-  const { blob } = await buildTunedKoala(await load(), [], { buses, busNames: BUS_NAMES, sidechain });
+const exported = async (buses: Map<number, number>) => {
+  const { blob } = await buildTunedKoala(await load(), [], { buses, busNames: BUS_NAMES });
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
   return {
     sampler: JSON.parse(await zip.file("sampler/sampler.json")!.async("string")),
@@ -44,19 +44,13 @@ const exported = async (buses: Map<number, number>, sidechain: boolean) => {
 describe("the routing follows whichever sounds are on the pads at export", () => {
   it("puts the kick on bus A and the bass on bus B, and moves them when the kit is swapped", async () => {
     const [a, b] = (await load()).pads.slice(0, 2).map((p) => p.sampleId);
-    const first = await exported(new Map([[a, CATEGORY_BUS.kick], [b, CATEGORY_BUS.bass]]), true);
+    const first = await exported(new Map([[a, CATEGORY_BUS.kick], [b, CATEGORY_BUS.bass]]));
     const busOf = (j: any, id: number) => j.sampler.pads.find((p: any) => p.sampleId === id).bus;
     expect([busOf(first, a), busOf(first, b)]).toEqual([0, 1]);
     // the kick and bass swap places on the pads: the buses swap with them
-    const second = await exported(new Map([[a, CATEGORY_BUS.bass], [b, CATEGORY_BUS.kick]]), true);
+    const second = await exported(new Map([[a, CATEGORY_BUS.bass], [b, CATEGORY_BUS.kick]]));
     expect([busOf(second, a), busOf(second, b)]).toEqual([1, 0]);
-    // the sidechain sits on the bass bus either way
-    for (const j of [first, second]) expect(j.mixer.buses[1].chain.some((fx: any) => fx?.name === "SIDECHAIN")).toBe(true);
-  });
-
-  it("writes no sidechain when it is off", async () => {
-    const [a, b] = (await load()).pads.slice(0, 2).map((p) => p.sampleId);
-    const j = await exported(new Map([[a, CATEGORY_BUS.kick], [b, CATEGORY_BUS.bass]]), false);
-    expect((j.mixer.buses[1].chain ?? []).some((fx: any) => fx?.name === "SIDECHAIN")).toBe(false);
+    // no sidechain is written for either order
+    for (const j of [first, second]) expect(j.mixer.buses.some((b: any) => b.chain.some((fx: any) => fx?.name === "SIDECHAIN"))).toBe(false);
   });
 });

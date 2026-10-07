@@ -1,10 +1,9 @@
-// Runs the app's loudness balancer over the mix calibration sounds with trims from the command line and prints each pad's output
-// level, so a trim change can be judged without exporting. Usage: npx tsx scripts/simulateBalance.ts [type=trimDb ...]
-// Also crest.<type>=<dB> and bonus.<type>=<dB> to try the peak-room and lift settings of the preset.
-// Example: npx tsx scripts/simulateBalance.ts closedHat=-5 cymbal=-6 crest.closedHat=0 bonus.kick=4
+// Runs the app's loudness balancer over the mix calibration sounds with target loudnesses from the command line and prints each pad's output
+// level, so a change can be judged without exporting. Usage: npx tsx scripts/simulateBalance.ts [type=targetLufs ...]
+// Example: npx tsx scripts/simulateBalance.ts closedHat=-30 cymbal=-28 kick=-12
 import { readFileSync } from "node:fs";
 import JSZip from "jszip";
-import { balanceStats, balanceFromStats, FILE_CEILING_DB, CATEGORY_TRIM_DB } from "../src/audio/loudness";
+import { balanceStats, balanceFromStats, FILE_CEILING_DB } from "../src/audio/loudness";
 import { ACTIVE_MIX_PRESET } from "../src/audio/mixPresets";
 import type { CategoryId } from "../src/audio/classify";
 import { categoryOfFile } from "../src/audio/samplePack";
@@ -27,11 +26,7 @@ function readWav24(buf: Uint8Array): { data: Float32Array; rate: number } {
 const zip = await JSZip.loadAsync(readFileSync(new URL("../docs/calibration/mix-calibration.koala", import.meta.url)));
 const sampler = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
 const overrides = Object.fromEntries(process.argv.slice(2).map((a) => a.split("=")).map(([k, v]) => [k, Number(v)]));
-for (const [key, v] of Object.entries(overrides)) {
-  if (key.startsWith("crest.")) (ACTIVE_MIX_PRESET.loudness.crestBonusDb as Record<string, number>)[key.slice(6)] = v;
-  else if (key.startsWith("bonus.")) (ACTIVE_MIX_PRESET.loudness.bonusDb as Record<string, number>)[key.slice(6)] = v;
-  else (CATEGORY_TRIM_DB as Record<string, number>)[key] = v;
-}
+for (const [key, v] of Object.entries(overrides)) (ACTIVE_MIX_PRESET.loudness.targetLufs as Record<string, number>)[key] = v;
 const rows: { name: string; stats: ReturnType<typeof balanceStats> }[] = [];
 for (const s of sampler.samples) {
   const wav = readWav24(await zip.file(`sampler/${s.id}.wav`)!.async("uint8array"));
@@ -40,7 +35,7 @@ for (const s of sampler.samples) {
   rows.push({ name, stats: balanceStats({ channelData: [wav.data], sampleRate: wav.rate, category }) });
 }
 const bal = balanceFromStats(rows.map((r) => r.stats), FILE_CEILING_DB);
-console.log("pad".padEnd(36), "category".padEnd(12), "trim", " out peak dB", " out loudness LUFS");
+console.log("pad".padEnd(36), "category".padEnd(12), "knob", " out peak dB", " out loudness LUFS");
 rows.forEach((r, i) => {
   const peak = r.stats.peakDb + bal.gainDb[i] + bal.knobDb[i];
   const loud = (r.stats.loud ?? NaN) + bal.gainDb[i] + bal.knobDb[i];

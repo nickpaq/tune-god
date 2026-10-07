@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MELODIC_LOOP_PLAYBACK, playbackFor, type PadPlayback } from "./audio/padSettings";
+import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { blankProject, entriesOfDrop, findPackInEntries, findPackInFileList, writeBankSounds, type FoundPack } from "./audio/packProject";
 import { BANK_ZONES, bankTakes, MAX_LOAD_SECONDS, numberedLabel, placeBank, planBank, type BankLoad } from "./audio/bankLoad";
@@ -17,9 +17,11 @@ import {
 import { setReferencePitch, startPad, type PadHandle, type PadMode, type ReferenceTone } from "./audio/player";
 import { buildTunedKoala, downloadBlob, masterEffectNames, type GhostPadExport, type TunedSample } from "./audio/exportProject";
 import { applyGainDb } from "./audio/gain";
+import { pitchKnobFor, shiftFor, snapSemitones } from "./audio/shift";
+import { fadeIn, fadeMsFor, kickTransientMs, medianTransientMs } from "./audio/kickTransient";
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { CATEGORIES, categoryIndex, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { CHOP_BANK_START, emptyPadInBank, inChopBank, movePad, nextEmptyPad, PADS_PER_BANK, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
@@ -96,27 +98,6 @@ const volFromDb = (db: number) => 10 ** (db / 20);
 /** Widest spread pan, in percent either side of centre. */
 const MAX_SPREAD_PERCENT = 40;
 
-/**
- * Total semitone shift for a pad: the shortest move (never more than 6 up or
- * down) from its exact detected pitch onto the target note, plus the manual trim.
- */
-function shiftFor(pad: Pad, projectKey: number | null, a4: number, major = false): number {
-  if (!pad.tune) return 0;
-  let target = pad.keyPc ?? projectKey;
-  // A loop's detected pitch is its key's relative minor. The key picked on the piano is a minor key (the default) or a major one, whose relative minor is a minor third below.
-  if (target !== null && pad.category === "melodicLoop" && major) target = (target + 9) % 12;
-  let base = 0;
-  if (target !== null && pad.detectedMidi != null) {
-    base = (((target - pad.detectedMidi) % 12) + 12) % 12;
-    if (base > 6) base -= 12;
-    // A loop is moved by whole semitones to the closest note of the key (no cents); anything it is off by, the user tweaks. A single sound's detected pitch
-    // is measured against A440, so a different A4 reference moves the target note with it.
-    if (pad.category === "melodicLoop") base = Math.round(base);
-    else base += referenceOffsetSemitones(a4);
-  }
-  return base + pad.semis + pad.cents / 100;
-}
-
 /** A sound from the project itself: not a silent placeholder and not a ghost copy the layout made. */
 const isReal = (p: Pad) => !p.placeholder && !p.ghost && !p.section && !p.chopper;
 
@@ -145,16 +126,6 @@ function padMode(pad: Pad): PadMode {
 /** A remembered category, brought up to date. The old single "hat" did not say open or closed, so the fresh guess decides. */
 function rememberedCategory(id: string | undefined, guess: CategoryId): CategoryId {
   return id === "hat" && (guess === "openHat" || guess === "closedHat") ? guess : migrateCategory(id);
-}
-
-/** Without normalize, scales down (never up) only if a resampled peak passes FILE_CEILING_DB. */
-function limitPeak(channelData: Float32Array[]): Float32Array[] {
-  const ceiling = 10 ** (FILE_CEILING_DB / 20);
-  let peak = 0;
-  for (const data of channelData) for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
-  if (peak <= ceiling) return channelData;
-  const gain = ceiling / peak;
-  return channelData.map((data) => data.map((v) => v * gain));
 }
 
 /** A sample longer than this is flagged on import: samples this long make export very slow. */
@@ -1405,11 +1376,18 @@ function App() {
   };
 
   /**
-   * Bakes every tuned pad's shift into its audio (windowed-sinc resample) and downloads the
-   * rebuilt project. With the normalize switch on, every sample is loudness-normalized and every pad volume knob set to a
-   * loudness-balanced level (see audio/loudness.ts); the audio files themselves are not gain-changed.
+   * Rebuilds the project and downloads it. Every file is peak-normalized and the mix is on each pad's Koala volume knob (audio/loudness.ts); every
+   * tuning is written to the pitch knob (audio/shift.ts). Only 808 and bass audio is rendered: onto its nearest semitone, then faded in under the kick.
    */
   const padsNow = pads;
+  /** An 808 is a bass sound by the name or by the loader's flag. */
+  const isEight = (p: Pad) => p.category === "bass" && (!!p.is808 || is808Name(p.name));
+  /** The 808s' fade-in, in ms: the length of the kicks' main transient, with the Sidechain switch on. Null when it is off or there is no kick and 808 to work from. */
+  const fadeFor = (list: Pad[]): number | null => {
+    if (!sidechainActive || !list.some(isEight)) return null;
+    const ms = medianTransientMs(list.filter((p) => p.category === "kick").map((p) => kickTransientMs(p.channelData, p.sampleRate, ACTIVE_MIX_PRESET.buses.fade808.withinDb)));
+    return ms === null ? null : fadeMsFor(ms, ACTIVE_MIX_PRESET.buses.fade808.minMs, ACTIVE_MIX_PRESET.buses.fade808.maxMs);
+  };
   const exportProject = async (mode: ExtraDrums = "keep") => {
     const pads = mode === "delete" ? withoutExtraDrums(padsNow) : padsNow;
     const arrangement = arrangementOf(pads);
@@ -1433,36 +1411,37 @@ function App() {
         tunedPads.forEach((p, i) => pans.set(p.sampleId, 0.5 + offsets[i] / 200));
       }
       const allPads = Object.values(pads).filter(isReal);
-      // Every pad's final (tuned) audio, so loudness is measured on what Koala will actually play.
-      // Only retimed pads hold new audio; the rest point at the pad's own data. Each pad is measured as
-      // it is rendered, so the whole project is never shipped to the worker or copied at once.
+      // Every file is rendered to its final audio and peak-normalized; the mix is on the Koala volume knob, and every tuning on the pitch knob.
+      // The only audio that is changed is 808 and bass (resampled onto their nearest semitone, then faded in under the kick) and it is measured as it is
+      // rendered, so the whole project is never shipped to the worker or copied at once.
+      const fade = fadeFor(allPads);
       const rendered: { pad: Pad; channelData: Float32Array[]; retimed: boolean }[] = [];
       const stats: BalanceStats[] = [];
+      const pitches = new Map<number, number>();
       let done = 0;
       for (const pad of allPads) {
         setExportProgress(`${done++}/${allPads.length}`);
         const shift = shiftFor(pad, tunedTarget, a4, keyMajor);
-        const retimed = pad.tune && Math.abs(shift) >= 1e-6;
-        if (!retimed && !normalize) continue;
+        const snap = snapSemitones(pad);
+        const retimed = Math.abs(snap) >= 0.005;
+        if (pad.tune || pad.tuneLocked || snap !== 0) pitches.set(pad.sampleId, pitchKnobFor(pad, shift));
         // The pad's audio was already cut to Koala's start/end points on load, so a stretched loop stays in time.
-        const channelData = retimed
-          ? limitPeak(await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(shift)))
-          : pad.channelData;
-        if (normalize) stats.push(await getRenderWorker().measure({ channelData, sampleRate: pad.sampleRate, category: pad.category }));
+        let channelData = retimed ? await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(snap)) : pad.channelData;
+        if (fade && isEight(pad)) channelData = fadeIn(channelData, pad.sampleRate, fade);
+        stats.push(await getRenderWorker().measure({ channelData, sampleRate: pad.sampleRate, category: pad.category }));
         rendered.push({ pad, channelData, retimed });
       }
-      // Files are loudness-normalized (quiet up, loud down); the mix goes on the pad knobs.
       const vols = new Map<number, number>();
-      const gains = normalize ? balanceFromStats(stats, FILE_CEILING_DB) : null;
+      const gains = balanceFromStats(stats, FILE_CEILING_DB);
       rendered.forEach((r, i) => {
-        if (gains) vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
+        vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
         tuned.push({
           sampleId: r.pad.sampleId,
           sampleRate: r.pad.sampleRate,
           channelData: r.channelData,
           retimed: r.retimed,
           trimmedFrom: r.pad.trimmedFrom,
-          gainDb: gains?.gainDb[i],
+          gainDb: gains.gainDb[i],
         });
       });
       // Ghost snares and soft kicks are made from their source's final audio (tuned and loudness-balanced), then quieted and dulled.
@@ -1472,7 +1451,7 @@ function App() {
         if (!source) continue;
         const at = rendered.findIndex((r) => r.pad === source);
         let audio = at >= 0 ? rendered[at].channelData : source.channelData;
-        if (gains && at >= 0) audio = applyGainDb(audio, gains.gainDb[at]);
+        if (at >= 0) audio = applyGainDb(audio, gains.gainDb[at]);
         ghostExports.push({
           index: gp.index,
           label: GHOST_LABEL[gp.ghost!.kind],
@@ -1486,28 +1465,35 @@ function App() {
       const songExport = songExportOf(Object.values(pads).filter((p) => p.section));
       const chopperPad = Object.values(pads).find((p) => p.chopper);
       const buses = new Map<number, number>();
-      if (routeBuses) {
-        for (const p of allPads) buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
+      for (const p of allPads) {
+        // Melodic loops always go to bus D; the rest follow the buses only with Organize.
+        if (routeBuses || p.category === "melodicLoop") buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
       }
       const playback = new Map<number, PadPlayback>();
       for (const p of allPads) {
-        // Melodic loops are written one-shot off and loop mode off even with Organize off; every other type's settings are Organize's.
-        const settings = autoPlayback ? (p.category ? playbackFor(p.category) : undefined) : p.category === "melodicLoop" ? MELODIC_LOOP_PLAYBACK : undefined;
-        if (settings) playback.set(p.sampleId, settings);
+        // The playback rules by sound type are written on every export; only the per-pad EQ is Organize's.
+        const settings = p.category ? playbackFor(p.category) : undefined;
+        if (settings) playback.set(p.sampleId, autoPlayback ? settings : { ...settings, eq: undefined });
       }
       // The pads the loaders made (Kick 1, Snare 2, Loop 3...) are written with the colour and label they show in the app; a sound from a project that was
       // opened keeps the colour and label it already had.
-      // A stretched loop is written with Koala's stretch, as long (in beats) as it is at its own tempo; Koala then plays it at the project's tempo.
+      // Loops are written stretched, as long (in beats) as they are at their own tempo; Koala then plays them at the project's tempo. A loop whose name
+      // states no tempo is stretched to its length at the project tempo, rounded to whole bars. A sound of another type is stretched when its key is on.
       const stretch = new Map<number, number>();
+      const beatsPerBar = await beatsPerBarOfProject();
       for (const p of allPads) {
-        if (p.stretch && p.bpm) stretch.set(p.sampleId, Math.max(1, Math.round((p.channelData[0].length / p.sampleRate) * (p.bpm / 60))));
+        const seconds = p.channelData[0].length / p.sampleRate;
+        if (p.category === "melodicLoop" || p.category === "drumLoop" || p.category === "percLoop") {
+          const beats = p.bpm ? seconds * (p.bpm / 60) : seconds * (projectBpm / 60);
+          stretch.set(p.sampleId, p.bpm || beats < beatsPerBar ? Math.max(1, Math.round(beats)) : Math.round(beats / beatsPerBar) * beatsPerBar);
+        } else if (p.stretch && p.bpm) stretch.set(p.sampleId, Math.max(1, Math.round(seconds * (p.bpm / 60))));
       }
       const colors = new Map<number, { color: string; label: string }>();
       for (const p of allPads) {
         // The label is what the pad's caption says in the app, without its number.
         if (p.category && numberedLabel(p)) colors.set(p.sampleId, { color: autoColorOf(p), label: captionOf(p) || labelOf(p) });
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, { bpm: projectBpm, stretch, vols, buses, busNames: routeBuses ? BUS_NAMES : undefined, sidechain: sidechainActive, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport, chopper: chopperPad ? chopperExportOf(chopperPad) : undefined });
+      const { blob, filename } = await buildTunedKoala(project, tuned, { bpm: projectBpm, stretch, vols, pitches, buses, busNames: routeBuses ? BUS_NAMES : undefined, busEffects: routeBuses, masterChain, masterStyle, arrangement, pans, colors, playback, ghosts: ghostExports, song: songExport, chopper: chopperPad ? chopperExportOf(chopperPad) : undefined });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error(err);

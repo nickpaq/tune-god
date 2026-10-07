@@ -11,17 +11,14 @@ All the numbers that decide how an export sounds are in one object, `HEAVY_WARM_
 
 ## 1. Loudness (`loudness`)
 
-Applied at export, and when Normalize now is on. Every sound is gain-matched to one loudness first, then these shape the mix.
+Applied at export, and when Normalize now is on. Every file is peak-normalized to the -1 dBFS ceiling, and nothing is ever turned down in the audio: the mix is each pad's Koala volume knob.
 
 | Field | What it does | Range | Move it to |
 | --- | --- | --- | --- |
-| `categoryTrimDb` | Pad knob trim per sound type, the mix itself | 0 or below | Lower = that type sits further back. Hats and cymbals down for warm, up for bright and crisp |
-| `bonusDb` | dB a type sits above the common loudness | any, small | Raise kick and bass for heavy |
-| `crestBonusDb` | Extra peak room per type | any, small | Raise to let a type peak higher, lower to hold it down (hats and cymbals are held down so they never rival the snare) |
-| `maxCrestDb` | Most any peak may stand above the common loudness | about 6 to 12 | Lower tames transients, higher keeps them punchy |
-| `peakLimitedFraction` | Share of pads allowed to fall short of the common loudness | 0 to 1 | Rarely changed |
+| `targetLufs` | Where each sound type sits after the knob, as the loudest-200 ms loudness (K-weighted LUFS) of the normalized file at its knob level | negative LUFS | Lower = that type sits further back. Hats and cymbals down for warm, up for bright and crisp. The knob can only turn down, so a file already under its target stays at 0 dB |
+| `padTone` | Koala's tone knob (a tilt EQ, 0 = the middle) by type | about -1 to 1 | The snare is at -0.1: a touch darker |
 
-Current heavy and warm trims: kick 0, bass 0, snare -2, clap -3, closed hat -5, open hat -4, cymbal -3, perc -5, melodic -4, vox -3, FX -7, drum loop -3, perc and melodic loops -5, other -3. Kick and bass sit 4 dB above the common loudness. `crestBonusDb` for hats and cymbals is -1: a peak cap, not a trim, so while it was -5/-4 the hats could not rise whatever their trim was (found in the first calibration render). `scripts/simulateBalance.ts` shows each pad's output level for any trims before you export: `npx tsx scripts/simulateBalance.ts closedHat=-5 crest.closedHat=-1`.
+Current targets: kick -13, bass and 808 -15, snare -19, clap -21, closed hat -29, open hat and cymbal -27, perc -23, melodic -21, vox -19, FX -27, drum loop -22, perc loop -27, melodic loop -22, other -22. The kick leads, the hats and cymbals are held well back. These are estimates taken from the earlier calibration renders (docs/koala-mixer-reference.md, round 3c); correct them from a render. `scripts/simulateBalance.ts` shows each pad's output level for any targets before you export: `npx tsx scripts/simulateBalance.ts closedHat=-30 kick=-12`.
 
 Not in the preset: `FILE_CEILING_DB` in `loudness.ts` (the -1 dBFS peak ceiling of every file, not a genre choice).
 
@@ -46,12 +43,10 @@ Written when "Route pads to buses" is on. Bus A is Kick, B Bass, C Drums, D Melo
 | `kickClipper.threshold` | same | Clip level and softness of the curve | about -35 to 0 dB | Near 0 is a hard clip, low is a soft S-curve. Lower also lowers the kick's peak |
 | `kickClipper.output` | same | Level after the clip | -36 to 0 dB | Can only turn down |
 | `kickClipper.oversample` | same | HQ button | 0 or 1 | 1 for less aliasing |
-| `bassSidechain.threshold` | Bass bus SIDECHAIN | Kick level that makes the bass duck. At -14 dB it ducked only about 2 to 3 dB; the sweep in `probe-sidechain.koala` measures -24, -40 and -60 | -60 to 0 dB | Lower is a deeper duck |
-| `bassSidechain.release` | same | Time for the bass to return | 10 to 1000 ms | Short is tight, long pumps |
-| `bassSidechain.output` | same | Level after ducking, not the depth | -12 to +12 dB | Rarely changed |
+| `fade808.withinDb` / `minMs` / `maxMs` | The soft fade-in every 808 gets instead of a sidechain | The fade is as long as the kick's main transient (how long its envelope stays within `withinDb` of its peak, `kickTransient.ts`), held between `minMs` and `maxMs` | 6 dB, 4 to 30 ms | Longer fade = more room for the kick, less 808 attack |
 | `melodicEq` | Melodic bus EQ | lo low shelf, mid bell, hi shelf (freq, gain, Q for each) | freq 20 to 20000 Hz, gain +-18 dB, Q 0.5 to 10 | Lower `lo gain` to clear more low end, lower `hi gain` to darken |
 
-The sidechain source (the kick bus) is fixed by the bus layout in `routing.ts` (`CATEGORY_BUS`, `BUS_NAMES`), which also decides which sound types go on which bus.
+The bus layout is fixed in `routing.ts` (`CATEGORY_BUS`, `BUS_NAMES`), which decides which sound types go on which bus. There is no sidechain.
 
 ## 4. Master chain (`master`)
 

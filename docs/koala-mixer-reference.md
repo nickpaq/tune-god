@@ -87,11 +87,12 @@ Screens of every plugin in the all-minimum project. They show how each stored va
 
 ## What the app writes
 
-- Bass bus: SIDECHAIN (source kick, threshold -17 dB (round 3 sweeps), release 80 ms, output 0 dB).
+- No sidechain is written any more (the plugin and its measurements above stay for reference): the 808s are faded in under the kick instead (`src/audio/kickTransient.ts`).
 - Kick bus: CLIPPER (input +4 dB, threshold -6 dB, output 0, HQ on).
 - Melodic bus: EQ (lo highpass 150 Hz, hi shelf -2 dB at 8 kHz).
 - Master: EQ (lo highpass 20 Hz, mid bell +2.5 dB at 70 Hz, hi shelf -3 dB at 8 kHz), DRIVE, COMPRESSOR, CLIPPER, LIMITER (-1 dB input gain), only into an empty master strip.
 - Per pad (with Settings by sound type): `eq.lo.freq` highpass (80 to 300 Hz by type) and, on hats and cymbals, `eq.hi.gain` -2 dB.
+- Per pad, on every export: the audio is peak-normalized to -1 dBFS and `vol` (the volume knob) carries the mix (`loudness.targetLufs`); every tuning is in `pitch` (semitones, two decimals), only 808 and bass audio being resampled, onto its nearest semitone; mute group, `oneshot`, `looping`, `release`, `tone` and `stretch` by type as in `src/audio/padSettings.ts`. **The Beats stretch mode value (`STRETCH_MODE.beats` = 2) is a guess**: only the default mode (1) has been read from a Koala project. Save a pad set to Beats and read its `stretch` field to confirm. `tone` 0 is the middle; the snare is written at -0.1 assuming the knob runs from -1 to 1.
 
 ## Sequence notes (read from a project with recorded patterns)
 

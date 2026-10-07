@@ -12,7 +12,7 @@ async function load(): Promise<ParsedKoalaProject> {
 }
 
 describe("ghost pads in the export", () => {
-  it("adds a pad with its own sample, cloned from the source, with the knob at 0 dB", async () => {
+  it("adds a pad with its own sample, cloned from the source, with the source's knob", async () => {
     const project = await load();
     const source = project.samplerJson.pads[0];
     const realCount = project.pads.length;
@@ -30,7 +30,7 @@ describe("ghost pads in the export", () => {
     const ghost = json.pads.find((p: any) => p.label === "Ghost Snare");
     expect(ghost.pad).toBe(9);
     expect(ghost.color).toBe("#123456");
-    expect(ghost.vol).toBe(1);
+    expect(ghost.vol).toBe(0.5); // the source's knob: the ghost's own audio is what is quieter
     if ("end" in source) expect(ghost.end).toBe(1000);
     expect(ghost.sampleId).not.toBe(source.sampleId);
     expect(json.pads.filter((p: any) => p.sampleId === ghost.sampleId)).toHaveLength(1);

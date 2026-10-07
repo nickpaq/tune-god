@@ -1,5 +1,5 @@
 // Builds the effects the export puts on Koala's mixer strips from the active mix preset (src/audio/mixPresets.ts, where every value
-// to tweak lives): a sidechain from the kick bus onto the bass bus, clipping on the kick bus, an EQ on the melodic bus and a master
+// to tweak lives): clipping on the kick bus, an EQ on the melodic bus and a master
 // chain. Plugin and parameter names are Koala's own (docs/koala-mixer-reference.md). Bus plugins are added after any plugins already on the strip (never replacing one, never doubling one that is there); the master chain replaces the master strip, and the app warns first.
 import { ACTIVE_MIX_PRESET, type MasterStyle, type MixPreset } from "./mixPresets";
 
@@ -12,13 +12,6 @@ export interface MixerEffect {
 export type MixerSlot = MixerEffect | null;
 
 const effect = (name: string, parameters: Record<string, number>): MixerEffect => ({ bypass: false, name, parameters });
-
-/** The bus the sidechain listens to: the kick bus (A, bus 0). The SIDECHAIN plugin's `source` is a bus number. Fixed by the bus layout in routing.ts, not a genre choice. */
-export const SIDECHAIN_SOURCE_BUS = 0;
-
-/** SIDECHAIN for the bass bus: ducks it whenever the kick bus plays. Values: preset.buses.bassSidechain. */
-export const bassSidechain = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect =>
-  effect("SIDECHAIN", { source: SIDECHAIN_SOURCE_BUS, ...preset.buses.bassSidechain });
 
 /** CLIPPER for the kick bus. Values: preset.buses.kickClipper. */
 export const kickClipper = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect => effect("CLIPPER", { ...preset.buses.kickClipper });
