@@ -709,8 +709,41 @@ function App() {
     acapellaInput.current?.click();
   };
 
+  /**
+   * Chopper mode with an audio file and no project open: the file is the sample to chop. A blank project is started (the export writes the new
+   * project from it) and the chop editor opens on the file.
+   */
+  const loadChopperAudio = async (file: File) => {
+    pickedMode.current = null;
+    let audio: Awaited<ReturnType<typeof decodeNative>>;
+    try {
+      audio = await decodeNative(file);
+    } catch {
+      return void window.alert("That audio file could not be read.");
+    }
+    if (audio.channelData.length === 0 || audio.channelData[0].length / audio.sampleRate < CHOPPER_MIN_SECONDS) return void window.alert(`Chopper mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`);
+    const opened = await ensureProject();
+    if (!opened) return;
+    const { project } = opened;
+    const used = [...project.pads.map((p) => p.sampleId), ...((project.samplerJson?.samples ?? []) as any[]).map((s) => s.id)].filter((id): id is number => typeof id === "number");
+    const song: Pad = {
+      index: -1,
+      origIndex: CHOPPER_ORIG_INDEX,
+      name: file.name.replace(/\.[^.]+$/, ""),
+      sampleId: Math.max(0, ...used) + 1,
+      sampleRate: audio.sampleRate,
+      channelData: audio.channelData,
+      category: "melodic",
+      tune: false,
+      semis: 0,
+      cents: 0,
+    };
+    await launchChopper(song);
+  };
+
   const loadAcapella = async (file: File) => {
     if (addPackStatus || loading) return;
+    if (pickedMode.current === "chopper" && !isKoalaFile(file)) return void (await loadChopperAudio(file));
     acapellaPending.current = pickedMode.current ?? "acapella";
     pickedMode.current = null;
     await loadProject(file, false, true);
@@ -1682,7 +1715,7 @@ function App() {
         <input
           ref={acapellaInput}
           type="file"
-          accept=".koala"
+          accept=".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg"
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0];
