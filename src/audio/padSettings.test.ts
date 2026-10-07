@@ -16,3 +16,7 @@ describe("per-pad EQ by sound type", () => {
     expect(playbackFor("cymbal")?.eq?.highShelfDb).toBe(-2);
   });
 });
+
+describe("melodic loops", () => {
+  it("are written with one-shot off", () => expect(playbackFor("melodicLoop")).toMatchObject({ oneShot: false }));
+});

@@ -642,7 +642,7 @@ function App() {
           .catch(() => ({ midi: null, category: "other" as const, detail: undefined, centroid: undefined, bpm: null, named: false }))
           .then(({ midi: detectedMidi, detail, centroid, bpm, named }) => {
             if (token !== loadToken.current) return;
-            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, bpm: bpm ?? undefined, keyFromName: named, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
+            const analysed = (p: Pad): Pad => ({ ...p, detectedMidi, detail, centroid, bpm: bpm ?? undefined, keyFromName: named, stretch: p.category === "melodicLoop" && bpm ? true : p.stretch, tune: tuneDefault(p.tuneLocked, p.tune, p.category, detectedMidi, tunedTargetRef.current) });
             setPads((prev) => {
               const at = Object.keys(prev).find((k) => prev[Number(k)].origIndex === pad.origIndex);
               return at === undefined ? prev : { ...prev, [Number(at)]: analysed(prev[Number(at)]) };

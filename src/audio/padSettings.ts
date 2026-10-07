@@ -24,6 +24,7 @@ function basePlayback(category: CategoryId): PadPlayback | undefined {
   if (category === "closedHat" || category === "openHat") return { chokeGroup: HAT_MUTE_GROUP, oneShot: true };
   if (isDrumCategory(category)) return { oneShot: true };
   if (category === "bass") return { chokeGroup: BASS_MUTE_GROUP, oneShot: false, release: MELODIC_RELEASE };
+  if (category === "melodicLoop") return { oneShot: false };
   if (category === "melodic") return { oneShot: false, release: MELODIC_RELEASE };
   return undefined;
 }
