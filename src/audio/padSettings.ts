@@ -22,11 +22,14 @@ export const MELODIC_RELEASE = 0.3;
 /** Per-pad EQ by sound type comes from the active mix preset (src/audio/mixPresets.ts, `padEq`). */
 const PAD_EQ = ACTIVE_MIX_PRESET.padEq;
 
+/** A melodic loop is written this way whatever the Organize switch says. */
+export const MELODIC_LOOP_PLAYBACK: PadPlayback = { oneShot: false, loop: false };
+
 function basePlayback(category: CategoryId): PadPlayback | undefined {
   if (category === "closedHat" || category === "openHat") return { chokeGroup: HAT_MUTE_GROUP, oneShot: true };
   if (isDrumCategory(category)) return { oneShot: true };
   if (category === "bass") return { chokeGroup: BASS_MUTE_GROUP, oneShot: false, release: MELODIC_RELEASE };
-  if (category === "melodicLoop") return { oneShot: false, loop: false };
+  if (category === "melodicLoop") return MELODIC_LOOP_PLAYBACK;
   if (category === "melodic") return { oneShot: false, release: MELODIC_RELEASE };
   return undefined;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { playbackFor, type PadPlayback } from "./audio/padSettings";
+import { MELODIC_LOOP_PLAYBACK, playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { blankProject, entriesOfDrop, findPackInEntries, findPackInFileList, writeBankSounds, type FoundPack } from "./audio/packProject";
 import { BANK_ZONES, bankTakes, MAX_LOAD_SECONDS, numberedLabel, placeBank, planBank, type BankLoad } from "./audio/bankLoad";
@@ -1480,11 +1480,10 @@ function App() {
         for (const p of allPads) buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
       }
       const playback = new Map<number, PadPlayback>();
-      if (autoPlayback) {
-        for (const p of allPads) {
-          const settings = p.category ? playbackFor(p.category) : undefined;
-          if (settings) playback.set(p.sampleId, settings);
-        }
+      for (const p of allPads) {
+        // Melodic loops are written one-shot off and loop mode off even with Organize off; every other type's settings are Organize's.
+        const settings = autoPlayback ? (p.category ? playbackFor(p.category) : undefined) : p.category === "melodicLoop" ? MELODIC_LOOP_PLAYBACK : undefined;
+        if (settings) playback.set(p.sampleId, settings);
       }
       // The pads the loaders made (Kick 1, Snare 2, Loop 3...) are written with the colour and label they show in the app; a sound from a project that was
       // opened keeps the colour and label it already had.
