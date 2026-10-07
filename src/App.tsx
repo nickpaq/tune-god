@@ -709,8 +709,42 @@ function App() {
     acapellaInput.current?.click();
   };
 
+  /**
+   * Chopper mode with an audio file and no project open: the file is the sample to chop. A blank project is started (the export writes the new
+   * project from it) and the chop editor opens on the file, with the patterns switch on one long pattern.
+   */
+  const loadChopperAudio = async (file: File) => {
+    pickedMode.current = null;
+    let audio: Awaited<ReturnType<typeof decodeNative>>;
+    try {
+      audio = await decodeNative(file);
+    } catch {
+      return void window.alert("That audio file could not be read.");
+    }
+    if (audio.channelData.length === 0 || audio.channelData[0].length / audio.sampleRate < CHOPPER_MIN_SECONDS) return void window.alert(`Chopper mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`);
+    const opened = await ensureProject();
+    if (!opened) return;
+    const { project } = opened;
+    const used = [...project.pads.map((p) => p.sampleId), ...((project.samplerJson?.samples ?? []) as any[]).map((s) => s.id)].filter((id): id is number => typeof id === "number");
+    const name = file.name.replace(/\.[^.]+$/, "");
+    const song: Pad = {
+      index: -1,
+      origIndex: CHOPPER_ORIG_INDEX,
+      name,
+      sampleId: Math.max(0, ...used) + 1,
+      sampleRate: audio.sampleRate,
+      channelData: audio.channelData,
+      category: "melodic",
+      tune: false,
+      semis: 0,
+      cents: 0,
+    };
+    await launchChopper(song, true);
+  };
+
   const loadAcapella = async (file: File) => {
     if (addPackStatus || loading) return;
+    if (pickedMode.current === "chopper" && !isKoalaFile(file)) return void (await loadChopperAudio(file));
     acapellaPending.current = pickedMode.current ?? "acapella";
     pickedMode.current = null;
     await loadProject(file, false, true);
@@ -825,7 +859,7 @@ function App() {
   };
 
   /** The sound being chopped (the cuts are found on it), and in acapella mode its vocal stem (what is cut), with the project's beats per bar, while the chop editor is open. */
-  const [chop, setChop] = useState<{ mode: ChopMode; song: Pad; vocals: Pad; beatsPerBar: number } | null>(null);
+  const [chop, setChop] = useState<{ mode: ChopMode; song: Pad; vocals: Pad; beatsPerBar: number; /** The sample came from an audio file, not from the project. */ fromAudio?: boolean } | null>(null);
   /**
    * Starts the a cappella chop for a long sound. It needs the song and its vocal stem from Koala's stem split, named like the song with VOCALS after
    * it and left exactly as the split made them, so this checks for them first and says what to do if they are not right.
@@ -856,11 +890,11 @@ function App() {
   };
 
   /** Opens the chop editor in chopper mode on the sample that was picked (the song itself is the sound that is cut). */
-  const launchChopper = async (song: Pad) => {
+  const launchChopper = async (song: Pad, fromAudio = false) => {
     const beatsPerBar = await beatsPerBarOfProject();
     setSourcePick(false);
     setMenuOpen(false);
-    setChop({ mode: "chopper", song, vocals: song, beatsPerBar });
+    setChop({ mode: "chopper", song, vocals: song, beatsPerBar, fromAudio });
   };
 
   /** The song sections as the export writes them: their pads, audio, bars, labels, colours and the tempo. */
@@ -874,6 +908,7 @@ function App() {
       sampleRate: sorted[0].sampleRate,
       sourceSampleId: sorted[0].section!.sourceSampleId,
       template: acapellaTemplate.current,
+      longPattern: sorted[0].section!.longPattern,
       bars: 8,
       sections: sorted.map((p) => ({ index: p.index, label: labelOf(p), channelData: p.channelData, bars: p.section!.bars, color: autoColorOf(p), bus: CATEGORY_BUS.melodic })),
     };
@@ -921,6 +956,8 @@ function App() {
     layout: pad.chopper!.layout,
     beatsPerBar: pad.chopper!.beatsPerBar,
     pitch: pad.chopper!.pitch,
+    longPattern: pad.chopper!.longPattern,
+    totalBars: pad.chopper!.totalBars,
   });
 
   /** Writes the chopper into a fresh copy of the project as the export will and reads it back: how many patterns it got, or what went wrong. */
@@ -979,7 +1016,16 @@ function App() {
           tune: false,
           semis: 0,
           cents: 0,
-          chopper: { sourceSampleId: song.sampleId, slices: layout.starts.length, bpm: tempo, beatsPerBar: settings.beatsPerBar, pitch: offset, layout },
+          chopper: {
+            sourceSampleId: song.sampleId,
+            slices: layout.starts.length,
+            bpm: tempo,
+            beatsPerBar: settings.beatsPerBar,
+            pitch: offset,
+            layout,
+            longPattern: settings.longPattern,
+            totalBars: (total / song.sampleRate) * (tempo / 60) / settings.beatsPerBar,
+          },
         };
         let result: Awaited<ReturnType<typeof trialWriteChopper>>;
         try {
@@ -1013,7 +1059,7 @@ function App() {
       // (a locked pad on bank D stays, and its slot is not used)
       const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => !inChopBank(p.index) || p.locked));
       const { pads: made } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(without), palette.colors);
-      const sections = made.map((p) => ({ ...p, section: { ...p.section!, pitch: offset } }));
+      const sections = made.map((p) => ({ ...p, section: { ...p.section!, pitch: offset, longPattern: settings.longPattern } }));
       if (sections.length === 0) {
         window.alert("There are no sections to put on Bank D, so nothing was changed.");
         return;
@@ -1682,7 +1728,7 @@ function App() {
         <input
           ref={acapellaInput}
           type="file"
-          accept=".koala"
+          accept=".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg"
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -2196,6 +2242,7 @@ function App() {
             beatsPerBar={chop.beatsPerBar}
             freeSlots={chop.mode === "chopper" ? CHOPPER_MAX_SLICES - 2 : PADS_PER_BANK}
             unit={chop.mode === "chopper" ? "chop" : "pattern"}
+            startLong={!!chop.fromAudio}
             onConfirm={(settings) => chopSong(chop, settings)}
             onClose={() => setChop(null)}
           />

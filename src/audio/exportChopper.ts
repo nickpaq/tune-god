@@ -71,6 +71,10 @@ export interface ChopperExport {
   beatsPerBar: number;
   /** Semitones on the pad's pitch knob. The pad is not stretched, so this also changes its tempo (the caller has put that in the project tempo). */
   pitch: number;
+  /** One pattern for the whole chop (every chop's note in turn, `totalBars` long at least) instead of a pattern for every chop. */
+  longPattern?: boolean;
+  /** The length of the sample in bars at the project tempo: the long pattern is at least this long. */
+  totalBars?: number;
 }
 
 const eq = () => ({ enabled: "false", hi: { freq: 8000.0, gain: 0.0, q: 1.0, type: "highshelf" }, lo: { freq: 100.0, gain: 0.0, q: 1.0, type: "lowshelf" }, mid: { freq: 1000.0, gain: 0.0, q: 1.0, type: "peaking" } });
@@ -138,7 +142,28 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
   const beatsPerBar = Number(sequence.beatsPerBar) > 0 ? Number(sequence.beatsPerBar) : 4;
   const free = sequences.map((s, i) => (isEmpty(s) ? i : -1)).filter((i) => i >= 0);
   let written = 0;
-  for (const section of chopper.layout.sections) {
+  if (chopper.longPattern && free.length > 0 && chopper.layout.sections.length > 0) {
+    let beats = 0;
+    const notes = chopper.layout.sections.map((section) => {
+      const note = {
+        chance: 1.0,
+        length: section.bars * beatsPerBar * TICKS_PER_BEAT,
+        num: chopper.index + base,
+        pan: -1.0078740119934082,
+        pitch: 0.0,
+        start: 0.0,
+        subPad: -1,
+        timeOffset: Math.round(beats * TICKS_PER_BEAT),
+        vel: sliceVelocity(section.slice, count),
+      };
+      beats += section.bars * beatsPerBar;
+      return note;
+    });
+    const numBars = Math.max(1, Math.ceil(beats / beatsPerBar), Math.ceil(chopper.totalBars ?? 0));
+    sequences[free[0]] = { ...emptySequence(), noteSequence: { pattern: { numBars, notes } } };
+    written = chopper.layout.sections.length;
+  }
+  for (const section of chopper.longPattern ? [] : chopper.layout.sections) {
     if (written >= free.length) break;
     sequences[free[written]] = {
       ...emptySequence(),

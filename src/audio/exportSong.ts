@@ -48,6 +48,8 @@ export interface SongExport {
   beatsPerBar?: number;
   /** The stem's pad settings when the stem is not in the project (an acapella zip loaded into bank D); otherwise they are found by `sourceSampleId`. */
   template?: SongTemplate;
+  /** One long pattern that plays every section back to back (each section's note at its place), instead of a pattern for every section. */
+  longPattern?: boolean;
 }
 
 /** The song's own pad and sample entry, kept before the song pad is removed from the project, for the section pads to start from. */
@@ -67,6 +69,19 @@ export function songTemplate(samplerJson: any, sourceSampleId: number): SongTemp
 export const emptySequence = () => ({ lastViewedPath: "", noteSequence: { pattern: { notes: null, numBars: 1 } }, parameterSequences: null });
 
 export const isEmpty = (seq: any) => !Array.isArray(seq?.noteSequence?.pattern?.notes) || seq.noteSequence.pattern.notes.length === 0;
+
+/** A note on a pad at the start of a pattern, at full velocity. */
+const sectionNote = (num: number, length: number) => ({
+  chance: 1.0,
+  length,
+  num,
+  pan: -1.0078740119934082,
+  pitch: 0.0,
+  start: 0.0,
+  subPad: -1,
+  timeOffset: 0,
+  vel: 127.0,
+});
 
 /** The first choke group no pad uses yet (0 is no group). */
 function freeChokeGroup(pads: any[]): number {
@@ -102,8 +117,12 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
 
   let added = 0;
   let firstPattern = -1;
+  const longNotes: any[] = [];
+  let longBeats = 0;
+  // A long pattern needs one free slot for all of the sections.
+  const room = song.longPattern ? (freeSlots.length > 0 ? Infinity : 0) : freeSlots.length;
   for (const section of [...song.sections].sort((a, b) => a.index - b.index)) {
-    if (taken.has(section.index) || added >= freeSlots.length) continue;
+    if (taken.has(section.index) || added >= room) continue;
     const sampleId = nextId++;
     const frames = section.channelData[0].length;
     project.zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: song.sampleRate, channelData: section.channelData, bitDepth: 24 }).arrayBuffer());
@@ -133,6 +152,12 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
     taken.add(section.index);
 
     const bars = section.bars ?? song.bars;
+    if (song.longPattern) {
+      longNotes.push({ ...sectionNote(section.index + base, bars * beatsPerBar * TICKS_PER_BEAT), timeOffset: Math.round(longBeats * TICKS_PER_BEAT) });
+      longBeats += bars * beatsPerBar;
+      added++;
+      continue;
+    }
     const slot = freeSlots[added];
     if (firstPattern < 0) firstPattern = slot;
     sequences[slot] = {
@@ -140,25 +165,17 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
       noteSequence: {
         pattern: {
           numBars: bars,
-          notes: [
-            {
-              chance: 1.0,
-              length: bars * beatsPerBar * TICKS_PER_BEAT,
-              num: section.index + base,
-              pan: -1.0078740119934082,
-              pitch: 0.0,
-              start: 0.0,
-              subPad: -1,
-              timeOffset: 0,
-              vel: 127.0,
-            },
-          ],
+          notes: [sectionNote(section.index + base, bars * beatsPerBar * TICKS_PER_BEAT)],
         },
       },
     };
     added++;
   }
   pads.sort((a, b) => Number(a.pad) - Number(b.pad));
+  if (song.longPattern && longNotes.length > 0) {
+    firstPattern = freeSlots[0];
+    sequences[firstPattern] = { ...emptySequence(), noteSequence: { pattern: { numBars: Math.max(1, Math.ceil(longBeats / beatsPerBar)), notes: longNotes } } };
+  }
   if (added > 0) {
     if (song.bpm !== undefined) sequence.bpm = song.bpm;
     sequence.autoPlay = "next"; // each pattern plays on into the next, so the song plays through

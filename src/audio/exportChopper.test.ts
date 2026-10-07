@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
+import { blankProject } from "./packProject";
+import { TICKS_PER_BEAT } from "./exportSong";
 import { CHOPPER_MAX_SLICES, fitPlans, sliceLayout, sliceOfVelocity, sliceVelocity } from "./exportChopper";
 import type { ParsedKoalaProject } from "./koalaProject";
 import type { SectionPlan } from "./song/chop";
@@ -90,5 +92,35 @@ describe("the chopper in the export", () => {
     const { blob } = await buildTunedKoala(project, [], { chopper: { index: 49, label: "X", sampleId: 9999, sampleRate: 44100, channelData: [new Float32Array(100)], layout, beatsPerBar: 4, pitch: 0 } });
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
     expect(zip.file("sampler/9999.wav")).not.toBeNull();
+  });
+
+  it("writes one long pattern with every chop's note in turn, at least as long as the sample", async () => {
+    const project = await load("probe-sidechain.koala");
+    const layout = sliceLayout([plan(0, 1000, 0, 2), plan(1000, 1000, 1, 3)], 2000);
+    const { blob } = await buildTunedKoala(project, [], {
+      chopper: { index: 48, label: "X", sampleId: 9999, sampleRate: 44100, channelData: [new Float32Array(2000)], layout, beatsPerBar: 4, pitch: 0, longPattern: true, totalBars: 7.2 },
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const sequence = JSON.parse(await zip.file("sequence.json")!.async("string"));
+    const held = sequence.sequences.filter((s: any) => s.noteSequence.pattern.notes?.some((n: any) => n.num === 48));
+    expect(held).toHaveLength(1);
+    const pattern = held[0].noteSequence.pattern;
+    expect(pattern.numBars).toBe(8);
+    expect(pattern.notes.map((n: any) => n.timeOffset)).toEqual([0, 2 * 4 * TICKS_PER_BEAT]);
+    expect(pattern.notes.map((n: any) => n.length)).toEqual([2 * 4 * TICKS_PER_BEAT, 3 * 4 * TICKS_PER_BEAT]);
+    expect(pattern.notes.map((n: any) => n.vel)).toEqual([sliceVelocity(0, 2), sliceVelocity(1, 2)]);
+  });
+
+  it("makes a new project from a blank one with the chopper on its first Bank D pad", async () => {
+    const file = await blankProject();
+    const zip0 = await JSZip.loadAsync(await file.arrayBuffer());
+    const samplerJson = JSON.parse(await zip0.file("sampler/sampler.json")!.async("string"));
+    const project: ParsedKoalaProject = { zip: zip0, samplerJson, originalName: "KoalaTune.koala", pads: [{ pad: 63, sampleId: 1, fileName: "1.wav" }], padBase: 0 };
+    const layout = sliceLayout([plan(0, 1000, 0, 2)], 1000);
+    const { blob } = await buildTunedKoala(project, [], { arrangement: new Map([[63, null]]), chopper: { index: 48, label: "Chopper", sampleId: 2, sampleRate: 44100, channelData: [new Float32Array(1000)], layout, beatsPerBar: 4, pitch: 0, longPattern: true, totalBars: 2 } });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const sampler = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
+    expect(sampler.pads.map((p: any) => [Number(p.pad), p.synth ?? p.type])).toEqual([[48, "CHOPPER"]]);
+    expect(zip.file("sampler/2.wav")).not.toBeNull();
   });
 });

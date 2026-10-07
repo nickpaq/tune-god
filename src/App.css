@@ -1652,6 +1652,67 @@
   flex: 1;
 }
 
+.chop__gorow {
+  flex: none;
+  display: flex;
+  gap: 2cqw;
+}
+
+.chop__gorow .chop__go {
+  flex: 1;
+  min-width: 0;
+  padding: 0 1cqw;
+  font-size: 3.2cqw;
+  letter-spacing: 0.06em;
+}
+
+.chop__switch {
+  flex: none;
+  width: 34cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1cqw;
+  border: 0;
+  border-radius: 1.8cqw;
+  background: var(--chassis1);
+  color: var(--ink);
+  font: inherit;
+  font-size: 2.6cqw;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.chop__switch-key {
+  width: 10cqw;
+  height: 4cqw;
+  border-radius: 1cqw;
+  background: var(--well);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+
+.chop__switch-key::after {
+  content: "";
+  position: absolute;
+  top: 0.5cqw;
+  left: 0.5cqw;
+  width: 4.2cqw;
+  height: 3cqw;
+  border-radius: 0.7cqw;
+  background: var(--ink3);
+  transition: transform 0.12s;
+}
+
+.chop__switch-key--on::after {
+  background: var(--accent);
+  transform: translateX(4.8cqw);
+}
+
 .chop__go {
   flex: none;
   height: 12cqw;
@@ -1832,7 +1893,8 @@
   display: flex;
   align-items: center;
   gap: 2.5cqw;
-  padding: 1.6cqw 2cqw;
+  min-height: 9cqw;
+  padding: 2.4cqw 2cqw;
   border: 0;
   border-radius: 1cqw;
   background: var(--chassis1);
@@ -1842,6 +1904,23 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-align: left;
+}
+
+.chop__bin-trash {
+  flex: none;
+  width: 9cqw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 1cqw;
+  background: var(--chassis1);
+  color: var(--ink2, var(--ink));
+}
+
+.chop__bin-trash svg {
+  width: 5cqw;
+  height: 5cqw;
 }
 
 .chop__bin-swatch {

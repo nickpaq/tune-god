@@ -23,6 +23,7 @@ import {
 import { bpmAt, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
 import { buildPyramid } from "../audio/song/waveform";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
+import { DELETE_ICON } from "./dropIcons";
 import { Knob } from "./Knob";
 import { useSongPlayer } from "./useSongPlayer";
 import type { SongKey } from "../audio/song/keyOffset";
@@ -38,6 +39,8 @@ export interface ChopSettings {
   plans: SectionPlan[];
   /** The song's key as detected (null when no beat, so no key, was found): what the key picked on the piano is compared with. */
   key: SongKey | null;
+  /** One long pattern holding every chop in turn (true), or a pattern for every chop (false). */
+  longPattern: boolean;
 }
 
 /** What the automatic detection found: the tempo and where bar 1 starts. */
@@ -80,6 +83,7 @@ export function SongChopModal({
   beatsPerBar,
   freeSlots,
   unit = "pattern",
+  startLong = false,
   onConfirm,
   onClose,
 }: {
@@ -92,6 +96,8 @@ export function SongChopModal({
   freeSlots: number;
   /** What the chop makes: a pattern per section (acapella mode) or a chop on the chopper (chopper mode). */
   unit?: "pattern" | "chop";
+  /** Whether the patterns switch starts on one long pattern (a sample opened as an audio file). */
+  startLong?: boolean;
   onConfirm: (settings: ChopSettings) => void;
   onClose: () => void;
 }) {
@@ -121,6 +127,8 @@ export function SongChopModal({
   };
   /** Whether scrubbing pulls the line onto grid lines and markers; off, to place a marker exactly where the sound is. */
   const [magnetOn, setMagnetOn] = useState(true);
+  /** Patterns for every chop, or one long pattern. */
+  const [longPattern, setLongPattern] = useState(startLong);
 
 
   // The song's tempo, bar 1 and key are found in the background.
@@ -312,7 +320,7 @@ export function SongChopModal({
     const chosen = planSections(totalFrames, grid, picked);
     if (chosen.length === 0) return setStatus("No whole bars to chop");
     change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)) }, `Chopped by ${bars}`);
-    onConfirm({ bpm: bpmAt(grid, picked[0].first), beatsPerBar, plans: chosen, key: detectedKey });
+    onConfirm({ bpm: bpmAt(grid, picked[0].first), beatsPerBar, plans: chosen, key: detectedKey, longPattern });
   };
 
   autoChopRef.current = autoChop;
@@ -339,6 +347,17 @@ export function SongChopModal({
     // With a downbeat marker the grid is already measured: the 1.1.1 names a bar line, so it sits exactly on the nearest one instead of on a transient.
     const frame = marks.downbeats.length > 0 ? lineFrame(grid, barLineNear(grid, cursor)) : attackNear(cursor);
     change({ ...marks, oneOne: frame, chops: [...others, frame] }, `1.1.1 and chop set at ${formatTime(frame / sampleRate)}`);
+  };
+
+  /**
+   * Takes a chop out of the list. The chop that starts at its first line goes (the one before it then runs on to the next marker), except the last chop,
+   * which goes by its end marker. Every chop after it moves up one place, so the numbers stay whole.
+   */
+  const deleteChop = (i: number) => {
+    if (!grid) return;
+    const s = sections[i];
+    const line = i === sections.length - 1 ? s.last : s.first;
+    change({ ...marks, chops: marks.chops.filter((f) => barLineNear(grid, f) !== line) }, `${unit === "chop" ? "Chop" : "Section"} ${i + 1} deleted`);
   };
 
   const stepHistory = (step: typeof undo, message: string) => {
@@ -423,14 +442,6 @@ export function SongChopModal({
             </button>
           </div>
           <div className="chop__row">
-            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops the vocal into patterns.">
-              Chop by 8
-            </button>
-            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song and chops the vocal into patterns.">
-              Chop by 16
-            </button>
-          </div>
-          <div className="chop__row">
             <button className="chop__btn chop__grow" disabled={history.past.length === 0} onClick={() => stepHistory(undo, "Undone")}>
               Undo
             </button>
@@ -447,19 +458,38 @@ export function SongChopModal({
                 <div key={s.first} className="chop__bin-row">
                   <button className="chop__bin-main" onClick={() => timeline.current?.setCursor(lineFrame(grid, s.first))}>
                     <span className="chop__bin-swatch" style={{ background: colorOf(i) }} />
-                    <span>Section {i + 1}</span>
+                    <span>{unit === "chop" ? "Chop" : "Section"} {i + 1}</span>
                     <span className="chop__bin-bars">{tooLong(grid, s) ? `${barsText(barsIn(grid, s))}, max ${MAX_SECTION_BARS}` : barsText(barsIn(grid, s))}</span>
+                  </button>
+                  <button className="chop__bin-trash" onClick={() => deleteChop(i)} aria-label={`Delete ${unit === "chop" ? "chop" : "section"} ${i + 1}`}>
+                    <svg viewBox="0 0 20 20" aria-hidden="true" shapeRendering="crispEdges">
+                      {DELETE_ICON.flatMap((row, y) => [...row].map((c, x) => (c === "#" ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null)))}
+                    </svg>
                   </button>
                 </div>
               ))
             )}
           </div>
 
+          <div className="chop__row">
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops it straight away.">
+              Split by 8
+            </button>
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song and chops it straight away.">
+              Split by 16
+            </button>
+          </div>
         </div>
 
-        <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, key: detectedKey })}>
-          Chop into {fits} {unit}{fits === 1 ? "" : "s"}
-        </button>
+        <div className="chop__gorow">
+          <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, key: detectedKey, longPattern })}>
+            Chop into {fits} {unit}{fits === 1 ? "" : "s"}
+          </button>
+          <button className="chop__switch" role="switch" aria-checked={longPattern} onClick={() => setLongPattern((on) => !on)} title="Patterns for every chop writes a pattern per chop. One long pattern writes a single pattern that plays every chop in turn.">
+            <span className={`chop__switch-key${longPattern ? " chop__switch-key--on" : ""}`} />
+            <span>{longPattern ? "One long pattern" : "Patterns for every chop"}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
