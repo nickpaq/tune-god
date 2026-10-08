@@ -18,10 +18,10 @@
   position: relative;
   container-type: inline-size;
   width: min(100%, 370px);
-  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  /* every gap (kicker, title, tiles, chips) equals the padding under the last row, so the card is as short as it can be */
+  gap: 6cqw;
   padding: 6cqw;
   border-radius: 4cqw;
   background: var(--chassis1);
@@ -147,8 +147,8 @@
 .gate__mark {
   position: absolute;
   top: 5cqw;
-  right: 5cqw;
-  width: 36cqw;
-  height: 36cqw;
+  right: 8cqw;
+  width: 32cqw;
+  height: 32cqw;
   pointer-events: none;
 }
