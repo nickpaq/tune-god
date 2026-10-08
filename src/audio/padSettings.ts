@@ -10,8 +10,8 @@ import { ACTIVE_MIX_PRESET, type PadEq } from "./mixPresets";
 
 export type { PadEq };
 
-/** Koala's stretch modes by name, as the pad's `stretch` field. Modern is what Koala writes by default (read from stretch-5-bars.koala). Beats is NOT confirmed: save a pad set to Beats in Koala and read its `stretch` field to check this number. */
-export const STRETCH_MODE = { modern: 1, beats: 2 } as const;
+/** Koala's stretch modes as the pad's `stretch` field, read from docs/calibration/stretch-all-modes.koala (pads in the order of the mode picker): Modern 1, Retro 2, Beats 3, Repitch 4, Cyclic 5. */
+export const STRETCH_MODE = { modern: 1, retro: 2, beats: 3, repitch: 4, cyclic: 5 } as const;
 
 export interface PadPlayback {
   eq?: PadEq;
