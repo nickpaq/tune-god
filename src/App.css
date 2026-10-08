@@ -2018,7 +2018,7 @@
   height: 5.6cqw;
   scroll-snap-align: center;
   touch-action: pan-y;
-  filter: brightness(0.7) contrast(0.8);
+  filter: brightness(0.7) saturate(1.2);
 }
 
 /* the row in the middle is the one that counts: full brightness and contrast */

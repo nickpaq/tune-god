@@ -65,13 +65,13 @@ function RowCanvas({ peaks, color, tail, eighths, len, span }: { peaks: Peaks | 
     // The end of the slot before, to the left of the playhead.
     if (tail) {
       ctx.fillStyle = tail;
-      ctx.globalAlpha = 0.3;
+      ctx.globalAlpha = 0.6;
       ctx.fillRect(0, 0, x0, h);
     }
     // The chop, shaded in its colour, with its waveform; what will not play is dimmed.
     const full = Math.min(w, Math.round(x(eighths)));
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.3;
+    ctx.globalAlpha = 0.6;
     ctx.fillRect(x0, 0, full - x0, h);
     ctx.fillStyle = ink;
     ctx.globalAlpha = 1;
