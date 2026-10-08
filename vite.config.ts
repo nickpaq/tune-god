@@ -24,7 +24,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.png", "apple-touch-icon.png"],
+      includeAssets: ["favicon.png", "apple-touch-icon.png", "favicon-light.png", "apple-touch-icon-light.png"],
       // Precache everything so the app works fully offline after the first load.
       workbox: {
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,

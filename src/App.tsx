@@ -23,7 +23,7 @@ import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/lo
 import { balancedSpread } from "./audio/spread";
 import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { chopColor, colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
-import { applyScheme } from "./audio/theme";
+import { applyIconLinks, applyScheme } from "./audio/theme";
 import { SchemeModal } from "./components/SchemeModal";
 import { CHOP_BANK_START, emptyPadInBank, inChopBank, movePad, nextEmptyPad, PADS_PER_BANK, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
@@ -231,6 +231,9 @@ function App() {
   const [paletteId, setPaletteId] = useState(paletteById(saved.paletteId ?? DEFAULT_PALETTE_ID).id);
   const palette = paletteById(paletteId);
   const [schemeOpen, setSchemeOpen] = useState(false);
+  /** The icon the page offers to the browser and to iOS's Add to Home Screen: dark (the default) or light (iconLinks in theme.ts). */
+  const [iconLight, setIconLight] = useState(saved.iconLight ?? false);
+  useLayoutEffect(() => applyIconLinks(iconLight), [iconLight]);
   useLayoutEffect(() => applyScheme(palette, document.documentElement), [palette]);
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
@@ -433,8 +436,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, paletteId, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
-  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, paletteId, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
+    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, paletteId, iconLight, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
+  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, paletteId, iconLight, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -2359,7 +2362,7 @@ function App() {
           />
         )}
 
-        {schemeOpen && <SchemeModal currentId={palette.id} onPick={(p) => setPaletteId(p.id)} onClose={() => setSchemeOpen(false)} />}
+        {schemeOpen && <SchemeModal currentId={palette.id} onPick={(p) => setPaletteId(p.id)} iconLight={iconLight} onIconLight={setIconLight} onClose={() => setSchemeOpen(false)} />}
 
         {extraPrompt && (
           <ExtraDrumsModal

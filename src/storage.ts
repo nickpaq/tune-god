@@ -52,6 +52,8 @@ export interface SavedState {
   /** How much of a dropped sample pack to load: "auto" guesses from the device. */
   packMemory?: "low" | "auto" | "high";
   paletteId?: string;
+  /** The app icon's look: the light version (white, no border) instead of the dark one. */
+  iconLight?: boolean;
   toneOn?: boolean;
   /** The reference tone's volume knob, 0 to 1 (0.5 is the level matched to the sound). */
   toneVolume?: number;

@@ -1283,6 +1283,34 @@
   color: var(--ink3);
 }
 
+.icon-switch {
+  display: flex;
+  align-items: center;
+  gap: 2cqw;
+  font-size: 3.2cqw;
+  color: var(--ink3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.icon-switch span {
+  flex: 1;
+}
+
+.icon-switch button {
+  padding: 1.6cqw 4cqw;
+  border: 0;
+  border-radius: 1.6cqw;
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 2px 0 var(--key-edge);
+  color: var(--key-ink);
+  font: inherit;
+}
+
+.icon-switch button.icon-switch--on {
+  box-shadow: inset 0 0 0 2px var(--accent), 0 2px 0 var(--key-edge);
+}
+
 .palette-modal__list {
   display: flex;
   flex-direction: column;

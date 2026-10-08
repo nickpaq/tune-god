@@ -63,3 +63,12 @@ export function applyScheme(palette: Palette, root: StyleTarget): void {
     else root.style.setProperty(name, value);
   }
 }
+
+/** Point the page's favicon and iOS home-screen icon at the light or the dark artwork (public/*-light.png). Installed icons only change when the app is added again. */
+export function applyIconLinks(light: boolean, doc: Document = document): void {
+  const suffix = light ? "-light" : "";
+  const icon = doc.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (icon) icon.href = `/favicon${suffix}.png`;
+  const touch = doc.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+  if (touch) touch.href = `/apple-touch-icon${suffix}.png`;
+}
