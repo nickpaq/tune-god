@@ -203,7 +203,8 @@ export function SongChopModal({
   const sections = useMemo(() => sectionsBetween(lines), [lines]);
   const plans = useMemo(() => (grid ? planSections(totalFrames, grid, sections) : []), [grid, totalFrames, sections]);
   const fits = Math.min(plans.length, freeSlots);
-  const longOnes = grid ? sections.map((s, i) => (tooLong(grid, s) ? i + 1 : 0)).filter(Boolean) : [];
+  // Chopper mode has no limit on a section's length (acapella and synced mode keep the 16 bar maximum).
+  const longOnes = grid && !fine ? sections.map((s, i) => (tooLong(grid, s) ? i + 1 : 0)).filter(Boolean) : [];
   const detectedKey = detected && detected !== "none" ? detected.key : null;
   const tempo = grid ? bpmAt(grid, sections.length > 0 ? sections[0].first : 0) : 0;
 
@@ -323,10 +324,10 @@ export function SongChopModal({
     if (marks.oneOne !== null && line < barLineNear(grid, marks.oneOne)) return setStatus("The 1.1.1 is the first chop: nothing before it");
     const there = marks.chops.find((f) => lineOf(f) === line);
     if (there !== undefined) return change({ ...marks, chops: marks.chops.filter((f) => f !== there) }, `Chop removed at ${formatTime(at / sampleRate)}`);
-    // A section may not pass 16 bars: markers fill in every 16 bars from the nearest chop before this one when it is further back than that.
+    // Outside chopper mode a section may not pass 16 bars: markers fill in every 16 bars from the nearest chop before this one when it is further back than that.
     const before = lines.filter((n) => n < line).pop();
     const filler: number[] = [];
-    if (before !== undefined) for (let n = before + MAX_SECTION_BARS * grid.beatsPerBar; n < line; n += MAX_SECTION_BARS * grid.beatsPerBar) filler.push(lineFrame(grid, n));
+    if (before !== undefined && !fine) for (let n = before + MAX_SECTION_BARS * grid.beatsPerBar; n < line; n += MAX_SECTION_BARS * grid.beatsPerBar) filler.push(lineFrame(grid, n));
     change({ ...marks, chops: [...marks.chops, ...filler, cursor] }, `Chop added at ${formatTime(at / sampleRate)}${filler.length ? ` (+${filler.length} at 16 bars)` : ""}`);
   };
 
@@ -334,7 +335,7 @@ export function SongChopModal({
   const autoChop = (frame: number) => {
     const g = gridRef.current;
     const ls = linesRef.current;
-    if (!g || ls.length === 0) return;
+    if (!g || ls.length === 0 || fine) return;
     const step = MAX_SECTION_BARS * g.beatsPerBar;
     const next = ls[ls.length - 1] + step;
     if (frame < lineFrame(g, next) || lineFrame(g, next) >= totalFrames) return;
@@ -419,9 +420,8 @@ export function SongChopModal({
     const old = marks.oneOne;
     const others = old === null ? marks.chops : marks.chops.filter((f) => f !== old);
     if (old !== null && Math.abs(old - cursor) <= grid.segments[0].beatFrames / 4) return change({ ...marks, oneOne: null, chops: others }, "1.1.1 removed");
-    // With a downbeat marker, or a 1.1.1 already set, the grid is already measured (and maybe adjusted): the 1.1.1 names a bar line of it, so it
-    // sits exactly on the nearest one instead of on a transient, and the grid does not change.
-    const frame = marks.downbeats.length > 0 || old !== null ? lineFrame(grid, barLineNear(grid, cursor)) : attackNear(cursor);
+    // Completely free: exactly the cursor's frame, with no snapping to an attack or a bar line. The grid is anchored on it (gridWithMarks).
+    const frame = Math.round(cursor);
     change({ ...marks, oneOne: frame, chops: [...others, frame] }, `1.1.1 and chop set at ${formatTime(frame / sampleRate)}`);
   };
 
@@ -534,7 +534,7 @@ export function SongChopModal({
                   <button className="chop__bin-main" onClick={() => timeline.current?.setCursor(lineFrame(grid, s.first))}>
                     <span className="chop__bin-swatch" style={{ background: colorOf(i) }} />
                     <span>Section {i + 1}</span>
-                    <span className="chop__bin-bars">{tooLong(grid, s) ? `${barsText(barsIn(grid, s))}, max ${MAX_SECTION_BARS}` : barsText(barsIn(grid, s))}</span>
+                    <span className="chop__bin-bars">{!fine && tooLong(grid, s) ? `${barsText(barsIn(grid, s))}, max ${MAX_SECTION_BARS}` : barsText(barsIn(grid, s))}</span>
                   </button>
                 </div>
               ))

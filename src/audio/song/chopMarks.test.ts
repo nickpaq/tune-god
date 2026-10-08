@@ -36,10 +36,9 @@ describe("gridWithMarks", () => {
     expect(barLineNear(grid, 1100)).toBe(-80);
   });
 
-  it("lets the 1.1.1 only name bar 1 once a downbeat marker has measured the grid", () => {
-    const measured = gridWithMarks(base, marks([3040]));
+  it("puts a bar line exactly on the 1.1.1 even after a downbeat marker has measured the grid", () => {
     const withOne = gridWithMarks(base, marks([3040], 777));
-    expect(withOne).toEqual(measured);
+    expect(lineFrame(withOne, barLineNear(withOne, 777))).toBe(777);
   });
 
   it("keeps the detected tempo with one anchor", () => {
@@ -182,6 +181,15 @@ describe("a tempo set by hand", () => {
   it("is not bent by the fit through downbeat markers", () => {
     const grid = gridWithMarks(base, { downbeats: [1000, 3010, 5030], oneOne: null, tempoScale: 1, bpm: 120 });
     expect(bpmAt(grid, 0)).toBeCloseTo(120, 6);
+  });
+});
+
+describe("the 1.1.1 is free", () => {
+  it("a bar line lies exactly on it, with or without downbeat markers", () => {
+    for (const downbeats of [[], [1000, 3010], [7290]]) {
+      const grid = gridWithMarks(base, { downbeats, oneOne: 7321, tempoScale: 1 });
+      expect(lineFrame(grid, barLineNear(grid, 7321))).toBe(7321);
+    }
   });
 });
 

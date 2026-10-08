@@ -41,8 +41,8 @@ export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, d
 }
 
 /**
- * The grid with the markers applied. Every downbeat marker is an anchor: a frame where a bar starts. The 1.1.1 is one too only while there is no downbeat
- * marker; with one, it just names the bar line that is bar 1 and never moves the grid or the tempo. The first anchor is where bars are
+ * The grid with the markers applied. Every downbeat marker is an anchor: a frame where a bar starts. The 1.1.1 is one too, always, and exactly where it was
+ * put (it is free: nothing snaps it to an attack or to a bar line, so a bar line lies on it). The first anchor is where bars are
  * counted from, and the lines tile backwards from it as well as forwards (a 1.1.1 set midway through the song gives the intro its grid too). With one
  * anchor the grid keeps the detected tempo. With more, the tempo is fitted through all of them (a straight line through anchor frame against bars
  * counted, so the BPM homes in on the exact one as markers are added) and is a single tempo for the whole song; each anchor then re-locks the phase from
@@ -52,10 +52,10 @@ export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "o
   const bpb = base.beatsPerBar;
   const byHand = marks.bpm != null && marks.bpm > 0;
   const detected = byHand ? (60 * base.sampleRate) / marks.bpm! : base.segments[0].beatFrames / marks.tempoScale;
-  // The 1.1.1 only says which bar is bar 1 once a downbeat marker has measured the grid; on its own it is the one anchor there is.
-  // A tempo changed by hand (or halved or doubled) turns the grid about the 1.1.1: it stays on its place in the waveform and every other line moves.
-  const pivot = marks.oneOne !== null && (byHand || marks.tempoScale !== 1);
-  const frames = [...new Set(pivot ? [marks.oneOne!, ...marks.downbeats] : marks.oneOne === null || marks.downbeats.length > 0 ? marks.downbeats : [marks.oneOne])].sort((a, b) => a - b);
+  // The 1.1.1 is always an anchor, exactly where it was put (no snapping to an attack or a bar line), so a bar line lies on it whatever else is set.
+  // A tempo changed by hand (or halved or doubled) turns the grid about it: it stays on its place in the waveform and every other line moves.
+  const one = marks.oneOne;
+  const frames = [...new Set(one === null ? marks.downbeats : [one, ...marks.downbeats])].sort((a, b) => a - b);
   if (frames.length === 0) return marks.tempoScale === 1 && !byHand ? base : { ...base, segments: [{ ...base.segments[0], beatFrames: detected }] };
 
   let beat = detected;
@@ -64,7 +64,11 @@ export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "o
     const last = anchors[anchors.length - 1];
     // Whole bars from the last anchor, by the tempo so far (a marker less than half a bar on from one is the same bar, and is left out).
     const bars = Math.round((frame - last.frame) / (beat * bpb));
-    if (bars < 1) continue;
+    // (a downbeat marker that close to the 1.1.1 gives way to it: the 1.1.1 stays exact)
+    if (bars < 1) {
+      if (frame === one) last.frame = frame;
+      continue;
+    }
     anchors.push({ bars: last.bars + bars, frame });
     // The tempo fitted through every anchor so far (a tempo set by hand stays).
     if (byHand) continue;
