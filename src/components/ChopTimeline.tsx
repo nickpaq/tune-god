@@ -12,6 +12,11 @@ const MIN_BAR_PX = 30;
 /** Zooming in eases up over about this much travel below the waveform (px); zooming out has no ease. */
 const ZOOM_EASE_PX = 60;
 
+/** Momentum after a scrub: the glide slows with this time constant (ms); in snap mode it is shorter, so the glide into the nearest line is barely changed. A release this long (ms) after the last movement glides nowhere; the glide ends below 0.02 px/ms. */
+const COAST_TAU_MS = 260;
+const COAST_SNAP_TAU_MS = 70;
+const COAST_STALE_MS = 70;
+
 /** In chopper mode the grid goes finer as the view zooms in (beats, eighths, sixteenths, never finer): a subdivision narrower than this on the screen (CSS pixels) is not drawn or snapped to. */
 const MIN_STEP_PX = 10;
 /** How much of the song the first view shows, in seconds. */
@@ -77,6 +82,8 @@ export const ChopTimeline = forwardRef<
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
   const drag = useRef<{ id: number; startX: number; startY: number; y0: number; moved: boolean; pivot: number; span: number } | null>(null);
+  /** The playhead's recent positions while scrubbing, for the glide on release. */
+  const trail = useRef<{ t: number; cursor: number }[]>([]);
   const settling = useRef(0);
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
@@ -269,6 +276,7 @@ export const ChopTimeline = forwardRef<
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     cancelAnimationFrame(settling.current);
+    trail.current = [];
     if (drag.current) return;
     const { cursor, span } = view.current;
     drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, y0: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span };
@@ -337,6 +345,8 @@ export const ChopTimeline = forwardRef<
     view.current = { cursor: view.current.cursor, span };
     const raw = Math.min(total, Math.max(0, start + span / 2));
     setCursor(raw);
+    const now = performance.now();
+    trail.current = [...trail.current.filter((p) => now - p.t < 100), { t: now, cursor: raw }];
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -345,7 +355,32 @@ export const ChopTimeline = forwardRef<
     drag.current = null;
     if (!d.moved) return;
     const resumed = latest.current.onScrubEnd();
-    if (!resumed && latest.current.magnetOn) settle();
+    if (resumed) return;
+    const settleAfter = () => {
+      if (latest.current.magnetOn) settle();
+    };
+    // Momentum: carry on at the speed the waveform was moving, slowing to a stop. The zoom stays as it was left.
+    const now = performance.now();
+    const first = trail.current[0];
+    const last = trail.current[trail.current.length - 1];
+    trail.current = [];
+    if (!first || !last || last === first || now - last.t > COAST_STALE_MS) return settleAfter();
+    const speed = (last.cursor - first.cursor) / (last.t - first.t);
+    const tau = latest.current.magnetOn ? COAST_SNAP_TAU_MS : COAST_TAU_MS;
+    let v = speed;
+    let prev = now;
+    cancelAnimationFrame(settling.current);
+    const glide = (t: number) => {
+      const dt = Math.min(50, t - prev);
+      prev = t;
+      const before = view.current.cursor;
+      setCursor(before + v * dt);
+      v *= Math.exp(-dt / tau);
+      const atEdge = view.current.cursor === before && v !== 0;
+      if ((Math.abs(v) * (canvas.current?.clientWidth ?? 1)) / view.current.span < 0.02 || atEdge) return settleAfter();
+      settling.current = requestAnimationFrame(glide);
+    };
+    settling.current = requestAnimationFrame(glide);
   };
 
   useEffect(() => () => cancelAnimationFrame(settling.current), []);
