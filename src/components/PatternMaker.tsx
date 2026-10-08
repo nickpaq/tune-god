@@ -2,14 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getAudioContext } from "../audio/decode";
 import { buildPyramid, columnPeaks, type PeakPyramid } from "../audio/song/waveform";
 import {
-  chopEighths,
+  chopSteps,
   defaultSilence,
   dragLength,
   maxSilence,
-  MIN_EIGHTHS,
+  MIN_STEPS,
   orderChops,
   positionText,
   renderSequence,
+  STEPS_PER_BEAT,
+  stepsPerBar,
   setSlot,
   slotStarts,
   type MakerChop,
@@ -40,9 +42,9 @@ interface Peaks {
 
 /**
  * One row, drawn the way the chop editor's screen is: black, the chop shaded in its colour with the waveform in the screen's ink over it, and a line in the chop's colour where it starts. The playhead is the line near the left, with the end of the slot before shaded to its left. The row
- * is one beat-square tall. Every row is on the same scale (`span` eighth notes across the rest), so the chops line up as blocks.
+ * is one beat-square tall. Every row is on the same scale (`span` steps across the rest), so the chops line up as blocks.
  */
-function RowCanvas({ peaks, color, eighths, len, span }: { peaks: Peaks | null; color: string; eighths: number; len: number; span: number }) {
+function RowCanvas({ peaks, color, steps, len, span }: { peaks: Peaks | null; color: string; steps: number; len: number; span: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -63,7 +65,7 @@ function RowCanvas({ peaks, color, eighths, len, span }: { peaks: Peaks | null; 
     ctx.fillRect(0, 0, w, h);
 
     // The chop, shaded in its colour, with its waveform; what will not play is dimmed.
-    const full = Math.min(w, Math.round(x(eighths)));
+    const full = Math.min(w, Math.round(x(steps)));
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.3; // the same tint as the chop editor's sections
     ctx.fillRect(x0, 0, full - x0, h);
@@ -79,7 +81,7 @@ function RowCanvas({ peaks, color, eighths, len, span }: { peaks: Peaks | null; 
         ctx.fillRect(x0 + col, h - level * k - one, 1, level * k + one);
       }
     }
-    if (len < eighths) {
+    if (len < steps) {
       const from = Math.min(w, Math.round(x(len)));
       ctx.fillStyle = "#000";
       ctx.globalAlpha = 0.55;
@@ -95,7 +97,7 @@ function RowCanvas({ peaks, color, eighths, len, span }: { peaks: Peaks | null; 
     }
     ctx.fillStyle = ink;
     ctx.fillRect(x0 - thick, 0, thick, h);
-  }, [peaks, color, eighths, len, span]);
+  }, [peaks, color, steps, len, span]);
   return <canvas ref={ref} className="maker__canvas" />;
 }
 
@@ -139,7 +141,7 @@ function TailCanvas({ peaks, color, from, to }: { peaks: Peaks | null; color: st
  * The pattern maker (chopper mode, "Finish and open pattern maker"): the chops stacked in a scrolling list, one beat-square tall each, the one nearest the
  * playhead's place in the bar at the bottom. The row in the middle (the selection zone) is the one that counts. A tap on the row in the zone puts it at the
  * playhead (and the playhead moves to its end); a tap on any other row plays it, and a double tap scrolls it into the zone; a tap on the bit of the slot
- * before that shows left of the playhead plays that slot from its beginning. Dragging along a row sets how many eighth notes of it play, and dragging back past
+ * before that shows left of the playhead plays that slot from its beginning. Dragging along a row sets how many steps (sixteenth notes) of it play, and dragging back past
  * nothing cuts the chop before it short. With Scroll play on, rows play as they scroll into the zone. The view zooms out to fit a chop longer than it shows. The arrows
  * select a slot to change; the transport plays the sequence; Done hands it back.
  */
@@ -168,7 +170,7 @@ export function PatternMaker({
   const [sel, setSel] = useState(initial.length);
   /** Lengths the finger set on rows, by row, until the choice is made. */
   const [lens, setLens] = useState<Record<string, number>>({});
-  /** Eighths the drag has cut off the slot before the selected one, not yet let go. */
+  /** Steps the drag has cut off the slot before the selected one, not yet let go. */
   const [trim, setTrim] = useState(0);
   const [centered, setCentered] = useState(0);
   const [visible, setVisible] = useState(12);
@@ -191,19 +193,19 @@ export function PatternMaker({
   /** The rows from the top down: the last chop of the order first, the silence last (just below the bottommost chop). */
   const rows = useMemo<RowKey[]>(() => [...orderChops(chops, playhead, beatsPerBar).reverse(), "s"], [chops, playhead, beatsPerBar]);
 
-  const fullOf = (key: RowKey) => (key === "s" ? defaultSilence(beatsPerBar) : chopEighths(chops[key], beatsPerBar));
-  const maxOf = (key: RowKey) => (key === "s" ? maxSilence(beatsPerBar) : chopEighths(chops[key], beatsPerBar));
+  const fullOf = (key: RowKey) => (key === "s" ? defaultSilence(beatsPerBar) : chopSteps(chops[key], beatsPerBar));
+  const maxOf = (key: RowKey) => (key === "s" ? maxSilence(beatsPerBar) : chopSteps(chops[key], beatsPerBar));
   /** What a row would play now: what the finger set, else the selected slot's own length when it holds this chop, else the whole chop (a bar of silence). */
   const lenOf = (key: RowKey) => {
     const set = lens[String(key)];
     if (set !== undefined) return set;
     const slot = sel < slots.length ? slots[sel] : undefined;
-    if (slot && (key === "s" ? slot.kind === "silence" : slot.kind === "chop" && slot.chop === key)) return slot.eighths;
+    if (slot && (key === "s" ? slot.kind === "silence" : slot.kind === "chop" && slot.chop === key)) return slot.steps;
     return fullOf(key);
   };
 
   // ---- the zoom: every row is on one scale, wide enough for the centred chop (or silence) and never under MIN_SPAN_BARS ----
-  const minSpan = MIN_SPAN_BARS * beatsPerBar * 2;
+  const minSpan = MIN_SPAN_BARS * stepsPerBar(beatsPerBar);
   const centeredKey = rows[Math.min(centered, rows.length - 1)];
   const targetSpan = Math.max(minSpan, centeredKey === "s" ? lenOf("s") : fullOf(centeredKey));
   const [span, setSpan] = useState(targetSpan);
@@ -280,9 +282,9 @@ export function PatternMaker({
     setTrim(0);
   };
   const confirm = (key: RowKey) => {
-    const eighths = lenOf(key);
-    if (eighths < MIN_EIGHTHS) return;
-    const slot: Slot = key === "s" ? { kind: "silence", eighths } : { kind: "chop", chop: key, eighths };
+    const steps = lenOf(key);
+    if (steps < MIN_STEPS) return;
+    const slot: Slot = key === "s" ? { kind: "silence", steps } : { kind: "chop", chop: key, steps };
     const next = setSlot(slots, sel, slot);
     setSlots(next);
     select(sel + 1, next.length);
@@ -300,9 +302,9 @@ export function PatternMaker({
       t.dragging = true;
       e.currentTarget.setPointerCapture(e.pointerId);
     }
-    const { eighths, trim: cut } = dragLength(t.startLen + Math.round((dx / t.width) * spanRef.current), maxOf(t.key));
-    const room = sel > 0 ? slots[sel - 1].eighths - MIN_EIGHTHS : 0;
-    setLens((l) => ({ ...l, [String(t.key)]: eighths }));
+    const { steps, trim: cut } = dragLength(t.startLen + Math.round((dx / t.width) * spanRef.current), maxOf(t.key));
+    const room = sel > 0 ? slots[sel - 1].steps - MIN_STEPS : 0;
+    setLens((l) => ({ ...l, [String(t.key)]: steps }));
     setTrim(Math.min(cut, room));
   };
   /** Scrolls the list so a row is in the selection zone; the rows passing do not play. */
@@ -334,7 +336,7 @@ export function PatternMaker({
     // Dragged back past nothing: the slot before is cut short and the playhead is back at its end, selected, to be dragged out again.
     if (trim > 0 && sel > 0) {
       const before = slots[sel - 1];
-      setSlots(setSlot(slots, sel - 1, { ...before, eighths: before.eighths - trim }));
+      setSlots(setSlot(slots, sel - 1, { ...before, steps: before.steps - trim }));
       setSel(sel - 1);
       setLens({});
       stopPlay();
@@ -359,7 +361,7 @@ export function PatternMaker({
   const voice = useRef<{ source: AudioBufferSourceNode; gain: GainNode; startedAt: number; offset: number; sequence: boolean } | null>(null);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
-  const eighthSeconds = beatFrames / 2 / sampleRate;
+  const stepSeconds = beatFrames / STEPS_PER_BEAT / sampleRate;
   function stopPlay() {
     const v = voice.current;
     voice.current = null;
@@ -396,14 +398,14 @@ export function PatternMaker({
       }
     };
   };
-  const play = (fromEighth: number) => {
+  const play = (fromStep: number) => {
     if (slots.length === 0) return;
-    startBuffer(renderSequence(channelData, chops, slots, beatFrames), fromEighth * eighthSeconds, true);
+    startBuffer(renderSequence(channelData, chops, slots, beatFrames), fromStep * stepSeconds, true);
   };
-  /** One chop on its own: its first `eighths` eighth notes. */
-  function playChop(chop: number, eighths: number) {
+  /** One chop on its own: its first `steps` steps. */
+  function playChop(chop: number, steps: number) {
     const c = chops[chop];
-    const frames = Math.min(Math.round((eighths * beatFrames) / 2), c.length);
+    const frames = Math.min(Math.round((steps * beatFrames) / STEPS_PER_BEAT), c.length);
     const from = Math.max(0, c.start);
     startBuffer(
       channelData.map((d) => d.subarray(from, Math.min(d.length, from + frames))),
@@ -420,7 +422,7 @@ export function PatternMaker({
     const tick = () => {
       const v = voice.current;
       if (!v || !v.sequence) return;
-      setPlayAt((v.offset + (getAudioContext().currentTime - v.startedAt)) / eighthSeconds);
+      setPlayAt((v.offset + (getAudioContext().currentTime - v.startedAt)) / stepSeconds);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -429,23 +431,23 @@ export function PatternMaker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playAt === null]);
   useEffect(() => stopPlay, []);
-  const barEighths = beatsPerBar * 2;
-  const lastBar = Math.max(0, Math.floor((total - 1) / barEighths)) * barEighths;
+  const barSteps = stepsPerBar(beatsPerBar);
+  const lastBar = Math.max(0, Math.floor((total - 1) / barSteps)) * barSteps;
 
   // ---- the sequence strip ----
-  const shown = trim > 0 && sel > 0 ? setSlot(slots, sel - 1, { ...slots[sel - 1], eighths: slots[sel - 1].eighths - trim }) : slots;
+  const shown = trim > 0 && sel > 0 ? setSlot(slots, sel - 1, { ...slots[sel - 1], steps: slots[sel - 1].steps - trim }) : slots;
   const shownStarts = slotStarts(shown);
-  const stripSpan = Math.max(barEighths * 8, shownStarts.total + barEighths * 2);
+  const stripSpan = Math.max(barSteps * 8, shownStarts.total + barSteps * 2);
   const at = sel < shown.length ? shownStarts.starts[sel] : shownStarts.total;
   const stripColor = (s: Slot) => (s.kind === "chop" ? chops[s.chop].color : "transparent");
   /** The slot before the selected one: its end shows in one row at the bottom left of the list, left of the playhead; the rest of that side is black. */
   const before = sel > 0 ? shown[sel - 1] : undefined;
   const tailSpan = (span * MARGIN) / (1 - MARGIN);
   const beforeChop = before?.kind === "chop" ? chops[before.chop] : undefined;
-  const beforeFull = beforeChop ? chopEighths(beforeChop, beatsPerBar) : 1;
+  const beforeFull = beforeChop ? chopSteps(beforeChop, beatsPerBar) : 1;
 
   /** The grid markers are on the sequence only, where the chosen slots play: a line for every bar, and for every beat once they are wide enough to tell apart. */
-  const barPct = (barEighths / stripSpan) * 100;
+  const barPct = (barSteps / stripSpan) * 100;
   const beatPct = barPct / beatsPerBar;
   const line = (alpha: number) => `linear-gradient(to right, rgba(255,255,255,${alpha}) 1px, transparent 1px)`;
   const gridStyle: React.CSSProperties = {
@@ -480,7 +482,7 @@ export function PatternMaker({
                 <div
                   key={i}
                   className={`maker__block${s.kind === "silence" ? " maker__block--silence" : ""}${i === sel ? " maker__block--on" : ""}`}
-                  style={{ left: `${(shownStarts.starts[i] / stripSpan) * 100}%`, width: `${(s.eighths / stripSpan) * 100}%`, background: stripColor(s) }}
+                  style={{ left: `${(shownStarts.starts[i] / stripSpan) * 100}%`, width: `${(s.steps / stripSpan) * 100}%`, background: stripColor(s) }}
                 />
               ))}
               <div className="maker__grid" style={gridStyle} />
@@ -495,15 +497,15 @@ export function PatternMaker({
                   return (
                     <div key={String(key)} className={`maker__row${j === centered ? " maker__row--on" : ""}`} onPointerDown={down(key, j)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
                       {key === "s" && before && (
-                        <div className="maker__tail" onClick={() => before.kind === "chop" && playChop(before.chop, before.eighths)} aria-label="Play the slot before from its start">
-                          <TailCanvas peaks={before.kind === "chop" ? peaksOf(before.chop) : null} color={beforeChop?.color ?? "#8a8a8a"} from={Math.max(0, before.eighths - tailSpan) / beforeFull} to={before.eighths / beforeFull} />
+                        <div className="maker__tail" onClick={() => before.kind === "chop" && playChop(before.chop, before.steps)} aria-label="Play the slot before from its start">
+                          <TailCanvas peaks={before.kind === "chop" ? peaksOf(before.chop) : null} color={beforeChop?.color ?? "#8a8a8a"} from={Math.max(0, before.steps - tailSpan) / beforeFull} to={before.steps / beforeFull} />
                         </div>
                       )}
                       {Math.abs(j - centered) <= visible && (
                         <RowCanvas
                           peaks={chop ? peaksOf(key as number) : null}
                           color={chop?.color ?? "#8a8a8a"}
-                          eighths={chop ? fullOf(key) : lenOf("s")}
+                          steps={chop ? fullOf(key) : lenOf("s")}
                           len={Math.min(lenOf(key), maxOf(key))}
                           span={span}
                         />

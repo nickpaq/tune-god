@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { chopEighths, dragLength, needsGate, orderChops, patternBars, positionText, renderSequence, setSlot, slotNotes, slotStarts, type MakerChop, type Slot } from "./patternMaker";
+import { chopSteps, dragLength, needsGate, orderChops, patternBars, positionText, renderSequence, setSlot, slotNotes, slotStarts, type MakerChop, type Slot } from "./patternMaker";
 
-const chop = (barIndex: number, bars = 1, slice = barIndex + 1): MakerChop => ({ slice, start: barIndex * 1000, length: bars * 1000, bars, barIndex, colorIndex: barIndex, color: "#fff" });
+const chop = (barIndex: number, bars = 1, slice = barIndex + 1): MakerChop => ({ slice, start: barIndex * 1000, length: bars * 1000, bars, steps: bars * 16, barIndex, colorIndex: barIndex, color: "#fff" });
 // chops that started on bars 1 to 8 of the song (barIndex 0 to 7)
 const chops = Array.from({ length: 8 }, (_, i) => chop(i));
 
@@ -11,8 +11,8 @@ describe("orderChops", () => {
   });
 
   it("halfway through bar three lists the chops of bar three, then bar one, then bar four and bar two", () => {
-    // 8 eighths a bar in 4/4; halfway through bar 3 is eighth 2 * 8 + 4
-    expect(orderChops(chops, 20, 4)).toEqual([2, 6, 0, 4, 3, 7, 1, 5]);
+    // 16 steps a bar in 4/4; halfway through bar 3 is step 2 * 16 + 8
+    expect(orderChops(chops, 40, 4)).toEqual([2, 6, 0, 4, 3, 7, 1, 5]);
   });
 
   it("lists every chop once", () => {
@@ -21,23 +21,23 @@ describe("orderChops", () => {
 });
 
 describe("dragLength", () => {
-  it("takes lengths from one eighth to the whole chop", () => {
-    expect(dragLength(5, 16)).toEqual({ eighths: 5, trim: 0 });
-    expect(dragLength(1, 16)).toEqual({ eighths: 1, trim: 0 });
-    expect(dragLength(99, 16)).toEqual({ eighths: 16, trim: 0 });
+  it("takes lengths from one step (a sixteenth) to the whole chop", () => {
+    expect(dragLength(5, 16)).toEqual({ steps: 5, trim: 0 });
+    expect(dragLength(1, 16)).toEqual({ steps: 1, trim: 0 });
+    expect(dragLength(99, 16)).toEqual({ steps: 16, trim: 0 });
   });
 
   it("goes to nothing and then cuts the slot before short", () => {
-    expect(dragLength(0, 16)).toEqual({ eighths: 0, trim: 1 });
-    expect(dragLength(-3, 16)).toEqual({ eighths: 0, trim: 4 });
+    expect(dragLength(0, 16)).toEqual({ steps: 0, trim: 1 });
+    expect(dragLength(-3, 16)).toEqual({ steps: 0, trim: 4 });
   });
 });
 
 describe("slots", () => {
   const slots: Slot[] = [
-    { kind: "chop", chop: 2, eighths: 8 },
-    { kind: "silence", eighths: 4 },
-    { kind: "chop", chop: 0, eighths: 3 },
+    { kind: "chop", chop: 2, steps: 8 },
+    { kind: "silence", steps: 4 },
+    { kind: "chop", chop: 0, steps: 3 },
   ];
 
   it("lays the slots end to end", () => {
@@ -46,44 +46,47 @@ describe("slots", () => {
 
   it("makes a note per chop slot, at its place, and none for silence", () => {
     expect(slotNotes(slots, chops)).toEqual([
-      { slice: 3, start: 0, eighths: 8 },
-      { slice: 1, start: 12, eighths: 3 },
+      { slice: 3, start: 0, steps: 8 },
+      { slice: 1, start: 12, steps: 3 },
     ]);
   });
 
   it("rounds the pattern up to whole bars", () => {
-    expect(patternBars(slots, 4)).toBe(2);
+    expect(patternBars(slots, 4)).toBe(1);
+    expect(patternBars([{ kind: "silence", steps: 17 }], 4)).toBe(2);
     expect(patternBars([], 4)).toBe(1);
   });
 
-  it("cuts the slot before by the trim, never under one eighth, and can add or replace a slot", () => {
-    expect(setSlot(slots, 3, { kind: "silence", eighths: 8 }, 2)[2]).toEqual({ kind: "chop", chop: 0, eighths: 1 });
-    expect(setSlot(slots, 1, { kind: "silence", eighths: 6 })[1]).toEqual({ kind: "silence", eighths: 6 });
-    expect(setSlot(slots, 3, { kind: "silence", eighths: 8 })).toHaveLength(4);
+  it("cuts the slot before by the trim, never under one step, and can add or replace a slot", () => {
+    expect(setSlot(slots, 3, { kind: "silence", steps: 8 }, 2)[2]).toEqual({ kind: "chop", chop: 0, steps: 1 });
+    expect(setSlot(slots, 1, { kind: "silence", steps: 6 })[1]).toEqual({ kind: "silence", steps: 6 });
+    expect(setSlot(slots, 3, { kind: "silence", steps: 8 })).toHaveLength(4);
   });
 
   it("needs the note length to decide only when a slot is cut short or silence is used", () => {
-    expect(needsGate([{ kind: "chop", chop: 0, eighths: chopEighths(chops[0], 4) }], chops, 4)).toBe(false);
-    expect(needsGate([{ kind: "chop", chop: 0, eighths: 3 }], chops, 4)).toBe(true);
-    expect(needsGate([{ kind: "silence", eighths: 8 }], chops, 4)).toBe(true);
+    expect(needsGate([{ kind: "chop", chop: 0, steps: chopSteps(chops[0], 4) }], chops, 4)).toBe(false);
+    expect(needsGate([{ kind: "chop", chop: 0, steps: 3 }], chops, 4)).toBe(true);
+    expect(needsGate([{ kind: "silence", steps: 8 }], chops, 4)).toBe(true);
   });
 });
 
 describe("positionText", () => {
   it("counts bars and beats from 1.1", () => {
     expect(positionText(0, 4)).toBe("1.1");
-    expect(positionText(9, 4)).toBe("2.1+");
-    expect(positionText(20, 4)).toBe("3.3");
+    expect(positionText(9, 4)).toBe("1.3e");
+    expect(positionText(11, 4)).toBe("1.3a");
+    expect(positionText(20, 4)).toBe("2.2");
+    expect(positionText(40, 4)).toBe("3.3");
   });
 });
 
 describe("renderSequence", () => {
-  it("puts each chop at its place for the eighths it plays and leaves silence empty", () => {
+  it("puts each chop at its place for the steps it plays and leaves silence empty", () => {
     const data = [Float32Array.from({ length: 4000 }, (_, i) => i + 1)];
     const ch = [chop(0), chop(1)]; // 1000 frames each, bars of 4 beats
-    const out = renderSequence(data, ch, [{ kind: "chop", chop: 1, eighths: 2 }, { kind: "silence", eighths: 2 }, { kind: "chop", chop: 0, eighths: 100 }], 100); // 50 frames an eighth
-    // 2 eighths of chop 1 = 100 frames from 1000, then 100 of silence, then chop 0 for 100 eighths, which is cut to the chop's 1000 frames
-    expect(out[0]).toHaveLength(104 * 50);
+    const out = renderSequence(data, ch, [{ kind: "chop", chop: 1, steps: 4 }, { kind: "silence", steps: 4 }, { kind: "chop", chop: 0, steps: 100 }], 100); // 25 frames a step
+    // 4 steps of chop 1 = 100 frames from 1000, then 100 of silence, then chop 0 for 100 steps, which is cut to the chop's 1000 frames
+    expect(out[0]).toHaveLength(108 * 25);
     expect(out[0][0]).toBe(1001);
     expect(out[0][99]).toBe(1100);
     expect(out[0][100]).toBe(0);

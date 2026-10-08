@@ -3,7 +3,7 @@
 // and the velocity of a note picks the slice (`TRIGGER MODE` 1): the velocities are shared out over the slices, so one note from the lowest to the highest
 // velocity plays every slice in turn. The note's own pitch transposes the slice (0 here), and the pad pitch knob is in semitones. The pad plays at the sample's own tempo (no stretch), so the project tempo is written to match it.
 import type { SectionPlan } from "./song/chop";
-import type { MakerNote } from "./song/patternMaker";
+import { STEPS_PER_BEAT, type MakerNote } from "./song/patternMaker";
 import { emptySequence, isEmpty, SEQUENCE_SLOTS, TICKS_PER_BEAT } from "./exportSong";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
@@ -145,7 +145,7 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
   const free = sequences.map((s, i) => (isEmpty(s) ? i : -1)).filter((i) => i >= 0);
   let written = 0;
   if (chopper.pattern) {
-    // The pattern maker's sequence: one pattern, each note at its place (`timeOffset`, 2048 ticks to an eighth note) held for its eighths.
+    // The pattern maker's sequence: one pattern, each note at its place (`timeOffset`, 1024 ticks to a step, a sixteenth note) held for its steps.
     if (free.length > 0) {
       sequences[free[0]] = {
         ...emptySequence(),
@@ -154,13 +154,13 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
             numBars: chopper.pattern.bars,
             notes: chopper.pattern.notes.map((n) => ({
               chance: 1.0,
-              length: n.eighths * (TICKS_PER_BEAT / 2),
+              length: n.steps * (TICKS_PER_BEAT / STEPS_PER_BEAT),
               num: chopper.index + base,
               pan: -1.0078740119934082,
               pitch: 0.0,
               start: 0.0,
               subPad: -1,
-              timeOffset: n.start * (TICKS_PER_BEAT / 2),
+              timeOffset: n.start * (TICKS_PER_BEAT / STEPS_PER_BEAT),
               vel: sliceVelocity(n.slice, count),
             })),
           },

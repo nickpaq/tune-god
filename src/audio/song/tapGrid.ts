@@ -62,6 +62,24 @@ export function lineNear(grid: TapGrid, frame: number): number {
   return after && n >= after.line ? after.line - 1 : n;
 }
 
+/** Steps (sixteenth notes) to a beat: the finest the chopper's grid and chops go. */
+export const STEPS_PER_BEAT = 4;
+
+/** The position nearest `frame` on the grid of `perBeat` divisions to a beat (16ths by default), as a line number with a fraction (3.25 is a sixteenth after line 3). */
+export function fineLineNear(grid: TapGrid, frame: number, perBeat = STEPS_PER_BEAT): number {
+  const n = lineNear(grid, frame);
+  let best = n;
+  let distance = Infinity;
+  for (let k = (n - 1) * perBeat; k <= (n + 1) * perBeat; k++) {
+    const d = Math.abs(lineFrame(grid, k / perBeat) - frame);
+    if (d < distance) {
+      distance = d;
+      best = k / perBeat;
+    }
+  }
+  return best;
+}
+
 /** The numbers of the lines that fall between two frames, nudged lines included, in order. */
 export function linesBetween(grid: TapGrid, from: number, to: number): number[] {
   const lines: number[] = [];

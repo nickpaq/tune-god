@@ -9,6 +9,7 @@ import {
   barsIn,
   baseGrid,
   chopLines,
+  fineChopLines,
   commit,
   gridWithMarks,
   markerAt,
@@ -21,7 +22,7 @@ import {
   type Marks,
 } from "../audio/song/chopMarks";
 import type { DriftFix } from "../audio/song/driftFix";
-import { bpmAt, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
+import { bpmAt, fineLineNear, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
 import { buildPyramid } from "../audio/song/waveform";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
 import { Knob } from "./Knob";
@@ -110,6 +111,8 @@ export function SongChopModal({
   const pyramid = useMemo(() => buildPyramid(pad.channelData), [pad.channelData]);
   const mono = useMemo(() => mixToMono(pad.channelData), [pad.channelData]);
   const timeline = useRef<ChopTimelineHandle>(null);
+  /** Chopper mode: the grid and the chops go down to sixteenth notes (the pattern maker's finest step too). */
+  const fine = unit === "chop";
   const colorOf = (i: number) => chopColor(palette.colors, i);
 
   const [detected, setDetected] = useState<Detected | "none" | null>(null);
@@ -194,8 +197,9 @@ export function SongChopModal({
   const lines = useMemo(() => {
     if (!grid) return [];
     const first = marks.oneOne === null ? null : barLineNear(grid, marks.oneOne);
-    return chopLines(grid, marks.chops).filter((n) => first === null || n >= first);
-  }, [grid, marks.chops, marks.oneOne]);
+    // Chopper mode puts chops on sixteenth notes; the other modes keep them on bar lines.
+    return (fine ? fineChopLines(grid, marks.chops) : chopLines(grid, marks.chops)).filter((n) => first === null || n >= first);
+  }, [grid, marks.chops, marks.oneOne, fine]);
   const sections = useMemo(() => sectionsBetween(lines), [lines]);
   const plans = useMemo(() => (grid ? planSections(totalFrames, grid, sections) : []), [grid, totalFrames, sections]);
   const fits = Math.min(plans.length, freeSlots);
@@ -313,10 +317,11 @@ export function SongChopModal({
   const addChop = () => {
     if (!grid) return;
     const cursor = timeline.current?.cursor() ?? 0;
-    const line = barLineNear(grid, cursor);
+    const lineOf = (frame: number) => (fine ? fineLineNear(grid, frame) : barLineNear(grid, frame));
+    const line = lineOf(cursor);
     const at = lineFrame(grid, line);
     if (marks.oneOne !== null && line < barLineNear(grid, marks.oneOne)) return setStatus("The 1.1.1 is the first chop: nothing before it");
-    const there = marks.chops.find((f) => barLineNear(grid, f) === line);
+    const there = marks.chops.find((f) => lineOf(f) === line);
     if (there !== undefined) return change({ ...marks, chops: marks.chops.filter((f) => f !== there) }, `Chop removed at ${formatTime(at / sampleRate)}`);
     // A section may not pass 16 bars: markers fill in every 16 bars from the nearest chop before this one when it is further back than that.
     const before = lines.filter((n) => n < line).pop();
@@ -449,7 +454,7 @@ export function SongChopModal({
           <p className="chop__note">{note}</p>
 
           <div className="chop__screen">
-            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} onScrub={scrubStart} onScrubEnd={scrubEnd} />
+            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
             <div className="chop__readout">
               <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="Double tap: nearest whole BPM. Drag up or down to scrub; move right to go finer.">
                 {bpmText}
@@ -465,7 +470,7 @@ export function SongChopModal({
             <button className="chop__btn chop__grow" disabled={!grid} onClick={() => scaleTempo(2)} title="Double the tempo: the grid has two lines for every one of its beats" aria-label="Double the tempo">
               ×2
             </button>
-            <button className="chop__btn chop__grow" aria-pressed={magnetOn} onClick={() => setMagnetOn((on) => !on)} title="When you let go, lets the line glide onto the nearest bar line (every fourth bar when zoomed out). Turn it off to place a marker exactly where the sound is.">
+            <button className="chop__btn chop__grow" aria-pressed={magnetOn} onClick={() => setMagnetOn((on) => !on)} title="When you let go, lets the line glide onto the nearest grid line: bar lines, and in chopper mode beats, eighths and sixteenths as you zoom in (never finer; every fourth bar when zoomed out). Turn it off to place a marker exactly where the sound is.">
               Snap {magnetOn ? "on" : "off"}
             </button>
           </div>

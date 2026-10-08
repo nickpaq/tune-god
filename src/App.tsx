@@ -47,7 +47,7 @@ import { addChopperPad, CHOPPER_MAX_SLICES, fitPlans, sliceLayout, type ChopperE
 import { keyOffset } from "./audio/song/keyOffset";
 import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
 import { PatternMaker } from "./components/PatternMaker";
-import { needsGate, patternBars, slotNotes, type Slot } from "./audio/song/patternMaker";
+import { needsGate, patternBars, slotNotes, STEPS_PER_BEAT, type Slot } from "./audio/song/patternMaker";
 import { CHOPPER_MIN_SECONDS, ChopperSourceModal } from "./components/ChopperSourceModal";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
@@ -1018,7 +1018,15 @@ function App() {
     samplerJson.pads = [];
     const patterns = await addChopperPad(project, samplerJson, chopperExportOf(pad));
     if (!samplerJson.pads.some((p: any) => p.synth === "CHOPPER")) return { problem: "the chopper pad was not written" };
-    if (patterns === 0 && pad.chopper!.layout.sections.length > 0) return { problem: "the project has no free pattern (Koala has 32 pattern slots; free some and chop again)" };
+    if (patterns === 0 && (pad.chopper!.layout.sections.length > 0 || pad.chopper!.maker?.slots?.length)) return { problem: "the project has no free pattern (Koala has 32 pattern slots; free some and chop again)" };
+    // The pattern maker's arrangement is read back out of the written sequence.json: one note on the chopper per chop slot, or nothing is kept.
+    const maker = pad.chopper!.maker;
+    if (maker?.slots?.length) {
+      const wanted = slotNotes(maker.slots, maker.chops).length;
+      const sequence = JSON.parse((await project.zip.file("sequence.json")?.async("string")) ?? "{}");
+      const written = (sequence.sequences ?? []).flatMap((q: any) => q?.noteSequence?.pattern?.notes ?? []).filter((n: any) => Number(n.num) === pad.index + project.padBase).length;
+      if (written !== wanted) return { problem: `the pattern holds ${written} notes on the chopper instead of ${wanted}` };
+    }
     return { patterns };
   };
 
@@ -1080,6 +1088,7 @@ function App() {
                 start: plan.start,
                 length: plan.length,
                 bars: plan.bars,
+                steps: Math.max(1, Math.round((plan.length / ((60 * song.sampleRate) / settings.bpm)) * STEPS_PER_BEAT)),
                 barIndex: plan.barIndex ?? 0,
                 colorIndex: plan.colorIndex ?? i,
                 color: chopColor(palette.colors, plan.colorIndex ?? i),

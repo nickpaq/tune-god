@@ -96,7 +96,7 @@ describe("the chopper in the export", () => {
     const project = await load("probe-sidechain.koala");
     const source = project.samplerJson.pads[0];
     const layout = sliceLayout([plan(0, 1000, 0), plan(1000, 1000, 1)], 2000);
-    const pattern = { notes: [{ slice: 1, start: 0, eighths: 8 }, { slice: 0, start: 12, eighths: 3 }], bars: 2, gate: true };
+    const pattern = { notes: [{ slice: 1, start: 0, steps: 8 }, { slice: 0, start: 12, steps: 3 }], bars: 2, gate: true };
     const { blob } = await buildTunedKoala(project, [], {
       chopper: { index: 48, label: "Song chopper", sampleId: source.sampleId, sampleRate: 44100, channelData: [new Float32Array(2000)], layout, beatsPerBar: 4, pitch: 0, pattern },
     });
@@ -108,10 +108,10 @@ describe("the chopper in the export", () => {
     expect(held).toHaveLength(1);
     const made = held[0].noteSequence.pattern;
     expect(made.numBars).toBe(2);
-    // 2048 ticks to an eighth note
+    // 1024 ticks to a step
     expect(made.notes.map((n: any) => [n.timeOffset, n.length, n.vel])).toEqual([
-      [0, 8 * 2048, sliceVelocity(1, 2)],
-      [12 * 2048, 3 * 2048, sliceVelocity(0, 2)],
+      [0, 8 * 1024, sliceVelocity(1, 2)],
+      [12 * 1024, 3 * 1024, sliceVelocity(0, 2)],
     ]);
   });
 });

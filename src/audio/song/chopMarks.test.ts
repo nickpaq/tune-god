@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { barLineNear, baseGrid, chopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
-import { bpmAt, isBarLine, lineFrame, planSections } from "./tapGrid";
+import { barLineNear, baseGrid, chopLines, fineChopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
+import { bpmAt, fineLineNear, isBarLine, lineFrame, planSections } from "./tapGrid";
 
 const RATE = 1000;
 // 120 BPM: a beat is 500 frames, a 4/4 bar 2000, bar 1 at 1 s.
@@ -201,5 +201,25 @@ describe("the 1.1.1 as the pivot of a tempo change", () => {
     const moved = gridWithMarks(base, { downbeats: [], oneOne: lineFrame(first, line), tempoScale: 1, bpm: 100 });
     expect(lineFrame(moved, 4)).toBeCloseTo(lineFrame(first, line + 4), 6);
     expect(lineFrame(moved, 8)).toBeCloseTo(lineFrame(first, line + 8), 6);
+  });
+});
+
+describe("chops on sixteenth notes (chopper mode)", () => {
+  it("finds the nearest sixteenth, as a line with a fraction", () => {
+    // 120 BPM: a beat is 500 frames, a sixteenth 125, line 0 on frame 1000
+    expect(fineLineNear(base, 1000)).toBe(0);
+    expect(fineLineNear(base, 1000 + 130)).toBe(0.25);
+    expect(fineLineNear(base, 1000 + 330)).toBe(0.75);
+    expect(fineLineNear(base, 1000 - 130)).toBe(-0.25);
+    expect(lineFrame(base, 0.25)).toBe(1125);
+  });
+
+  it("makes sections of sixteenth lengths, and drops chops on the same sixteenth", () => {
+    const lines = fineChopLines(base, [1000, 1010, 1000 + 4 * 500 + 126]);
+    expect(lines).toEqual([0, 4.25]);
+    const plans = planSections(100000, base, sectionsBetween(lines));
+    expect(plans).toHaveLength(1);
+    expect(plans[0].start).toBe(1000);
+    expect(plans[0].length).toBe(2125);
   });
 });

@@ -9,6 +9,8 @@ const FLAG_H = 14;
 const MIN_SPAN_SECONDS = 0.25;
 /** A bar narrower than this on the screen (CSS pixels) is too small to be a line of its own: the grid then shows (and the snap takes) every fourth bar, and at the widest views every sixteenth. */
 const MIN_BAR_PX = 30;
+/** In chopper mode the grid goes finer as the view zooms in (beats, eighths, sixteenths, never finer): a subdivision narrower than this on the screen (CSS pixels) is not drawn or snapped to. */
+const MIN_STEP_PX = 10;
 /** How much of the song the first view shows, in seconds. */
 const START_SECONDS = 12;
 
@@ -26,6 +28,8 @@ export interface ChopTimelineHandle {
   setCursor: (frame: number) => void;
   /** Glides the line onto the nearest bar line and returns that line's frame (null with the magnet off or no line to go to). */
   snap: () => number | null;
+  /** The divisions to a beat the grid shows at this zoom (4, 2, 1), or 0 for bar lines only. */
+  division: () => number;
 }
 
 function formatTime(seconds: number): string {
@@ -58,13 +62,15 @@ export const ChopTimeline = forwardRef<
     onScrub: () => void;
     /** The finger let go after scrubbing. Returns true when playback carries on from where the line is, which skips the snap. */
     onScrubEnd: () => boolean;
+    /** Chopper mode: the grid and the snap go down to sixteenth notes when zoomed in, and chop markers may sit on them. */
+    fine?: boolean;
   }
->(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd }, ref) {
+>(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine = false }, ref) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const time = useRef<HTMLSpanElement>(null);
   const total = pyramid.totalFrames;
-  const latest = useRef({ grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd });
-  latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd };
+  const latest = useRef({ grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine });
+  latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine };
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
   const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number; span: number } | null>(null);
@@ -77,7 +83,29 @@ export const ChopTimeline = forwardRef<
    * bar is wide enough on the screen to tell apart, otherwise every fourth bar, and at the widest views every sixteenth (the longest a section may be).
    * They are counted from the grid's first bar.
    */
+  /** Divisions to a beat the grid shows at this zoom: 4 (sixteenths), 2, 1 (beats), or 0 for bar lines only (always 0 outside chopper mode). */
+  const divisionAt = (g: TapGrid, span: number, widthPx: number): number => {
+    if (!latest.current.fine) return 0;
+    const beatPx = (g.segments[0].beatFrames * widthPx) / span;
+    return beatPx / 4 >= MIN_STEP_PX ? 4 : beatPx / 2 >= MIN_STEP_PX ? 2 : beatPx >= MIN_STEP_PX ? 1 : 0;
+  };
+
   const gridLines = (g: TapGrid, from: number, to: number, span: number, widthPx: number): number[] => {
+    const d = divisionAt(g, span, widthPx);
+    if (d > 0) {
+      const beat = g.segments[0].beatFrames;
+      const lo = Math.max(0, from);
+      const hi = Math.min(total, to);
+      const out: number[] = [];
+      for (const n of linesBetween(g, lo - beat, hi + beat)) {
+        for (let j = 0; j < d; j++) {
+          const m = n + j / d;
+          const frame = lineFrame(g, m);
+          if (frame >= lo && frame <= hi) out.push(m);
+        }
+      }
+      return out;
+    }
     const barPx = (g.segments[0].beatFrames * g.beatsPerBar * widthPx) / span;
     const every = barPx >= MIN_BAR_PX ? 1 : barPx * 4 >= MIN_BAR_PX ? 4 : MAX_SECTION_BARS;
     const ref = g.downbeats[0] ?? 0;
@@ -140,8 +168,9 @@ export const ChopTimeline = forwardRef<
     if (g) {
       for (const n of gridLines(g, start, start + span, span, w / ratio)) {
         ctx.fillStyle = ink;
-        ctx.globalAlpha = 0.6;
-        const thick = Math.max(2, Math.round(1.5 * ratio));
+        // Bar lines strongest, beats lighter, the sixteenths and eighths between them lightest and thinnest.
+        ctx.globalAlpha = !Number.isInteger(n) ? 0.28 : divisionAt(g, span, w / ratio) > 0 && !isBarLine(g, n) ? 0.45 : 0.6;
+        const thick = Number.isInteger(n) ? Math.max(2, Math.round(1.5 * ratio)) : Math.max(1, Math.round(ratio));
         ctx.fillRect(Math.round(xOf(lineFrame(g, n))) - Math.floor(thick / 2), flag, thick, bottom - flag);
       }
       ctx.globalAlpha = 1;
@@ -223,6 +252,7 @@ export const ChopTimeline = forwardRef<
         setCursor(frame);
       },
       snap: () => (latest.current.magnetOn ? settle() : null),
+      division: () => (latest.current.grid && canvas.current ? divisionAt(latest.current.grid, view.current.span, canvas.current.clientWidth) : 0),
     }),
     [setCursor],
   );

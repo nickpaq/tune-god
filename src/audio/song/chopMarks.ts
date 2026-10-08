@@ -5,6 +5,7 @@ import {
   isBarLine,
   lineFrame,
   lineNear,
+  fineLineNear,
   MAX_SECTION_BARS,
   type PickedSection,
   type TapGrid,
@@ -100,6 +101,11 @@ export function barLineNear(grid: TapGrid, frame: number): number {
 /** The bar lines the chop markers sit on, in song order (two markers on one bar line are one). */
 export function chopLines(grid: TapGrid, chops: readonly number[]): number[] {
   return [...new Set(chops.map((frame) => barLineNear(grid, frame)))].sort((a, b) => a - b);
+}
+
+/** The positions the chop markers sit on when chops may go as fine as sixteenth notes (chopper mode), in song order (two markers on one sixteenth are one). */
+export function fineChopLines(grid: TapGrid, chops: readonly number[]): number[] {
+  return [...new Set(chops.map((frame) => fineLineNear(grid, frame)))].sort((a, b) => a - b);
 }
 
 /** The sections between neighbouring chop markers, in song order, each given the palette colour of its place in the list. */
