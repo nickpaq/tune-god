@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAudioContext } from "../audio/decode";
-import { buildPyramid, columnPeaks, type PeakPyramid } from "../audio/song/waveform";
 import {
   chopEighths,
   defaultSilence,
@@ -17,36 +16,22 @@ import {
 } from "../audio/song/patternMaker";
 import { Knob } from "./Knob";
 
-/** Columns of waveform kept for each chop. */
-const COLUMNS = 1024;
 /** The least the rows show across their width, in bars: longer chops zoom the view out to fit. */
 const MIN_SPAN_BARS = 4;
 /** A finger that moves this far (CSS pixels) is dragging, not tapping. */
 const DRAG_PX = 8;
 /** Rows this far from the centred one (or less) are drawn. */
 const DRAW_NEAR = 3;
-/** The strip along the top of a row that carries its flag, as in the chop editor (CSS pixels). */
-const FLAG_H = 14;
 /** How quickly the view zooms to the centred chop: the share of the way it goes each frame. */
 const ZOOM_EASE = 0.22;
 
 type RowKey = number | "s";
-interface Peaks {
-  min: Float32Array;
-  max: Float32Array;
-}
-
-const lengthText = (eighths: number, beatsPerBar: number) => {
-  const bars = eighths / (beatsPerBar * 2);
-  return `${+bars.toFixed(2)} BAR${bars === 1 ? "" : "S"}`;
-};
-
 /**
- * One row, drawn the way the chop editor's screen is: black, the waveform in the screen's ink one column to a device pixel, the bar lines over it, the chop
- * shaded in its colour with a numbered flag where it starts, and a cursor line (with its triangle) at the end of the part that will play. Every row is on
- * the same scale (`span` eighth notes across), so a shorter chop only fills part of the width.
+ * One row: a block in the chop's colour, as wide as the part of it that plays, on a grid of squares (a beat wide, the bar lines heavier). Nothing else is
+ * drawn: no waveform, number or marker. Every row is on the same scale (`span` eighth notes across), so a shorter chop only fills part of the width and
+ * the rows stack like blocks.
  */
-function RowCanvas({ peaks, scale, color, flag, eighths, len, span, beatsPerBar }: { peaks: Peaks | null; scale: number; color: string; flag: string; eighths: number; len: number; span: number; beatsPerBar: number }) {
+function RowCanvas({ color, len, span, beatsPerBar }: { color: string; len: number; span: number; beatsPerBar: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -58,86 +43,30 @@ function RowCanvas({ peaks, scale, color, flag, eighths, len, span, beatsPerBar 
     if (el.height !== h) el.height = h;
     const ctx = el.getContext("2d");
     if (!ctx) return;
-    const ink = getComputedStyle(el).color;
     const one = Math.max(1, Math.round(ratio));
-    const top = FLAG_H * ratio;
-    const mid = (top + h) / 2;
     const x = (e: number) => (e / span) * w;
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, w, h);
-
-    // The whole chop shaded in its colour, as the sections are in the chop editor.
+    ctx.clearRect(0, 0, w, h);
+    const end = Math.min(w, Math.round(x(len)));
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.3;
-    ctx.fillRect(0, top, Math.min(w, x(eighths)), h - top);
-
-    ctx.fillStyle = ink;
-    ctx.globalAlpha = 0.3;
-    ctx.fillRect(0, Math.floor(mid), w, one);
-    ctx.globalAlpha = 1;
-    if (peaks) {
-      const width = Math.min(w, Math.round(x(eighths)));
-      const k = (((h - top) / 2) * 0.94) * scale;
-      for (let col = 0; col < width; col++) {
-        const i = Math.min(COLUMNS - 1, Math.floor((col / width) * COLUMNS));
-        const up = mid - peaks.max[i] * k;
-        const down = mid - peaks.min[i] * k;
-        ctx.fillRect(col, up, 1, Math.max(1, down - up));
-      }
-    }
-
-    // Eighth notes and beats faintly, the bars as strong as the chop editor's.
-    const bar = beatsPerBar * 2;
-    for (let e = 0; e * 1 <= span; e++) {
-      const isBar = e % bar === 0;
-      const isBeat = e % 2 === 0;
-      ctx.fillStyle = ink;
-      ctx.globalAlpha = isBar ? 0.6 : isBeat ? 0.2 : 0.09;
-      const thick = isBar ? Math.max(2, Math.round(1.5 * ratio)) : one;
-      ctx.fillRect(Math.round(x(e)) - Math.floor(thick / 2), top, thick, h - top);
-    }
-    ctx.globalAlpha = 1;
-
-    // What will not play is dimmed.
-    if (len < eighths) {
-      ctx.fillStyle = "#000";
-      ctx.globalAlpha = 0.55;
-      ctx.fillRect(Math.min(w, x(len)), top, Math.max(0, Math.min(w, x(eighths)) - x(len)), h - top);
-      ctx.globalAlpha = 1;
-    }
-
-    // The chop's markers: a line in its colour where it starts and where it ends.
-    if (peaks) {
-      ctx.fillStyle = color;
-      ctx.fillRect(0, top, Math.max(2, Math.round(2 * ratio)), h - top);
-      const end = Math.round(x(eighths));
-      if (end < w) ctx.fillRect(end - one, top, Math.max(2, Math.round(2 * ratio)), h - top);
-    }
-
-    ctx.font = `${Math.round(8 * ratio)}px Silkscreen, monospace`;
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    const fw = (flag.length * 5 + 8) * ratio;
-    ctx.fillStyle = color === "#888" ? ink : color;
-    ctx.fillRect(0, 0, fw, top);
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(0, 0, end, h);
     ctx.fillStyle = "#000";
-    ctx.fillText(flag, fw / 2, top / 2 + ratio);
-    ctx.textAlign = "right";
-    ctx.fillStyle = ink;
-    ctx.fillText(lengthText(len, beatsPerBar), w - 6 * ratio, top / 2 + ratio);
-
-    // The end of what plays: the line, and its triangle, like the chop editor's cursor.
-    const cx = Math.min(w - 2, Math.round(x(len)));
-    ctx.fillRect(cx - one, 0, Math.max(2, Math.round(2 * ratio)), h);
-    const half = 5 * ratio;
-    ctx.beginPath();
-    ctx.moveTo(cx - half, top);
-    ctx.lineTo(cx + half, top);
-    ctx.lineTo(cx, top + 7 * ratio);
-    ctx.closePath();
-    ctx.fill();
-  }, [peaks, scale, color, flag, eighths, len, span, beatsPerBar]);
+    const cell = x(2);
+    for (let y = 0; y <= h; y += cell) {
+      ctx.globalAlpha = 0.5;
+      ctx.fillRect(0, Math.min(h - one, Math.round(y)), end, one);
+    }
+    for (let e = 0; e <= span; e += 2) {
+      const px = Math.round(x(e));
+      if (px > end) break;
+      const bar = e % (beatsPerBar * 2) === 0;
+      ctx.globalAlpha = bar ? 0.85 : 0.5;
+      ctx.fillRect(Math.min(end - one, px), 0, bar ? Math.max(2, Math.round(1.5 * ratio)) : one, h);
+    }
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(Math.max(0, end - one), 0, one, h);
+    ctx.globalAlpha = 1;
+  }, [color, len, span, beatsPerBar]);
   return <canvas ref={ref} className="maker__canvas" />;
 }
 
@@ -175,19 +104,6 @@ export function PatternMaker({
   /** Eighths the drag has cut off the slot before the selected one, not yet let go. */
   const [trim, setTrim] = useState(0);
   const [centered, setCentered] = useState(0);
-
-  const pyramid = useMemo<PeakPyramid>(() => buildPyramid(channelData), [channelData]);
-  const scale = pyramid.peak > 0 ? 1 / pyramid.peak : 1;
-  const peakCache = useRef(new Map<number, Peaks>());
-  const peaksOf = (i: number): Peaks => {
-    let hit = peakCache.current.get(i);
-    if (!hit) {
-      hit = { min: new Float32Array(COLUMNS), max: new Float32Array(COLUMNS) };
-      columnPeaks(pyramid, chops[i].start, chops[i].length, COLUMNS, hit.min, hit.max);
-      peakCache.current.set(i, hit);
-    }
-    return hit;
-  };
 
   const { starts, total } = slotStarts(slots);
   const playhead = sel < slots.length ? starts[sel] : total;
@@ -430,16 +346,7 @@ export function PatternMaker({
             return (
               <div key={String(key)} className={`maker__row${j === centered ? " maker__row--on" : ""}`} onPointerDown={down(key)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
                 {Math.abs(j - centered) <= DRAW_NEAR && (
-                  <RowCanvas
-                    peaks={chop ? peaksOf(key as number) : null}
-                    scale={scale}
-                    color={chop?.color ?? "#888"}
-                    flag={chop ? String((key as number) + 1) : "SIL"}
-                    eighths={chop ? fullOf(key) : lenOf("s")}
-                    len={Math.min(lenOf(key), maxOf(key))}
-                    span={span}
-                    beatsPerBar={beatsPerBar}
-                  />
+                  <RowCanvas color={chop?.color ?? "#8a8a8a"} len={Math.min(lenOf(key), maxOf(key))} span={span} beatsPerBar={beatsPerBar} />
                 )}
               </div>
             );

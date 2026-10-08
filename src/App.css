@@ -2003,16 +2003,11 @@
 
 .maker__row {
   box-sizing: border-box;
-  height: 42cqw;
-  padding: 1cqw 2.8cqw;
+  height: 32cqw;
+  padding: 0 2.8cqw;
   scroll-snap-align: center;
   scroll-snap-stop: always;
   touch-action: pan-y;
-  opacity: 0.5;
-}
-
-.maker__row--on {
-  opacity: 1;
 }
 
 .maker__canvas {
