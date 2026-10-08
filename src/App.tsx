@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
-import { blankProject, entriesOfDrop, findPackInEntries, findPackInFileList, writeBankSounds, type FoundPack } from "./audio/packProject";
+import { acapellaProjectFromAudio, blankProject, entriesOfDrop, findPackInEntries, findPackInFileList, writeBankSounds, type FoundPack } from "./audio/packProject";
 import { BANK_ZONES, bankTakes, MAX_LOAD_SECONDS, numberedLabel, placeBank, planBank, type BankLoad } from "./audio/bankLoad";
 import { displayName, packTags } from "./audio/sampleName";
 import { packByteBudget, type PackMemory } from "./audio/samplePack";
@@ -687,8 +687,11 @@ function App() {
     const open = Object.keys(latest.current.pads).length > 0 || Object.keys(latest.current.hidden).length > 0;
     if (open) return void beginChop(mode);
     pickedMode.current = mode;
-    // Acapella mode takes a .koala project only. A picker that also lists audio shows only audio on iOS and greys the .koala files out, so the audio types are asked for in chopper mode alone.
-    if (acapellaInput.current) acapellaInput.current.accept = mode === "chopper" ? ".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg" : ".koala";
+    // Acapella mode takes a .koala project or audio files (the song and its stem, picked together); chopper mode takes one audio file.
+    if (acapellaInput.current) {
+      acapellaInput.current.accept = mode === "chopper" ? "audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg" : ".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg";
+      acapellaInput.current.multiple = mode !== "chopper";
+    }
     acapellaInput.current?.click();
   };
 
@@ -724,9 +727,26 @@ function App() {
     await launchChopper(song);
   };
 
-  const loadAcapella = async (file: File) => {
+  const loadAcapella = async (picked: File[]) => {
     if (addPackStatus || loading) return;
-    if (pickedMode.current === "chopper" && !isKoalaFile(file)) return void (await loadChopperAudio(file));
+    if (pickedMode.current === "chopper") {
+      const audio = picked.find((f) => !isKoalaFile(f));
+      if (!audio) {
+        pickedMode.current = null;
+        return void window.alert("Chopper mode needs an audio file.");
+      }
+      return void (await loadChopperAudio(audio));
+    }
+    // Acapella mode: a Koala project, or the song and its vocal stem as two audio files (made into a project that holds them).
+    let file = picked.find(isKoalaFile);
+    if (!file) {
+      const made = await acapellaProjectFromAudio(picked);
+      if ("problem" in made) {
+        pickedMode.current = null;
+        return void window.alert(made.problem);
+      }
+      file = made.file;
+    }
     acapellaPending.current = pickedMode.current ?? "acapella";
     pickedMode.current = null;
     await loadProject(file, false, true);
@@ -1712,12 +1732,13 @@ function App() {
         <input
           ref={acapellaInput}
           type="file"
-          accept=".koala"
+          accept=".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg"
+          multiple
           hidden
           onChange={(e) => {
-            const file = e.target.files?.[0];
+            const files = Array.from(e.target.files ?? []);
             e.target.value = "";
-            if (file) void loadAcapella(file);
+            if (files.length) void loadAcapella(files);
           }}
         />
         {menuOpen && (

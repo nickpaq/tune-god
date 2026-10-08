@@ -260,3 +260,38 @@ export async function blankProject(name = "KoalaTune"): Promise<File> {
   const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
   return new File([blob], `${name}.koala`, { type: "application/octet-stream" });
 }
+
+/** A file name that says the sound is a vocal stem. */
+const STEM_NAME = /vocal|acap|vox|stem/i;
+
+/**
+ * A project for acapella mode made from two audio files: the song on pad 48 and its vocal stem on pad 49, the stem labelled like the song with
+ * VOCALS after it (what acapella mode looks for). The stem is the file whose name says so (vocals, acapella, vox, stem); returns a message instead
+ * when the two files cannot be told apart or the audio cannot be read.
+ */
+export async function acapellaProjectFromAudio(files: File[]): Promise<{ file: File } | { problem: string }> {
+  if (files.length !== 2) return { problem: "Acapella mode needs two audio files: the song and its vocal stem. Pick both together, or open a Koala project that already holds them." };
+  const stems = files.filter((f) => STEM_NAME.test(f.name));
+  if (stems.length !== 1) return { problem: 'Could not tell which file is the vocal stem. Name it with "vocals" (or "acapella") and pick the song and the stem together.' };
+  const stem = stems[0];
+  const song = files.find((f) => f !== stem)!;
+  const zip = new JSZip();
+  const samples: any[] = [];
+  const pads: any[] = [];
+  const title = song.name.replace(/\.[^.]+$/, "");
+  try {
+    for (const [n, [file, label]] of [[song, title], [stem, `${title} VOCALS`]].entries() as Iterable<[number, [File, string]]>) {
+      const decoded = await decodeNative(file);
+      const frames = decoded.channelData[0].length;
+      const sampleId = n + 1;
+      zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: decoded.sampleRate, channelData: decoded.channelData, bitDepth: 24 }).arrayBuffer());
+      samples.push({ id: sampleId, metadata: { originalPath: file.name } });
+      pads.push({ pad: 49 + n, type: "sample", sampleId, label, vol: 1, pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
+    }
+  } catch {
+    return { problem: "One of the audio files could not be read." };
+  }
+  zip.file("sampler/sampler.json", JSON.stringify({ samples, pads }));
+  const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
+  return { file: new File([blob], `${title}.koala`, { type: "application/octet-stream" }) };
+}
