@@ -439,7 +439,8 @@ export function SongChopModal({
     cancelAnimationFrame(h.raf);
     const bpm = Math.round(h.bpm * 100) / 100;
     setLiveBpm(null);
-    if (grid && bpm !== Math.round(bpmNow * 100) / 100) change({ ...marks, bpm }, `Tempo set to ${bpm.toFixed(2)} BPM`);
+    // (always committed: while held the grid shown already runs at the live tempo, so comparing with it would drop the change and snap back)
+    if (grid) change({ ...marks, bpm }, `Tempo set to ${bpm.toFixed(2)} BPM`);
   };
   const nudgeStart = (dir: 1 | -1) => (e: React.PointerEvent<HTMLButtonElement>) => {
     if (!grid || nudgeHold.current) return;
