@@ -433,88 +433,103 @@ export function PatternMaker({
     if (slots.length === 0 || window.confirm("Close the pattern maker? The chopper keeps one pattern per chop, in order.")) onClose();
   };
 
+  const bpm = (60 * sampleRate) / beatFrames;
+  const readoutTwo = sel < slots.length ? `Slot ${sel + 1} of ${slots.length}` : `${slots.length} slot${slots.length === 1 ? "" : "s"}, next`;
+
   return (
     <div className="palette-backdrop chop-backdrop" onClick={askClose}>
       <div className="chop maker" role="dialog" aria-label="Pattern maker" onClick={(e) => e.stopPropagation()}>
         <div className="chop__head">
-          <span>Pattern maker</span>
+          <span>
+            Pattern maker<span className="chop__version">v{__APP_VERSION__}</span>
+          </span>
           <button onClick={askClose} aria-label="Close">
             X
           </button>
         </div>
+        <div className="chop__scroll">
+          <p className="chop__note">Tap the middle row to lock it in. Tap another to hear it; double tap brings it up. Drag along a row for its length.</p>
 
-        <div className="chop__screen">
-          <div className="maker__strip" aria-label="Sequence">
-            {shown.map((s, i) => (
-              <div
-                key={i}
-                className={`maker__block${s.kind === "silence" ? " maker__block--silence" : ""}${i === sel ? " maker__block--on" : ""}`}
-                style={{ left: `${(shownStarts.starts[i] / stripSpan) * 100}%`, width: `${(s.eighths / stripSpan) * 100}%`, background: stripColor(s) }}
-              />
-            ))}
-            <div className="maker__grid" style={gridStyle} />
-            <div className="maker__head" style={{ left: `${(at / stripSpan) * 100}%` }} />
-            {playAt !== null && <div className="maker__play" style={{ left: `${(Math.min(playAt, stripSpan) / stripSpan) * 100}%` }} />}
+          <div className="chop__screen">
+            <div className="maker__strip" aria-label="Sequence">
+              {shown.map((s, i) => (
+                <div
+                  key={i}
+                  className={`maker__block${s.kind === "silence" ? " maker__block--silence" : ""}${i === sel ? " maker__block--on" : ""}`}
+                  style={{ left: `${(shownStarts.starts[i] / stripSpan) * 100}%`, width: `${(s.eighths / stripSpan) * 100}%`, background: stripColor(s) }}
+                />
+              ))}
+              <div className="maker__grid" style={gridStyle} />
+              <div className="maker__head" style={{ left: `${(at / stripSpan) * 100}%` }} />
+              {playAt !== null && <div className="maker__play" style={{ left: `${(Math.min(playAt, stripSpan) / stripSpan) * 100}%` }} />}
+            </div>
+
+            <div className="maker__well">
+              <div className="maker__picker" ref={picker} onScroll={onScroll} style={{ paddingBlock: edge }}>
+                {rows.map((key, j) => {
+                  const chop = key === "s" ? null : chops[key];
+                  return (
+                    <div key={String(key)} className="maker__row" onPointerDown={down(key, j)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
+                      {Math.abs(j - centered) <= visible && (
+                        <RowCanvas
+                          peaks={chop ? peaksOf(key as number) : null}
+                          scale={scale}
+                          color={chop?.color ?? "#8a8a8a"}
+                          tail={tail}
+                          eighths={chop ? fullOf(key) : lenOf("s")}
+                          len={Math.min(lenOf(key), maxOf(key))}
+                          span={span}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="maker__zone" />
+            </div>
+
+            <div className="chop-timeline__bar">Bar {positionText(at, beatsPerBar)}</div>
+            <div className="chop__readout">
+              <span>{bpm.toFixed(2)} BPM</span>
+              <span>{readoutTwo}</span>
+            </div>
           </div>
-          <div className="chop__readout">
-            <span>Bar {positionText(at, beatsPerBar)}</span>
-            <span>{sel < slots.length ? `Slot ${sel + 1} of ${slots.length}` : `${slots.length} slot${slots.length === 1 ? "" : "s"}, next`}</span>
+
+          <div className="chop__row chop__transport">
+            <button className={`chop__play${playAt !== null ? " chop__play--on" : ""}`} disabled={slots.length === 0} onClick={() => play(at)} aria-label="Play from the playhead">
+              <span className="chop__play-icon">▶</span>
+              <span>Play</span>
+            </button>
+            <Knob value={volume} onChange={setVolume} label="Volume" />
+            <div className="chop__jumps">
+              <button className="chop__btn" disabled={slots.length === 0} onClick={() => play(lastBar)} aria-label="Play from the start of the last bar">
+                Last bar
+              </button>
+              <button className="chop__btn" disabled={slots.length === 0} onClick={() => play(0)} aria-label="Play from the start">
+                Start
+              </button>
+              <button className="chop__btn" onClick={stopPlay} aria-label="Stop">
+                Stop
+              </button>
+              <button className="chop__btn" aria-pressed={scrollPlay} onClick={() => setScrollPlay((on) => !on)} title="Scroll play: plays each chop as it scrolls into the middle" aria-label="Scroll play">
+                Scroll
+              </button>
+            </div>
+          </div>
+
+          <div className="chop__row">
+            <button className="chop__btn chop__grow" disabled={sel === 0} onClick={() => select(sel - 1)} aria-label="Previous slot">
+              ◀
+            </button>
+            <button className="chop__btn chop__grow" disabled={sel >= slots.length} onClick={() => select(sel + 1)} aria-label="Next slot">
+              ▶
+            </button>
+            <button className="chop__btn chop__grow" disabled={sel >= slots.length} onClick={remove}>
+              Remove
+            </button>
           </div>
         </div>
 
-        <div className="maker__well">
-          <div className="maker__picker" ref={picker} onScroll={onScroll} style={{ paddingBlock: edge }}>
-            {rows.map((key, j) => {
-              const chop = key === "s" ? null : chops[key];
-              return (
-                <div key={String(key)} className="maker__row" onPointerDown={down(key, j)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
-                  {Math.abs(j - centered) <= visible && (
-                    <RowCanvas
-                      peaks={chop ? peaksOf(key as number) : null}
-                      scale={scale}
-                      color={chop?.color ?? "#8a8a8a"}
-                      tail={tail}
-                      eighths={chop ? fullOf(key) : lenOf("s")}
-                      len={Math.min(lenOf(key), maxOf(key))}
-                      span={span}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="maker__zone" />
-        </div>
-
-        <div className="chop__row maker__transport">
-          <button className="chop__btn chop__grow" disabled={slots.length === 0} onClick={() => play(at)} aria-label="Play from the playhead">
-            ▶ Play
-          </button>
-          <button className="chop__btn chop__grow" disabled={slots.length === 0} onClick={() => play(lastBar)} aria-label="Play from the start of the last bar">
-            ▶ Last bar
-          </button>
-          <button className="chop__btn chop__grow" disabled={slots.length === 0} onClick={() => play(0)} aria-label="Play from the start">
-            ▶ Start
-          </button>
-          <button className="chop__btn chop__grow" onClick={stopPlay} aria-label="Stop">
-            ■ Stop
-          </button>
-          <Knob value={volume} onChange={setVolume} label="Volume" />
-        </div>
-        <div className="chop__row maker__transport">
-          <button className="chop__btn chop__grow" disabled={sel === 0} onClick={() => select(sel - 1)} aria-label="Previous slot">
-            ◀
-          </button>
-          <button className="chop__btn chop__grow" disabled={sel >= slots.length} onClick={() => select(sel + 1)} aria-label="Next slot">
-            ▶
-          </button>
-          <button className="chop__btn chop__grow" disabled={sel >= slots.length} onClick={remove}>
-            Remove
-          </button>
-          <button className="chop__btn chop__grow" aria-pressed={scrollPlay} onClick={() => setScrollPlay((on) => !on)} title="Plays each chop as it scrolls into the middle">
-            Scroll play
-          </button>
-        </div>
         <button className="chop__go" disabled={slots.length === 0} onClick={() => onDone(slots)}>
           Done
         </button>
