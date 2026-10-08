@@ -13,7 +13,8 @@ export interface MakerChop {
   bars: number;
   /** The bar of the song's grid it started on (bar 1, the 1.1.1, is 0). */
   barIndex: number;
-  /** Its colour (hex), the one it was given in the chop step. */
+  /** Its place in the chop step's colours, and the colour (hex) that gave it in the scheme then in use. */
+  colorIndex: number;
   color: string;
 }
 

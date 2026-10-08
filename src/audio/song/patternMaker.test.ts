@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chopEighths, dragLength, needsGate, orderChops, patternBars, positionText, renderSequence, setSlot, slotNotes, slotStarts, type MakerChop, type Slot } from "./patternMaker";
 
-const chop = (barIndex: number, bars = 1, slice = barIndex + 1): MakerChop => ({ slice, start: barIndex * 1000, length: bars * 1000, bars, barIndex, color: "#fff" });
+const chop = (barIndex: number, bars = 1, slice = barIndex + 1): MakerChop => ({ slice, start: barIndex * 1000, length: bars * 1000, bars, barIndex, colorIndex: barIndex, color: "#fff" });
 // chops that started on bars 1 to 8 of the song (barIndex 0 to 7)
 const chops = Array.from({ length: 8 }, (_, i) => chop(i));
 

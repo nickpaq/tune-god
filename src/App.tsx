@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import { acapellaProjectFromAudio, blankProject, entriesOfDrop, findPackInEntries, findPackInFileList, writeBankSounds, type FoundPack } from "./audio/packProject";
@@ -23,6 +23,8 @@ import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/lo
 import { balancedSpread } from "./audio/spread";
 import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { chopColor, colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
+import { applyScheme } from "./audio/theme";
+import { SchemeModal } from "./components/SchemeModal";
 import { CHOP_BANK_START, emptyPadInBank, inChopBank, movePad, nextEmptyPad, PADS_PER_BANK, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { sortForSlot } from "./audio/swapOrder";
@@ -225,6 +227,11 @@ function App() {
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
   /** The reference tone's volume knob, 0 to 1: 0.5 is the level the tone is matched to, so the multiplier is twice the knob. */
   const [toneVolume, setToneVolume] = useState(saved.toneVolume ?? 0.5);
+  /** The colour scheme: the pad, type and chop colours, the lamps and the menu's tint (palettes.ts, theme.ts). */
+  const [paletteId, setPaletteId] = useState(paletteById(saved.paletteId ?? DEFAULT_PALETTE_ID).id);
+  const palette = paletteById(paletteId);
+  const [schemeOpen, setSchemeOpen] = useState(false);
+  useLayoutEffect(() => applyScheme(palette, document.documentElement), [palette]);
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
   const [a4Text, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
@@ -426,8 +433,8 @@ function App() {
   }, [loadProject]);
 
   useEffect(() => {
-    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
-  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
+    saveState({ organizeOn: organize, sidechainOn, masterStyle, padSymbols, packMemory, paletteId, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, bpm: projectBpm });
+  }, [organize, sidechainOn, masterStyle, padSymbols, packMemory, paletteId, toneOn, toneVolume, a4, bank, selected, keyPc, tunedTarget, keyMajor, projectBpm]);
 
   // Pad choices are only saved once every pad has loaded, so a half-restored grid never overwrites them.
   useEffect(() => {
@@ -1074,6 +1081,7 @@ function App() {
                 length: plan.length,
                 bars: plan.bars,
                 barIndex: plan.barIndex ?? 0,
+                colorIndex: plan.colorIndex ?? i,
                 color: chopColor(palette.colors, plan.colorIndex ?? i),
               })),
             },
@@ -1602,13 +1610,12 @@ function App() {
     return new Map(slots.map((r) => [r.pad, now.get(r.pad) ?? null]));
   };
 
-  const palette = paletteById(DEFAULT_PALETTE_ID);
     const shownBank = bank;
   /** Palette colour for a sound, by its own category. Where it sits (including on a layout's slots) never changes it. */
   const autoColorOf = (p: Pad): string => {
     if (p.chopper) return p.chopper.color ?? colorFor(palette, "melodic");
-    // A section of a chopped song keeps the palette colour it was given when it was picked.
-    if (p.section) return p.section.color ?? chopColor(palette.colors, p.section.colorIndex ?? 0);
+    // A section of a chopped song takes the colour its place in the chop had, from the scheme in use.
+    if (p.section) return chopColor(palette.colors, p.section.colorIndex ?? 0);
     const base = colorFor(palette, p.category ?? "other");
     if (p.ghost) return shade(base, 2);
     // A key read from the file name is a sure one: the pad is a slightly darker shade. A key that was only detected leaves the normal shade.
@@ -1931,6 +1938,16 @@ function App() {
               onClick={() => askChopMode()}
             >
               {addPackStatus || "Load Bank D: Chopper"}
+            </button>
+            <button
+              className="menu__button"
+              title="Choose the colour scheme: the pad, sound-type and chop colours, the lamps and the menu all follow it."
+              onClick={() => {
+                setSchemeOpen(true);
+                setMenuOpen(false);
+              }}
+            >
+              Colour scheme: {palette.name}
             </button>
             <Switch label="Show symbols on pads" on={padSymbols} onChange={setPadSymbols} />
             <label className="menu__a4">
@@ -2325,13 +2342,15 @@ function App() {
             channelData={pads[makerPad].channelData}
             sampleRate={pads[makerPad].sampleRate}
             beatFrames={pads[makerPad].chopper!.maker!.beatFrames}
-            chops={pads[makerPad].chopper!.maker!.chops}
+            chops={pads[makerPad].chopper!.maker!.chops.map((c) => ({ ...c, color: chopColor(palette.colors, c.colorIndex) }))}
             beatsPerBar={pads[makerPad].chopper!.beatsPerBar}
             initial={pads[makerPad].chopper!.maker!.slots ?? []}
             onDone={(slots) => void finishMaker(slots)}
             onClose={() => setMakerPad(null)}
           />
         )}
+
+        {schemeOpen && <SchemeModal currentId={palette.id} onPick={(p) => setPaletteId(p.id)} onClose={() => setSchemeOpen(false)} />}
 
         {extraPrompt && (
           <ExtraDrumsModal

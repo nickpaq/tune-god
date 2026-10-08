@@ -29,7 +29,14 @@ describe("palettes", () => {
       const [l, c, h] = hexToOklch(hex);
       return [l, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180)];
     };
-    for (const p of PALETTES.filter((p) => p.id !== "grayscale")) {
+    // The one-hue palettes tell their types apart by lightness alone, as Grayscale does, so they are held to a lower bar below.
+    const MONO = ["grayscale", "sepia", "blueprint", "terminal", "amber", "gameboy", "slate"];
+    for (const p of PALETTES.filter((p) => MONO.includes(p.id))) {
+      const colors = CATEGORIES.map((c) => lab(colorFor(p, c.id)));
+      for (let i = 0; i < colors.length; i++)
+        for (let j = i + 1; j < colors.length; j++) expect(Math.hypot(...colors[i].map((v, k) => v - colors[j][k])), `${p.name} ${i}/${j}`).toBeGreaterThan(0.01);
+    }
+    for (const p of PALETTES.filter((p) => !MONO.includes(p.id))) {
       const colors = CATEGORIES.map((c) => lab(colorFor(p, c.id)));
       for (let i = 0; i < colors.length; i++)
         for (let j = i + 1; j < colors.length; j++) expect(Math.hypot(...colors[i].map((v, k) => v - colors[j][k]))).toBeGreaterThan(0.025);
@@ -59,6 +66,17 @@ describe("palettes", () => {
 
   it("puts every category in a tone the palette knows", () => {
     for (const c of CATEGORIES) expect(TONES).toContain(CATEGORY_TONE[c.id]);
+  });
+});
+
+describe("schemes", () => {
+  it("have a unique id, a name and a hex accent, and there is a long list of them", () => {
+    expect(PALETTES.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(PALETTES.map((p) => p.id)).size).toBe(PALETTES.length);
+    for (const p of PALETTES) {
+      expect(p.name.length).toBeGreaterThan(0);
+      expect(p.accent).toMatch(/^#[0-9A-F]{6}$/i);
+    }
   });
 });
 
