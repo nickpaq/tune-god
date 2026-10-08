@@ -2018,20 +2018,12 @@
   height: 5.6cqw;
   scroll-snap-align: center;
   touch-action: pan-y;
+  filter: brightness(0.7) contrast(0.8);
 }
 
-/* the selection zone: the row in the middle of the list is the one that counts */
-.maker__zone {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 5.6cqw;
-  transform: translateY(-50%);
-  box-sizing: border-box;
-  border: 2px solid var(--oled);
-  pointer-events: none;
-  box-shadow: 0 0 6px var(--oled-glow);
+/* the row in the middle is the one that counts: full brightness and contrast */
+.maker__row--on {
+  filter: none;
 }
 
 .maker__canvas {

@@ -42,7 +42,7 @@ interface Peaks {
  * One row, drawn the way the chop editor's screen is: black, the chop shaded in its colour with the waveform in the screen's ink over it, and a line in the chop's colour where it starts. The playhead is the line near the left, with the end of the slot before shaded to its left. The row
  * is one beat-square tall. Every row is on the same scale (`span` eighth notes across the rest), so the chops line up as blocks.
  */
-function RowCanvas({ peaks, scale, color, tail, eighths, len, span }: { peaks: Peaks | null; scale: number; color: string; tail: string | null; eighths: number; len: number; span: number }) {
+function RowCanvas({ peaks, color, tail, eighths, len, span }: { peaks: Peaks | null; color: string; tail: string | null; eighths: number; len: number; span: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -58,7 +58,6 @@ function RowCanvas({ peaks, scale, color, tail, eighths, len, span }: { peaks: P
     const one = Math.max(1, Math.round(ratio));
     const x0 = Math.round(w * MARGIN);
     const x = (e: number) => x0 + (e / span) * (w - x0);
-    const mid = h / 2;
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, w, h);
@@ -75,16 +74,15 @@ function RowCanvas({ peaks, scale, color, tail, eighths, len, span }: { peaks: P
     ctx.globalAlpha = 0.3;
     ctx.fillRect(x0, 0, full - x0, h);
     ctx.fillStyle = ink;
-    ctx.fillRect(x0, Math.floor(mid), full - x0, one);
     ctx.globalAlpha = 1;
     if (peaks && full > x0) {
-      const k = ((h / 2) * 0.94 * scale) / 4; // a quarter of the height the chop editor draws
+      // Only the top of the waveform, rising from the bottom of the row; full scale (0 dB) reaches three quarters of the way up.
+      const k = h * 0.75;
       const width = full - x0;
       for (let col = 0; col < width; col++) {
         const i = Math.min(COLUMNS - 1, Math.floor((col / width) * COLUMNS));
-        const up = mid - peaks.max[i] * k;
-        const down = mid - peaks.min[i] * k;
-        ctx.fillRect(x0 + col, up, 1, Math.max(1, down - up));
+        const level = Math.min(1, Math.max(peaks.max[i], -peaks.min[i]));
+        ctx.fillRect(x0 + col, h - level * k - one, 1, level * k + one);
       }
     }
     if (len < eighths) {
@@ -103,7 +101,7 @@ function RowCanvas({ peaks, scale, color, tail, eighths, len, span }: { peaks: P
     }
     ctx.fillStyle = ink;
     ctx.fillRect(x0 - thick, 0, thick, h);
-  }, [peaks, scale, color, tail, eighths, len, span]);
+  }, [peaks, color, tail, eighths, len, span]);
   return <canvas ref={ref} className="maker__canvas" />;
 }
 
@@ -147,7 +145,6 @@ export function PatternMaker({
   const [scrollPlay, setScrollPlay] = useState(false);
 
   const pyramid = useMemo<PeakPyramid>(() => buildPyramid([channelData[0]]), [channelData]); // the left channel only
-  const scale = pyramid.peak > 0 ? 1 / pyramid.peak : 1;
   const peakCache = useRef(new Map<number, Peaks>());
   const peaksOf = (i: number): Peaks => {
     let hit = peakCache.current.get(i);
@@ -469,11 +466,10 @@ export function PatternMaker({
                 {rows.map((key, j) => {
                   const chop = key === "s" ? null : chops[key];
                   return (
-                    <div key={String(key)} className="maker__row" onPointerDown={down(key, j)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
+                    <div key={String(key)} className={`maker__row${j === centered ? " maker__row--on" : ""}`} onPointerDown={down(key, j)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
                       {Math.abs(j - centered) <= visible && (
                         <RowCanvas
                           peaks={chop ? peaksOf(key as number) : null}
-                          scale={scale}
                           color={chop?.color ?? "#8a8a8a"}
                           tail={tail}
                           eighths={chop ? fullOf(key) : lenOf("s")}
@@ -485,7 +481,6 @@ export function PatternMaker({
                   );
                 })}
               </div>
-              <div className="maker__zone" />
             </div>
 
             <div className="chop-timeline__bar">Bar {positionText(at, beatsPerBar)}</div>
