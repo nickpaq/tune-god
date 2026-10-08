@@ -9,6 +9,9 @@ const FLAG_H = 14;
 const MIN_SPAN_SECONDS = 0.25;
 /** A bar narrower than this on the screen (CSS pixels) is too small to be a line of its own: the grid then shows (and the snap takes) every fourth bar, and at the widest views every sixteenth. */
 const MIN_BAR_PX = 30;
+/** Zooming in eases up over about this much downward travel (px); zooming out has no ease. */
+const ZOOM_EASE_PX = 60;
+
 /** In chopper mode the grid goes finer as the view zooms in (beats, eighths, sixteenths, never finer): a subdivision narrower than this on the screen (CSS pixels) is not drawn or snapped to. */
 const MIN_STEP_PX = 10;
 /** How much of the song the first view shows, in seconds. */
@@ -73,7 +76,7 @@ export const ChopTimeline = forwardRef<
   latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine };
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
-  const drag = useRef<{ id: number; startX: number; startY: number; moved: boolean; pivot: number; span: number } | null>(null);
+  const drag = useRef<{ id: number; startX: number; startY: number; y0: number; moved: boolean; pivot: number; span: number } | null>(null);
   const settling = useRef(0);
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
@@ -268,7 +271,7 @@ export const ChopTimeline = forwardRef<
     cancelAnimationFrame(settling.current);
     if (drag.current) return;
     const { cursor, span } = view.current;
-    drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span };
+    drag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, y0: e.clientY, moved: false, pivot: cursor - span / 2 + across(e.clientX) * span, span };
   };
 
   /** The drawn grid line just before a frame and the one just after it (infinite where there is none): where the snap can go. */
@@ -316,15 +319,16 @@ export const ChopTimeline = forwardRef<
       d.moved = true;
       // Pin what is under the finger now, so the waveform does not jump by the distance the tap threshold swallowed.
       d.span = view.current.span;
+      d.y0 = e.clientY;
       d.pivot = view.current.cursor - d.span / 2 + across(e.clientX) * d.span;
       latest.current.onScrub();
     }
-    // Ableton style: sideways drags the waveform, and the point under the finger stays under it. Zoom only starts when the finger leaves the waveform
-    // vertically: below its bottom edge zooms in, above its top edge zooms out, the same ratio for every equal step; back inside it, the zoom is where it was.
-    const rect = canvas.current!.getBoundingClientRect();
-    const outside = e.clientY > rect.bottom ? e.clientY - rect.bottom : e.clientY < rect.top ? e.clientY - rect.top : 0;
+    // Ableton style: sideways drags the waveform, and the point under the finger stays under it. Vertical travel from where the drag began zooms at once:
+    // up zooms out straight away, down zooms in with a gradual increase (eased in, then the same pace as up). The zoom stays where it was left on release.
+    const dy = e.clientY - d.y0;
+    const outside = dy > 0 ? (dy * dy) / (dy + ZOOM_EASE_PX) : dy;
     const resting = Math.max(d.span, Math.min(total, START_SECONDS * sampleRate));
-    const rate = zoomRate(resting, zoomRoom(rect.bottom, window.innerHeight), minSpan);
+    const rate = zoomRate(resting, zoomRoom(d.y0, window.innerHeight), minSpan);
     const span = spanAfterDrag(d.span, outside, rate, total, minSpan);
     const start = viewUnderFinger(d.pivot, across(e.clientX), span);
     // The line stays in the middle and follows the finger freely; the snap comes when the finger lets go.
