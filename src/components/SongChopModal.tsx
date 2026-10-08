@@ -87,6 +87,18 @@ function NudgeIcon({ plus }: { plus: boolean }) {
   );
 }
 
+/** A pixel-drawn A (a 5 x 5 grid of squares). */
+function AutoIcon() {
+  const squares = [1, 2, 3, 5, 9, 10, 11, 12, 13, 14, 15, 19, 20, 24];
+  return (
+    <svg viewBox="0 0 5 5" width="100%" height="100%" shapeRendering="crispEdges" aria-hidden="true">
+      {squares.map((n) => (
+        <rect key={n} x={n % 5} y={Math.floor(n / 5)} width="1" height="1" fill="currentColor" />
+      ))}
+    </svg>
+  );
+}
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   return `${m}:${(seconds - m * 60).toFixed(2).padStart(5, "0")}`;
@@ -424,8 +436,8 @@ export function SongChopModal({
     const now = performance.now();
     if (now - lastBpmTap.current < BPM_DOUBLE_MS) {
       lastBpmTap.current = 0;
-      // Back to the tempo the detection and the markers work out, as it was before any +, - or scrub.
-      if (marks.bpm != null) change({ ...marks, bpm: null }, "Tempo back to automatic");
+      const bpm = Math.round(bpmNow);
+      if (bpm >= BPM_MIN) change({ ...marks, bpm }, `Tempo snapped to ${bpm} BPM`);
     } else lastBpmTap.current = now;
   };
 
@@ -462,6 +474,11 @@ export function SongChopModal({
       };
       h.raf = requestAnimationFrame(tick);
     }, BPM_HOLD_DELAY_MS);
+  };
+
+  /** The A key: the tempo goes back to what the detection and the markers work out. It is lit while that is in charge and the 1.1.1 is set. */
+  const autoTempo = () => {
+    if (marks.bpm != null) change({ ...marks, bpm: null }, "Tempo back to automatic");
   };
 
   /** The 1.1.1 is also the first chop marker: it is put there as the chop is, and goes and moves with it. */
@@ -507,10 +524,13 @@ export function SongChopModal({
           <div className="chop__screen">
             <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
             <div className="chop__readout">
+              <button className={`chop__nudge${marks.oneOne !== null && marks.bpm == null ? " chop__nudge--on" : ""}`} disabled={!grid || marks.bpm == null} onClick={autoTempo} aria-pressed={marks.oneOne !== null && marks.bpm == null} aria-label="Automatic tempo">
+                <AutoIcon />
+              </button>
               <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(-1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo down by 0.01">
                 <NudgeIcon plus={false} />
               </button>
-              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: back to the automatic tempo. Drag up or down to scrub; move right to go finer.">
+              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: nearest whole BPM. Drag up or down to scrub; move right to go finer.">
                 {bpmText}
               </span>
               <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo up by 0.01">

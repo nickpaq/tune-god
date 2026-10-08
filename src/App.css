@@ -1629,12 +1629,13 @@
   height: calc(var(--cell) * 5);
 }
 
+.chop__nudge--on,
 .chop__nudge:active {
   background: var(--oled);
   color: var(--bezel);
 }
 
-.chop__nudge:disabled {
+.chop__nudge:disabled:not(.chop__nudge--on) {
   opacity: 0.4;
 }
 
