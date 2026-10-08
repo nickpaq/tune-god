@@ -94,12 +94,24 @@ describe("chopColor", () => {
     for (let i = 0; i < 40; i++) expect(palette.colors).toContain(chopColor(palette.colors, i));
   });
 
-  it("puts side-by-side chops further apart than the palette's own neighbours", () => {
+  it("keeps a chop distinct from the two before it as well, never nearer than the palette's own nearest pair", () => {
     for (const palette of PALETTES) {
-      const next = (i: number) => dist(chopColor(palette.colors, i), chopColor(palette.colors, i + 1));
-      const spread = Array.from({ length: 9 }, (_, i) => next(i)).reduce((a, b) => a + b, 0) / 9;
-      const own = palette.colors.slice(0, 9).reduce((t, c, i) => t + dist(c, palette.colors[i + 1]), 0) / 9;
-      expect(spread).toBeGreaterThan(own);
+      const near = Math.min(...Array.from({ length: 12 }, (_, i) => Math.min(dist(chopColor(palette.colors, i), chopColor(palette.colors, i + 1)), dist(chopColor(palette.colors, i), chopColor(palette.colors, i + 2)))));
+      expect(near, palette.name).toBeGreaterThan(0.02);
+    }
+  });
+
+  it("puts side-by-side chops at least as far apart as a typical pair of the palette's colours", () => {
+    for (const palette of PALETTES) {
+      const next = Array.from({ length: 9 }, (_, i) => dist(chopColor(palette.colors, i), chopColor(palette.colors, i + 1))).reduce((a, b) => a + b, 0) / 9;
+      let pairs = 0;
+      let total = 0;
+      for (let i = 0; i < palette.colors.length; i++)
+        for (let j = i + 1; j < palette.colors.length; j++) {
+          total += dist(palette.colors[i], palette.colors[j]);
+          pairs++;
+        }
+      expect(next, palette.name).toBeGreaterThan(total / pairs);
     }
   });
 });

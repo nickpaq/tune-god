@@ -56,52 +56,6 @@ export interface PaletteSpec {
 }
 
 export const SPECS: PaletteSpec[] = [
-  // Koala: the whole wheel, evenly: red kick, rose snare, cyan hats, green perc and vox, violet bass.
-  { id: "koala", name: "Koala", l: 0.68, c: 0.16, hues: { kick: 25, snareClap: 350, hats: 205, percVox: 135, fx: 315, bass: 298, melodic: 268, melodicLoop: 238, drumPercLoop: 80 }, accent: "#ff4d5e", surface: 20 },
-  // Studio: dusty and cool, with sand and rust as the warm accents.
-  { id: "studio", name: "Studio", l: 0.66, c: 0.11, spread: 0.85, hues: { kick: 38, snareClap: 205, hats: 95, percVox: 325, fx: 170, bass: 262, melodic: 235, melodicLoop: 18, drumPercLoop: 150 }, accent: "#e0a458", surface: 225 },
-  // Pastel: candy, warm from rose through apricot to butter, with mint, sky and lilac against it.
-  { id: "pastel", name: "Pastel", l: 0.83, c: 0.095, spread: 0.55, hues: { kick: 8, snareClap: 58, hats: 178, percVox: 298, fx: 340, bass: 275, melodic: 245, melodicLoop: 215, drumPercLoop: 105 }, accent: "#ff9eb5" },
-  // Neon: hot and electric, and the one palette that runs magenta, lime and orange together.
-  { id: "neon", name: "Neon", l: 0.72, c: 0.25, spread: 0.7, hues: { kick: 40, snareClap: 335, hats: 120, percVox: 215, fx: 300, bass: 265, melodic: 175, melodicLoop: 15, drumPercLoop: 145 }, accent: "#b6ff00", surface: 300 },
-  // Midnight: deep jewel tones: ruby, emerald, sapphire, amethyst and gold.
-  { id: "midnight", name: "Midnight", l: 0.56, c: 0.14, spread: 0.8, hues: { kick: 18, snareClap: 160, hats: 90, percVox: 300, fx: 345, bass: 255, melodic: 225, melodicLoop: 200, drumPercLoop: 45 }, accent: "#ffc83d", surface: 265 },
-  // Sunset: the warm end of the wheel, from vermilion through apricot to magenta.
-  { id: "sunset", name: "Sunset", l: 0.7, c: 0.16, hues: { kick: 28, snareClap: 346, hats: 88, percVox: 52, fx: 335, bass: 318, melodic: 358, melodicLoop: 40, drumPercLoop: 70 }, accent: "#ff7a3d", surface: 30 },
-  // Ocean: blues and teals, with sea-foam hats and a coral kick for something to hit against.
-  { id: "ocean", name: "Ocean", l: 0.64, c: 0.12, spread: 0.9, hues: { kick: 30, snareClap: 195, hats: 114, percVox: 285, fx: 285, bass: 268, melodic: 225, melodicLoop: 205, drumPercLoop: 170 }, accent: "#28b6d6", surface: 235 },
-  // Deep sea: the same water, an hour after dark.
-  { id: "deepsea", name: "Deep sea", l: 0.5, c: 0.12, spread: 0.8, hues: { kick: 20, snareClap: 145, hats: 135, percVox: 250, fx: 285, bass: 262, melodic: 205, melodicLoop: 230, drumPercLoop: 160 }, accent: "#1fd1c1", surface: 215 },
-  // Forest: bark, moss and fern, with a rust kick.
-  { id: "forest", name: "Forest", l: 0.58, c: 0.11, hues: { kick: 35, snareClap: 30, hats: 124, percVox: 195, fx: 62, bass: 168, melodic: 140, melodicLoop: 160, drumPercLoop: 75 }, accent: "#6bbf59", surface: 150 },
-  // Moss: soft lichen greens and warm earth.
-  { id: "moss", name: "Moss", l: 0.6, c: 0.1, spread: 0.9, hues: { kick: 55, snareClap: 16, hats: 118, percVox: 166, fx: 85, bass: 175, melodic: 135, melodicLoop: 195, drumPercLoop: 100 }, accent: "#9acd32", surface: 125 },
-  // Jungle: parrot colours under a canopy.
-  { id: "tropical", name: "Tropical", l: 0.72, c: 0.19, spread: 0.75, hues: { kick: 22, snareClap: 350, hats: 100, percVox: 205, fx: 320, bass: 282, melodic: 165, melodicLoop: 130, drumPercLoop: 62 }, accent: "#00d1a0", surface: 170 },
-  // Candy: bubblegum, lemonade and mint.
-  { id: "candy", name: "Candy", l: 0.78, c: 0.15, spread: 0.6, hues: { kick: 355, snareClap: 32, hats: 200, percVox: 300, fx: 330, bass: 285, melodic: 260, melodicLoop: 235, drumPercLoop: 150 }, accent: "#ff5fa8", surface: 345 },
-  // Cherry blossom: petals, new leaves and a little sky.
-  { id: "blossom", name: "Blossom", l: 0.8, c: 0.11, spread: 0.8, hues: { kick: 5, snareClap: 45, hats: 140, percVox: 268, fx: 330, bass: 295, melodic: 22, melodicLoop: 355, drumPercLoop: 168 }, accent: "#ff8fb1", surface: 350 },
-  // Lavender: violets and lilacs, with cool mint hats.
-  { id: "lavender", name: "Lavender", l: 0.72, c: 0.1, spread: 0.7, hues: { kick: 322, snareClap: 16, hats: 205, percVox: 261, fx: 305, bass: 275, melodic: 255, melodicLoop: 235, drumPercLoop: 175 }, accent: "#b48cff", surface: 290 },
-  // Citrus: lemon, lime, orange and grapefruit.
-  { id: "citrus", name: "Citrus", l: 0.76, c: 0.17, spread: 0.7, hues: { kick: 42, snareClap: 12, hats: 105, percVox: 135, fx: 75, bass: 152, melodic: 92, melodicLoop: 122, drumPercLoop: 168 }, accent: "#ffd21f", surface: 100 },
-  // Desert: sand, clay and sage, sun-bleached.
-  { id: "desert", name: "Desert", l: 0.66, c: 0.12, spread: 1, hues: { kick: 40, snareClap: 72, hats: 158, percVox: 340, fx: 350, bass: 322, melodic: 55, melodicLoop: 30, drumPercLoop: 140 }, accent: "#e69a4a", surface: 60 },
-  // Rose gold: blush, copper and champagne.
-  { id: "rosegold", name: "Rose gold", l: 0.72, c: 0.11, spread: 1, hues: { kick: 28, snareClap: 4, hats: 135, percVox: 250, fx: 356, bass: 330, melodic: 38, melodicLoop: 14, drumPercLoop: 58 }, accent: "#e8a190", surface: 20 },
-  // Volcano: lava, ash and sulphur.
-  { id: "volcano", name: "Volcano", l: 0.6, c: 0.17, spread: 0.85, hues: { kick: 28, snareClap: 52, hats: 104, percVox: 350, fx: 355, bass: 330, melodic: 40, melodicLoop: 18, drumPercLoop: 70 }, accent: "#ff4a1c", surface: 25 },
-  // Aurora: northern lights over snow.
-  { id: "aurora", name: "Aurora", l: 0.7, c: 0.16, spread: 0.75, hues: { kick: 350, snareClap: 130, hats: 76, percVox: 212, fx: 300, bass: 276, melodic: 190, melodicLoop: 245, drumPercLoop: 165 }, accent: "#45f0b0", surface: 170 },
-  // Arctic: ice and pale sky.
-  { id: "arctic", name: "Arctic", l: 0.74, c: 0.1, spread: 1, hues: { kick: 350, snareClap: 205, hats: 90, percVox: 322, fx: 285, bass: 250, melodic: 222, melodicLoop: 242, drumPercLoop: 175 }, accent: "#7fd4ff", surface: 225 },
-  // Cyberpunk: hot pink, cyan and acid yellow on a dark street.
-  { id: "cyberpunk", name: "Cyberpunk", l: 0.7, c: 0.24, spread: 0.7, hues: { kick: 352, snareClap: 195, hats: 108, percVox: 300, fx: 272, bass: 288, melodic: 330, melodicLoop: 222, drumPercLoop: 60 }, accent: "#ff2bd6", surface: 310 },
-  // Vaporwave: pink, teal and lilac, in the afternoon sun.
-  { id: "vaporwave", name: "Vaporwave", l: 0.76, c: 0.13, spread: 0.65, hues: { kick: 352, snareClap: 344, hats: 190, percVox: 264, fx: 300, bass: 270, melodic: 205, melodicLoop: 242, drumPercLoop: 155 }, accent: "#ff71ce", surface: 300 },
-  // Royal: purple, gold and wine.
-  { id: "royal", name: "Royal", l: 0.55, c: 0.15, spread: 0.85, hues: { kick: 82, snareClap: 342, hats: 108, percVox: 272, fx: 320, bass: 285, melodic: 270, melodicLoop: 250, drumPercLoop: 42 }, accent: "#e6b800", surface: 285 },
   // Sepia: an old photograph: one brown, told apart by lightness.
   { id: "sepia", name: "Sepia", l: 0.6, c: 0.05, hues: { kick: 62, snareClap: 62, hats: 62, percVox: 62, fx: 62, bass: 62, melodic: 62, melodicLoop: 62, drumPercLoop: 62, other: 62 }, ls: { kick: 0.3, snareClap: 0.56, hats: 0.96, percVox: 0.2, fx: 0.47, bass: 0.07, melodic: 0.66, other: 0.86, drumPercLoop: 0.42, melodicLoop: 0.74 }, accent: "#c9923f", surface: 65 },
   // Blueprint: one blue, told apart by lightness.
@@ -122,6 +76,106 @@ export const SPECS: PaletteSpec[] = [
     ls: { kick: 0.3, snareClap: 0.56, hats: 0.96, percVox: 0.2, fx: 0.47, bass: 0.07, melodic: 0.66, other: 0.86, drumPercLoop: 0.42, melodicLoop: 0.74 },
     accent: "#f2f2ee",
   },
+];
+
+/**
+ * A scheme built as a family, which is what keeps it tasteful: every tone sits in one stretch of the colour wheel (`hue` and `span`), the kick alone takes the
+ * contrasting `pop` hue, and the types are told apart by lightness (the ladder below) far more than by hue, so a scheme reads as one palette and not a
+ * rainbow, with a single colour to hit against. `lo` and `hi` bound the lightness of the darkest and lightest types.
+ */
+export interface FamilySpec {
+  id: string;
+  name: string;
+  /** The middle of the family's hues, and how far (degrees) it reaches in all. */
+  hue: number;
+  span: number;
+  /** The contrasting hue the kick takes. */
+  pop: number;
+  /** Chroma of the base tones. */
+  c: number;
+  lo?: number;
+  hi?: number;
+  accent: string;
+  surface?: number;
+}
+
+/** Where on the family's hue stretch each tone sits (-1 to 1; the kick is the pop hue instead) and how high on the lightness ladder (0 to 1). */
+export const FAMILY: Record<ToneId, { t: number; v: number }> = {
+  bass: { t: -1, v: 0 },
+  percVox: { t: -0.15, v: 0.177 },
+  drumPercLoop: { t: -0.5, v: 0.226 },
+  kick: { t: 0, v: 0.46 },
+  fx: { t: 0.55, v: 0.52 },
+  snareClap: { t: -1, v: 0.436 },
+  melodic: { t: 0.25, v: 0.72 },
+  other: { t: 0, v: 0.78 },
+  melodicLoop: { t: 0.7, v: 0.909 },
+  hats: { t: 1, v: 1 },
+};
+
+export function buildFamily(spec: FamilySpec): Palette {
+  const lo = spec.lo ?? 0.34;
+  const hi = spec.hi ?? 0.92;
+  return {
+    id: spec.id,
+    name: spec.name,
+    accent: spec.accent,
+    surface: spec.surface,
+    colors: TONES.map((t) => {
+      const f = FAMILY[t];
+      const hue = t === "kick" ? spec.pop : (spec.hue + (f.t * spec.span) / 2 + 360) % 360;
+      return oklchToHex(lo + f.v * (hi - lo), t === "other" ? ROLES.other.c * spec.c : spec.c * ROLES[t].c, t === "other" ? spec.hue : hue);
+    }),
+  };
+}
+
+export const FAMILIES: FamilySpec[] = [
+  // Koala: grey-blue fur and a pink nose.
+  { id: "koala", name: "Koala", hue: 250, span: 70, pop: 5, c: 0.085, accent: "#ff6b81", surface: 250 },
+  // Studio: dusty cool blues with one rust.
+  { id: "studio", name: "Studio", hue: 235, span: 60, pop: 40, c: 0.085, accent: "#e0a458", surface: 230 },
+  // Pastel: rose, peach and lilac with a mint kick.
+  { id: "pastel", name: "Pastel", hue: 335, span: 110, pop: 175, c: 0.1, lo: 0.4, hi: 0.93, accent: "#ff9eb5" },
+  // Neon: magenta and violet, lime for the kick.
+  { id: "neon", name: "Neon", hue: 305, span: 80, pop: 125, c: 0.24, lo: 0.46, hi: 0.9, accent: "#b6ff00", surface: 300 },
+  // Midnight: deep blue-violets, a gold kick.
+  { id: "midnight", name: "Midnight", hue: 268, span: 70, pop: 85, c: 0.14, lo: 0.3, hi: 0.82, accent: "#ffc83d", surface: 265 },
+  // Sunset: vermilion through apricot to rose, a violet kick.
+  { id: "sunset", name: "Sunset", hue: 30, span: 80, pop: 285, c: 0.15, accent: "#ff7a3d", surface: 30 },
+  // Ocean: blues and teals, a sand kick.
+  { id: "ocean", name: "Ocean", hue: 225, span: 70, pop: 60, c: 0.12, accent: "#28b6d6", surface: 235 },
+  // Deep sea: the same water after dark, a bioluminescent kick.
+  { id: "deepsea", name: "Deep sea", hue: 215, span: 60, pop: 168, c: 0.135, lo: 0.26, hi: 0.8, accent: "#1fd1c1", surface: 215 },
+  // Forest: greens with an amber kick.
+  { id: "forest", name: "Forest", hue: 145, span: 70, pop: 55, c: 0.11, lo: 0.3, hi: 0.86, accent: "#6bbf59", surface: 150 },
+  // Moss: lichen and fern, a terracotta kick.
+  { id: "moss", name: "Moss", hue: 122, span: 60, pop: 32, c: 0.1, lo: 0.32, hi: 0.86, accent: "#9acd32", surface: 125 },
+  // Tropical: lagoon greens and blues, a hot pink kick.
+  { id: "tropical", name: "Tropical", hue: 170, span: 90, pop: 355, c: 0.17, accent: "#00d1a0", surface: 170 },
+  // Candy: bubblegum pinks and peach, an aqua kick.
+  { id: "candy", name: "Candy", hue: 350, span: 80, pop: 198, c: 0.14, lo: 0.4, hi: 0.93, accent: "#ff5fa8", surface: 345 },
+  // Blossom: petals, with a leaf-green kick.
+  { id: "blossom", name: "Blossom", hue: 355, span: 55, pop: 148, c: 0.11, lo: 0.4, hi: 0.94, accent: "#ff8fb1", surface: 350 },
+  // Lavender: violets and lilacs, a butter kick.
+  { id: "lavender", name: "Lavender", hue: 295, span: 65, pop: 92, c: 0.115, lo: 0.34, hi: 0.9, accent: "#b48cff", surface: 290 },
+  // Citrus: lemon, lime and a little leaf, a grapefruit kick.
+  { id: "citrus", name: "Citrus", hue: 100, span: 70, pop: 22, c: 0.16, lo: 0.4, hi: 0.93, accent: "#ffd21f", surface: 100 },
+  // Desert: sand and clay, a sky-blue kick.
+  { id: "desert", name: "Desert", hue: 58, span: 55, pop: 215, c: 0.11, lo: 0.34, hi: 0.9, accent: "#e69a4a", surface: 60 },
+  // Rose gold: blush and copper, a dusty blue kick.
+  { id: "rosegold", name: "Rose gold", hue: 25, span: 45, pop: 250, c: 0.115, lo: 0.36, hi: 0.92, accent: "#e8a190", surface: 20 },
+  // Volcano: lava reds and oranges, an ash-violet kick.
+  { id: "volcano", name: "Volcano", hue: 35, span: 60, pop: 280, c: 0.15, lo: 0.3, hi: 0.84, accent: "#ff4a1c", surface: 25 },
+  // Aurora: green through teal to violet, a pink kick.
+  { id: "aurora", name: "Aurora", hue: 195, span: 130, pop: 335, c: 0.15, accent: "#45f0b0", surface: 170 },
+  // Arctic: ice blues, a warm kick.
+  { id: "arctic", name: "Arctic", hue: 225, span: 55, pop: 15, c: 0.1, lo: 0.38, hi: 0.94, accent: "#7fd4ff", surface: 225 },
+  // Cyberpunk: magenta and violet, a cyan kick.
+  { id: "cyberpunk", name: "Cyberpunk", hue: 305, span: 70, pop: 195, c: 0.22, lo: 0.42, hi: 0.88, accent: "#ff2bd6", surface: 310 },
+  // Vaporwave: pink and lilac, a teal kick.
+  { id: "vaporwave", name: "Vaporwave", hue: 322, span: 90, pop: 190, c: 0.13, lo: 0.4, hi: 0.93, accent: "#ff71ce", surface: 300 },
+  // Royal: purples with a gold kick.
+  { id: "royal", name: "Royal", hue: 290, span: 55, pop: 85, c: 0.14, lo: 0.3, hi: 0.82, accent: "#e6b800", surface: 285 },
 ];
 
 function oklchToRgb(l: number, c: number, h: number): [number, number, number] {
@@ -225,7 +279,7 @@ const organ: Palette = {
   categories: ORGAN,
 };
 
-export const PALETTES: Palette[] = [organ, ...SPECS.map(build)];
+export const PALETTES: Palette[] = [organ, ...FAMILIES.map(buildFamily), ...SPECS.map(build)];
 
 export const DEFAULT_PALETTE_ID = "organ";
 
@@ -262,8 +316,8 @@ export function colorFor(palette: Palette, category: CategoryId): string {
 
 
 /**
- * The colour of the `i`th chop (or section): the palette's own colours, but taken in an order where each colour is as far as it can be from the one before
- * it (a greedy walk round the colours by their distance in OKLCH, starting from the first), so side-by-side chops never look alike. The same colours repeat
+ * The colour of the `i`th chop (or section): the palette's own colours, but taken in an order where each colour is as far as it can be from the last three
+ * before it (a greedy walk round the colours by their distance in OKLCH, starting from the first), so chops near each other never look alike. The same colours repeat
  * in that order for more chops than the palette has.
  */
 export function chopColor(colors: readonly string[], i: number): string {
@@ -274,12 +328,15 @@ export function chopColor(colors: readonly string[], i: number): string {
     return [l, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180)];
   });
   const dist = (a: number, b: number) => Math.hypot(lab[a][0] - lab[b][0], lab[a][1] - lab[b][1], lab[a][2] - lab[b][2]);
+  // Each colour taken next is the one furthest from the last three chosen (the nearest of them counts), so a chop differs from the two before it as well as
+  // the one before, and the same few colours do not keep coming back together.
   const order = [0];
   const left = new Set(colors.map((_, k) => k).slice(1));
   while (left.size > 0) {
-    const last = order[order.length - 1];
+    const recent = order.slice(-3);
+    const near = (k: number) => Math.min(...recent.map((r) => dist(r, k)));
     let best = -1;
-    for (const k of left) if (best < 0 || dist(last, k) > dist(last, best)) best = k;
+    for (const k of left) if (best < 0 || near(k) > near(best) + 1e-9) best = k;
     order.push(best);
     left.delete(best);
   }
