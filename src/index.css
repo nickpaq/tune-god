@@ -81,13 +81,13 @@ button {
   height: 100%;
 }
 
-/* The one exception to the 402 x 874 layout rules: the logo (with its white outline) sits in the iPhone 17 Pro's status bar, where the app runs under it
-   (black-translucent), between the clock and the Dynamic Island. Placed from the viewport test's touch readout: the island's left tip is at x 138, y 31 (its middle line), the clock ends near x 93, so a 22 px mark with equal 11.5 px gaps starts at x 104.5 and is centred on y 31.
+/* The one exception to the 402 x 874 layout rules: the logo (with its white outline) sits in the iPhone's status bar, where the app runs under it
+   (black-translucent), in the top left corner on the clock's level: the clock starts at x 45 to 56 (it is centred in its slot), so a 22 px mark centred between the screen's edge and the clock starts at x 13, with its middle on y 32 (the clock's middle). It no longer sits beside the island, which widens under the orange microphone dot and covered it there.
    Fixed device pixels on purpose. */
 .status-mark {
   position: fixed;
-  top: 20px;
-  left: 104.5px;
+  top: 21px;
+  left: 13px;
   width: 22px;
   height: 22px;
   z-index: 10000;
