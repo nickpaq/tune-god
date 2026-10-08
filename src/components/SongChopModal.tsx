@@ -420,8 +420,9 @@ export function SongChopModal({
     const old = marks.oneOne;
     const others = old === null ? marks.chops : marks.chops.filter((f) => f !== old);
     if (old !== null && Math.abs(old - cursor) <= grid.segments[0].beatFrames / 4) return change({ ...marks, oneOne: null, chops: others }, "1.1.1 removed");
-    // Completely free: exactly the cursor's frame, with no snapping to an attack or a bar line. The grid is anchored on it (gridWithMarks).
-    const frame = Math.round(cursor);
+    // The first 1.1.1 is completely free: exactly the cursor's frame, no snapping to an attack or a bar line (the grid is anchored on it, gridWithMarks).
+    // Only when another 1.1.1 is already defined does the new one snap, to the nearest bar line of that grid, which leaves the grid as it was.
+    const frame = old !== null ? lineFrame(grid, barLineNear(grid, cursor)) : Math.round(cursor);
     change({ ...marks, oneOne: frame, chops: [...others, frame] }, `1.1.1 and chop set at ${formatTime(frame / sampleRate)}`);
   };
 
