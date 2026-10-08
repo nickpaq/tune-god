@@ -9,8 +9,8 @@ const FLAG_H = 14;
 const MIN_SPAN_SECONDS = 0.25;
 /** A bar narrower than this on the screen (CSS pixels) is too small to be a line of its own: the grid then shows (and the snap takes) every fourth bar, and at the widest views every sixteenth. */
 const MIN_BAR_PX = 30;
-/** Zooming in eases up over about this much travel below the waveform (px); zooming out has no ease. */
-const ZOOM_EASE_PX = 60;
+/** Zooming in eases up over about this much downward travel (px); zooming out has no ease. */
+const ZOOM_EASE_PX = 40;
 
 /** Momentum after a scrub: the glide slows with this time constant (ms); in snap mode it is shorter, so the glide into the nearest line is barely changed. A release this long (ms) after the last movement glides nowhere; the glide ends below 0.02 px/ms. */
 const COAST_TAU_MS = 260;
@@ -331,12 +331,11 @@ export const ChopTimeline = forwardRef<
       d.pivot = view.current.cursor - d.span / 2 + across(e.clientX) * d.span;
       latest.current.onScrub();
     }
-    // Ableton style: sideways drags the waveform, and the point under the finger stays under it. Up zooms out at once, from where the drag began.
-    // Down zooms in only once the finger has left the waveform's bottom edge, then at once, with a gradual increase (eased in, then the same pace as up).
-    // The zoom stays where it was left on release.
+    // Ableton style: sideways drags the waveform, and the point under the finger stays under it. Vertical travel from where the drag began zooms at once:
+    // up zooms out straight away, down zooms in with a smooth start (eased in, then the same pace as up). The zoom stays where it was left on release.
     const rect = canvas.current!.getBoundingClientRect();
-    const below = Math.max(0, e.clientY - Math.max(rect.bottom, d.y0));
-    const outside = e.clientY < d.y0 ? e.clientY - d.y0 : (below * below) / (below + ZOOM_EASE_PX);
+    const dy = e.clientY - d.y0;
+    const outside = dy > 0 ? (dy * dy) / (dy + ZOOM_EASE_PX) : dy;
     const resting = Math.max(d.span, Math.min(total, START_SECONDS * sampleRate));
     const rate = zoomRate(resting, zoomRoom(rect.bottom, window.innerHeight), minSpan);
     const span = spanAfterDrag(d.span, outside, rate, total, minSpan);
