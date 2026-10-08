@@ -42,7 +42,7 @@ interface Peaks {
  * One row, drawn the way the chop editor's screen is: black, the chop shaded in its colour with the waveform in the screen's ink over it, and a line in the chop's colour where it starts. The playhead is the line near the left, with the end of the slot before shaded to its left. The row
  * is one beat-square tall. Every row is on the same scale (`span` eighth notes across the rest), so the chops line up as blocks.
  */
-function RowCanvas({ peaks, color, tail, eighths, len, span }: { peaks: Peaks | null; color: string; tail: string | null; eighths: number; len: number; span: number }) {
+function RowCanvas({ peaks, color, eighths, len, span }: { peaks: Peaks | null; color: string; eighths: number; len: number; span: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -62,12 +62,6 @@ function RowCanvas({ peaks, color, tail, eighths, len, span }: { peaks: Peaks | 
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, w, h);
 
-    // The end of the slot before, to the left of the playhead.
-    if (tail) {
-      ctx.fillStyle = tail;
-      ctx.globalAlpha = 0.6;
-      ctx.fillRect(0, 0, x0, h);
-    }
     // The chop, shaded in its colour, with its waveform; what will not play is dimmed.
     const full = Math.min(w, Math.round(x(eighths)));
     ctx.fillStyle = color;
@@ -101,7 +95,43 @@ function RowCanvas({ peaks, color, tail, eighths, len, span }: { peaks: Peaks | 
     }
     ctx.fillStyle = ink;
     ctx.fillRect(x0 - thick, 0, thick, h);
-  }, [peaks, color, tail, eighths, len, span]);
+  }, [peaks, color, eighths, len, span]);
+  return <canvas ref={ref} className="maker__canvas" />;
+}
+
+/**
+ * The end of the slot before the playhead, in its chop's colour with the tail of its waveform: one row tall, at the bottom left of the list. Everything else
+ * left of the playhead is black.
+ */
+function TailCanvas({ peaks, color, from, to }: { peaks: Peaks | null; color: string; from: number; to: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ratio = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(el.clientWidth * ratio));
+    const h = Math.max(1, Math.round(el.clientHeight * ratio));
+    if (el.width !== w) el.width = w;
+    if (el.height !== h) el.height = h;
+    const ctx = el.getContext("2d");
+    if (!ctx) return;
+    const ink = getComputedStyle(el).color;
+    const one = Math.max(1, Math.round(ratio));
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.6;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = ink;
+    if (peaks) {
+      for (let col = 0; col < w; col++) {
+        const i = Math.min(COLUMNS - 1, Math.max(0, Math.floor((from + ((to - from) * col) / w) * COLUMNS)));
+        const level = Math.min(1, Math.max(peaks.max[i], -peaks.min[i]));
+        ctx.fillRect(col, h - level * h * 0.75 - one, 1, level * h * 0.75 + one);
+      }
+    }
+  }, [peaks, color, from, to]);
   return <canvas ref={ref} className="maker__canvas" />;
 }
 
@@ -241,7 +271,7 @@ export function PatternMaker({
   };
 
   // ---- the finger on a row ----
-  const touch = useRef<{ key: RowKey; row: number; x: number; y: number; width: number; startLen: number; dragging: boolean; inTail: boolean } | null>(null);
+  const touch = useRef<{ key: RowKey; row: number; x: number; y: number; width: number; startLen: number; dragging: boolean } | null>(null);
   const lastTap = useRef<{ key: RowKey; at: number } | null>(null);
   const select = (to: number, count = slots.length) => {
     stopPlay();
@@ -259,7 +289,7 @@ export function PatternMaker({
   };
   const down = (key: RowKey, row: number) => (e: React.PointerEvent<HTMLDivElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
-    touch.current = { key, row, x: e.clientX, y: e.clientY, width: box.width * (1 - MARGIN), startLen: lenOf(key), dragging: false, inTail: e.clientX - box.left < box.width * MARGIN };
+    touch.current = { key, row, x: e.clientX, y: e.clientY, width: box.width * (1 - MARGIN), startLen: lenOf(key), dragging: false };
   };
   const move = (e: React.PointerEvent<HTMLDivElement>) => {
     const t = touch.current;
@@ -285,11 +315,6 @@ export function PatternMaker({
     touch.current = null;
     if (!t) return;
     if (!t.dragging) {
-      // The bit of the slot before that shows left of the playhead: it plays from its beginning.
-      if (t.inTail) {
-        if (before?.kind === "chop") playChop(before.chop, before.eighths);
-        return;
-      }
       // The row in the zone is locked in.
       if (t.row === centered) {
         lastTap.current = null;
@@ -413,9 +438,11 @@ export function PatternMaker({
   const stripSpan = Math.max(barEighths * 8, shownStarts.total + barEighths * 2);
   const at = sel < shown.length ? shownStarts.starts[sel] : shownStarts.total;
   const stripColor = (s: Slot) => (s.kind === "chop" ? chops[s.chop].color : "transparent");
-  /** The slot before the selected one: the end of it shows left of the playhead in every row. */
+  /** The slot before the selected one: its end shows in one row at the bottom left of the list, left of the playhead; the rest of that side is black. */
   const before = sel > 0 ? shown[sel - 1] : undefined;
-  const tail = before ? (before.kind === "chop" ? chops[before.chop].color : "#8a8a8a") : null;
+  const tailSpan = (span * MARGIN) / (1 - MARGIN);
+  const beforeChop = before?.kind === "chop" ? chops[before.chop] : undefined;
+  const beforeFull = beforeChop ? chopEighths(beforeChop, beatsPerBar) : 1;
 
   /** The grid markers are on the sequence only, where the chosen slots play: a line for every bar, and for every beat once they are wide enough to tell apart. */
   const barPct = (barEighths / stripSpan) * 100;
@@ -467,11 +494,15 @@ export function PatternMaker({
                   const chop = key === "s" ? null : chops[key];
                   return (
                     <div key={String(key)} className={`maker__row${j === centered ? " maker__row--on" : ""}`} onPointerDown={down(key, j)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
+                      {key === "s" && before && (
+                        <div className="maker__tail" onClick={() => before.kind === "chop" && playChop(before.chop, before.eighths)} aria-label="Play the slot before from its start">
+                          <TailCanvas peaks={before.kind === "chop" ? peaksOf(before.chop) : null} color={beforeChop?.color ?? "#8a8a8a"} from={Math.max(0, before.eighths - tailSpan) / beforeFull} to={before.eighths / beforeFull} />
+                        </div>
+                      )}
                       {Math.abs(j - centered) <= visible && (
                         <RowCanvas
                           peaks={chop ? peaksOf(key as number) : null}
                           color={chop?.color ?? "#8a8a8a"}
-                          tail={tail}
                           eighths={chop ? fullOf(key) : lenOf("s")}
                           len={Math.min(lenOf(key), maxOf(key))}
                           span={span}

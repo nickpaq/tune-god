@@ -1997,7 +1997,7 @@
 .maker__well {
   position: relative;
   flex: none;
-  height: 112cqw;
+  height: 98cqw;
   background: #000;
   overflow: hidden;
 }
@@ -2014,6 +2014,7 @@
 
 /* one beat-square tall: a beat is a sixteenth of the width at the closest view (four bars across) */
 .maker__row {
+  position: relative;
   box-sizing: border-box;
   height: 5.6cqw;
   scroll-snap-align: center;
@@ -2024,6 +2025,15 @@
 /* the row in the middle is the one that counts: full brightness and contrast */
 .maker__row--on {
   filter: none;
+}
+
+.maker__tail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  width: 10%;
+  height: 5.6cqw;
 }
 
 .maker__canvas {
