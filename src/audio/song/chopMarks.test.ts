@@ -184,3 +184,22 @@ describe("a tempo set by hand", () => {
     expect(bpmAt(grid, 0)).toBeCloseTo(120, 6);
   });
 });
+
+describe("the 1.1.1 as the pivot of a tempo change", () => {
+  it("stays on its place in the waveform while the tempo changes", () => {
+    for (const bpm of [100, 140]) {
+      const grid = gridWithMarks(base, { downbeats: [], oneOne: 7300, tempoScale: 1, bpm });
+      expect(lineFrame(grid, 0)).toBe(7300);
+    }
+    const withDownbeats = gridWithMarks(base, { downbeats: [1000, 3010], oneOne: 7300, tempoScale: 1, bpm: 140 });
+    expect(lineFrame(withDownbeats, barLineNear(withDownbeats, 7300))).toBe(7300);
+  });
+
+  it("a 1.1.1 moved to a bar line of that grid leaves the grid as it was", () => {
+    const first = gridWithMarks(base, { downbeats: [], oneOne: 7300, tempoScale: 1, bpm: 100 });
+    const line = barLineNear(first, 7300 - 2 * 4 * (60000 / 100));
+    const moved = gridWithMarks(base, { downbeats: [], oneOne: lineFrame(first, line), tempoScale: 1, bpm: 100 });
+    expect(lineFrame(moved, 4)).toBeCloseTo(lineFrame(first, line + 4), 6);
+    expect(lineFrame(moved, 8)).toBeCloseTo(lineFrame(first, line + 8), 6);
+  });
+});

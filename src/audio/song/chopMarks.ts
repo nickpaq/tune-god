@@ -52,7 +52,9 @@ export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "o
   const byHand = marks.bpm != null && marks.bpm > 0;
   const detected = byHand ? (60 * base.sampleRate) / marks.bpm! : base.segments[0].beatFrames / marks.tempoScale;
   // The 1.1.1 only says which bar is bar 1 once a downbeat marker has measured the grid; on its own it is the one anchor there is.
-  const frames = [...new Set(marks.oneOne === null || marks.downbeats.length > 0 ? marks.downbeats : [marks.oneOne])].sort((a, b) => a - b);
+  // A tempo changed by hand (or halved or doubled) turns the grid about the 1.1.1: it stays on its place in the waveform and every other line moves.
+  const pivot = marks.oneOne !== null && (byHand || marks.tempoScale !== 1);
+  const frames = [...new Set(pivot ? [marks.oneOne!, ...marks.downbeats] : marks.oneOne === null || marks.downbeats.length > 0 ? marks.downbeats : [marks.oneOne])].sort((a, b) => a - b);
   if (frames.length === 0) return marks.tempoScale === 1 && !byHand ? base : { ...base, segments: [{ ...base.segments[0], beatFrames: detected }] };
 
   let beat = detected;
