@@ -78,7 +78,7 @@ function RowCanvas({ peaks, scale, color, tail, eighths, len, span }: { peaks: P
     ctx.fillRect(x0, Math.floor(mid), full - x0, one);
     ctx.globalAlpha = 1;
     if (peaks && full > x0) {
-      const k = (h / 2) * 0.94 * scale;
+      const k = ((h / 2) * 0.94 * scale) / 4; // a quarter of the height the chop editor draws
       const width = full - x0;
       for (let col = 0; col < width; col++) {
         const i = Math.min(COLUMNS - 1, Math.floor((col / width) * COLUMNS));
@@ -146,7 +146,7 @@ export function PatternMaker({
   const [visible, setVisible] = useState(12);
   const [scrollPlay, setScrollPlay] = useState(false);
 
-  const pyramid = useMemo<PeakPyramid>(() => buildPyramid(channelData), [channelData]);
+  const pyramid = useMemo<PeakPyramid>(() => buildPyramid([channelData[0]]), [channelData]); // the left channel only
   const scale = pyramid.peak > 0 ? 1 / pyramid.peak : 1;
   const peakCache = useRef(new Map<number, Peaks>());
   const peaksOf = (i: number): Peaks => {
