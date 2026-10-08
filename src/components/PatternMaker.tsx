@@ -512,6 +512,16 @@ export function PatternMaker({
             </div>
           </div>
 
+          <div className="chop__row maker__cycle">
+            <button className="chop__btn chop__grow" disabled={centered <= 0} onClick={() => scrollTo(centered - 1)} aria-label="Up one chop">
+              ▲
+            </button>
+            <span className="maker__cycle-label">Cycle chop-tions</span>
+            <button className="chop__btn chop__grow" disabled={centered >= rows.length - 1} onClick={() => scrollTo(centered + 1)} aria-label="Down one chop">
+              ▼
+            </button>
+          </div>
+
           <div className="chop__row">
             <button className="chop__btn chop__grow" disabled={sel === 0} onClick={() => select(sel - 1)} aria-label="Previous slot">
               ◀

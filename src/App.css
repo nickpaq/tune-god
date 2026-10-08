@@ -2033,3 +2033,15 @@
   background: #000;
   color: var(--oled);
 }
+
+.maker__cycle {
+  flex-wrap: nowrap;
+}
+
+.maker__cycle-label {
+  flex: none;
+  color: var(--ink3);
+  font-size: 2.8cqw;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
