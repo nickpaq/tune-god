@@ -103,6 +103,7 @@ export interface SavedChopMarks {
   downbeats: readonly number[];
   oneOne: number | null;
   tempoScale: number;
+  bpm?: number | null;
 }
 
 export function loadChopMarks(songKey: string): SavedChopMarks | null {

@@ -19,9 +19,11 @@ export interface Marks {
   oneOne: number | null;
   /** The detected tempo is taken this many times over (2 for double time, 0.5 for half time). */
   tempoScale: number;
+  /** A tempo set by hand (double tap to snap, drag to scrub): the grid's tempo exactly, ahead of the detection, the markers' fit and the drift correction. Null leaves them in charge. */
+  bpm?: number | null;
 }
 
-export const NO_MARKS: Marks = { chops: [], downbeats: [], oneOne: null, tempoScale: 1 };
+export const NO_MARKS: Marks = { chops: [], downbeats: [], oneOne: null, tempoScale: 1, bpm: null };
 
 /** How far the tempo fitted through the markers may stray from the detected one (a ratio), so a stray marker cannot bend the grid. */
 const FIT_RANGE = 0.15;
@@ -45,12 +47,13 @@ export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, d
  * counted, so the BPM homes in on the exact one as markers are added) and is a single tempo for the whole song; each anchor then re-locks the phase from
  * there, which only ever moves the lines by the little the fitted tempo is out. With no anchor the detection's own bar 1 and tempo stand.
  */
-export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "oneOne" | "tempoScale">): TapGrid {
+export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "oneOne" | "tempoScale" | "bpm">): TapGrid {
   const bpb = base.beatsPerBar;
-  const detected = base.segments[0].beatFrames / marks.tempoScale;
+  const byHand = marks.bpm != null && marks.bpm > 0;
+  const detected = byHand ? (60 * base.sampleRate) / marks.bpm! : base.segments[0].beatFrames / marks.tempoScale;
   // The 1.1.1 only says which bar is bar 1 once a downbeat marker has measured the grid; on its own it is the one anchor there is.
   const frames = [...new Set(marks.oneOne === null || marks.downbeats.length > 0 ? marks.downbeats : [marks.oneOne])].sort((a, b) => a - b);
-  if (frames.length === 0) return marks.tempoScale === 1 ? base : { ...base, segments: [{ ...base.segments[0], beatFrames: detected }] };
+  if (frames.length === 0) return marks.tempoScale === 1 && !byHand ? base : { ...base, segments: [{ ...base.segments[0], beatFrames: detected }] };
 
   let beat = detected;
   const anchors = [{ bars: 0, frame: frames[0] }];
@@ -60,7 +63,8 @@ export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "o
     const bars = Math.round((frame - last.frame) / (beat * bpb));
     if (bars < 1) continue;
     anchors.push({ bars: last.bars + bars, frame });
-    // The tempo fitted through every anchor so far.
+    // The tempo fitted through every anchor so far (a tempo set by hand stays).
+    if (byHand) continue;
     const n = anchors.length;
     const meanX = anchors.reduce((t, a) => t + a.bars, 0) / n;
     const meanY = anchors.reduce((t, a) => t + a.frame, 0) / n;

@@ -171,3 +171,16 @@ describe("history", () => {
     expect(undo(h).present).toBe(1);
   });
 });
+
+describe("a tempo set by hand", () => {
+  it("is the grid's tempo exactly, ahead of the detection", () => {
+    const grid = gridWithMarks(base, { downbeats: [], oneOne: null, tempoScale: 1, bpm: 100 });
+    expect(bpmAt(grid, 0)).toBeCloseTo(100, 6);
+    expect(lineFrame(grid, 0)).toBe(1000);
+  });
+
+  it("is not bent by the fit through downbeat markers", () => {
+    const grid = gridWithMarks(base, { downbeats: [1000, 3010, 5030], oneOne: null, tempoScale: 1, bpm: 120 });
+    expect(bpmAt(grid, 0)).toBeCloseTo(120, 6);
+  });
+});

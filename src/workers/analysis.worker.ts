@@ -7,6 +7,8 @@ import { frequencyToMidi } from "../audio/theory";
 import { classifySample, extractFeatures, isTunedCategory, type CategoryId } from "../audio/classify";
 import { classifyDetail, type Detail } from "../audio/padLabels";
 import { analyzeSong, type SongAnalysis } from "../audio/song/beats";
+import { correctDrift, type DriftFix } from "../audio/song/driftFix";
+import type { TapGrid } from "../audio/song/tapGrid";
 
 const api = {
   /** Fractional MIDI note of the sample's dominant pitch, or null when it has no clear one (drums, noise). */
@@ -18,6 +20,11 @@ const api = {
   /** Tempo, bar 1 and key of a whole song, from its mono mix. */
   analyzeSong(mono: Float32Array, sampleRate: number, beatsPerBar: number): SongAnalysis | null {
     return analyzeSong(mono, sampleRate, beatsPerBar);
+  },
+
+  /** The grid with its tempo and phase corrected from the hits that sound like the one on its first downbeat. */
+  correctDrift(mono: Float32Array, grid: TapGrid): DriftFix {
+    return correctDrift(mono, grid);
   },
 
   /** Pitch plus a best-guess sound category, sharing one pitch-detection pass. */

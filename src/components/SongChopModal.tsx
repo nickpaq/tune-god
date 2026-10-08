@@ -20,6 +20,7 @@ import {
   undo,
   type Marks,
 } from "../audio/song/chopMarks";
+import type { DriftFix } from "../audio/song/driftFix";
 import { bpmAt, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
 import { buildPyramid } from "../audio/song/waveform";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
@@ -46,6 +47,15 @@ interface Detected {
   downbeatSeconds: number;
   key: SongKey;
 }
+
+/** The BPM readout: a finger that moves this far (CSS pixels) is scrubbing; two taps within this (ms) are a double tap. */
+const BPM_DRAG_PX = 4;
+const BPM_DOUBLE_MS = 320;
+/** Scrubbing: BPM per pixel dragged up, shrinking as 1 / (1 + dx / BPM_FINE_PX) with dx the finger's distance right of where it went down. */
+const BPM_PER_PX = 0.25;
+const BPM_FINE_PX = 25;
+const BPM_MIN = 30;
+const BPM_MAX = 300;
 
 /** Where a downbeat marker looks for the sound's real attack, either side of the cursor (seconds). */
 const ATTACK_RADIUS_S = 0.02;
@@ -147,7 +157,38 @@ export function SongChopModal({
     if (detected === null) return null;
     return detected === "none" ? baseGrid(sampleRate, beatsPerBar, 120, 0) : baseGrid(sampleRate, beatsPerBar, detected.bpm, detected.downbeatSeconds);
   }, [detected, sampleRate, beatsPerBar]);
-  const grid = useMemo(() => (base ? gridWithMarks(base, marks) : null), [base, marks]);
+  /** The tempo being scrubbed with a finger on the BPM readout, not yet in the history (it is when the finger lifts). */
+  const [liveBpm, setLiveBpm] = useState<number | null>(null);
+  const shownMarks = useMemo<Marks>(() => (liveBpm === null ? marks : { ...marks, bpm: liveBpm }), [marks, liveBpm]);
+  const rawGrid = useMemo(() => (base ? gridWithMarks(base, shownMarks) : null), [base, shownMarks]);
+  // Drift correction: the hits that sound like the transient on the grid's first downbeat are followed along the song, which corrects the tempo and
+  // re-locks the grid where it has drifted. A tempo set by hand, or two downbeat markers (which measure the grid themselves), take over from it.
+  const canCorrect = detected !== null && detected !== "none" && shownMarks.bpm == null && marks.downbeats.length < 2;
+  const [corrected, setCorrected] = useState<{ from: TapGrid; fix: DriftFix } | null>(null);
+  const toldCorrection = useRef(false);
+  useEffect(() => {
+    if (!rawGrid || !canCorrect) return;
+    let alive = true;
+    const timer = setTimeout(() => {
+      const copy = mono.slice();
+      nextAnalysisWorker()
+        .correctDrift(Comlink.transfer(copy, [copy.buffer]), rawGrid)
+        .then((fix) => {
+          if (!alive) return;
+          setCorrected({ from: rawGrid, fix });
+          if (fix.matches > 0 && !toldCorrection.current) {
+            toldCorrection.current = true;
+            setStatus(`Grid lined up with ${fix.matches} matching hits${fix.relocks > 0 ? `, re-locked ${fix.relocks}x` : ""}`);
+          }
+        })
+        .catch(() => {});
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [rawGrid, canCorrect, mono]);
+  const grid = rawGrid && canCorrect && corrected?.from === rawGrid ? corrected.fix.grid : rawGrid;
 
   // The 1.1.1 is the first chop marker: a chop before it does not count.
   const lines = useMemo(() => {
@@ -327,7 +368,44 @@ export function SongChopModal({
     change({ ...marks, downbeats: [...marks.downbeats, frame] }, `Downbeat added at ${formatTime(frame / sampleRate)}`);
   };
 
-  const scaleTempo = (factor: number) => change({ ...marks, tempoScale: marks.tempoScale * factor }, factor > 1 ? "Tempo doubled" : "Tempo halved");
+  const scaleTempo = (factor: number) => change({ ...marks, tempoScale: marks.tempoScale * factor, bpm: marks.bpm == null ? null : marks.bpm * factor }, factor > 1 ? "Tempo doubled" : "Tempo halved");
+
+  // ---- the BPM readout: double tap snaps to the nearest whole number; a drag up or down scrubs it, finer the further right the finger is ----
+  const bpmTouch = useRef<{ x0: number; y0: number; y: number; bpm: number; moved: boolean } | null>(null);
+  const lastBpmTap = useRef(0);
+  const bpmNow = grid ? bpmAt(grid, 0) : 0;
+  const bpmDown = (e: React.PointerEvent<HTMLSpanElement>) => {
+    if (!grid) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    bpmTouch.current = { x0: e.clientX, y0: e.clientY, y: e.clientY, bpm: bpmNow, moved: false };
+  };
+  const bpmMove = (e: React.PointerEvent<HTMLSpanElement>) => {
+    const t = bpmTouch.current;
+    if (!t) return;
+    if (!t.moved && Math.hypot(e.clientX - t.x0, e.clientY - t.y0) < BPM_DRAG_PX) return;
+    t.moved = true;
+    // Each step counts at the fineness of where the finger is now: the further right of where it went down, the smaller the BPM per pixel.
+    const perPixel = BPM_PER_PX / (1 + Math.max(0, e.clientX - t.x0) / BPM_FINE_PX);
+    t.bpm = Math.min(BPM_MAX, Math.max(BPM_MIN, t.bpm + (t.y - e.clientY) * perPixel));
+    t.y = e.clientY;
+    setLiveBpm(t.bpm);
+  };
+  const bpmUp = () => {
+    const t = bpmTouch.current;
+    bpmTouch.current = null;
+    if (!t || !grid) return;
+    if (t.moved) {
+      const bpm = Math.round(t.bpm * 100) / 100;
+      setLiveBpm(null);
+      return change({ ...marks, bpm }, `Tempo set to ${bpm.toFixed(2)} BPM`);
+    }
+    const now = performance.now();
+    if (now - lastBpmTap.current < BPM_DOUBLE_MS) {
+      lastBpmTap.current = 0;
+      const bpm = Math.round(bpmNow);
+      if (bpm >= BPM_MIN) change({ ...marks, bpm }, `Tempo snapped to ${bpm} BPM`);
+    } else lastBpmTap.current = now;
+  };
 
   /** The 1.1.1 is also the first chop marker: it is put there as the chop is, and goes and moves with it. */
   const addOneOne = () => {
@@ -372,7 +450,9 @@ export function SongChopModal({
           <div className="chop__screen">
             <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} onScrub={scrubStart} onScrubEnd={scrubEnd} />
             <div className="chop__readout">
-              <span>{bpmText}</span>
+              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="Double tap: nearest whole BPM. Drag up or down to scrub; move right to go finer.">
+                {bpmText}
+              </span>
               <span>{readoutTwo}</span>
             </div>
           </div>

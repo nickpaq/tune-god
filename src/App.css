@@ -1570,6 +1570,13 @@
   text-overflow: ellipsis;
 }
 
+.chop__readout .chop__bpm {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: ns-resize;
+}
+
 .chop__readout span:last-child {
   opacity: 0.7;
 }
