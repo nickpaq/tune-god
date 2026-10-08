@@ -45,7 +45,7 @@ import { addChopperPad, CHOPPER_MAX_SLICES, fitPlans, sliceLayout, type ChopperE
 import { keyOffset } from "./audio/song/keyOffset";
 import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
 import { PatternMaker } from "./components/PatternMaker";
-import { needsGate, patternBars, slotNotes, type Slot } from "./audio/song/patternMaker";
+import { chopColors, needsGate, patternBars, slotNotes, type Slot } from "./audio/song/patternMaker";
 import { CHOPPER_MIN_SECONDS, ChopperSourceModal } from "./components/ChopperSourceModal";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
@@ -1046,6 +1046,8 @@ function App() {
           return;
         }
         const layout = sliceLayout(plans, total);
+        // Every chop its own colour, none repeating (the palette first, then colours spread round the wheel).
+        const colors = chopColors(plans.length, palette.colors);
         // The chopper is not stretched: it plays at the sample's own tempo, and a pitch change speeds it up or slows it down by the same amount.
         const tempo = Math.min(300, Math.max(20, Math.round(settings.bpm * 2 ** (offset / 12) * 100) / 100));
         const pad: Pad = {
@@ -1074,7 +1076,7 @@ function App() {
                 length: plan.length,
                 bars: plan.bars,
                 barIndex: plan.barIndex ?? 0,
-                color: palette.colors[(plan.colorIndex ?? i) % palette.colors.length],
+                color: colors[i],
               })),
             },
           },

@@ -65,7 +65,7 @@ function RowCanvas({ peaks, color, eighths, len, span }: { peaks: Peaks | null; 
     // The chop, shaded in its colour, with its waveform; what will not play is dimmed.
     const full = Math.min(w, Math.round(x(eighths)));
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.6;
+    ctx.globalAlpha = 0.3; // the same tint as the chop editor's sections
     ctx.fillRect(x0, 0, full - x0, h);
     ctx.fillStyle = ink;
     ctx.globalAlpha = 1;
@@ -120,7 +120,7 @@ function TailCanvas({ peaks, color, from, to }: { peaks: Peaks | null; color: st
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.6;
+    ctx.globalAlpha = 0.3;
     ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1;
     ctx.fillStyle = ink;

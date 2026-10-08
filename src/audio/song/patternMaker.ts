@@ -131,3 +131,11 @@ export function renderSequence(channelData: readonly Float32Array[], chops: read
   });
   return out;
 }
+
+/**
+ * A colour for every chop, none repeating: the chop editor's palette colours first, in order, then colours spread round the colour wheel by the golden
+ * angle (so neighbours differ and any number are told apart), at about the palette's own saturation and lightness.
+ */
+export function chopColors(count: number, palette: readonly string[]): string[] {
+  return Array.from({ length: count }, (_, i) => (i < palette.length ? palette[i] : `hsl(${Math.round((i * 137.508) % 360)} 62% 56%)`));
+}
