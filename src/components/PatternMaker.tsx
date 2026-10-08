@@ -460,7 +460,6 @@ export function PatternMaker({
   };
 
   const bpm = (60 * sampleRate) / beatFrames;
-  const readoutTwo = sel < slots.length ? `Slot ${sel + 1} of ${slots.length}` : `${slots.length} slot${slots.length === 1 ? "" : "s"}, next`;
 
   return (
     <div className="palette-backdrop chop-backdrop" onClick={askClose}>
@@ -518,8 +517,7 @@ export function PatternMaker({
 
             <div className="chop-timeline__bar">Bar {positionText(at, beatsPerBar)}</div>
             <div className="chop__readout">
-              <span>{bpm.toFixed(2)} BPM</span>
-              <span>{readoutTwo}</span>
+              <span>{bpm.toFixed(2)}</span>
             </div>
           </div>
 

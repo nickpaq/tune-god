@@ -50,13 +50,19 @@ interface Detected {
 }
 
 /** The BPM readout: a finger that moves this far (CSS pixels) is scrubbing; two taps within this (ms) are a double tap. */
-const BPM_DRAG_PX = 4;
+const BPM_DRAG_PX = 8;
 const BPM_DOUBLE_MS = 320;
 /** Scrubbing: BPM per pixel dragged up, shrinking as 1 / (1 + dx / BPM_FINE_PX) with dx the finger's distance right of where it went down. */
-const BPM_PER_PX = 0.25;
-const BPM_FINE_PX = 25;
+const BPM_PER_PX = 0.08;
+const BPM_FINE_PX = 70;
 const BPM_MIN = 30;
 const BPM_MAX = 300;
+/** The + and - keys: a tap nudges by this much; held, after a pause, the rate climbs from BPM_HOLD_START (BPM per second) to a semitone of tempo per second. */
+const BPM_NUDGE = 0.01;
+const BPM_HOLD_DELAY_MS = 350;
+const BPM_HOLD_START = 0.05;
+const BPM_HOLD_DOUBLE_S = 0.6;
+const SEMITONE_RATIO = 2 ** (1 / 12) - 1;
 
 /** Where a downbeat marker looks for the sound's real attack, either side of the cursor (seconds). */
 const ATTACK_RADIUS_S = 0.02;
@@ -70,6 +76,16 @@ const barsText = (bars: number) => {
   const shown = +bars.toFixed(2);
   return `${shown} bar${shown === 1 ? "" : "s"}`;
 };
+
+/** A pixel-drawn plus or minus (a 5 x 5 grid of squares). */
+function NudgeIcon({ plus }: { plus: boolean }) {
+  return (
+    <svg viewBox="0 0 5 5" width="100%" height="100%" shapeRendering="crispEdges" aria-hidden="true">
+      <rect x="0" y="2" width="5" height="1" fill="currentColor" />
+      {plus && <rect x="2" y="0" width="1" height="5" fill="currentColor" />}
+    </svg>
+  );
+}
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -124,7 +140,7 @@ export function SongChopModal({
   });
   const marks = history.present;
   /** What the last press did, for the readout. */
-  const [status, setStatus] = useState(() => (history.present === NO_MARKS ? "" : "Your saved markers are back"));
+  const [, setStatus] = useState(() => (history.present === NO_MARKS ? "" : "Your saved markers are back"));
   useEffect(() => {
     saveChopMarks(songKey, marks);
   }, [songKey, marks]);
@@ -413,6 +429,40 @@ export function SongChopModal({
     } else lastBpmTap.current = now;
   };
 
+  // ---- the + and - keys: tap = 0.01, hold = slowly accelerating up to a semitone of tempo per second ----
+  const nudgeHold = useRef<{ bpm: number; timer: number; raf: number } | null>(null);
+  const nudgeStop = () => {
+    const h = nudgeHold.current;
+    if (!h) return;
+    nudgeHold.current = null;
+    window.clearTimeout(h.timer);
+    cancelAnimationFrame(h.raf);
+    const bpm = Math.round(h.bpm * 100) / 100;
+    setLiveBpm(null);
+    if (grid && bpm !== Math.round(bpmNow * 100) / 100) change({ ...marks, bpm }, `Tempo set to ${bpm.toFixed(2)} BPM`);
+  };
+  const nudgeStart = (dir: 1 | -1) => (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!grid || nudgeHold.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const clamp = (v: number) => Math.min(BPM_MAX, Math.max(BPM_MIN, v));
+    const h = { bpm: clamp(Math.round(bpmNow * 100) / 100 + dir * BPM_NUDGE), timer: 0, raf: 0 };
+    nudgeHold.current = h;
+    setLiveBpm(h.bpm);
+    h.timer = window.setTimeout(() => {
+      const t0 = performance.now();
+      let last = t0;
+      const tick = (now: number) => {
+        const held = (now - t0) / 1000;
+        const rate = Math.min(BPM_HOLD_START * 2 ** (held / BPM_HOLD_DOUBLE_S), h.bpm * SEMITONE_RATIO);
+        h.bpm = clamp(h.bpm + dir * rate * ((now - last) / 1000));
+        last = now;
+        setLiveBpm(h.bpm);
+        h.raf = requestAnimationFrame(tick);
+      };
+      h.raf = requestAnimationFrame(tick);
+    }, BPM_HOLD_DELAY_MS);
+  };
+
   /** The 1.1.1 is also the first chop marker: it is put there as the chop is, and goes and moves with it. */
   const addOneOne = () => {
     if (!grid) return;
@@ -437,8 +487,7 @@ export function SongChopModal({
   const chopFrames = grid ? lines.map((n) => lineFrame(grid, n)) : [];
   
   const note = "Scroll the waveform to a cut and add a chop. A downbeat marker locks the grid in where it drifts; 1.1.1 sets bar 1.";
-  const bpmText = detected === null ? "Finding the beat..." : detected === "none" && marks.downbeats.length === 0 && marks.oneOne === null ? "No beat found" : `${(grid ? bpmAt(grid, 0) : 0).toFixed(2)} BPM`;
-  const readoutTwo = status || `${lines.length} chop${lines.length === 1 ? "" : "s"}, ${marks.downbeats.length} downbeat${marks.downbeats.length === 1 ? "" : "s"}`;
+  const bpmText = detected === null ? "..." : detected === "none" && marks.downbeats.length === 0 && marks.oneOne === null ? "--" : (grid ? bpmAt(grid, 0) : 0).toFixed(2);
 
   return (
     <div className="palette-backdrop chop-backdrop" onClick={askClose}>
@@ -457,10 +506,15 @@ export function SongChopModal({
           <div className="chop__screen">
             <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
             <div className="chop__readout">
-              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="Double tap: nearest whole BPM. Drag up or down to scrub; move right to go finer.">
+              <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(-1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo down by 0.01">
+                <NudgeIcon plus={false} />
+              </button>
+              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: nearest whole number. Drag up or down to scrub; move right to go finer.">
                 {bpmText}
               </span>
-              <span>{readoutTwo}</span>
+              <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo up by 0.01">
+                <NudgeIcon plus />
+              </button>
             </div>
           </div>
 

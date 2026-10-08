@@ -1581,8 +1581,8 @@
 .chop__readout {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: calc(var(--cell) * 3);
+  justify-content: center;
+  gap: calc(var(--cell) * 6);
   height: calc(var(--cell) * 10);
   overflow: hidden;
   white-space: nowrap;
@@ -1605,8 +1605,27 @@
   cursor: ns-resize;
 }
 
-.chop__readout span:last-child {
-  opacity: 0.7;
+.chop__nudge {
+  flex: none;
+  box-sizing: border-box;
+  width: calc(var(--cell) * 10);
+  height: calc(var(--cell) * 10);
+  padding: calc(var(--cell) * 2);
+  border: var(--cell) solid currentColor;
+  background: none;
+  color: inherit;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.chop__nudge:active {
+  background: var(--oled);
+  color: var(--bezel);
+}
+
+.chop__nudge:disabled {
+  opacity: 0.4;
 }
 
 .chop__row {
