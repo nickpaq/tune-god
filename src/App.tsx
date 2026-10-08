@@ -687,6 +687,8 @@ function App() {
     const open = Object.keys(latest.current.pads).length > 0 || Object.keys(latest.current.hidden).length > 0;
     if (open) return void beginChop(mode);
     pickedMode.current = mode;
+    // Acapella mode takes a .koala project only. A picker that also lists audio shows only audio on iOS and greys the .koala files out, so the audio types are asked for in chopper mode alone.
+    if (acapellaInput.current) acapellaInput.current.accept = mode === "chopper" ? ".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg" : ".koala";
     acapellaInput.current?.click();
   };
 
@@ -1710,7 +1712,7 @@ function App() {
         <input
           ref={acapellaInput}
           type="file"
-          accept=".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg"
+          accept=".koala"
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0];
