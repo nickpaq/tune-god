@@ -44,7 +44,7 @@ const FEATURES = [
 export function InstallGate() {
   return (
     <main className="gate">
-      <section className="gate__card" aria-label="KoalaTune">
+      <section className="gate__card" aria-label="tunegod">
         <div className="gate__kick">
           <span className="gate__led" />
           Koala Sampler companion

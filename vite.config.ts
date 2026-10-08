@@ -24,7 +24,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
+      includeAssets: ["favicon.png", "apple-touch-icon.png"],
       // Precache everything so the app works fully offline after the first load.
       workbox: {
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
@@ -33,8 +33,8 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/viewport-test/],
       },
       manifest: {
-        name: "KoalaTune",
-        short_name: "KoalaTune",
+        name: "tunegod",
+        short_name: "tunegod",
         description: "Tune a Koala project's pads to a key — on-device.",
         theme_color: "#222326",
         background_color: "#222326",

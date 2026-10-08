@@ -2001,7 +2001,7 @@ function App() {
               </button>
             )}
             <div className="menu__version">
-              KoalaTune v{__APP_VERSION__} · {__APP_BUILD__}
+              tunegod v{__APP_VERSION__} · {__APP_BUILD__}
               <br />
               Mix preset: {ACTIVE_MIX_PRESET.name}
             </div>
