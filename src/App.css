@@ -2003,8 +2003,8 @@
 
 .maker__row {
   box-sizing: border-box;
-  height: 36cqw;
-  padding: 1.5cqw 2.8cqw;
+  height: 42cqw;
+  padding: 1cqw 2.8cqw;
   scroll-snap-align: center;
   scroll-snap-stop: always;
   touch-action: pan-y;

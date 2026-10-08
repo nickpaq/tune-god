@@ -67,12 +67,10 @@ function RowCanvas({ peaks, scale, color, flag, eighths, len, span, beatsPerBar 
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, w, h);
 
-    // The chop, shaded in its colour: the part that plays brighter than the rest.
+    // The whole chop shaded in its colour, as the sections are in the chop editor.
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.3;
-    ctx.fillRect(0, top, Math.min(w, x(len)), h - top);
-    ctx.globalAlpha = 0.12;
-    ctx.fillRect(Math.min(w, x(len)), top, Math.max(0, Math.min(w, x(eighths)) - x(len)), h - top);
+    ctx.fillRect(0, top, Math.min(w, x(eighths)), h - top);
 
     ctx.fillStyle = ink;
     ctx.globalAlpha = 0.3;
@@ -100,6 +98,22 @@ function RowCanvas({ peaks, scale, color, flag, eighths, len, span, beatsPerBar 
       ctx.fillRect(Math.round(x(e)) - Math.floor(thick / 2), top, thick, h - top);
     }
     ctx.globalAlpha = 1;
+
+    // What will not play is dimmed.
+    if (len < eighths) {
+      ctx.fillStyle = "#000";
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(Math.min(w, x(len)), top, Math.max(0, Math.min(w, x(eighths)) - x(len)), h - top);
+      ctx.globalAlpha = 1;
+    }
+
+    // The chop's markers: a line in its colour where it starts and where it ends.
+    if (peaks) {
+      ctx.fillStyle = color;
+      ctx.fillRect(0, top, Math.max(2, Math.round(2 * ratio)), h - top);
+      const end = Math.round(x(eighths));
+      if (end < w) ctx.fillRect(end - one, top, Math.max(2, Math.round(2 * ratio)), h - top);
+    }
 
     ctx.font = `${Math.round(8 * ratio)}px Silkscreen, monospace`;
     ctx.textBaseline = "middle";
