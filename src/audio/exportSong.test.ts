@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
 import type { ParsedKoalaProject } from "./koalaProject";
-import { STRETCH_LENGTH_UNIT, stretchLengthFor, TICKS_PER_BEAT } from "./exportSong";
+import { SECTION_MUTE_GROUP, sectionMuteGroup, STRETCH_LENGTH_UNIT, stretchLengthFor, TICKS_PER_BEAT } from "./exportSong";
 
 async function load(file: string): Promise<ParsedKoalaProject> {
   const zip = await JSZip.loadAsync(readFileSync(new URL(`../../docs/calibration/${file}`, import.meta.url)));
@@ -124,7 +124,7 @@ describe("a chopped song in the export", () => {
     // Koala counts the stretch length in beats: 8 bars of 4/4 is 32, 3 bars is 12
     expect(STRETCH_LENGTH_UNIT).toBe("beats");
     expect(added.map((p: any) => p.stretchLength)).toEqual([32, 12, 32]);
-    // the stretch mode is left as it was
+    // the stretch mode is Modern
     expect(added.every((p: any) => p.stretch === 1)).toBe(true);
   });
 
@@ -186,5 +186,50 @@ describe("acapella mode leaves the project's tempo alone", () => {
     const added = sampler.pads.filter((p: any) => /^Section/.test(p.label));
     expect(added.map((p: any) => p.pitch)).toEqual([-3, -3]);
     expect(added.every((p: any) => String(p.stretching) === "true")).toBe(true);
+  });
+});
+
+describe("the mute group of the section pads", () => {
+  it("keeps the group the song's pad already has", () => {
+    expect(sectionMuteGroup({ chokeGroup: 3 }, [{ chokeGroup: 3 }, { chokeGroup: 5 }])).toBe(3);
+  });
+
+  it("takes group 5 when the song's pad has none and no pad uses 5", () => {
+    expect(sectionMuteGroup({ chokeGroup: 0 }, [{ chokeGroup: 4 }, { chokeGroup: 0 }])).toBe(SECTION_MUTE_GROUP);
+    expect(SECTION_MUTE_GROUP).toBe(5);
+  });
+
+  it("takes the first free group instead when 5 is already used (the hats)", () => {
+    expect(sectionMuteGroup({}, [{ chokeGroup: 1 }, { chokeGroup: 5 }])).toBe(2);
+  });
+});
+
+describe("the section files and their knobs", () => {
+  it("peak-normalizes each section file and takes the gain off again on the pad's volume knob, keeping the levels between sections", async () => {
+    const quiet = { ...section(48, 4410), channelData: [new Float32Array(4410).map((_, i) => 0.05 * Math.sin(i / 5))] };
+    const loud = { ...section(49, 4410), channelData: [new Float32Array(4410).map((_, i) => 0.4 * Math.sin(i / 5))] };
+    const { zip, sampler } = await run("probe-sidechain.koala", [quiet, loud]);
+    const added = sampler.pads.filter((p: any) => /^Section/.test(p.label));
+    const peaks: number[] = [];
+    for (const p of added) {
+      const wav = await zip.file(`sampler/${p.sampleId}.wav`)!.async("uint8array");
+      const view = new DataView(wav.buffer, wav.byteOffset);
+      let peak = 0;
+      for (let o = 44; o + 2 < wav.length; o += 3) peak = Math.max(peak, Math.abs(((view.getUint8(o + 2) << 16) | (view.getUint8(o + 1) << 8) | view.getUint8(o)) << 8 >> 8) / 2 ** 23);
+      peaks.push(peak);
+    }
+    expect(peaks[0]).toBeCloseTo(10 ** (-1 / 20), 2);
+    expect(peaks[1]).toBeCloseTo(10 ** (-1 / 20), 2);
+    // knob x file peak keeps the original ratio (0.05 : 0.4), and the knob never goes above 1
+    expect(added.every((p: any) => p.vol <= 1)).toBe(true);
+    expect((added[0].vol * peaks[0]) / (added[1].vol * peaks[1])).toBeCloseTo(0.05 / 0.4, 1);
+  });
+
+  it("puts a highpass on every section pad's EQ", async () => {
+    const { sampler } = await run("probe-sidechain.koala", [section(48, 1000)]);
+    const pad = sampler.pads.find((p: any) => /^Section/.test(p.label));
+    expect(String(pad.eq.enabled)).toBe("true");
+    expect(pad.eq.lo.type).toBe("highpass");
+    expect(pad.eq.lo.freq).toBe(150);
   });
 });

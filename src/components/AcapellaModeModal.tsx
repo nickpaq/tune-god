@@ -1,4 +1,4 @@
-export type ChopMode = "acapella" | "chopper";
+export type ChopMode = "acapella" | "chopper" | "synced";
 
 const ACAPELLA_POINTS = [
   "Stays in time with the project, even if the BPM changes",
@@ -7,6 +7,14 @@ const ACAPELLA_POINTS = [
   "Overwrites everything on Bank D",
   "Leaves the project's BPM alone",
   "Needs a song and its VOCALS stem in the project",
+];
+
+const SYNCED_POINTS = [
+  "Like Acapella mode, but chops the sample itself (no vocal stem needed)",
+  "Stays in time with the project, even if the BPM changes",
+  "Limited to 16 chops, one pad each",
+  "Overwrites everything on Bank D",
+  "Works on any sample over 10 seconds",
 ];
 
 const CHOPPER_POINTS = [
@@ -34,6 +42,14 @@ export function AcapellaModeModal({ onChoose, onCancel }: { onChoose: (mode: Cho
           </button>
           <ul className="mode-points">
             {ACAPELLA_POINTS.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+          <button className="menu__button" onClick={() => onChoose("synced")}>
+            Synced mode
+          </button>
+          <ul className="mode-points">
+            {SYNCED_POINTS.map((p) => (
               <li key={p}>{p}</li>
             ))}
           </ul>

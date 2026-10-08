@@ -2,6 +2,9 @@
 // one pattern per section holding that pad's note for the section's whole length, and the project tempo set to the song's.
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
+import { applyPadEq, STRETCH_MODE } from "./padSettings";
+import { balanceStats, FILE_CEILING_DB } from "./loudness";
+import { ACTIVE_MIX_PRESET } from "./mixPresets";
 
 /** Koala's sequencer resolution: ticks in one beat (see docs/koala-mixer-reference.md). */
 export const TICKS_PER_BEAT = 4096;
@@ -68,6 +71,19 @@ export const emptySequence = () => ({ lastViewedPath: "", noteSequence: { patter
 
 export const isEmpty = (seq: any) => !Array.isArray(seq?.noteSequence?.pattern?.notes) || seq.noteSequence.pattern.notes.length === 0;
 
+/** The mute group the sections take when the song pad has none: group 5, as long as no other pad uses it. */
+export const SECTION_MUTE_GROUP = 5;
+
+/**
+ * The mute group the section pads share (they cut one another). A group the song's pad already has is kept; with none, group 5 if no pad uses it
+ * (the hats do, once a kit is loaded), otherwise the first group nobody uses.
+ */
+export function sectionMuteGroup(source: any, pads: any[]): number {
+  const own = Number(source?.chokeGroup);
+  if (Number.isFinite(own) && own > 0) return own;
+  return pads.some((p) => Number(p.chokeGroup) === SECTION_MUTE_GROUP) ? freeChokeGroup(pads) : SECTION_MUTE_GROUP;
+}
+
 /** The first choke group no pad uses yet (0 is no group). */
 function freeChokeGroup(pads: any[]): number {
   const used = new Set(pads.map((p) => Number(p.chokeGroup)).filter((n) => Number.isFinite(n)));
@@ -88,7 +104,7 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
   const ids = [...samples.map((s) => s.id), ...pads.map((p) => p.sampleId)].filter((id) => typeof id === "number");
   let nextId = Math.max(0, ...ids) + 1;
   const taken = new Set(pads.map((p) => Number(p.pad) - base));
-  const choke = freeChokeGroup(pads);
+  const choke = sectionMuteGroup(source, pads);
 
   const sequenceEntry = project.zip.file("sequence.json");
   const sequence = sequenceEntry
@@ -100,13 +116,27 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
   const beatsPerBar = Number(sequence.beatsPerBar) > 0 ? Number(sequence.beatsPerBar) : 4;
   const freeSlots = sequences.map((s, i) => (isEmpty(s) ? i : -1)).filter((i) => i >= 0);
 
+  // Every section file is peak-normalized, and the gain taken off again on the pad's volume knob so the sections keep their levels to one another
+  // (the loudest sits at the vox target loudness; the knob only turns down).
+  const stats = song.sections.map((sec) => balanceStats({ channelData: sec.channelData, sampleRate: song.sampleRate }));
+  const gainDb = stats.map((st) => (st.loud === null ? 0 : FILE_CEILING_DB - st.peakDb));
+  const loudest = Math.max(-Infinity, ...stats.map((st) => st.loud ?? -Infinity));
+  const shift = Number.isFinite(loudest) ? ACTIVE_MIX_PRESET.loudness.targetLufs.vox - loudest : 0;
+  const normalized = new Map(
+    song.sections.map((sec, i) => {
+      const g = 10 ** (gainDb[i] / 20);
+      const knobDb = stats[i].loud === null ? 0 : Math.min(0, shift - gainDb[i]);
+      return [sec, { data: sec.channelData.map((ch) => ch.map((v) => v * g)), vol: 10 ** (knobDb / 20) }] as const;
+    }),
+  );
+
   let added = 0;
   let firstPattern = -1;
   for (const section of [...song.sections].sort((a, b) => a.index - b.index)) {
     if (taken.has(section.index) || added >= freeSlots.length) continue;
     const sampleId = nextId++;
     const frames = section.channelData[0].length;
-    project.zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: song.sampleRate, channelData: section.channelData, bitDepth: 24 }).arrayBuffer());
+    project.zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: song.sampleRate, channelData: normalized.get(section)!.data, bitDepth: 24 }).arrayBuffer());
     samples.push({
       ...(sourceSample ? JSON.parse(JSON.stringify(sourceSample)) : {}),
       id: sampleId,
@@ -126,8 +156,10 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
     // Stretch on, for as many bars as the section's pattern: if the project tempo changes (or the pad is moved), the vocals stretch to stay in time,
     // and at the song's own tempo (which the export sets) they are not altered at all.
     pad.stretching = typeof source?.stretching === "string" ? "true" : true;
+    pad.stretch = STRETCH_MODE.modern;
     pad.stretchLength = stretchLengthFor(section.bars ?? song.bars, beatsPerBar);
-    Object.assign(pad, { start: 0, zoomStart: 0, end: frames, zoomEnd: frames, pitch: song.pitch ?? 0, vol: 1, pan: 0.5 });
+    Object.assign(pad, { start: 0, zoomStart: 0, end: frames, zoomEnd: frames, pitch: song.pitch ?? 0, vol: normalized.get(section)!.vol, pan: 0.5 });
+    applyPadEq(pad, ACTIVE_MIX_PRESET.sectionEq);
     if ("loopPoint" in pad) pad.loopPoint = -1;
     pads.push(pad);
     taken.add(section.index);

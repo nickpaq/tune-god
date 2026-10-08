@@ -648,7 +648,7 @@ function App() {
   /** The Acapella / Chopper button asks which mode first. */
   const [modeAsk, setModeAsk] = useState(false);
   /** Chopper mode's list of samples over 10 seconds. */
-  const [sourcePick, setSourcePick] = useState(false);
+  const [sourcePick, setSourcePick] = useState<"chopper" | "synced" | null>(null);
   /** The mode chosen while the Koala project picker is open, and then while that project loads: the mode starts as soon as the project is in. */
   const pickedMode = useRef<ChopMode | null>(null);
   const acapellaPending = useRef<ChopMode | null>(null);
@@ -668,9 +668,9 @@ function App() {
    */
   const chopPad = async (mode: ChopMode, pad: Pad) => {
     if (addPackStatus || loading || analyzing > 0) return;
-    if (mode === "chopper") {
-      if (pad.channelData[0].length / pad.sampleRate < CHOPPER_MIN_SECONDS) return void window.alert(`Chopper mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`);
-      return void (await launchChopper(pad));
+    if (mode === "chopper" || mode === "synced") {
+      if (pad.channelData[0].length / pad.sampleRate < CHOPPER_MIN_SECONDS) return void window.alert(`${mode === "synced" ? "Synced" : "Chopper"} mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`);
+      return void (await (mode === "synced" ? launchSynced(pad) : launchChopper(pad)));
     }
     const cur = latest.current;
     const check = checkStems(pad, [...Object.values(cur.pads).filter(isReal), ...Object.values(cur.hidden)]);
@@ -689,8 +689,8 @@ function App() {
     pickedMode.current = mode;
     // Acapella mode takes a .koala project or audio files (the song and its stem, picked together); chopper mode takes one audio file.
     if (acapellaInput.current) {
-      acapellaInput.current.accept = mode === "chopper" ? "audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg" : ".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg";
-      acapellaInput.current.multiple = mode !== "chopper";
+      acapellaInput.current.accept = mode !== "acapella" ? "audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg" : ".koala,audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac,.ogg";
+      acapellaInput.current.multiple = mode === "acapella";
     }
     acapellaInput.current?.click();
   };
@@ -699,15 +699,16 @@ function App() {
    * Chopper mode with an audio file and no project open: the file is the sample to chop. A blank project is started (the export writes the new
    * project from it) and the chop editor opens on the file.
    */
-  const loadChopperAudio = async (file: File) => {
+  const loadChopperAudio = async (file: File, mode: "chopper" | "synced" = "chopper") => {
     pickedMode.current = null;
+    const modeName = mode === "synced" ? "Synced" : "Chopper";
     let audio: Awaited<ReturnType<typeof decodeNative>>;
     try {
       audio = await decodeNative(file);
     } catch {
       return void window.alert("That audio file could not be read.");
     }
-    if (audio.channelData.length === 0 || audio.channelData[0].length / audio.sampleRate < CHOPPER_MIN_SECONDS) return void window.alert(`Chopper mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`);
+    if (audio.channelData.length === 0 || audio.channelData[0].length / audio.sampleRate < CHOPPER_MIN_SECONDS) return void window.alert(`${modeName} mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`);
     const opened = await ensureProject();
     if (!opened) return;
     const { project } = opened;
@@ -724,18 +725,19 @@ function App() {
       semis: 0,
       cents: 0,
     };
-    await launchChopper(song);
+    await (mode === "synced" ? launchSynced(song) : launchChopper(song));
   };
 
   const loadAcapella = async (picked: File[]) => {
     if (addPackStatus || loading) return;
-    if (pickedMode.current === "chopper") {
+    if (pickedMode.current === "chopper" || pickedMode.current === "synced") {
+      const mode = pickedMode.current;
       const audio = picked.find((f) => !isKoalaFile(f));
       if (!audio) {
         pickedMode.current = null;
-        return void window.alert("Chopper mode needs an audio file.");
+        return void window.alert(`${mode === "synced" ? "Synced" : "Chopper"} mode needs an audio file.`);
       }
-      return void (await loadChopperAudio(audio));
+      return void (await loadChopperAudio(audio, mode));
     }
     // Acapella mode: a Koala project, or the song and its vocal stem as two audio files (made into a project that holds them).
     let file = picked.find(isKoalaFile);
@@ -759,7 +761,7 @@ function App() {
 
   const beginChop = async (mode: ChopMode) => {
     if (addPackStatus || loading || analyzing > 0) return;
-    if (mode === "chopper") return void setSourcePick(true);
+    if (mode === "chopper" || mode === "synced") return void setSourcePick(mode);
     await startAcapella();
   };
 
@@ -891,10 +893,25 @@ function App() {
     setChop({ mode: "acapella", song, vocals, beatsPerBar });
   };
 
+  /**
+   * Opens the chop editor in synced mode: acapella mode without the acapella. The sample is its own song, so the markers are placed on it and the same
+   * sample is cut into the section pads. Like acapella mode it overwrites bank D (locked pads excepted).
+   */
+  const launchSynced = async (song: Pad) => {
+    const occupied = Object.values(latest.current.pads).filter((p) => inChopBank(p.index) && !p.locked).length;
+    if (occupied > 0 && !window.confirm(`Synced mode overwrites everything on Bank D except locked pads (${occupied} pad${occupied === 1 ? "" : "s"}). Continue?`)) return;
+    const beatsPerBar = await beatsPerBarOfProject();
+    acapellaTemplate.current = undefined;
+    setSourcePick(null);
+    setMenuOpen(false);
+    setLongSamples([]);
+    setChop({ mode: "synced", song, vocals: song, beatsPerBar });
+  };
+
   /** Opens the chop editor in chopper mode on the sample that was picked (the song itself is the sound that is cut). */
   const launchChopper = async (song: Pad) => {
     const beatsPerBar = await beatsPerBarOfProject();
-    setSourcePick(false);
+    setSourcePick(null);
     setMenuOpen(false);
     setChop({ mode: "chopper", song, vocals: song, beatsPerBar });
   };
@@ -1042,14 +1059,14 @@ function App() {
         return;
       }
 
-      // Acapella mode. The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
+      // Acapella and synced mode. The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
       const { song, vocals } = job;
       const plans = scalePlans(settings.plans, song.sampleRate, vocals.sampleRate);
       // The sections overwrite everything on bank D (the chop is the only thing that ever goes there).
       // (a locked pad on bank D stays, and its slot is not used)
       const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => !inChopBank(p.index) || p.locked));
       const { pads: made } = makeSectionPads(vocals, plans, settings.bpm, settings.beatsPerBar, freeSongSlots(without), palette.colors);
-      const sections = made.map((p) => ({ ...p, section: { ...p.section!, pitch: offset } }));
+      const sections = made.map((p) => ({ ...p, section: { ...p.section!, pitch: offset, ...(job.mode === "synced" ? { synced: true } : {}) } }));
       if (sections.length === 0) {
         window.alert("There are no sections to put on Bank D, so nothing was changed.");
         return;
@@ -1550,7 +1567,7 @@ function App() {
   };
   /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
-  const sectionLabel = (p: Pad): string => `${CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
+  const sectionLabel = (p: Pad): string => `${p.section!.synced ? "Chop" : CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
   const labelOf = (p: Pad): string => (p.placeholder ? p.placeholder.label : p.ghost ? GHOST_LABEL[p.ghost.kind] : p.chopper ? "Chopper" : p.section ? sectionLabel(p) : (numberedLabel(p)?.label ?? padLabel(p)));
   const colorOfPad = (p: Pad) => (p.placeholder ? placeholderColor(p) : autoColorOf(p));
   const hasProject = Object.keys(pads).length > 0 || Object.keys(hidden).length > 0;
@@ -1861,7 +1878,7 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, 16 chops, stretched to the project) or chopper mode (any sample over 10 seconds, 127 chops on one pad). With no project open it asks for a Koala project first."
+              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, 16 chops, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample over 10 seconds, 127 chops on one pad). With no project open it asks for a Koala project first."
               onClick={() => askChopMode()}
             >
               {addPackStatus || "Load Bank D: Chopper"}
@@ -2237,8 +2254,8 @@ function App() {
             pads={[...Object.values(pads).filter(isReal), ...Object.values(hidden)]
               .filter((p) => p.channelData[0].length / p.sampleRate >= CHOPPER_MIN_SECONDS)
               .sort((a, b) => b.channelData[0].length / b.sampleRate - a.channelData[0].length / a.sampleRate)}
-            onPick={(pad) => void launchChopper(pad)}
-            onCancel={() => setSourcePick(false)}
+            onPick={(pad) => void (sourcePick === "synced" ? launchSynced(pad) : launchChopper(pad))}
+            onCancel={() => setSourcePick(null)}
           />
         )}
 

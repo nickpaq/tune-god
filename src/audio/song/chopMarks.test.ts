@@ -127,6 +127,16 @@ describe("chop markers", () => {
   });
 });
 
+describe("the finest chop", () => {
+  it("is one bar, however the markers were placed (snap off or on)", () => {
+    // markers a hair apart, and one a few beats after another: each lands on a bar line, two on one bar line are one
+    const lines = chopLines(base, [1000, 1010, 3700, 3900, 9000]);
+    const sections = sectionsBetween(lines);
+    for (const s of sections) expect(barsIn(base, s)).toBeGreaterThanOrEqual(1);
+    expect(sections.every((s) => Number.isInteger(barsIn(base, s)))).toBe(true);
+  });
+});
+
 describe("markerAt", () => {
   it("finds the nearest marker within the tolerance", () => {
     expect(markerAt([100, 500, 520], 505, 30)).toBe(500);

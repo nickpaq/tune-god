@@ -45,6 +45,8 @@ export interface MixPreset {
   padTone: Partial<Record<CategoryId, number>>;
   /** Per-pad EQ by sound type. A type that is not listed keeps the EQ it came with. */
   padEq: Partial<Record<CategoryId, PadEq>>;
+  /** Per-pad EQ of the chop section pads (acapella and synced mode): a highpass that keeps them off the bass. */
+  sectionEq: PadEq;
   buses: {
     /** CLIPPER on the Kick bus (bus A). Threshold also sets the curve: near 0 dB is a hard clip, low (-6 or less) a soft S-curve. */
     kickClipper: {
@@ -108,6 +110,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
     },
   },
   padTone: { snare: -0.1 }, // slightly under the middle: a touch darker
+  sectionEq: { highpassHz: 150 }, // above the bass and 808 fundamentals, below the voice
   padEq: {
     closedHat: { highpassHz: 300, highShelfDb: -2 }, // highpass: clear of the 808; shelf: warmer
     openHat: { highpassHz: 300, highShelfDb: -2 },

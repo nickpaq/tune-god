@@ -1,5 +1,5 @@
 import { applyGainDb } from "./gain";
-import { STRETCH_MODE, type PadEq, type PadPlayback } from "./padSettings";
+import { applyPadEq, STRETCH_MODE, type PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import type { MasterStyle } from "./mixPresets";
@@ -150,16 +150,6 @@ export function downloadBlob(blob: Blob, filename: string): void {
   link.click();
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-/**
- * Koala's per-pad EQ (`pad.eq`: lo highpass, mid peaking, hi highshelf). Sets the highpass frequency and, when asked, the high shelf's
- * gain, keeping every other band setting the pad already has. A pad with no EQ gets Koala's defaults first.
- */
-function applyPadEq(pad: any, eq: PadEq): void {
-  const base = { enabled: "true", lo: { type: "highpass", freq: 20, gain: -18, q: 1 }, mid: { type: "peaking", freq: 1000, gain: 0, q: 1 }, hi: { type: "highshelf", freq: 8000, gain: 0, q: 1 } };
-  const cur = pad.eq ?? base;
-  pad.eq = { ...base, ...cur, enabled: typeof cur.enabled === "boolean" ? true : "true", lo: { ...base.lo, ...cur.lo, freq: eq.highpassHz }, hi: { ...base.hi, ...cur.hi, ...(eq.highShelfDb !== undefined ? { gain: eq.highShelfDb } : {}) } };
 }
 
 /** The project tempo, in sequence.json (a project that has none gets Koala's default settings around it). */

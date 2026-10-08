@@ -58,3 +58,13 @@ export function playbackFor(category: CategoryId): PadPlayback | undefined {
   const play = basePlayback(category);
   return eq || tone !== undefined ? { ...play, ...(eq ? { eq } : {}), ...(tone !== undefined ? { tone } : {}) } : play;
 }
+
+/**
+ * Koala's per-pad EQ (`pad.eq`: lo highpass, mid peaking, hi highshelf). Sets the highpass frequency and, when asked, the high shelf's
+ * gain, keeping every other band setting the pad already has. A pad with no EQ gets Koala's defaults first.
+ */
+export function applyPadEq(pad: any, eq: PadEq): void {
+  const base = { enabled: "true", lo: { type: "highpass", freq: 20, gain: -18, q: 1 }, mid: { type: "peaking", freq: 1000, gain: 0, q: 1 }, hi: { type: "highshelf", freq: 8000, gain: 0, q: 1 } };
+  const cur = pad.eq ?? base;
+  pad.eq = { ...base, ...cur, enabled: typeof cur.enabled === "boolean" ? true : "true", lo: { ...base.lo, ...cur.lo, freq: eq.highpassHz }, hi: { ...base.hi, ...cur.hi, ...(eq.highShelfDb !== undefined ? { gain: eq.highShelfDb } : {}) } };
+}
