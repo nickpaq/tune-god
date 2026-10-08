@@ -119,11 +119,20 @@ const apart = (a: string, b: string) => {
 const ALL_CATEGORIES = Object.keys(CATEGORY_TONE) as CategoryId[];
 
 /** Whether a palette keeps every type apart from every other (0.034) and snares, cymbals and perc well apart (0.15, 0.15 and 0.11). */
-function keepsRules(p: Palette): boolean {
+export function keepsRules(p: Palette): boolean {
   const colors = ALL_CATEGORIES.map((c) => colorFor(p, c));
   for (let i = 0; i < colors.length; i++) for (let j = i + 1; j < colors.length; j++) if (apart(colors[i], colors[j]) < 0.034) return false;
   const [snare, cymbal, perc] = [colorFor(p, "snare"), colorFor(p, "cymbal"), colorFor(p, "perc")];
   return apart(snare, cymbal) > 0.15 && apart(snare, perc) > 0.15 && apart(cymbal, perc) > 0.11;
+}
+
+/** How far a palette is over the rules (1 = just keeping them, more = comfortably): the smallest of each distance over the one it must reach. */
+export function ruleMargin(p: Palette): number {
+  const colors = ALL_CATEGORIES.map((c) => colorFor(p, c));
+  let min = 9;
+  for (let i = 0; i < colors.length; i++) for (let j = i + 1; j < colors.length; j++) min = Math.min(min, apart(colors[i], colors[j]));
+  const [snare, cymbal, perc] = [colorFor(p, "snare"), colorFor(p, "cymbal"), colorFor(p, "perc")];
+  return Math.min(min / 0.034, apart(snare, cymbal) / 0.15, apart(snare, perc) / 0.15, apart(cymbal, perc) / 0.11);
 }
 
 export function buildSeeded(spec: SeedSpec): Palette {
@@ -151,6 +160,46 @@ export function buildSeeded(spec: SeedSpec): Palette {
   }
   return last!;
 }
+
+/**
+ * Schemes taken from palettes picked on coolors.co: the palette's own colours (five and six colour ones are extended to ten with tints and shades of
+ * themselves, kept apart from the rest), assigned to the ten tones by the arrangement that keeps the rules best (every type told apart, snares, cymbals and
+ * perc well apart, the quietest colour for Other) and nudged a little where a palette could not reach them as it was. Worked out once, offline, and kept as data.
+ */
+export const CURATED: Palette[] = [
+  { id: "golden-peachy-glow", name: "Golden Peachy Glow", accent: "#DB7868", surface: 30, colors: ["#6D4049", "#CBCAA5", "#8A9473", "#AD5729", "#442F32", "#F89B6D", "#FAE1AB", "#22100F", "#8B5F72", "#D67363"] },
+  { id: "soft-pink-delight", name: "Soft Pink Delight", accent: "#E66E6D", surface: 22, colors: ["#BE558B", "#C2A9AA", "#B78CA4", "#C95455", "#A73F77", "#EC7592", "#F093AB", "#FAE3EA", "#F5B4C5", "#F7C4D2"] },
+  { id: "ocean-sunset", name: "Ocean Sunset", accent: "#E76F5C", surface: 31, colors: ["#E49E3A", "#28606F", "#428F92", "#E8D9AC", "#8E2A2D", "#9F2D1E", "#A1D0BE", "#05131A", "#BB6926", "#AD471D"] },
+  { id: "dusty-teal-ember", name: "Dusty Teal Ember", accent: "#DC7387", surface: 9, colors: ["#D8A150", "#501412", "#FCF2B8", "#CE677B", "#3E5C68", "#933330", "#768FA2", "#0A2D32", "#907200", "#FFC190"] },
+  { id: "fiery-ocean", name: "Fiery Ocean", accent: "#EF665F", surface: 26, colors: ["#153149", "#FAF0D7", "#31000B", "#ED6481", "#B02A2B", "#B8D0FB", "#6D120D", "#C4B39F", "#3C6578", "#759BBD"] },
+  { id: "pastel-dreamland-adventure", name: "Pastel Dreamland Adventure", accent: "#FBACCC", surface: 354, colors: ["#F6CADF", "#C5DFFB", "#669BB9", "#D48E98", "#94A8D7", "#F5B0CB", "#987898", "#FFE8EA", "#C8B2D9", "#A9D0FA"] },
+  { id: "autumn-harvest", name: "Autumn Harvest", accent: "#CD7E8C", surface: 9, colors: ["#8F5C37", "#CBC68F", "#894150", "#31000F", "#FCE5B0", "#674207", "#B67863", "#3F281B", "#B49660", "#682322"] },
+  { id: "refreshing-summer-fun", name: "Refreshing Summer Fun", accent: "#E67247", surface: 40, colors: ["#EE8933", "#123045", "#996300", "#4A9CBB", "#F5B942", "#D05E32", "#A48B00", "#FFEAD8", "#9DC9E3", "#006875"] },
+  { id: "sage-linen", name: "Sage Linen", accent: "#CB8560", surface: 48, colors: ["#EEF6C8", "#DBDFBC", "#AC7C67", "#D49E72", "#F2E3C9", "#F6C1A4", "#8A7041", "#F8F0E1", "#8C9E83", "#A3B297"] },
+  { id: "summer-sunset-beach", name: "Summer Sunset Beach Palette", accent: "#F5614F", surface: 30, colors: ["#B92F24", "#14336B", "#5A0F11", "#A9CDE0", "#3267A6", "#5890C6", "#DD4B3B", "#F8DFD6", "#E59A7E", "#E37257"] },
+  { id: "sunshine-fiesta-fun", name: "Sunshine Fiesta Fun", accent: "#E67791", surface: 6, colors: ["#E8BCCA", "#F7CCB7", "#E67791", "#659877", "#97D6C0", "#B8F6E1", "#E59272", "#425249", "#DC7355", "#F1BF4F"] },
+  { id: "pastel-dreamy-hues", name: "Pastel Dreamy Hues", accent: "#FED4FF", surface: 326, colors: ["#E4D9E3", "#FFF0D9", "#FAC3C8", "#E6B1CF", "#D9F8E9", "#C6E0E5", "#EFF0FF", "#E9E8E0", "#CDD4F2", "#DFE4FF"] },
+  { id: "soft-pastels", name: "Soft Pastels", accent: "#AB87C6", surface: 310, colors: ["#B6C4FE", "#BEB4FD", "#C59AB6", "#708DC0", "#9D7BB6", "#BFD5FF", "#E2C8FB", "#E3F0FF", "#F8D5FB", "#8AA5D6"] },
+  { id: "soft-rainbow", name: "Soft Rainbow", accent: "#CFB5FA", surface: 302, colors: ["#EBC4E5", "#C8F9C4", "#A1D8F3", "#CDB8F0", "#A9C0EF", "#AAF3DF", "#F8D1D5", "#F9E3D0", "#A4E9F2", "#FBF6CD"] },
+  { id: "pastel-dreamland", name: "Pastel Dreamland", accent: "#D6A6FB", surface: 310, colors: ["#C0ABE3", "#FFE1F6", "#CE96E7", "#D4A8FF", "#EBD1FF", "#D1D0F5", "#E6BFFF", "#CCE5FD", "#D5B4F3", "#CDF9FD"] },
+  { id: "subtle-pastel-hues", name: "Subtle Pastel Hues", accent: "#FFD7EC", surface: 345, colors: ["#EAD8E9", "#FDF2EA", "#FEDFDE", "#FFABDF", "#E0EDE5", "#C5E0E4", "#E8EBFF", "#F8EBCA", "#D4DEFF", "#CAD0F0"] },
+  { id: "peachy-sunrise", name: "Peachy Sunrise", accent: "#E6698A", surface: 6, colors: ["#B8FBD8", "#99DBC8", "#5AA19D", "#AD355A", "#C7532D", "#B5707B", "#EF7070", "#FFFFFF", "#F2A9A1", "#FFD6DB"] },
+  { id: "soft-pastel-shades", name: "Soft Pastel Shades", accent: "#83C3F8", surface: 245, colors: ["#F4D1E0", "#FFDFD3", "#FDF1E9", "#91C5F5", "#C1D3E5", "#F6E6EA", "#CEDEF5", "#F5EBD3", "#DFE8E5", "#CADCDC"] },
+  { id: "peachy-delight", name: "Peachy Delight", accent: "#D4798B", surface: 8, colors: ["#EFE8B7", "#F5C5AA", "#B07B43", "#B35C6E", "#F2958E", "#C77369", "#BFC899", "#90B295", "#F3AD86", "#D5F1C6"] },
+  { id: "cotton-candy-mist", name: "Cotton Candy Mist", accent: "#FFBDC4", surface: 12, colors: ["#EAE9E2", "#FEF2CB", "#DDD3CD", "#CEBDDE", "#F1C4C8", "#F3CCE5", "#FADBCA", "#CDC7C1", "#CBE3DC", "#C7DBEE"] },
+  { id: "sun-kissed-autumn-fields", name: "Sun-kissed Autumn Fields", accent: "#DD785A", surface: 37, colors: ["#2F4858", "#031A28", "#E5C46F", "#82D3D5", "#3E7270", "#4E9B8E", "#9E3A3E", "#FFE9E0", "#DA7557", "#E9A56A"] },
+  { id: "golden-sun-glow", name: "Golden Sun Glow", accent: "#F6CC76", surface: 84, colors: ["#C58E67", "#905540", "#F0DCAB", "#F6CC76", "#9A9A7B", "#EFAC94", "#777B64", "#4A4631", "#957A68", "#B4BFA0"] },
+  { id: "mysterious-night-sky", name: "Mysterious Night Sky", accent: "#A08BCE", surface: 298, colors: ["#221E32", "#232559", "#49485F", "#5D5074", "#75587C", "#A88BA2", "#7E86A0", "#2B273C", "#04092D", "#93768D"] },
+  { id: "pastel-rainbow", name: "Pastel Rainbow", accent: "#C37CB5", surface: 334, colors: ["#AC679F", "#FAF3C3", "#BA8F83", "#77A5B4", "#F6C6C4", "#E0C4F5", "#B4BC8F", "#D6F2E1", "#B5DCF5", "#F29BC4"] },
+  { id: "royal-purple-majesty", name: "Royal Purple Majesty", accent: "#F36260", surface: 24, colors: ["#E55555", "#402779", "#5A63B8", "#FFA8B8", "#2E176B", "#D972B3", "#240852", "#2F001A", "#5D1650", "#A53864"] },
+  { id: "bubblegum-beach-sunset", name: "Bubblegum Beach Sunset", accent: "#EE6384", surface: 8, colors: ["#B1282E", "#61B59E", "#B790A7", "#EE6384", "#F7C8D6", "#F193AA", "#90D1BF", "#C5EDE3", "#AE5E88", "#397C58"] },
+  { id: "fiery-ocean-sunset", name: "Fiery Ocean Sunset", accent: "#F3625D", surface: 25, colors: ["#EA632B", "#002C35", "#E98932", "#88D3E6", "#275F61", "#387F80", "#4C9CA0", "#FFEADB", "#AD1923", "#EFAF50"] },
+  { id: "cozy-autumn-vibes", name: "Cozy Autumn Vibes", accent: "#CB8B5D", surface: 56, colors: ["#777B64", "#3D3B27", "#F0DCAB", "#905540", "#957A68", "#5D674B", "#9A9A7B", "#FFE9E3", "#C2A695", "#C58E67"] },
+  { id: "electric-rainbow-burst", name: "Electric Rainbow Burst", accent: "#AA76FF", surface: 299, colors: ["#D471FF", "#BEFA4B", "#EF8434", "#8A15F5", "#EA3570", "#FADD4B", "#5D007A", "#DCEBFF", "#A0001D", "#54BAFA"] },
+  { id: "chocolate-chip-cookie", name: "Chocolate Chip Cookie", accent: "#CE826C", surface: 37, colors: ["#A3A087", "#EEA699", "#642427", "#344431", "#451D00", "#E2CFC0", "#884834", "#F4EDE4", "#6C755C", "#AF7355"] },
+  { id: "candy-floss-delight", name: "Candy Floss Delight", accent: "#E47A70", surface: 27, colors: ["#F5B3B0", "#F5C45E", "#A79419", "#003231", "#A4481F", "#4896A5", "#81CFDF", "#FDF4F1", "#2B636C", "#E47A70"] },
+  { id: "summer-sunset-splash", name: "Summer Sunset Splash", accent: "#F0665C", surface: 27, colors: ["#64D6A8", "#A01518", "#F7D277", "#89BCF5", "#3D89B3", "#E88F6F", "#DD5470", "#193B4D", "#B9FFF1", "#499959"] },
+];
 
 /** The generated schemes: a theme each (its hues, lightness and chroma) and a seed. */
 export const SEEDED: SeedSpec[] = [
@@ -287,7 +336,7 @@ const organ: Palette = {
   categories: ORGAN,
 };
 
-export const PALETTES: Palette[] = [organ, ...SEEDED.map(buildSeeded), ...SPECS.map(build)];
+export const PALETTES: Palette[] = [organ, ...CURATED, ...SEEDED.map(buildSeeded), ...SPECS.map(build)];
 
 export const DEFAULT_PALETTE_ID = "organ";
 

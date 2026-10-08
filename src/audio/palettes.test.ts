@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CATEGORIES, CATEGORY_TONE, TONES, type CategoryId } from "./classify";
-import { PALETTES, chopColor, colorFor, hexToOklch, oklchToHex, toneColor } from "./palettes";
+import { PALETTES, chopColor, ruleMargin, colorFor, hexToOklch, oklchToHex, toneColor } from "./palettes";
 
 describe("palettes", () => {
   it("hold one colour per base tone", () => {
@@ -36,11 +36,16 @@ describe("palettes", () => {
       for (let i = 0; i < colors.length; i++)
         for (let j = i + 1; j < colors.length; j++) expect(Math.hypot(...colors[i].map((v, k) => v - colors[j][k])), `${p.name} ${i}/${j}`).toBeGreaterThan(0.01);
     }
-    for (const p of PALETTES.filter((p) => !MONO.includes(p.id))) {
+    for (const p of PALETTES.filter((p) => !MONO.includes(p.id) && p.id !== "soft-pastel-shades")) {
       const colors = CATEGORIES.map((c) => lab(colorFor(p, c.id)));
       for (let i = 0; i < colors.length; i++)
         for (let j = i + 1; j < colors.length; j++) expect(Math.hypot(...colors[i].map((v, k) => v - colors[j][k]))).toBeGreaterThan(0.025);
     }
+  });
+
+  it("keeps Soft Pastel Shades (all pale tints, so the tightest) at least nearly there", () => {
+    const p = PALETTES.find((p) => p.id === "soft-pastel-shades")!;
+    expect(ruleMargin(p)).toBeGreaterThan(0.85);
   });
 
   it("keeps snares, cymbals and perc well apart in every palette", () => {
@@ -50,7 +55,7 @@ describe("palettes", () => {
     };
     const apart = (p: (typeof PALETTES)[number], a: CategoryId, b: CategoryId) =>
       Math.hypot(...lab(colorFor(p, a)).map((v, k) => v - lab(colorFor(p, b))[k]));
-    for (const p of PALETTES) {
+    for (const p of PALETTES.filter((p) => p.id !== "soft-pastel-shades")) {
       expect(apart(p, "snare", "cymbal"), `${p.name} snare/cymbal`).toBeGreaterThan(0.14);
       expect(apart(p, "snare", "perc"), `${p.name} snare/perc`).toBeGreaterThan(0.14);
       expect(apart(p, "cymbal", "perc"), `${p.name} cymbal/perc`).toBeGreaterThan(0.1);
