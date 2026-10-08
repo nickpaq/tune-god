@@ -39,11 +39,10 @@ interface Peaks {
 }
 
 /**
- * One row, drawn the way the chop editor's screen is: black, the chop shaded in its colour with the waveform in the screen's ink over it, the bar lines over
- * that, and a line in the chop's colour where it starts. The playhead is the line near the left, with the end of the slot before shaded to its left. The row
+ * One row, drawn the way the chop editor's screen is: black, the chop shaded in its colour with the waveform in the screen's ink over it, and a line in the chop's colour where it starts. The playhead is the line near the left, with the end of the slot before shaded to its left. The row
  * is one beat-square tall. Every row is on the same scale (`span` eighth notes across the rest), so the chops line up as blocks.
  */
-function RowCanvas({ peaks, scale, color, tail, eighths, len, span, beatsPerBar }: { peaks: Peaks | null; scale: number; color: string; tail: string | null; eighths: number; len: number; span: number; beatsPerBar: number }) {
+function RowCanvas({ peaks, scale, color, tail, eighths, len, span }: { peaks: Peaks | null; scale: number; color: string; tail: string | null; eighths: number; len: number; span: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -96,16 +95,6 @@ function RowCanvas({ peaks, scale, color, tail, eighths, len, span, beatsPerBar 
       ctx.globalAlpha = 1;
     }
 
-    // Bar lines as strong as the chop editor's, beats and eighths faint.
-    for (let e = 0; x(e) <= w; e++) {
-      const isBar = e % (beatsPerBar * 2) === 0;
-      ctx.fillStyle = ink;
-      ctx.globalAlpha = isBar ? 0.6 : e % 2 === 0 ? 0.2 : 0.08;
-      const thick = isBar ? Math.max(2, Math.round(1.5 * ratio)) : one;
-      ctx.fillRect(Math.round(x(e)) - Math.floor(thick / 2), 0, thick, h);
-    }
-    ctx.globalAlpha = 1;
-
     // The chop's own line where it starts, and over it the playhead.
     const thick = Math.max(2, Math.round(2 * ratio));
     if (peaks) {
@@ -114,7 +103,7 @@ function RowCanvas({ peaks, scale, color, tail, eighths, len, span, beatsPerBar 
     }
     ctx.fillStyle = ink;
     ctx.fillRect(x0 - thick, 0, thick, h);
-  }, [peaks, scale, color, tail, eighths, len, span, beatsPerBar]);
+  }, [peaks, scale, color, tail, eighths, len, span]);
   return <canvas ref={ref} className="maker__canvas" />;
 }
 
@@ -431,6 +420,15 @@ export function PatternMaker({
   const before = sel > 0 ? shown[sel - 1] : undefined;
   const tail = before ? (before.kind === "chop" ? chops[before.chop].color : "#8a8a8a") : null;
 
+  /** The grid markers are on the sequence only, where the chosen slots play: a line for every bar, and for every beat once they are wide enough to tell apart. */
+  const barPct = (barEighths / stripSpan) * 100;
+  const beatPct = barPct / beatsPerBar;
+  const line = (alpha: number) => `linear-gradient(to right, rgba(255,255,255,${alpha}) 1px, transparent 1px)`;
+  const gridStyle: React.CSSProperties = {
+    backgroundImage: beatPct >= 1.7 ? `${line(0.7)}, ${line(0.25)}` : line(0.7),
+    backgroundSize: beatPct >= 1.7 ? `${barPct}% 100%, ${beatPct}% 100%` : `${barPct}% 100%`,
+  };
+
   const askClose = () => {
     if (slots.length === 0 || window.confirm("Close the pattern maker? The chopper keeps one pattern per chop, in order.")) onClose();
   };
@@ -454,6 +452,7 @@ export function PatternMaker({
                 style={{ left: `${(shownStarts.starts[i] / stripSpan) * 100}%`, width: `${(s.eighths / stripSpan) * 100}%`, background: stripColor(s) }}
               />
             ))}
+            <div className="maker__grid" style={gridStyle} />
             <div className="maker__head" style={{ left: `${(at / stripSpan) * 100}%` }} />
             {playAt !== null && <div className="maker__play" style={{ left: `${(Math.min(playAt, stripSpan) / stripSpan) * 100}%` }} />}
           </div>
@@ -478,7 +477,6 @@ export function PatternMaker({
                       eighths={chop ? fullOf(key) : lenOf("s")}
                       len={Math.min(lenOf(key), maxOf(key))}
                       span={span}
-                      beatsPerBar={beatsPerBar}
                     />
                   )}
                 </div>

@@ -1971,6 +1971,12 @@
   outline-offset: -2px;
 }
 
+.maker__grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .maker__head,
 .maker__play {
   position: absolute;
