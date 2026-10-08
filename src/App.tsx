@@ -1067,6 +1067,7 @@ function App() {
             pitch: offset,
             layout,
             maker: {
+              beatFrames: (60 * song.sampleRate) / settings.bpm,
               chops: plans.map((plan, i) => ({
                 slice: layout.sections[i].slice,
                 start: plan.start,
@@ -2322,6 +2323,8 @@ function App() {
         {makerPad !== null && pads[makerPad]?.chopper?.maker && (
           <PatternMaker
             channelData={pads[makerPad].channelData}
+            sampleRate={pads[makerPad].sampleRate}
+            beatFrames={pads[makerPad].chopper!.maker!.beatFrames}
             chops={pads[makerPad].chopper!.maker!.chops}
             beatsPerBar={pads[makerPad].chopper!.beatsPerBar}
             initial={pads[makerPad].chopper!.maker!.slots ?? []}

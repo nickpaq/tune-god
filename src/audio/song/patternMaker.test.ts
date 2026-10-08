@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chopEighths, dragLength, needsGate, orderChops, patternBars, positionText, setSlot, slotNotes, slotStarts, type MakerChop, type Slot } from "./patternMaker";
+import { chopEighths, dragLength, needsGate, orderChops, patternBars, positionText, renderSequence, setSlot, slotNotes, slotStarts, type MakerChop, type Slot } from "./patternMaker";
 
 const chop = (barIndex: number, bars = 1, slice = barIndex + 1): MakerChop => ({ slice, start: barIndex * 1000, length: bars * 1000, bars, barIndex, color: "#fff" });
 // chops that started on bars 1 to 8 of the song (barIndex 0 to 7)
@@ -74,5 +74,20 @@ describe("positionText", () => {
     expect(positionText(0, 4)).toBe("1.1");
     expect(positionText(9, 4)).toBe("2.1+");
     expect(positionText(20, 4)).toBe("3.3");
+  });
+});
+
+describe("renderSequence", () => {
+  it("puts each chop at its place for the eighths it plays and leaves silence empty", () => {
+    const data = [Float32Array.from({ length: 4000 }, (_, i) => i + 1)];
+    const ch = [chop(0), chop(1)]; // 1000 frames each, bars of 4 beats
+    const out = renderSequence(data, ch, [{ kind: "chop", chop: 1, eighths: 2 }, { kind: "silence", eighths: 2 }, { kind: "chop", chop: 0, eighths: 100 }], 100); // 50 frames an eighth
+    // 2 eighths of chop 1 = 100 frames from 1000, then 100 of silence, then chop 0 for 100 eighths, which is cut to the chop's 1000 frames
+    expect(out[0]).toHaveLength(104 * 50);
+    expect(out[0][0]).toBe(1001);
+    expect(out[0][99]).toBe(1100);
+    expect(out[0][100]).toBe(0);
+    expect(out[0][199]).toBe(0);
+    expect(out[0][200]).toBe(1);
   });
 });

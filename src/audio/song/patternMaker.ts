@@ -109,3 +109,25 @@ export function positionText(eighths: number, beatsPerBar: number): string {
   const beat = Math.floor((eighths - bar * beatsPerBar * 2) / 2);
   return `${bar + 1}.${beat + 1}${eighths % 2 === 1 ? "+" : ""}`;
 }
+
+/**
+ * The sequence as audio, for listening to it: each chop slot is the chop's first `eighths` eighth notes (never past the chop's own end) at its place,
+ * silence is silence. `beatFrames` is the sample's frames to a beat at its own tempo. Returns one array per channel, as long as the sequence.
+ */
+export function renderSequence(channelData: readonly Float32Array[], chops: readonly MakerChop[], slots: readonly Slot[], beatFrames: number): Float32Array[] {
+  const eighth = beatFrames / 2;
+  const { starts, total } = slotStarts(slots);
+  const out = channelData.map(() => new Float32Array(Math.max(1, Math.round(total * eighth))));
+  slots.forEach((slot, i) => {
+    if (slot.kind !== "chop") return;
+    const chop = chops[slot.chop];
+    const at = Math.round(starts[i] * eighth);
+    const frames = Math.min(Math.round(slot.eighths * eighth), chop.length);
+    channelData.forEach((data, c) => {
+      const from = Math.max(0, chop.start);
+      const part = data.subarray(from, Math.min(data.length, from + frames));
+      out[c].set(part.subarray(0, Math.max(0, Math.min(part.length, out[c].length - at))), at);
+    });
+  });
+  return out;
+}

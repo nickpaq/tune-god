@@ -1971,13 +1971,21 @@
   outline-offset: -2px;
 }
 
-.maker__head {
+.maker__head,
+.maker__play {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 2px;
   margin-left: -1px;
+}
+
+.maker__head {
   background: var(--accent);
+}
+
+.maker__play {
+  background: var(--oled);
 }
 
 .maker__picker {
@@ -1990,61 +1998,42 @@
   scroll-snap-type: y mandatory;
   border-radius: 2.6cqw;
   background: var(--bezel);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75), 0 1px 0 var(--seam-l);
 }
 
 .maker__row {
-  position: relative;
   box-sizing: border-box;
-  height: 30cqw;
+  height: 36cqw;
+  padding: 1.5cqw 2.8cqw;
   scroll-snap-align: center;
   scroll-snap-stop: always;
   touch-action: pan-y;
-  padding: 1.2cqw 2cqw;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .maker__row--on {
   opacity: 1;
 }
 
-.maker__row::before {
-  content: "";
-  position: absolute;
-  inset: 1.2cqw 2cqw;
-  border-radius: 1.4cqw;
-  background: #000;
-  box-shadow: inset 0 0 0 1px var(--edge);
-}
-
-.maker__row--on::before {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-
 .maker__canvas {
-  position: absolute;
-  inset: 1.2cqw 2cqw;
-  width: calc(100% - 4cqw);
-  height: calc(100% - 2.4cqw);
-  border-radius: 1.4cqw;
-}
-
-.maker__label,
-.maker__len {
-  position: absolute;
-  top: 2.4cqw;
-  font: 400 calc(var(--cell) * 8) / calc(var(--cell) * 10) "Silkscreen", monospace;
-  text-transform: uppercase;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #000;
   color: var(--oled);
-  text-shadow: 0 0 4px #000, 0 0 2px #000;
-  pointer-events: none;
-  white-space: pre;
 }
 
-.maker__label {
-  left: 4cqw;
+.maker__transport {
+  flex-wrap: nowrap;
+  align-items: center;
 }
 
-.maker__len {
-  right: 4cqw;
+.maker__transport .knob {
+  flex: none;
+}
+
+.maker__transport .chop__btn {
+  white-space: nowrap;
+  padding-inline: 1cqw;
+  font-size: 2.7cqw;
 }
