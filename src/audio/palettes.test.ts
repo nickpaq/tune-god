@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CATEGORIES, CATEGORY_TONE, TONES, type CategoryId } from "./classify";
-import { PALETTES, colorFor, hexToOklch, oklchToHex, toneColor } from "./palettes";
+import { PALETTES, chopColor, colorFor, hexToOklch, oklchToHex, toneColor } from "./palettes";
 
 describe("palettes", () => {
   it("hold one colour per base tone", () => {
@@ -59,5 +59,29 @@ describe("palettes", () => {
 
   it("puts every category in a tone the palette knows", () => {
     for (const c of CATEGORIES) expect(TONES).toContain(CATEGORY_TONE[c.id]);
+  });
+});
+
+describe("chopColor", () => {
+  const dist = (a: string, b: string) => {
+    const [l1, c1, h1] = hexToOklch(a);
+    const [l2, c2, h2] = hexToOklch(b);
+    const p = (l: number, c: number, h: number) => [l, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180)];
+    const [x, y] = [p(l1, c1, h1), p(l2, c2, h2)];
+    return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+  };
+
+  it("only uses the palette's own colours", () => {
+    const palette = PALETTES[0];
+    for (let i = 0; i < 40; i++) expect(palette.colors).toContain(chopColor(palette.colors, i));
+  });
+
+  it("puts side-by-side chops further apart than the palette's own neighbours", () => {
+    for (const palette of PALETTES) {
+      const next = (i: number) => dist(chopColor(palette.colors, i), chopColor(palette.colors, i + 1));
+      const spread = Array.from({ length: 9 }, (_, i) => next(i)).reduce((a, b) => a + b, 0) / 9;
+      const own = palette.colors.slice(0, 9).reduce((t, c, i) => t + dist(c, palette.colors[i + 1]), 0) / 9;
+      expect(spread).toBeGreaterThan(own);
+    }
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chopEighths, dragLength, needsGate, orderChops, patternBars, positionText, chopColors, renderSequence, setSlot, slotNotes, slotStarts, type MakerChop, type Slot } from "./patternMaker";
+import { chopEighths, dragLength, needsGate, orderChops, patternBars, positionText, renderSequence, setSlot, slotNotes, slotStarts, type MakerChop, type Slot } from "./patternMaker";
 
 const chop = (barIndex: number, bars = 1, slice = barIndex + 1): MakerChop => ({ slice, start: barIndex * 1000, length: bars * 1000, bars, barIndex, color: "#fff" });
 // chops that started on bars 1 to 8 of the song (barIndex 0 to 7)
@@ -89,14 +89,5 @@ describe("renderSequence", () => {
     expect(out[0][100]).toBe(0);
     expect(out[0][199]).toBe(0);
     expect(out[0][200]).toBe(1);
-  });
-});
-
-describe("chopColors", () => {
-  it("never repeats a colour, up to 127 chops, and starts with the palette in order", () => {
-    const palette = ["#d9534f", "#e8c23c", "#3cb4a8"];
-    const colors = chopColors(127, palette);
-    expect(colors.slice(0, 3)).toEqual(palette);
-    expect(new Set(colors).size).toBe(127);
   });
 });

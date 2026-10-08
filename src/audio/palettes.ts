@@ -200,3 +200,28 @@ export function colorFor(palette: Palette, category: CategoryId): string {
   return shade(toneColor(palette, CATEGORY_TONE[category]), SHADE[category] ?? 0);
 }
 
+
+/**
+ * The colour of the `i`th chop (or section): the palette's own colours, but taken in an order where each colour is as far as it can be from the one before
+ * it (a greedy walk round the colours by their distance in OKLCH, starting from the first), so side-by-side chops never look alike. The same colours repeat
+ * in that order for more chops than the palette has.
+ */
+export function chopColor(colors: readonly string[], i: number): string {
+  const n = colors.length;
+  if (n <= 2) return colors[((i % n) + n) % n];
+  const lab = colors.map((hex) => {
+    const [l, c, h] = hexToOklch(hex);
+    return [l, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180)];
+  });
+  const dist = (a: number, b: number) => Math.hypot(lab[a][0] - lab[b][0], lab[a][1] - lab[b][1], lab[a][2] - lab[b][2]);
+  const order = [0];
+  const left = new Set(colors.map((_, k) => k).slice(1));
+  while (left.size > 0) {
+    const last = order[order.length - 1];
+    let best = -1;
+    for (const k of left) if (best < 0 || dist(last, k) > dist(last, best)) best = k;
+    order.push(best);
+    left.delete(best);
+  }
+  return colors[order[((i % n) + n) % n]];
+}

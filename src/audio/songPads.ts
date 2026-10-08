@@ -1,6 +1,7 @@
 // The sections of a chopped song as pads. Like ghost and placeholder pads they have no slot in the project they were loaded
 // from: they are written into the export as new pads (see exportSong.ts), so they are not "real" pads and are left out of tuning and mixing.
 import type { Pad } from "../components/PadPanel";
+import { chopColor } from "./palettes";
 import { CHOP_BANK_START, PAD_COUNT } from "./padMoves";
 import { sliceSection, type SectionPlan } from "./song/chop";
 
@@ -46,7 +47,7 @@ export function makeSectionPads(song: Pad, plans: SectionPlan[], bpm: number, be
       tune: false,
       semis: 0,
       cents: 0,
-      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar, bars: plan.bars, colorIndex: plan.colorIndex, color: colors && plan.colorIndex !== undefined ? colors[plan.colorIndex % colors.length] : undefined },
+      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar, bars: plan.bars, colorIndex: plan.colorIndex, color: colors && plan.colorIndex !== undefined ? chopColor(colors, plan.colorIndex) : undefined },
     });
   });
   return { pads, dropped: Math.max(0, plans.length - free.length), seconds: plans.slice(0, free.length).reduce((sum, p) => sum + p.length, 0) / song.sampleRate };

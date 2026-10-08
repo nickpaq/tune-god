@@ -22,7 +22,7 @@ import { fadeIn, fadeMsFor, kickTransientMs, medianTransientMs } from "./audio/k
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
 import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
-import { colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
+import { chopColor, colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { CHOP_BANK_START, emptyPadInBank, inChopBank, movePad, nextEmptyPad, PADS_PER_BANK, removePad } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { sortForSlot } from "./audio/swapOrder";
@@ -45,7 +45,7 @@ import { addChopperPad, CHOPPER_MAX_SLICES, fitPlans, sliceLayout, type ChopperE
 import { keyOffset } from "./audio/song/keyOffset";
 import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
 import { PatternMaker } from "./components/PatternMaker";
-import { chopColors, needsGate, patternBars, slotNotes, type Slot } from "./audio/song/patternMaker";
+import { needsGate, patternBars, slotNotes, type Slot } from "./audio/song/patternMaker";
 import { CHOPPER_MIN_SECONDS, ChopperSourceModal } from "./components/ChopperSourceModal";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
@@ -1046,8 +1046,6 @@ function App() {
           return;
         }
         const layout = sliceLayout(plans, total);
-        // Every chop its own colour, none repeating (the palette first, then colours spread round the wheel).
-        const colors = chopColors(plans.length, palette.colors);
         // The chopper is not stretched: it plays at the sample's own tempo, and a pitch change speeds it up or slows it down by the same amount.
         const tempo = Math.min(300, Math.max(20, Math.round(settings.bpm * 2 ** (offset / 12) * 100) / 100));
         const pad: Pad = {
@@ -1076,7 +1074,7 @@ function App() {
                 length: plan.length,
                 bars: plan.bars,
                 barIndex: plan.barIndex ?? 0,
-                color: colors[i],
+                color: chopColor(palette.colors, plan.colorIndex ?? i),
               })),
             },
           },
@@ -1610,7 +1608,7 @@ function App() {
   const autoColorOf = (p: Pad): string => {
     if (p.chopper) return p.chopper.color ?? colorFor(palette, "melodic");
     // A section of a chopped song keeps the palette colour it was given when it was picked.
-    if (p.section) return p.section.color ?? palette.colors[(p.section.colorIndex ?? 0) % palette.colors.length];
+    if (p.section) return p.section.color ?? chopColor(palette.colors, p.section.colorIndex ?? 0);
     const base = colorFor(palette, p.category ?? "other");
     if (p.ghost) return shade(base, 2);
     // A key read from the file name is a sure one: the pad is a slightly darker shade. A key that was only detected leaves the normal shade.

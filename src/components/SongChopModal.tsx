@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
-import type { Palette } from "../audio/palettes";
+import { chopColor, type Palette } from "../audio/palettes";
 import { mixToMono, snapToAttack } from "../audio/song/beats";
 import type { SectionPlan } from "../audio/song/chop";
 import {
@@ -100,7 +100,7 @@ export function SongChopModal({
   const pyramid = useMemo(() => buildPyramid(pad.channelData), [pad.channelData]);
   const mono = useMemo(() => mixToMono(pad.channelData), [pad.channelData]);
   const timeline = useRef<ChopTimelineHandle>(null);
-  const colorOf = (i: number) => palette.colors[i % palette.colors.length];
+  const colorOf = (i: number) => chopColor(palette.colors, i);
 
   const [detected, setDetected] = useState<Detected | "none" | null>(null);
   // The markers are kept under the song's name and length, so they come back after the editor is closed or the app is reopened.
