@@ -392,7 +392,7 @@ export function SongChopModal({
 
   const scaleTempo = (factor: number) => change({ ...marks, tempoScale: marks.tempoScale * factor, bpm: marks.bpm == null ? null : marks.bpm * factor }, factor > 1 ? "Tempo doubled" : "Tempo halved");
 
-  // ---- the BPM readout: double tap snaps to the nearest whole number; a drag up or down scrubs it, finer the further right the finger is ----
+  // ---- the BPM readout: double tap goes back to the automatic tempo; a drag up or down scrubs it, finer the further right the finger is ----
   const bpmTouch = useRef<{ x0: number; y0: number; y: number; bpm: number; moved: boolean } | null>(null);
   const lastBpmTap = useRef(0);
   const bpmNow = grid ? bpmAt(grid, 0) : 0;
@@ -424,8 +424,8 @@ export function SongChopModal({
     const now = performance.now();
     if (now - lastBpmTap.current < BPM_DOUBLE_MS) {
       lastBpmTap.current = 0;
-      const bpm = Math.round(bpmNow);
-      if (bpm >= BPM_MIN) change({ ...marks, bpm }, `Tempo snapped to ${bpm} BPM`);
+      // Back to the tempo the detection and the markers work out, as it was before any +, - or scrub.
+      if (marks.bpm != null) change({ ...marks, bpm: null }, "Tempo back to automatic");
     } else lastBpmTap.current = now;
   };
 
@@ -510,7 +510,7 @@ export function SongChopModal({
               <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(-1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo down by 0.01">
                 <NudgeIcon plus={false} />
               </button>
-              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: nearest whole number. Drag up or down to scrub; move right to go finer.">
+              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: back to the automatic tempo. Drag up or down to scrub; move right to go finer.">
                 {bpmText}
               </span>
               <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo up by 0.01">
