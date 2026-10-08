@@ -79,103 +79,108 @@ export const SPECS: PaletteSpec[] = [
 ];
 
 /**
- * A scheme built as a family, which is what keeps it tasteful: every tone sits in one stretch of the colour wheel (`hue` and `span`), the kick alone takes the
- * contrasting `pop` hue, and the types are told apart by lightness (the ladder below) far more than by hue, so a scheme reads as one palette and not a
- * rainbow, with a single colour to hit against. `lo` and `hi` bound the lightness of the darkest and lightest types.
+ * A scheme picked at random from a theme, and unique because of it: each of its ten tones gets its own hue (from the theme's hue ranges), lightness and
+ * chroma, drawn from a seeded generator, so no two schemes share a structure and none is another with a hue turned. Draws that break the rules are thrown
+ * away and drawn again (the same seed always ends in the same scheme): every type is told apart from every other, and snares, cymbals and perc, the sounds
+ * most often side by side, are well apart. The tones are shuffled before they are drawn so none has first pick of the colours.
  */
-export interface FamilySpec {
+export interface SeedSpec {
   id: string;
   name: string;
-  /** The middle of the family's hues, and how far (degrees) it reaches in all. */
-  hue: number;
-  span: number;
-  /** The contrasting hue the kick takes. */
-  pop: number;
-  /** Chroma of the base tones. */
-  c: number;
-  lo?: number;
-  hi?: number;
+  seed: number;
+  /** The hue ranges (degrees, start to end round the wheel) the tones are drawn from. */
+  hues: [number, number][];
+  /** Lightness and chroma ranges the tones are drawn from. */
+  l: [number, number];
+  c: [number, number];
   accent: string;
   surface?: number;
 }
 
-/** Where on the family's hue stretch each tone sits (-1 to 1; the kick is the pop hue instead) and how high on the lightness ladder (0 to 1). */
-export const FAMILY: Record<ToneId, { t: number; v: number }> = {
-  bass: { t: -1, v: 0 },
-  percVox: { t: -0.15, v: 0.177 },
-  drumPercLoop: { t: -0.5, v: 0.226 },
-  kick: { t: 0, v: 0.46 },
-  fx: { t: 0.55, v: 0.52 },
-  snareClap: { t: -1, v: 0.436 },
-  melodic: { t: 0.25, v: 0.72 },
-  other: { t: 0, v: 0.78 },
-  melodicLoop: { t: 0.7, v: 0.909 },
-  hats: { t: 1, v: 1 },
-};
-
-export function buildFamily(spec: FamilySpec): Palette {
-  const lo = spec.lo ?? 0.34;
-  const hi = spec.hi ?? 0.92;
-  return {
-    id: spec.id,
-    name: spec.name,
-    accent: spec.accent,
-    surface: spec.surface,
-    colors: TONES.map((t) => {
-      const f = FAMILY[t];
-      const hue = t === "kick" ? spec.pop : (spec.hue + (f.t * spec.span) / 2 + 360) % 360;
-      return oklchToHex(lo + f.v * (hi - lo), t === "other" ? ROLES.other.c * spec.c : spec.c * ROLES[t].c, t === "other" ? spec.hue : hue);
-    }),
+function mulberry32(a: number): () => number {
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-export const FAMILIES: FamilySpec[] = [
-  // Koala: grey-blue fur and a pink nose.
-  { id: "koala", name: "Koala", hue: 250, span: 70, pop: 5, c: 0.085, accent: "#ff6b81", surface: 250 },
-  // Studio: dusty cool blues with one rust.
-  { id: "studio", name: "Studio", hue: 235, span: 60, pop: 40, c: 0.085, accent: "#e0a458", surface: 230 },
-  // Pastel: rose, peach and lilac with a mint kick.
-  { id: "pastel", name: "Pastel", hue: 335, span: 110, pop: 175, c: 0.1, lo: 0.4, hi: 0.93, accent: "#ff9eb5" },
-  // Neon: magenta and violet, lime for the kick.
-  { id: "neon", name: "Neon", hue: 305, span: 80, pop: 125, c: 0.24, lo: 0.46, hi: 0.9, accent: "#b6ff00", surface: 300 },
-  // Midnight: deep blue-violets, a gold kick.
-  { id: "midnight", name: "Midnight", hue: 268, span: 70, pop: 85, c: 0.14, lo: 0.3, hi: 0.82, accent: "#ffc83d", surface: 265 },
-  // Sunset: vermilion through apricot to rose, a violet kick.
-  { id: "sunset", name: "Sunset", hue: 30, span: 80, pop: 285, c: 0.15, accent: "#ff7a3d", surface: 30 },
-  // Ocean: blues and teals, a sand kick.
-  { id: "ocean", name: "Ocean", hue: 225, span: 70, pop: 60, c: 0.12, accent: "#28b6d6", surface: 235 },
-  // Deep sea: the same water after dark, a bioluminescent kick.
-  { id: "deepsea", name: "Deep sea", hue: 215, span: 60, pop: 168, c: 0.135, lo: 0.26, hi: 0.8, accent: "#1fd1c1", surface: 215 },
-  // Forest: greens with an amber kick.
-  { id: "forest", name: "Forest", hue: 145, span: 70, pop: 55, c: 0.11, lo: 0.3, hi: 0.86, accent: "#6bbf59", surface: 150 },
-  // Moss: lichen and fern, a terracotta kick.
-  { id: "moss", name: "Moss", hue: 122, span: 60, pop: 32, c: 0.1, lo: 0.32, hi: 0.86, accent: "#9acd32", surface: 125 },
-  // Tropical: lagoon greens and blues, a hot pink kick.
-  { id: "tropical", name: "Tropical", hue: 170, span: 90, pop: 355, c: 0.17, accent: "#00d1a0", surface: 170 },
-  // Candy: bubblegum pinks and peach, an aqua kick.
-  { id: "candy", name: "Candy", hue: 350, span: 80, pop: 198, c: 0.14, lo: 0.4, hi: 0.93, accent: "#ff5fa8", surface: 345 },
-  // Blossom: petals, with a leaf-green kick.
-  { id: "blossom", name: "Blossom", hue: 355, span: 55, pop: 148, c: 0.11, lo: 0.4, hi: 0.94, accent: "#ff8fb1", surface: 350 },
-  // Lavender: violets and lilacs, a butter kick.
-  { id: "lavender", name: "Lavender", hue: 295, span: 65, pop: 92, c: 0.115, lo: 0.34, hi: 0.9, accent: "#b48cff", surface: 290 },
-  // Citrus: lemon, lime and a little leaf, a grapefruit kick.
-  { id: "citrus", name: "Citrus", hue: 100, span: 70, pop: 22, c: 0.16, lo: 0.4, hi: 0.93, accent: "#ffd21f", surface: 100 },
-  // Desert: sand and clay, a sky-blue kick.
-  { id: "desert", name: "Desert", hue: 58, span: 55, pop: 215, c: 0.11, lo: 0.34, hi: 0.9, accent: "#e69a4a", surface: 60 },
-  // Rose gold: blush and copper, a dusty blue kick.
-  { id: "rosegold", name: "Rose gold", hue: 25, span: 45, pop: 250, c: 0.115, lo: 0.36, hi: 0.92, accent: "#e8a190", surface: 20 },
-  // Volcano: lava reds and oranges, an ash-violet kick.
-  { id: "volcano", name: "Volcano", hue: 35, span: 60, pop: 280, c: 0.15, lo: 0.3, hi: 0.84, accent: "#ff4a1c", surface: 25 },
-  // Aurora: green through teal to violet, a pink kick.
-  { id: "aurora", name: "Aurora", hue: 195, span: 130, pop: 335, c: 0.15, accent: "#45f0b0", surface: 170 },
-  // Arctic: ice blues, a warm kick.
-  { id: "arctic", name: "Arctic", hue: 225, span: 55, pop: 15, c: 0.1, lo: 0.38, hi: 0.94, accent: "#7fd4ff", surface: 225 },
-  // Cyberpunk: magenta and violet, a cyan kick.
-  { id: "cyberpunk", name: "Cyberpunk", hue: 305, span: 70, pop: 195, c: 0.22, lo: 0.42, hi: 0.88, accent: "#ff2bd6", surface: 310 },
-  // Vaporwave: pink and lilac, a teal kick.
-  { id: "vaporwave", name: "Vaporwave", hue: 322, span: 90, pop: 190, c: 0.13, lo: 0.4, hi: 0.93, accent: "#ff71ce", surface: 300 },
-  // Royal: purples with a gold kick.
-  { id: "royal", name: "Royal", hue: 290, span: 55, pop: 85, c: 0.14, lo: 0.3, hi: 0.82, accent: "#e6b800", surface: 285 },
+const labOf = (hex: string) => {
+  const [l, c, h] = hexToOklch(hex);
+  return [l, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180)];
+};
+const apart = (a: string, b: string) => {
+  const x = labOf(a);
+  const y = labOf(b);
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+};
+const ALL_CATEGORIES = Object.keys(CATEGORY_TONE) as CategoryId[];
+
+/** Whether a palette keeps every type apart from every other (0.034) and snares, cymbals and perc well apart (0.15, 0.15 and 0.11). */
+function keepsRules(p: Palette): boolean {
+  const colors = ALL_CATEGORIES.map((c) => colorFor(p, c));
+  for (let i = 0; i < colors.length; i++) for (let j = i + 1; j < colors.length; j++) if (apart(colors[i], colors[j]) < 0.034) return false;
+  const [snare, cymbal, perc] = [colorFor(p, "snare"), colorFor(p, "cymbal"), colorFor(p, "perc")];
+  return apart(snare, cymbal) > 0.15 && apart(snare, perc) > 0.15 && apart(cymbal, perc) > 0.11;
+}
+
+export function buildSeeded(spec: SeedSpec): Palette {
+  const widths = spec.hues.map(([a, b]) => ((b - a + 360) % 360) || 360);
+  const total = widths.reduce((t, w) => t + w, 0);
+  let last: Palette | null = null;
+  for (let attempt = 0; attempt < 4000; attempt++) {
+    const rnd = mulberry32(spec.seed * 7919 + attempt);
+    const colors: string[] = [];
+    // The tones are drawn in a shuffled order.
+    const order = TONES.map((_, i) => i).sort(() => rnd() - 0.5);
+    for (const i of order) {
+      if (TONES[i] === "other") {
+        colors[i] = oklchToHex(spec.l[0] + (spec.l[1] - spec.l[0]) * 0.55, 0.02, spec.hues[0][0]);
+        continue;
+      }
+      let pick = rnd() * total;
+      let r = 0;
+      while (r < widths.length - 1 && pick > widths[r]) pick -= widths[r++];
+      const hue = (spec.hues[r][0] + (pick / widths[r]) * widths[r]) % 360;
+      colors[i] = oklchToHex(spec.l[0] + rnd() * (spec.l[1] - spec.l[0]), spec.c[0] + rnd() * (spec.c[1] - spec.c[0]), hue);
+    }
+    last = { id: spec.id, name: spec.name, accent: spec.accent, surface: spec.surface, colors };
+    if (keepsRules(last)) return last;
+  }
+  return last!;
+}
+
+/** The generated schemes: a theme each (its hues, lightness and chroma) and a seed. */
+export const SEEDED: SeedSpec[] = [
+  { id: "koala", name: "Koala", seed: 1, hues: [[205, 265], [350, 25]], l: [0.45, 0.82], c: [0.045, 0.11], accent: "#ff6b81", surface: 250 },
+  { id: "studio", name: "Studio", seed: 2, hues: [[185, 250], [25, 60]], l: [0.46, 0.8], c: [0.05, 0.11], accent: "#e0a458", surface: 230 },
+  { id: "pastel", name: "Pastel", seed: 3, hues: [[0, 360]], l: [0.76, 0.92], c: [0.06, 0.1], accent: "#ff9eb5" },
+  { id: "neon", name: "Neon", seed: 4, hues: [[0, 360]], l: [0.62, 0.84], c: [0.2, 0.29], accent: "#b6ff00", surface: 300 },
+  { id: "midnight", name: "Midnight", seed: 5, hues: [[235, 305], [335, 360], [75, 100]], l: [0.34, 0.66], c: [0.1, 0.17], accent: "#ffc83d", surface: 265 },
+  { id: "sunset", name: "Sunset", seed: 6, hues: [[0, 70], [300, 360], [255, 290]], l: [0.5, 0.82], c: [0.12, 0.2], accent: "#ff7a3d", surface: 30 },
+  { id: "ocean", name: "Ocean", seed: 7, hues: [[165, 255], [20, 50]], l: [0.4, 0.85], c: [0.08, 0.15], accent: "#28b6d6", surface: 235 },
+  { id: "deepsea", name: "Deep sea", seed: 8, hues: [[170, 270], [330, 350]], l: [0.28, 0.7], c: [0.09, 0.16], accent: "#1fd1c1", surface: 215 },
+  { id: "forest", name: "Forest", seed: 9, hues: [[85, 175], [20, 60]], l: [0.3, 0.78], c: [0.08, 0.15], accent: "#6bbf59", surface: 150 },
+  { id: "moss", name: "Moss", seed: 10, hues: [[90, 150], [15, 45], [190, 215]], l: [0.35, 0.8], c: [0.07, 0.14], accent: "#9acd32", surface: 125 },
+  { id: "tropical", name: "Tropical", seed: 11, hues: [[120, 215], [335, 20], [75, 100]], l: [0.55, 0.85], c: [0.14, 0.22], accent: "#00d1a0", surface: 170 },
+  { id: "candy", name: "Candy", seed: 12, hues: [[320, 20], [180, 215], [60, 90]], l: [0.6, 0.9], c: [0.09, 0.17], accent: "#ff5fa8", surface: 345 },
+  { id: "blossom", name: "Blossom", seed: 13, hues: [[330, 30], [110, 160]], l: [0.55, 0.92], c: [0.06, 0.12], accent: "#ff8fb1", surface: 350 },
+  { id: "lavender", name: "Lavender", seed: 14, hues: [[255, 330], [80, 105]], l: [0.45, 0.9], c: [0.07, 0.14], accent: "#b48cff", surface: 290 },
+  { id: "citrus", name: "Citrus", seed: 15, hues: [[15, 125]], l: [0.55, 0.92], c: [0.12, 0.2], accent: "#ffd21f", surface: 100 },
+  { id: "desert", name: "Desert", seed: 16, hues: [[15, 85], [200, 230]], l: [0.4, 0.88], c: [0.07, 0.13], accent: "#e69a4a", surface: 60 },
+  { id: "rosegold", name: "Rose gold", seed: 17, hues: [[345, 50], [225, 260]], l: [0.45, 0.9], c: [0.06, 0.12], accent: "#e8a190", surface: 20 },
+  { id: "volcano", name: "Volcano", seed: 18, hues: [[10, 65], [270, 295]], l: [0.3, 0.78], c: [0.1, 0.19], accent: "#ff4a1c", surface: 25 },
+  { id: "aurora", name: "Aurora", seed: 19, hues: [[120, 210], [270, 330]], l: [0.45, 0.88], c: [0.1, 0.19], accent: "#45f0b0", surface: 170 },
+  { id: "arctic", name: "Arctic", seed: 20, hues: [[190, 250], [350, 25]], l: [0.5, 0.94], c: [0.05, 0.1], accent: "#7fd4ff", surface: 225 },
+  { id: "cyberpunk", name: "Cyberpunk", seed: 21, hues: [[285, 345], [175, 215], [95, 115]], l: [0.45, 0.82], c: [0.18, 0.27], accent: "#ff2bd6", surface: 310 },
+  { id: "vaporwave", name: "Vaporwave", seed: 22, hues: [[290, 350], [170, 210]], l: [0.55, 0.9], c: [0.09, 0.16], accent: "#ff71ce", surface: 300 },
+  { id: "royal", name: "Royal", seed: 23, hues: [[255, 325], [75, 100], [340, 360]], l: [0.3, 0.7], c: [0.1, 0.18], accent: "#e6b800", surface: 285 },
+  { id: "harvest", name: "Harvest", seed: 24, hues: [[20, 110], [330, 350]], l: [0.35, 0.8], c: [0.09, 0.17], accent: "#d9762a", surface: 55 },
+  { id: "berry", name: "Berry", seed: 25, hues: [[310, 360], [250, 290], [100, 130]], l: [0.38, 0.8], c: [0.1, 0.18], accent: "#d6336c", surface: 340 },
+  { id: "mint", name: "Mint", seed: 26, hues: [[140, 200], [0, 25], [270, 300]], l: [0.5, 0.92], c: [0.07, 0.14], accent: "#4de0b5", surface: 165 },
+  { id: "slateorange", name: "Slate & orange", seed: 27, hues: [[225, 260], [30, 55]], l: [0.35, 0.85], c: [0.04, 0.14], accent: "#ff8a3d", surface: 245 },
 ];
 
 function oklchToRgb(l: number, c: number, h: number): [number, number, number] {
@@ -245,6 +250,9 @@ function build(spec: PaletteSpec): Palette {
   };
 }
 
+/** OKLCH lightness moved per shade. */
+const SHADE_STEP = 0.085;
+
 /** How many shades a category sits from its tone's base colour (0 = the base itself). */
 const SHADE: Partial<Record<CategoryId, number>> = { clap: 1, openHat: 1, cymbal: 2, vox: 1, percLoop: 1 };
 /**
@@ -279,7 +287,7 @@ const organ: Palette = {
   categories: ORGAN,
 };
 
-export const PALETTES: Palette[] = [organ, ...FAMILIES.map(buildFamily), ...SPECS.map(build)];
+export const PALETTES: Palette[] = [organ, ...SEEDED.map(buildSeeded), ...SPECS.map(build)];
 
 export const DEFAULT_PALETTE_ID = "organ";
 
@@ -292,8 +300,6 @@ export function toneColor(palette: Palette, tone: ToneId): string {
   return palette.colors[TONES.indexOf(tone)] ?? palette.colors[palette.colors.length - 1];
 }
 
-/** OKLCH lightness moved per shade. */
-const SHADE_STEP = 0.085;
 
 /** `hex` moved `steps` shades away from its own lightness: lighter when the colour is dark, darker when it is light, keeping its hue. */
 export function shade(hex: string, steps: number): string {
