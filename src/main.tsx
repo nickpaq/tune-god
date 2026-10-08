@@ -31,7 +31,7 @@ createRoot(document.getElementById('root')!).render(
     ) : (
       <>
         <App />
-        {inStatusBar() && <img className="status-mark" src="/logo-mark.png" alt="" aria-hidden="true" />}
+        {inStatusBar() && <img className="status-mark" src="/logo-mark-outline.png" alt="" aria-hidden="true" />}
       </>
     )}
   </StrictMode>,
