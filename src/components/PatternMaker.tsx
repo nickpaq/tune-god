@@ -23,8 +23,6 @@ const COLUMNS = 1024;
 const MIN_SPAN_BARS = 4;
 /** The share of a row's width left of the playhead, where the end of the slot before shows. */
 const MARGIN = 0.1;
-/** A finger held this long (ms) on a row plays the chop; a scroll that starts sooner does not. */
-const HOLD_MS = 70;
 /** Two taps this close together (ms) on a row are a double tap. */
 const DOUBLE_MS = 320;
 /** A finger that moves this far (CSS pixels) is dragging, not tapping. */
@@ -122,9 +120,10 @@ function RowCanvas({ peaks, scale, color, tail, eighths, len, span, beatsPerBar 
 
 /**
  * The pattern maker (chopper mode, "Finish and open pattern maker"): the chops stacked in a scrolling list, one beat-square tall each, the one nearest the
- * playhead's place in the bar at the bottom. The row in the middle (the selection zone) is the one that counts. Holding a row plays that chop; a double tap
- * puts it at the playhead (and the playhead moves to its end); dragging along a row sets how many eighth notes of it play, and dragging back past nothing cuts
- * the chop before it short. With Scroll play on, rows play as they scroll into the zone. The view zooms out to fit a chop longer than it shows. The arrows
+ * playhead's place in the bar at the bottom. The row in the middle (the selection zone) is the one that counts. A tap on the row in the zone puts it at the
+ * playhead (and the playhead moves to its end); a tap on any other row plays it, and a double tap scrolls it into the zone; a tap on the bit of the slot
+ * before that shows left of the playhead plays that slot from its beginning. Dragging along a row sets how many eighth notes of it play, and dragging back past
+ * nothing cuts the chop before it short. With Scroll play on, rows play as they scroll into the zone. The view zooms out to fit a chop longer than it shows. The arrows
  * select a slot to change; the transport plays the sequence; Done hands it back.
  */
 export function PatternMaker({
@@ -256,7 +255,7 @@ export function PatternMaker({
   };
 
   // ---- the finger on a row ----
-  const touch = useRef<{ key: RowKey; x: number; y: number; width: number; startLen: number; dragging: boolean; hold: number; held: boolean } | null>(null);
+  const touch = useRef<{ key: RowKey; row: number; x: number; y: number; width: number; startLen: number; dragging: boolean; inTail: boolean } | null>(null);
   const lastTap = useRef<{ key: RowKey; at: number } | null>(null);
   const select = (to: number, count = slots.length) => {
     stopPlay();
@@ -272,20 +271,9 @@ export function PatternMaker({
     setSlots(next);
     select(sel + 1, next.length);
   };
-  const down = (key: RowKey) => (e: React.PointerEvent<HTMLDivElement>) => {
-    const t = { key, x: e.clientX, y: e.clientY, width: e.currentTarget.clientWidth * (1 - MARGIN), startLen: lenOf(key), dragging: false, hold: 0, held: false };
-    // Held, the chop plays; a scroll that starts first cancels it.
-    t.hold = window.setTimeout(() => {
-      if (touch.current === t && !t.dragging && key !== "s") {
-        t.held = true;
-        playChop(key, lenOf(key));
-      }
-    }, HOLD_MS);
-    touch.current = t;
-  };
-  const endHold = (t: NonNullable<typeof touch.current>) => {
-    window.clearTimeout(t.hold);
-    if (t.held) stopPlay();
+  const down = (key: RowKey, row: number) => (e: React.PointerEvent<HTMLDivElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    touch.current = { key, row, x: e.clientX, y: e.clientY, width: box.width * (1 - MARGIN), startLen: lenOf(key), dragging: false, inTail: e.clientX - box.left < box.width * MARGIN };
   };
   const move = (e: React.PointerEvent<HTMLDivElement>) => {
     const t = touch.current;
@@ -294,7 +282,6 @@ export function PatternMaker({
     if (!t.dragging) {
       if (Math.abs(dx) < DRAG_PX || Math.abs(dx) < Math.abs(e.clientY - t.y)) return;
       t.dragging = true;
-      endHold(t);
       e.currentTarget.setPointerCapture(e.pointerId);
     }
     const { eighths, trim: cut } = dragLength(t.startLen + Math.round((dx / t.width) * spanRef.current), maxOf(t.key));
@@ -302,20 +289,35 @@ export function PatternMaker({
     setLens((l) => ({ ...l, [String(t.key)]: eighths }));
     setTrim(Math.min(cut, room));
   };
+  /** Scrolls the list so a row is in the selection zone; the rows passing do not play. */
+  const scrollTo = (row: number) => {
+    autoUntil.current = performance.now() + AUTO_SCROLL_MS;
+    picker.current?.scrollTo({ top: row * rowHeight(), behavior: "smooth" });
+  };
   const up = () => {
     const t = touch.current;
     touch.current = null;
     if (!t) return;
-    endHold(t);
     if (!t.dragging) {
-      // A double tap puts the chop at the playhead.
-      const now = performance.now();
-      const before = lastTap.current;
-      if (before && before.key === t.key && now - before.at < DOUBLE_MS) {
+      // The bit of the slot before that shows left of the playhead: it plays from its beginning.
+      if (t.inTail) {
+        if (before?.kind === "chop") playChop(before.chop, before.eighths);
+        return;
+      }
+      // The row in the zone is locked in.
+      if (t.row === centered) {
         lastTap.current = null;
         return confirm(t.key);
       }
+      // Any other row plays; a second tap on it soon after scrolls it into the zone.
+      const now = performance.now();
+      const last = lastTap.current;
+      if (last && last.key === t.key && now - last.at < DOUBLE_MS) {
+        lastTap.current = null;
+        return scrollTo(t.row);
+      }
       lastTap.current = { key: t.key, at: now };
+      if (t.key !== "s") playChop(t.key, lenOf(t.key));
       return;
     }
     // Dragged back past nothing: the slot before is cut short and the playhead is back at its end, selected, to be dragged out again.
@@ -329,9 +331,7 @@ export function PatternMaker({
     setTrim(0);
   };
   const cancel = () => {
-    const t = touch.current;
     touch.current = null;
-    if (t) endHold(t);
     setTrim(0);
   };
 
@@ -468,7 +468,7 @@ export function PatternMaker({
             {rows.map((key, j) => {
               const chop = key === "s" ? null : chops[key];
               return (
-                <div key={String(key)} className="maker__row" onPointerDown={down(key)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
+                <div key={String(key)} className="maker__row" onPointerDown={down(key, j)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
                   {Math.abs(j - centered) <= visible && (
                     <RowCanvas
                       peaks={chop ? peaksOf(key as number) : null}
