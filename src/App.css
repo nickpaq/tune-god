@@ -1608,15 +1608,25 @@
 .chop__nudge {
   flex: none;
   box-sizing: border-box;
-  width: calc(var(--cell) * 10);
-  height: calc(var(--cell) * 10);
-  padding: calc(var(--cell) * 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--cell) * 11);
+  height: calc(var(--cell) * 11);
+  padding: 0;
   border: var(--cell) solid currentColor;
   background: none;
   color: inherit;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.chop__nudge svg {
+  display: block;
+  flex: none;
+  width: calc(var(--cell) * 5);
+  height: calc(var(--cell) * 5);
 }
 
 .chop__nudge:active {
