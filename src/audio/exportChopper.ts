@@ -3,6 +3,7 @@
 // and the velocity of a note picks the slice (`TRIGGER MODE` 1): the velocities are shared out over the slices, so one note from the lowest to the highest
 // velocity plays every slice in turn. The note's own pitch transposes the slice (0 here), and the pad pitch knob is in semitones. The pad plays at the sample's own tempo (no stretch), so the project tempo is written to match it.
 import type { SectionPlan } from "./song/chop";
+import type { MakerNote } from "./song/patternMaker";
 import { emptySequence, isEmpty, SEQUENCE_SLOTS, TICKS_PER_BEAT } from "./exportSong";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
@@ -69,6 +70,11 @@ export interface ChopperExport {
   channelData: Float32Array[];
   layout: SliceLayout;
   beatsPerBar: number;
+  /**
+   * The pattern the pattern maker laid out: one pattern of `bars` bars holding a note per chop. When set it replaces the pattern per section. `gate` says a note's
+   * length cuts the chop short (a slot cut short, or silence after it), so the chopper's ONE SHOT is switched off and the note length decides.
+   */
+  pattern?: { notes: MakerNote[]; bars: number; gate: boolean };
   /** Semitones on the pad's pitch knob. The pad is not stretched, so this also changes its tempo (the caller has put that in the project tempo). */
   pitch: number;
 }
@@ -105,7 +111,7 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
     synth: "CHOPPER",
     synthParams: {
       MONO: 1.0,
-      "ONE SHOT": 1.0,
+      "ONE SHOT": chopper.pattern?.gate ? 0.0 : 1.0,
       "PLAY THRU": 0.0,
       SENSITIVITY: 0.5,
       "SLICE MODE": 0.0,
@@ -138,7 +144,32 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
   const beatsPerBar = Number(sequence.beatsPerBar) > 0 ? Number(sequence.beatsPerBar) : 4;
   const free = sequences.map((s, i) => (isEmpty(s) ? i : -1)).filter((i) => i >= 0);
   let written = 0;
-  for (const section of chopper.layout.sections) {
+  if (chopper.pattern) {
+    // The pattern maker's sequence: one pattern, each note at its place (`timeOffset`, 2048 ticks to an eighth note) held for its eighths.
+    if (free.length > 0) {
+      sequences[free[0]] = {
+        ...emptySequence(),
+        noteSequence: {
+          pattern: {
+            numBars: chopper.pattern.bars,
+            notes: chopper.pattern.notes.map((n) => ({
+              chance: 1.0,
+              length: n.eighths * (TICKS_PER_BEAT / 2),
+              num: chopper.index + base,
+              pan: -1.0078740119934082,
+              pitch: 0.0,
+              start: 0.0,
+              subPad: -1,
+              timeOffset: n.start * (TICKS_PER_BEAT / 2),
+              vel: sliceVelocity(n.slice, count),
+            })),
+          },
+        },
+      };
+      written = 1;
+    }
+  }
+  for (const section of chopper.pattern ? [] : chopper.layout.sections) {
     if (written >= free.length) break;
     sequences[free[written]] = {
       ...emptySequence(),

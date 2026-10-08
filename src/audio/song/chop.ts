@@ -12,6 +12,8 @@ export interface SectionPlan {
   audioFrames: number;
   /** Which section this is (0-based). */
   index: number;
+  /** The bar the section starts on, counted in the song's grid (bar 1, the 1.1.1, is 0): where in the song it came from. */
+  barIndex?: number;
   /** The palette colour the section was given when it was picked, if any. */
   colorIndex?: number;
 }

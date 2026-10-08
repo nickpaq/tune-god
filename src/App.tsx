@@ -44,6 +44,8 @@ import { addSongSections, songTemplate, type SongExport, type SongTemplate } fro
 import { addChopperPad, CHOPPER_MAX_SLICES, fitPlans, sliceLayout, type ChopperExport } from "./audio/exportChopper";
 import { keyOffset } from "./audio/song/keyOffset";
 import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
+import { PatternMaker } from "./components/PatternMaker";
+import { needsGate, patternBars, slotNotes, type Slot } from "./audio/song/patternMaker";
 import { CHOPPER_MIN_SECONDS, ChopperSourceModal } from "./components/ChopperSourceModal";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
@@ -959,6 +961,28 @@ function App() {
     return null;
   };
 
+  /** The chopper pad whose pattern the pattern maker is making, while it is open. */
+  const [makerPad, setMakerPad] = useState<number | null>(null);
+
+  /** Done in the pattern maker: the sequence goes on the chopper pad (checked by writing it into a copy of the project first). */
+  const finishMaker = async (slots: Slot[]) => {
+    const pad = latest.current.pads[makerPad ?? -1];
+    if (!pad?.chopper?.maker) return void setMakerPad(null);
+    const next: Pad = { ...pad, chopper: { ...pad.chopper, maker: { ...pad.chopper.maker, slots } } };
+    let result: Awaited<ReturnType<typeof trialWriteChopper>>;
+    try {
+      result = await trialWriteChopper(next);
+    } catch (err) {
+      console.error(err);
+      result = { problem: "the project file could not be written" };
+    }
+    if ("problem" in result) return void window.alert(`The pattern could not be written into the Koala project: ${result.problem}.`);
+    recordEdit();
+    setPads((prev) => ({ ...prev, [next.index]: next }));
+    setMakerPad(null);
+    setNotice(`Pattern made on the chopper (Bank D pad ${(next.index % PADS_PER_BANK) + 1}): ${slots.length} slot${slots.length === 1 ? "" : "s"}, ${patternBars(slots, next.chopper!.beatsPerBar)} bars at ${next.chopper!.bpm.toFixed(2)} BPM.`);
+  };
+
   /** While a chop is being made: a second press of Chop does nothing. */
   const chopping = useRef(false);
 
@@ -974,6 +998,9 @@ function App() {
     layout: pad.chopper!.layout,
     beatsPerBar: pad.chopper!.beatsPerBar,
     pitch: pad.chopper!.pitch,
+    pattern: pad.chopper!.maker?.slots?.length
+      ? { notes: slotNotes(pad.chopper!.maker.slots, pad.chopper!.maker.chops), bars: patternBars(pad.chopper!.maker.slots, pad.chopper!.beatsPerBar), gate: needsGate(pad.chopper!.maker.slots, pad.chopper!.maker.chops, pad.chopper!.beatsPerBar) }
+      : undefined,
   });
 
   /** Writes the chopper into a fresh copy of the project as the export will and reads it back: how many patterns it got, or what went wrong. */
@@ -996,7 +1023,7 @@ function App() {
    * If step 1 or 2 fails nothing at all is changed. Nothing is tuned: when a key was picked on the piano, Koala's pitch knob on the new pads is set to
    * move the song into it (the audio is never altered). Acapella mode never touches the project's tempo; chopper mode sets it to the sample's.
    */
-  const chopSong = async (job: { mode: ChopMode; song: Pad; vocals: Pad }, settings: ChopSettings) => {
+  const chopSong = async (job: { mode: ChopMode; song: Pad; vocals: Pad }, settings: ChopSettings, openMaker = false) => {
     if (chopping.current) return;
     chopping.current = true;
     try {
@@ -1032,7 +1059,24 @@ function App() {
           tune: false,
           semis: 0,
           cents: 0,
-          chopper: { sourceSampleId: song.sampleId, slices: layout.starts.length, bpm: tempo, beatsPerBar: settings.beatsPerBar, pitch: offset, layout },
+          chopper: {
+            sourceSampleId: song.sampleId,
+            slices: layout.starts.length,
+            bpm: tempo,
+            beatsPerBar: settings.beatsPerBar,
+            pitch: offset,
+            layout,
+            maker: {
+              chops: plans.map((plan, i) => ({
+                slice: layout.sections[i].slice,
+                start: plan.start,
+                length: plan.length,
+                bars: plan.bars,
+                barIndex: plan.barIndex ?? 0,
+                color: palette.colors[(plan.colorIndex ?? i) % palette.colors.length],
+              })),
+            },
+          },
         };
         let result: Awaited<ReturnType<typeof trialWriteChopper>>;
         try {
@@ -1052,6 +1096,10 @@ function App() {
         setSelected(null);
         setBank(3);
         setChop(null);
+        if (openMaker) {
+          setMakerPad(slot);
+          return;
+        }
         const missing = layout.sections.length - result.patterns;
         setNotice(
           `Chopper on pad ${(slot % PADS_PER_BANK) + 1} of Bank D: ${layout.starts.length} chops. The project tempo is now ${tempo} BPM.${pitchNote}${missing > 0 ? ` ${missing} chop${missing === 1 ? "" : "s"} got no pattern (32 slots) but still play from the pad.` : ""}`,
@@ -2266,8 +2314,19 @@ function App() {
             beatsPerBar={chop.beatsPerBar}
             freeSlots={chop.mode === "chopper" ? CHOPPER_MAX_SLICES - 2 : PADS_PER_BANK}
             unit={chop.mode === "chopper" ? "chop" : "pattern"}
-            onConfirm={(settings) => chopSong(chop, settings)}
+            onConfirm={(settings, openMaker) => chopSong(chop, settings, openMaker)}
             onClose={() => setChop(null)}
+          />
+        )}
+
+        {makerPad !== null && pads[makerPad]?.chopper?.maker && (
+          <PatternMaker
+            channelData={pads[makerPad].channelData}
+            chops={pads[makerPad].chopper!.maker!.chops}
+            beatsPerBar={pads[makerPad].chopper!.beatsPerBar}
+            initial={pads[makerPad].chopper!.maker!.slots ?? []}
+            onDone={(slots) => void finishMaker(slots)}
+            onClose={() => setMakerPad(null)}
           />
         )}
 

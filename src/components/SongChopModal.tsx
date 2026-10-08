@@ -92,7 +92,7 @@ export function SongChopModal({
   freeSlots: number;
   /** What the chop makes: a pattern per section (acapella mode) or a chop on the chopper (chopper mode). */
   unit?: "pattern" | "chop";
-  onConfirm: (settings: ChopSettings) => void;
+  onConfirm: (settings: ChopSettings, openMaker?: boolean) => void;
   onClose: () => void;
 }) {
   const sampleRate = pad.sampleRate;
@@ -457,6 +457,11 @@ export function SongChopModal({
 
         </div>
 
+        {unit === "chop" && (
+          <button className="chop__btn" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, key: detectedKey }, true)}>
+            Finish and open pattern maker
+          </button>
+        )}
         <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, key: detectedKey })}>
           Chop into {fits} {unit}{fits === 1 ? "" : "s"}
         </button>

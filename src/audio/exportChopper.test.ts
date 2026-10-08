@@ -91,4 +91,27 @@ describe("the chopper in the export", () => {
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
     expect(zip.file("sampler/9999.wav")).not.toBeNull();
   });
+
+  it("writes the pattern maker's sequence as ONE pattern with a note per chop at its place, and lets the note length decide when a chop is cut short", async () => {
+    const project = await load("probe-sidechain.koala");
+    const source = project.samplerJson.pads[0];
+    const layout = sliceLayout([plan(0, 1000, 0), plan(1000, 1000, 1)], 2000);
+    const pattern = { notes: [{ slice: 1, start: 0, eighths: 8 }, { slice: 0, start: 12, eighths: 3 }], bars: 2, gate: true };
+    const { blob } = await buildTunedKoala(project, [], {
+      chopper: { index: 48, label: "Song chopper", sampleId: source.sampleId, sampleRate: 44100, channelData: [new Float32Array(2000)], layout, beatsPerBar: 4, pitch: 0, pattern },
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const sampler = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
+    expect(sampler.pads.find((p: any) => p.synth === "CHOPPER").synthParams["ONE SHOT"]).toBe(0);
+    const sequence = JSON.parse(await zip.file("sequence.json")!.async("string"));
+    const held = sequence.sequences.filter((s: any) => s.noteSequence.pattern.notes?.some((n: any) => n.num === 48));
+    expect(held).toHaveLength(1);
+    const made = held[0].noteSequence.pattern;
+    expect(made.numBars).toBe(2);
+    // 2048 ticks to an eighth note
+    expect(made.notes.map((n: any) => [n.timeOffset, n.length, n.vel])).toEqual([
+      [0, 8 * 2048, sliceVelocity(1, 2)],
+      [12 * 2048, 3 * 2048, sliceVelocity(0, 2)],
+    ]);
+  });
 });
