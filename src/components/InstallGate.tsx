@@ -45,6 +45,7 @@ export function InstallGate() {
   return (
     <main className="gate">
       <section className="gate__card" aria-label="tunegod">
+        <img className="gate__mark" src="/logo-mark.png" alt="" />
         <div className="gate__kick">
           <span className="gate__led" />
           Koala Sampler companion

@@ -15,6 +15,7 @@
     var(--stage);
 }
 .gate__card {
+  position: relative;
   container-type: inline-size;
   width: min(100%, 370px);
   aspect-ratio: 1;
@@ -140,4 +141,14 @@
 }
 .gate__steps b {
   color: #fff;
+}
+
+/* the logo (transparent, no border) fills the empty top right of the card */
+.gate__mark {
+  position: absolute;
+  top: 5cqw;
+  right: 5cqw;
+  width: 36cqw;
+  height: 36cqw;
+  pointer-events: none;
 }

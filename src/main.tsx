@@ -8,7 +8,7 @@ import '@fontsource/silkscreen/700.css'
 import './index.css'
 import App from './App.tsx'
 import { InstallGate } from './components/InstallGate.tsx'
-import { needsInstallGate } from './installGate.ts'
+import { inStatusBar, needsInstallGate } from './installGate.ts'
 
 // Belt and braces for iOS Safari, which can still scroll, rubber-band or pinch-zoom a page that is
 // `overflow: hidden`: cancel page-level touch moves and pinch gestures. The palette list, hot-swap list and chop editor are the
@@ -26,6 +26,13 @@ for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {needsInstallGate() ? <InstallGate /> : <App />}
+    {needsInstallGate() ? (
+      <InstallGate />
+    ) : (
+      <>
+        <App />
+        {inStatusBar() && <img className="status-mark" src="/logo-mark.png" alt="" aria-hidden="true" />}
+      </>
+    )}
   </StrictMode>,
 )

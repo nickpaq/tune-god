@@ -80,3 +80,16 @@ button {
 #root {
   height: 100%;
 }
+
+/* The one exception to the 402 x 874 layout rules: the logo sits in the iPhone 17 Pro's status bar (the app runs under it, black-translucent), centred between
+   the clock and the Dynamic Island (the island spans about x 138 to 264, the clock ends near x 93 (4:47), its middle is on y 32). Fixed device pixels on purpose. */
+.status-mark {
+  position: fixed;
+  top: 22px;
+  left: 105.5px;
+  width: 20px;
+  height: 20px;
+  z-index: 10000;
+  pointer-events: none;
+  user-select: none;
+}

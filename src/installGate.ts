@@ -15,3 +15,10 @@ export function needsInstallGate(): boolean {
   const displayStandalone = typeof matchMedia === "function" && matchMedia("(display-mode: standalone)").matches;
   return !isInstalled({ standalone, displayStandalone });
 }
+
+/** True when the page runs from the Home Screen, where it is drawn under the status bar: only there does the logo go next to the clock. */
+export function inStatusBar(): boolean {
+  const standalone = (navigator as Navigator & { standalone?: boolean }).standalone;
+  const displayStandalone = typeof matchMedia === "function" && matchMedia("(display-mode: standalone)").matches;
+  return isInstalled({ standalone, displayStandalone });
+}
