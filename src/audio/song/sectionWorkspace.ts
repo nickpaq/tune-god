@@ -17,6 +17,7 @@ export interface WorkspaceState {
   slots: Slot[];
   cuts: number[];
   rhythm?: RhythmPattern;
+  cursor?: number | null;
 }
 export interface WorkspaceResult {
   chops: MakerChop[];
@@ -91,6 +92,43 @@ export function placeCandidate(
   if (at !== null && at >= 0 && at < state.slots.length)
     next.slots.splice(at, 1, slot);
   else next.slots.push(slot);
+  return next;
+}
+
+/** Reuse the previous audible piece without changing its source or the sequence suffix. */
+export function repeatPrevious(
+  state: WorkspaceState,
+  at: number | null,
+  grid: TapGrid,
+  totalFrames: number,
+  steps?: number,
+  alignedStart?: number,
+): WorkspaceState {
+  const previous = (at === null ? state.slots : state.slots.slice(0, at))
+    .slice()
+    .reverse()
+    .find((slot) => slot.kind === "chop");
+  if (!previous || previous.kind !== "chop") return state;
+  const original = state.chops[previous.chop];
+  const duration = steps ?? previous.steps;
+  const sourceStep = fineLineNear(grid, original.start, 48) * 4;
+  const end = Math.min(
+    totalFrames,
+    Math.round(lineFrame(grid, (sourceStep + duration) / 4)),
+  );
+  const next = addCandidate(state, {
+    ...original,
+    steps: duration,
+    bars: duration / stepsPerBar(grid.beatsPerBar),
+    length: Math.max(1, end - original.start),
+  });
+  const copy = next.slots.pop()!;
+  const slot =
+    copy.kind === "chop" && alignedStart !== undefined
+      ? { ...copy, alignedStart }
+      : copy;
+  if (at === null) next.slots.push(slot);
+  else next.slots.splice(at, 0, slot);
   return next;
 }
 

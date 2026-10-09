@@ -94,8 +94,10 @@
 }
 .section-transport button {
   flex: 1;
-  min-width: 70px;
-  font-size: 13px;
+  min-width: 0;
+  padding: 0 3px;
+  font-size: 12px;
+  letter-spacing: 0;
 }
 .section-volume {
   display: flex;

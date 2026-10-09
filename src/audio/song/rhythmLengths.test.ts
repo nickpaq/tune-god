@@ -69,6 +69,53 @@ describe("repeating chop-start rhythm", () => {
     expect(at.kind === "chop" && refined.chops[at.chop].start).toBe(4000);
     expect(refined.slots.every((s) => s.steps === 4)).toBe(true);
   });
+  it("randomizes independently while retaining each slot's matching source phase", () => {
+    let calls = 0;
+    const result = applyRhythm(
+      empty,
+      { bars: 1, markers: [0, 8], enabled: true },
+      grid,
+      10000,
+      undefined,
+      () => {
+        calls++;
+        return 0.9;
+      },
+    );
+    expect(calls).toBe(10);
+    expect(result.slots.map((s) => s.steps)).toEqual(Array(10).fill(8));
+    expect(
+      result.slots.map((s) =>
+        s.kind === "chop" ? result.chops[s.chop].start : -1,
+      ),
+    ).toEqual(Array.from({ length: 10 }, (_, i) => 8000 + (i % 2) * 1000));
+    expect(result.chops.every((c) => c.start + c.length <= 10000)).toBe(true);
+  });
+  it("changing loop size randomizes only the suffix after the editing head", () => {
+    const original = applyRhythm(
+      empty,
+      { bars: 1, markers: [0, 8], enabled: true },
+      grid,
+      10000,
+      undefined,
+      () => 0.9,
+    );
+    const changed = applyRhythm(
+      original,
+      { bars: 4, markers: [0, 8], enabled: true },
+      grid,
+      10000,
+      undefined,
+      () => 0,
+      16,
+    );
+    expect(changed.slots.slice(0, 2)).toEqual(original.slots.slice(0, 2));
+    expect(changed.chops.slice(0, original.chops.length)).toEqual(
+      original.chops,
+    );
+    expect(slotStarts(changed.slots).starts[2]).toBe(16);
+    expect(changed.slots[2].steps).toBe(16);
+  });
   it("disables length locking without destroying the prepared sequence", () => {
     const original = applyRhythm(
       empty,

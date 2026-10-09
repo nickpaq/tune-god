@@ -1,5 +1,5 @@
 import { fineLineNear, lineFrame, type TapGrid } from "./tapGrid";
-import type { WorkspaceState } from "./sectionWorkspace";
+import { slotsThrough, type WorkspaceState } from "./sectionWorkspace";
 import { slotStarts, type MakerChop, type Slot } from "./patternMaker";
 export interface RhythmPattern {
   bars: number;
@@ -27,22 +27,24 @@ export function rhythmLength(
     (rhythmMarkers(markers, span).find((n) => n > phase + 1e-8) ?? span) - phase
   );
 }
-/** Fill the song with original slices at repeated rhythm boundaries, preserving any prior substitutions. */
+/** Fill repeated rhythm boundaries; an optional RNG picks aligned source sections independently. */
 export function applyRhythm(
   state: WorkspaceState,
   rhythm: RhythmPattern,
   grid: TapGrid,
   totalFrames: number,
   colors: readonly string[] = ["#ce7b63", "#bbad78", "#76a89b", "#8e96bd"],
+  random?: () => number,
+  fromStep = 0,
 ): WorkspaceState {
   if (!rhythm.enabled || !rhythm.markers.length) return { ...state, rhythm };
   const span = rhythm.bars * grid.beatsPerBar * 4;
   const sourceSteps = Math.max(0, fineLineNear(grid, totalFrames, 48) * 4);
   const chops = state.chops.slice();
-  const slots: Slot[] = [];
+  const slots: Slot[] = slotsThrough(state.slots, fromStep);
   const oldStarts = slotStarts(state.slots).starts;
   let oldIndex = 0;
-  for (let at = 0; at < sourceSteps - 1e-8;) {
+  for (let at = fromStep; at < sourceSteps - 1e-8;) {
     const steps = rhythmLength(rhythm.markers, span, at);
     while (
       oldIndex + 1 < oldStarts.length &&
@@ -51,11 +53,22 @@ export function applyRhythm(
       oldIndex++;
     const prior = state.slots[oldIndex];
     const covers = prior && at < oldStarts[oldIndex] + prior.steps - 1e-8;
-    if (covers && prior.kind === "silence")
+    if (!random && covers && prior.kind === "silence")
       slots.push({ kind: "silence", steps });
     else {
-      const sourceAt =
-        covers && prior.kind === "chop"
+      const phase = at % span;
+      // Offer only sections containing the whole piece where possible, so tail sections don't add silence.
+      const count = Math.max(
+        1,
+        Math.floor((sourceSteps - phase - steps + 1e-8) / span) + 1,
+      );
+      const sourceAt = random
+        ? Math.floor(
+            Math.max(0, Math.min(1 - Number.EPSILON, random())) * count,
+          ) *
+            span +
+          phase
+        : covers && prior.kind === "chop"
           ? fineLineNear(grid, state.chops[prior.chop].start, 48) * 4 +
             at -
             oldStarts[oldIndex]

@@ -1,3 +1,4 @@
+import { stretchPreview } from "../audio/song/stretchPreview";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAudioContext } from "../audio/decode";
 import { pieceAudio, type PieceFades } from "../audio/song/sectionWorkspace";
@@ -7,8 +8,10 @@ export interface AuditionPiece extends PieceFades {
   chop?: MakerChop;
   steps: number;
   skip?: number;
+  stretch?: boolean;
 }
-export type AuditionKind = "candidate" | "browse" | "join" | "sequence";
+export type AuditionKind =
+  "candidate" | "browse" | "join" | "sequence" | "stretch";
 export function useChopAudition(
   data: Float32Array[],
   sampleRate: number,
@@ -78,10 +81,10 @@ export function useChopAudition(
       const cache = new Map<string, AudioBuffer>();
       const buffers = pieces.map((p) => {
         if (!p.chop) return null;
-        const key = `${p.chop.start}:${p.chop.length}:${p.steps + (p.skip ?? 0)}:${p.fadeIn}:${p.fadeOut}`;
+        const key = `${p.chop.start}:${p.chop.length}:${p.steps + (p.skip ?? 0)}:${p.fadeIn}:${p.fadeOut}:${p.stretch}`;
         const reused = cache.get(key);
         if (reused) return reused;
-        const audio = pieceAudio(
+        const raw = pieceAudio(
           data,
           p.chop,
           p.steps + (p.skip ?? 0),
@@ -89,6 +92,7 @@ export function useChopAudition(
           sampleRate,
           p,
         );
+        const audio = p.stretch ? stretchPreview(raw, sampleRate) : raw;
         const buffer = ctx.createBuffer(
           audio.length,
           audio[0].length,
@@ -112,25 +116,41 @@ export function useChopAudition(
           source.playbackRate.value = rate;
           gain.gain.value = volumeRef.current ** 2;
           source.connect(gain).connect(ctx.destination);
-          source.start(
-            start + at * stepSeconds,
-            ((piece.skip ?? 0) * beatFrames) / 4 / sampleRate,
-            (piece.steps * beatFrames) / 4 / sampleRate,
-          );
+          if (piece.stretch) {
+            source.loop = true;
+            source.loopStart = 0.02;
+            source.loopEnd = buffer.duration;
+            gain.gain.setValueAtTime(0, start);
+            gain.gain.linearRampToValueAtTime(
+              volumeRef.current ** 2,
+              start + 0.01,
+            );
+            source.start(start);
+          } else
+            source.start(
+              start + at * stepSeconds,
+              ((piece.skip ?? 0) * beatFrames) / 4 / sampleRate,
+              piece.stretch
+                ? buffer.duration
+                : (piece.steps * beatFrames) / 4 / sampleRate,
+            );
           voices.current.push(source);
           gains.current.push(gain);
         }
-        at += piece.steps;
+        at +=
+          piece.stretch && buffer
+            ? buffer.duration / rate / stepSeconds
+            : piece.steps;
       });
       setPosition({ kind, steps: origin });
       const tick = () => {
         if (epoch.current !== token) return;
         const elapsed = Math.max(0, (ctx.currentTime - start) / stepSeconds);
-        if (elapsed >= at) {
+        if (kind !== "stretch" && elapsed >= at) {
           stop();
           return;
         }
-        setPosition({ kind, steps: origin + elapsed });
+        setPosition({ kind, steps: kind === "stretch" ? 0 : origin + elapsed });
         raf.current = requestAnimationFrame(tick);
       };
       raf.current = requestAnimationFrame(tick);

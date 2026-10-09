@@ -3,6 +3,7 @@ import { baseGrid, commit, startHistory, undo } from "./chopMarks";
 import {
   addCandidate,
   placeCandidate,
+  repeatPrevious,
   nextOffset,
   packArrangement,
   pieceAudio,
@@ -134,6 +135,41 @@ describe("earlier chop replacement", () => {
     expect(state.slots[1].kind).toBe("silence");
     const h = commit(startHistory(state), result);
     expect(undo(h).present).toBe(state);
+  });
+  it("repeats the previous source across a gap while retaining its confirmed length", () => {
+    const state: WorkspaceState = {
+      chops: [piece],
+      cuts: [],
+      slots: [
+        { kind: "chop", chop: 0, steps: 2 },
+        { kind: "silence", steps: 1 },
+      ],
+    };
+    const repeated = repeatPrevious(state, null, grid, 10000);
+    const last = repeated.slots.at(-1)!;
+    expect(last.steps).toBe(2);
+    expect(last.kind === "chop" && repeated.chops[last.chop].start).toBe(
+      piece.start,
+    );
+    expect(state.slots).toHaveLength(2);
+  });
+  it("inserts a repeat before the selected slot without dropping following slots", () => {
+    const state: WorkspaceState = {
+      chops: [piece],
+      cuts: [],
+      slots: [
+        { kind: "chop", chop: 0, steps: 2 },
+        { kind: "silence", steps: 4 },
+        { kind: "chop", chop: 0, steps: 8 },
+      ],
+    };
+    const repeated = repeatPrevious(state, 1, grid, 10000, 4, 7);
+    expect(repeated.slots[1].steps).toBe(4);
+    expect(repeated.slots[2]).toEqual(state.slots[1]);
+    expect(repeated.slots[3]).toEqual(state.slots[2]);
+    expect(
+      repeated.slots[1].kind === "chop" && repeated.slots[1].alignedStart,
+    ).toBe(7);
   });
   it("appends at the end when no earlier slot is selected", () => {
     const state: WorkspaceState = { chops: [], slots: [], cuts: [] };
