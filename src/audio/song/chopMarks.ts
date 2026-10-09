@@ -1,5 +1,5 @@
 // The chop editor's model: a beat grid found by the automatic detection, two kinds of marker the user places at the cursor, and an undo history.
-// Chop markers say where a section starts or ends; downbeat markers say where a bar starts, to lock the grid back in where it has gone out of sync.
+// Chop markers delimit sections. One anchor locks the grid to the audio and serves as the pivot for BPM changes.
 // Markers are kept as the frames they were placed on and the grid and the cuts are worked out from them, so undo is just going back to earlier markers.
 import {
   isBarLine,
@@ -14,13 +14,15 @@ import {
 /** What the user has placed, as the frames of the song they were placed on (the cursor's position at the time), in the order they were placed. */
 export interface Marks {
   chops: readonly number[];
-  /** Where a bar starts, to lock the grid in. They do not say where the song's bar 1 is. */
+  /** Whole-grid phase nudge, in source frames; independent of detection input and tempo. */
+  gridOffsetFrames?: number;
+  /** Legacy downbeat markers, read only for saved-project compatibility. */
   downbeats: readonly number[];
   /** Exact phase anchor; the legacy property name keeps saved projects compatible. */
   oneOne: number | null;
   /** The detected tempo is taken this many times over (2 for double time, 0.5 for half time). */
   tempoScale: number;
-  /** A tempo set by hand (double tap to snap, drag to scrub): the grid's tempo exactly, ahead of the detection, the markers' fit and the drift correction. Null leaves them in charge. */
+  /** A tempo set by hand (double tap to snap, drag to scrub): the grid's tempo exactly, overriding automatic detection. Null uses Music Tempo. */
   bpm?: number | null;
 }
 
@@ -41,14 +43,15 @@ export function baseGrid(sampleRate: number, beatsPerBar: number, bpm: number, d
  * Legacy downbeat markers are read for compatibility; the last one supplies the anchor
  * only when no explicit anchor exists. No anchor ever changes the detected BPM.
  */
-export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "oneOne" | "tempoScale" | "bpm">): TapGrid {
+export function gridWithMarks(base: TapGrid, marks: Pick<Marks, "downbeats" | "oneOne" | "tempoScale" | "bpm" | "gridOffsetFrames">): TapGrid {
   const byHand = marks.bpm != null && marks.bpm > 0;
   const beatFrames = byHand ? (60 * base.sampleRate) / marks.bpm! : base.segments[0].beatFrames / marks.tempoScale;
   const anchor = marks.oneOne ?? marks.downbeats.at(-1) ?? null;
-  if (anchor === null && marks.tempoScale === 1 && !byHand) return base;
+  const offset = marks.gridOffsetFrames ?? 0;
+  if (anchor === null && marks.tempoScale === 1 && !byHand && offset === 0) return base;
   return {
     ...base,
-    segments: [{ line: 0, frame: anchor ?? base.segments[0].frame, beatFrames }],
+    segments: [{ line: 0, frame: (anchor ?? base.segments[0].frame) + offset, beatFrames }],
     offsets: {},
     downbeats: [0],
   };
@@ -127,3 +130,19 @@ export const undo = <T>(h: History<T>): History<T> =>
 
 export const redo = <T>(h: History<T>): History<T> =>
   h.future.length === 0 ? h : { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) };
+
+/** One anchor: snap chooses an existing beat; free placement uses the exact playhead frame. */
+export function anchorAtPlayhead(grid: TapGrid, cursor: number, snap: boolean, lastFrame = Infinity): number {
+  if (!snap) return Math.max(0, Math.min(lastFrame, Math.round(cursor)));
+  const near = lineNear(grid, cursor);
+  const frame = lineFrame(grid, near);
+  const beatFrames = grid.segments[0].beatFrames;
+  if (frame < 0) return lineFrame(grid, near + Math.ceil(-frame / beatFrames));
+  if (frame > lastFrame) return lineFrame(grid, near - Math.ceil((frame - lastFrame) / beatFrames));
+  return frame;
+}
+
+/** A nudge changes only phase and does not trigger a new analysis. */
+export function nudgeGridMarks(marks: Marks, sampleRate: number, direction: -1 | 1): Marks {
+  return { ...marks, gridOffsetFrames: (marks.gridOffsetFrames ?? 0) + direction * sampleRate * 0.001 };
+}

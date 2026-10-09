@@ -6,6 +6,8 @@ import { mixToMono } from "../audio/song/beats";
 import type { SectionPlan } from "../audio/song/chop";
 import {
   barLineNear,
+  anchorAtPlayhead,
+  nudgeGridMarks,
   barsIn,
   baseGrid,
   chopLines,
@@ -165,13 +167,28 @@ export function SongChopModal({
   const [magnetOn, setMagnetOn] = useState(true);
 
 
+  const [detecting, setDetecting] = useState(true);
+  const [detectionFailed, setDetectionFailed] = useState(false);
+  const [analysisRevision, setAnalysisRevision] = useState(0);
+  const detectionAnchor = marks.oneOne ?? marks.downbeats.at(-1) ?? null;
   const [detectedKey, setDetectedKey] = useState<SongKey | null>(null);
   useEffect(() => {
     let alive = true;
-    setDetected(null);
-    detectSongTempo(mono, sampleRate)
+    setDetecting(true);
+    setDetectionFailed(false);
+    detectSongTempo(mono, sampleRate, detectionAnchor)
       .then(result => { if (alive) setDetected(result); })
-      .catch(() => { if (alive) setDetected("none"); });
+      .catch(() => {
+        if (!alive) return;
+        setDetectionFailed(true);
+        setDetected(previous => previous ?? "none");
+      })
+      .finally(() => { if (alive) setDetecting(false); });
+    return () => { alive = false; };
+  }, [mono, sampleRate, detectionAnchor, analysisRevision]);
+
+  useEffect(() => {
+    let alive = true;
     const copy = mono.slice();
     nextAnalysisWorker().analyzeSongKey(Comlink.transfer(copy, [copy.buffer]), sampleRate)
       .then(key => { if (alive) setDetectedKey({ pc: key.pc, minor: key.minor }); })
@@ -428,9 +445,20 @@ export function SongChopModal({
 
   const placeAnchor = () => {
     if (!grid) return;
-    const frame = Math.round(Math.max(0, Math.min(totalFrames, timeline.current?.cursor() ?? 0)));
-    timeline.current?.setCursor(frame);
-    change({ ...marks, oneOne: frame, downbeats: [] }, `Anchor placed at ${formatTime(frame / sampleRate)}; tempo unchanged`);
+    const cursor = Math.max(0, Math.min(totalFrames, timeline.current?.cursor() ?? 0));
+    const frame = anchorAtPlayhead(grid, cursor, magnetOn, totalFrames - 1);
+    if (frame < 0 || frame >= totalFrames) return;
+    // Stop a pending glide without moving the playhead or source audio.
+    timeline.current?.setCursor(cursor);
+    setLiveBpm(null);
+    // Keep the current audible tempo while analysis runs, and as the fallback if it fails.
+    setDetected({ bpm: bpmAt(grid, 0), downbeatSeconds: frame / sampleRate });
+    change({ ...marks, oneOne: frame, downbeats: [], gridOffsetFrames: 0, bpm: null, tempoScale: 1 }, `Anchor placed at ${formatTime(frame / sampleRate)}; detecting BPM`);
+    setAnalysisRevision(revision => revision + 1);
+  };
+
+  const nudgeGrid = (direction: -1 | 1) => {
+    change(nudgeGridMarks(marks, sampleRate, direction), `Grid nudged ${direction < 0 ? "earlier" : "later"} by 1 ms`);
   };
 
   const stepHistory = (step: typeof undo, message: string) => {
@@ -443,7 +471,7 @@ export function SongChopModal({
   const drawnSections = grid ? sections.map((s, i) => ({ start: lineFrame(grid, s.first), end: lineFrame(grid, s.last), color: colorOf(i) })) : [];
   const chopFrames = grid ? lines.map((n) => lineFrame(grid, n)) : [];
   
-  const note = detected === null ? "Music Tempo is detecting the beat…" : detected === "none" ? "No beat found. Set BPM manually, then place an anchor on a first beat." : "Place an anchor on a first beat to shift the grid. BPM stays unchanged.";
+  const note = detecting ? "Music Tempo is detecting BPM from the anchor…" : detectionFailed ? "Detection failed. Previous BPM kept; adjust BPM and listen to the click." : "Anchor locks a downbeat. Adjust BPM around it; nudge grid −/+ moves timing by 1 ms.";
   const bpmText = detected === null ? "..." : detected === "none" && marks.bpm == null && marks.downbeats.length === 0 && marks.oneOne === null ? "--" : (grid ? bpmAt(grid, 0) : 0).toFixed(2);
 
   if (workspaceGrid) {
@@ -476,7 +504,7 @@ export function SongChopModal({
           }}>Open section workspace · 1–16 bars</button>}
 
           <div className="chop__screen">
-            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[]} oneOne={marks.oneOne ?? marks.downbeats.at(-1) ?? null} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
+            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[]} oneOne={detectionAnchor === null ? null : detectionAnchor + (marks.gridOffsetFrames ?? 0)} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
             <div className="chop__readout">
               <button className={`chop__nudge${marks.oneOne !== null && marks.bpm == null ? " chop__nudge--on" : ""}`} disabled={!grid || marks.bpm == null} onClick={autoTempo} aria-pressed={marks.oneOne !== null && marks.bpm == null} aria-label="Automatic tempo">
                 <AutoIcon />
@@ -531,9 +559,13 @@ export function SongChopModal({
             <button className="chop__btn chop__grow" disabled={!grid} onClick={addChop} title="Puts a cut at the line, on the nearest bar line. On a cut already there it takes it away.">
               Chop marker
             </button>
-            <button className="chop__btn chop__grow" disabled={!grid} onClick={placeAnchor} title="Places a first-beat anchor exactly at the playhead and shifts the grid without changing BPM or adding a chop.">
-              Place anchor point
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={placeAnchor} title="Replaces the single downbeat anchor and re-detects BPM from it. Snap on selects a beat; Snap off uses the exact playhead.">
+              Anchor
             </button>
+          </div>
+          <div className="chop__row">
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => nudgeGrid(-1)} aria-label="Nudge grid earlier by 1 millisecond">Nudge grid −</button>
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => nudgeGrid(1)} aria-label="Nudge grid later by 1 millisecond">Nudge grid +</button>
           </div>
           <div className="chop__row">
             <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops the vocal into patterns.">

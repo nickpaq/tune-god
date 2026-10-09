@@ -1,8 +1,10 @@
 import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../../workers/workerClient";
 
-/** Analyze the whole song once. Anchors only offset the resulting grid; they never change this input. */
-export async function detectSongTempo(mono: Float32Array, sampleRate: number) {
+/** Analyze from the supplied musical downbeat. Its exact frame supplies phase, independently of the library's first tracked beat. */
+export async function detectSongTempo(mono: Float32Array, sampleRate: number, anchorFrame: number | null = null) {
+  const first = anchorFrame === null ? 0 : Math.max(0, Math.min(mono.length, Math.round(anchorFrame)));
+  mono = mono.subarray(first);
   if (mono.length < sampleRate * 2) throw new Error("Not enough audio to detect a beat");
   let copy: Float32Array;
   if (sampleRate === 44100) copy = mono.slice();
@@ -16,5 +18,6 @@ export async function detectSongTempo(mono: Float32Array, sampleRate: number) {
     source.start();
     copy = (await offline.startRendering()).getChannelData(0).slice();
   }
-  return nextAnalysisWorker().detectMusicTempo(Comlink.transfer(copy, [copy.buffer]));
+  const result = await nextAnalysisWorker().detectMusicTempo(Comlink.transfer(copy, [copy.buffer]));
+  return { ...result, downbeatSeconds: anchorFrame === null ? result.downbeatSeconds : first / sampleRate };
 }
