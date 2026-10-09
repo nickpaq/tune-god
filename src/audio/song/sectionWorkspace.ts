@@ -1,3 +1,4 @@
+import type { RhythmPattern } from "./rhythmLengths";
 import { quantizeNote, SHORTEST_NOTE } from "./noteLengths";
 import { lineFrame, fineLineNear, type TapGrid } from "./tapGrid";
 import {
@@ -15,11 +16,13 @@ export interface WorkspaceState {
   chops: MakerChop[];
   slots: Slot[];
   cuts: number[];
+  rhythm?: RhythmPattern;
 }
 export interface WorkspaceResult {
   chops: MakerChop[];
   slots: Slot[];
   grid?: TapGrid;
+  rhythm?: RhythmPattern;
 }
 
 /** Keep the timeline prefix, splitting the crossing piece without changing source data. */
@@ -70,6 +73,25 @@ export function nextOffset(
     ),
     sectionSteps,
   );
+}
+
+/** Replace a selected slot while retaining the complete sequence suffix. */
+export function placeCandidate(
+  state: WorkspaceState,
+  candidate: MakerChop,
+  at: number | null = null,
+  alignedStart?: number,
+): WorkspaceState {
+  const next = addCandidate(state, candidate);
+  const appended = next.slots.pop()!;
+  const slot =
+    appended.kind === "chop" && alignedStart !== undefined
+      ? { ...appended, alignedStart }
+      : appended;
+  if (at !== null && at >= 0 && at < state.slots.length)
+    next.slots.splice(at, 1, slot);
+  else next.slots.push(slot);
+  return next;
 }
 
 /** Full song sections and inherited candidates use the corrected grid's frames, including its phase anchors. */

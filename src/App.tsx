@@ -979,11 +979,11 @@ function App() {
   const [makerPad, setMakerPad] = useState<number | null>(null);
 
   /** Done in the pattern maker: the sequence goes on the chopper pad (checked by writing it into a copy of the project first). */
-  const finishMaker = async ({ slots, chops, grid }: WorkspaceResult) => {
+  const finishMaker = async ({ slots, chops, grid, rhythm }: WorkspaceResult) => {
     const pad = latest.current.pads[makerPad ?? -1];
     if (!pad?.chopper?.maker) return void setMakerPad(null);
     const slices = Math.max(1, new Set(slots.flatMap(s => s.kind === 'chop' ? [`${s.chop}:${s.steps}`] : [])).size);
-    const next: Pad = { ...pad, chopper: { ...pad.chopper, slices, maker: { ...pad.chopper.maker, slots, chops, grid } } };
+    const next: Pad = { ...pad, chopper: { ...pad.chopper, slices, maker: { ...pad.chopper.maker, slots, chops, grid, rhythm } } };
     let result: Awaited<ReturnType<typeof trialWriteChopper>>;
     try {
       result = await trialWriteChopper(next);
@@ -1089,6 +1089,7 @@ function App() {
             maker: {
               beatFrames: (60 * song.sampleRate) / settings.bpm,
               grid: settings.maker?.grid ?? settings.grid,
+              rhythm: settings.maker?.rhythm,
               slots: settings.maker?.slots,
               chops: settings.maker?.chops ?? plans.map((plan, i) => ({
                 slice: layout.sections[i].slice,
@@ -2364,6 +2365,7 @@ function App() {
             initial={pads[makerPad].chopper!.maker!.slots ?? []}
             colors={palette.colors}
             grid={pads[makerPad].chopper!.maker!.grid}
+            rhythm={pads[makerPad].chopper!.maker!.rhythm}
             pitch={pads[makerPad].chopper!.pitch}
             onDone={finishMaker}
             onClose={() => setMakerPad(null)}

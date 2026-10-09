@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { baseGrid, commit, startHistory, undo } from "./chopMarks";
 import {
   addCandidate,
+  placeCandidate,
   nextOffset,
   packArrangement,
   pieceAudio,
@@ -104,6 +105,41 @@ describe("source sections and inherited offsets", () => {
     expect(undo(h).present).toBe(state);
     expect(state.chops).toHaveLength(0);
     expect(next.slots).toEqual([{ kind: "chop", chop: 0, steps: 8 }]);
+  });
+});
+
+describe("earlier chop replacement", () => {
+  it("replaces the selected slot while retaining both sides and all their durations", () => {
+    const state: WorkspaceState = {
+      chops: [piece],
+      cuts: [],
+      slots: [
+        { kind: "chop", chop: 0, steps: 8 },
+        { kind: "silence", steps: 2 },
+        { kind: "chop", chop: 0, steps: 8 },
+      ],
+    };
+    const other = {
+      ...piece,
+      start: piece.start + 2000,
+      steps: 2,
+      length: 250,
+    };
+    const result = placeCandidate(state, other, 1, 8);
+    expect(result.slots).toEqual([
+      state.slots[0],
+      { kind: "chop", chop: 1, steps: 2, alignedStart: 8 },
+      state.slots[2],
+    ]);
+    expect(state.slots[1].kind).toBe("silence");
+    const h = commit(startHistory(state), result);
+    expect(undo(h).present).toBe(state);
+  });
+  it("appends at the end when no earlier slot is selected", () => {
+    const state: WorkspaceState = { chops: [], slots: [], cuts: [] };
+    expect(placeCandidate(state, piece).slots).toEqual([
+      { kind: "chop", chop: 0, steps: 8 },
+    ]);
   });
 });
 
