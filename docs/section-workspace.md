@@ -1,4 +1,4 @@
-# Song section workspace (v0.41.4)
+# Song section workspace (v1.0.0)
 
 Open **Load Bank D: Chopper → Chopper mode**, choose audio, check the detected tempo and bar 1 in the existing alignment editor, then choose **Open section workspace**. The ordinary marker editor and its acapella/synced paths remain available.
 
@@ -21,7 +21,7 @@ Play starts a candidate on a tap; a second tap stops it, and the next tap restar
 - The existing spectral-flux BPM detector, separate downbeat phase detection, manual anchors, and drift correction remain authoritative. The section workspace takes a snapshot of that grid on opening. Later source sections use their corrected frame positions rather than accumulating a tempo from frame zero.
 - Musical positions retain the existing step unit, with fractional steps supporting regular and triplet notes down to 1/64. A 48-subdivision-per-quarter grid represents both exactly. Audio starts search for a quiet crossing within 1 ms, shared across channels, with 2 ms boundary fades. This does not move the notes off the grid or alter the original source arrays.
 - An arrangement's overlapping source choices are packed into independent slices of a new 24-bit WAV. Repeated choices of the same chop and length share a slice. This prevents another chosen source boundary from ending a longer Koala slice prematurely, and avoids overwriting audio referenced by another pad.
-- Up to 127 distinct pieces are supported. An arrangement exceeding that limit fails explicitly rather than truncating it. Silence leaves a note gap. Notes retain the measured velocity-to-slice mapping, pitch 0, and 1024 ticks per sixteenth. Fractional durations round absolute start/end ticks independently, keeping a run of triplets on its bar endpoint rather than accumulating rounding errors. ONE SHOT is off so note lengths gate playback. Pattern duration is rounded up to whole bars, as required by the existing exporter; a partial final bar leaves trailing silence in Koala.
+- Arrangements use consecutive Bank D pads starting at pad 48 (D1), with up to 127 distinct pieces per pad and a separate packed WAV for each. All notes remain in one pattern, targeting the appropriate pad and local slice velocity. Up to 2032 unique pieces fit across D1–D16; exceeding Bank D capacity fails explicitly. Occupied Bank D pads prevent saving rather than being overwritten. Silence leaves a note gap. Notes retain the measured velocity-to-slice mapping, pitch 0, and 1024 ticks per sixteenth. Fractional durations round absolute start/end ticks independently, keeping a run of triplets on its bar endpoint rather than accumulating rounding errors. ONE SHOT is off so note lengths gate playback. Pattern duration is rounded up to whole bars, as required by the existing exporter; a partial final bar leaves trailing silence in Koala.
 
 ## Verification and remaining device check
 

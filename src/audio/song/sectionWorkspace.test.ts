@@ -265,7 +265,7 @@ describe("preview and packed Koala audio", () => {
     expect(incoming[3]).toBe(1);
     expect(constant[0][piece.start]).toBe(1);
   });
-  it("supports silence-only sequences and rejects more than 127 unique pieces explicitly", () => {
+  it("supports silence-only sequences and more than 127 unique pieces", () => {
     const silent = packArrangement(
       data,
       [],
@@ -279,14 +279,14 @@ describe("preview and packed Koala audio", () => {
       ...piece,
       start: i * 5,
     }));
-    expect(() =>
+    expect(
       packArrangement(
         data,
         many,
         many.map((_, chop) => ({ kind: "chop", chop, steps: 1 })),
         500,
         1000,
-      ),
-    ).toThrow("127");
+      ).layout.starts,
+    ).toHaveLength(128);
   });
 });

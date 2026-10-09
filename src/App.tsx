@@ -980,7 +980,8 @@ function App() {
 
   /** Done in the pattern maker: the sequence goes on the chopper pad (checked by writing it into a copy of the project first). */
   const finishMaker = async ({ slots, chops, grid, rhythm }: WorkspaceResult) => {
-    const pad = latest.current.pads[makerPad ?? -1];
+    const selected = latest.current.pads[makerPad ?? -1];
+    const pad = selected?.chopper?.page ? latest.current.pads[48] : selected;
     if (!pad?.chopper?.maker) return void setMakerPad(null);
     const slices = Math.max(1, new Set(slots.flatMap(s => s.kind === 'chop' ? [`${s.chop}:${s.steps}`] : [])).size);
     const next: Pad = { ...pad, chopper: { ...pad.chopper, slices, maker: { ...pad.chopper.maker, slots, chops, grid, rhythm } } };
@@ -993,9 +994,23 @@ function App() {
     }
     if ("problem" in result) return void window.alert(`The pattern could not be written into the Koala project: ${result.problem}.`);
     recordEdit();
-    setPads((prev) => ({ ...prev, [next.index]: next }));
+    setPads((prev) => installChopperPages(prev, next));
     setMakerPad(null);
     setNotice(`Pattern made on the chopper (Bank D pad ${(next.index % PADS_PER_BANK) + 1}): ${slots.length} slot${slots.length === 1 ? "" : "s"}, ${patternBars(slots, next.chopper!.beatsPerBar)} bars at ${next.chopper!.bpm.toFixed(2)} BPM.`);
+  };
+
+  /** Bank D holds consecutive pages of the same editable arrangement. */
+  const installChopperPages = (previous: Record<number, Pad>, pad: Pad): Record<number, Pad> => {
+    const slices = pad.chopper!.maker?.slots?.length ? Math.max(1, new Set(pad.chopper!.maker!.slots!.flatMap(s => s.kind === "chop" ? [`${s.chop}:${s.steps}`] : [])).size) : pad.chopper!.slices;
+    const count = Math.max(1, Math.ceil(slices / CHOPPER_MAX_SLICES));
+    if (count > 16) throw new Error("Bank D is full (2032 unique chops maximum).");
+    const next = Object.fromEntries(Object.entries(previous).filter(([, p]) => !p.chopper && !p.section));
+    for (let page = 0; page < count; page++) {
+      const index = 48 + page;
+      if (next[index]) throw new Error(`Bank D pad ${page + 1} is occupied. Free it before saving the arrangement.`);
+      next[index] = { ...pad, index, origIndex: CHOPPER_ORIG_INDEX + page, chopper: { ...pad.chopper!, page, slices: Math.min(CHOPPER_MAX_SLICES, slices - page * CHOPPER_MAX_SLICES) } };
+    }
+    return next;
   };
 
   /** While a chop is being made: a second press of Chop does nothing. */
@@ -1007,7 +1022,7 @@ function App() {
     const maker = chopper.maker;
     const packed = maker?.slots?.length ? packArrangement(pad.channelData, maker.chops, maker.slots, maker.beatFrames, pad.sampleRate) : null;
     return {
-      index: pad.index, label: labelOf(pad), color: autoColorOf(pad), bus: CATEGORY_BUS.melodic,
+      index: 48, label: labelOf(pad), color: autoColorOf(pad), bus: CATEGORY_BUS.melodic,
       sampleId: chopper.sourceSampleId, sampleRate: pad.sampleRate,
       channelData: packed?.channelData ?? pad.channelData, independentSample: !!packed,
       layout: packed?.layout ?? chopper.layout, beatsPerBar: chopper.beatsPerBar, pitch: chopper.pitch,
@@ -1017,6 +1032,7 @@ function App() {
 
   /** Writes the chopper into a fresh copy of the project as the export will and reads it back: how many patterns it got, or what went wrong. */
   const trialWriteChopper = async (pad: Pad): Promise<{ patterns: number } | { problem: string }> => {
+    installChopperPages(latest.current.pads, pad);
     if (!projectFile.current) return { patterns: chopperExportOf(pad).pattern ? 1 : pad.chopper!.layout.sections.length };
     const project = await parseKoalaProject(projectFile.current);
     const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -1029,7 +1045,7 @@ function App() {
     if (maker?.slots?.length) {
       const wanted = slotNotes(maker.slots, maker.chops).length;
       const sequence = JSON.parse((await project.zip.file("sequence.json")?.async("string")) ?? "{}");
-      const written = (sequence.sequences ?? []).flatMap((q: any) => q?.noteSequence?.pattern?.notes ?? []).filter((n: any) => Number(n.num) === pad.index + project.padBase).length;
+      const written = (sequence.sequences ?? []).flatMap((q: any) => q?.noteSequence?.pattern?.notes ?? []).filter((n: any) => Number(n.num) >= 48 + project.padBase && Number(n.num) < 64 + project.padBase).length;
       if (written !== wanted) return { problem: `the pattern holds ${written} notes on the chopper instead of ${wanted}` };
     }
     return { patterns };
@@ -1060,7 +1076,7 @@ function App() {
         const plans = settings.maker ? settings.plans : fitPlans(settings.plans, total);
         // A new chop replaces the last one: the old chopper (or sections) go, and the chopper takes the first free pad of bank D.
         const without = Object.fromEntries(Object.entries(cur.pads).filter(([, p]) => !p.section && !p.chopper));
-        const slot = freeSongSlots(without)[0];
+        const slot = without[48] ? undefined : 48;
         if (slot === undefined || plans.length === 0) {
           window.alert("There is no free pad on Bank D for the chopper, so nothing was changed. Delete a pad there and chop again.");
           return;
@@ -1116,7 +1132,7 @@ function App() {
           return;
         }
         recordEdit();
-        setPads({ ...without, [slot]: pad });
+        setPads(installChopperPages(without, pad));
         // The project tempo becomes the sample's (at its pitch): the chopper does not stretch.
         changeBpm(tempo);
         setSelected(null);
@@ -2125,7 +2141,7 @@ function App() {
                         ? "Silent placeholder: drag a sound here"
                         : "Silent placeholder"}
                   </span>
-                  {selectedPad.chopper?.maker && <button className="type-readout__match" onClick={() => setMakerPad(selectedPad.index)}>Edit chop pattern</button>}
+                  {selectedPad.chopper?.maker && <button className="type-readout__match" onClick={() => setMakerPad(48)}>Edit chop pattern</button>}
                 </div>
               ) : shownMode === "tune" ? (
                 panel

@@ -300,9 +300,9 @@ export function packArrangement(
       (u) => u.chop === slot.chop && u.steps === slot.steps,
     );
     if (slice < 0) {
-      if (unique.length >= 127)
+      if (unique.length >= 16 * 127)
         throw new Error(
-          "This arrangement uses more than 127 different pieces. Remove a piece or reuse an existing one.",
+          "This arrangement exceeds Bank D’s capacity of 2032 unique pieces (16 pads × 127).",
         );
       slice = unique.length;
       unique.push({
@@ -320,9 +320,9 @@ export function packArrangement(
     }
     notes.push({ slice, start: starts[i], steps: slot.steps });
   });
-  if (unique.length > 127)
+  if (unique.length > 16 * 127)
     throw new Error(
-      "This arrangement uses more than 127 different pieces. Remove a piece or reuse an existing one.",
+      "This arrangement exceeds Bank D’s capacity of 2032 unique pieces (16 pads × 127).",
     );
   const sliceStarts: number[] = [];
   let frames = 0;

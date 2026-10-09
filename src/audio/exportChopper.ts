@@ -5,7 +5,12 @@
 import { noteTicks } from "./song/noteLengths";
 import type { SectionPlan } from "./song/chop";
 import { type MakerNote } from "./song/patternMaker";
-import { emptySequence, isEmpty, SEQUENCE_SLOTS, TICKS_PER_BEAT } from "./exportSong";
+import {
+  emptySequence,
+  isEmpty,
+  SEQUENCE_SLOTS,
+  TICKS_PER_BEAT,
+} from "./exportSong";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 
@@ -24,7 +29,10 @@ export interface SliceLayout {
  * The slices for a chop. Audio before the first cut is slice 0 (the chopper's first slice always starts at the beginning of the sample), and a slice
  * starts where the last section ends so the tail of the song does not play on into the final section.
  */
-export function sliceLayout(plans: readonly SectionPlan[], totalFrames: number): SliceLayout {
+export function sliceLayout(
+  plans: readonly SectionPlan[],
+  totalFrames: number,
+): SliceLayout {
   const starts = new Set<number>([0]);
   for (const p of plans) {
     starts.add(Math.min(totalFrames - 1, Math.max(0, Math.round(p.start))));
@@ -34,14 +42,27 @@ export function sliceLayout(plans: readonly SectionPlan[], totalFrames: number):
   const sorted = [...starts].sort((a, b) => a - b);
   return {
     starts: sorted,
-    sections: plans.map((p) => ({ slice: sorted.indexOf(Math.min(totalFrames - 1, Math.max(0, Math.round(p.start)))), bars: p.bars })),
+    sections: plans.map((p) => ({
+      slice: sorted.indexOf(
+        Math.min(totalFrames - 1, Math.max(0, Math.round(p.start))),
+      ),
+      bars: p.bars,
+    })),
   };
 }
 
 /** How many sections can be chopped before the slices (the extras at the start and end included) pass 127: the plans that fit. */
-export function fitPlans(plans: readonly SectionPlan[], totalFrames: number): SectionPlan[] {
+export function fitPlans(
+  plans: readonly SectionPlan[],
+  totalFrames: number,
+): SectionPlan[] {
   let n = plans.length;
-  while (n > 0 && sliceLayout(plans.slice(0, n), totalFrames).starts.length > CHOPPER_MAX_SLICES) n--;
+  while (
+    n > 0 &&
+    sliceLayout(plans.slice(0, n), totalFrames).starts.length >
+      CHOPPER_MAX_SLICES
+  )
+    n--;
   return plans.slice(0, n);
 }
 
@@ -49,7 +70,8 @@ export function fitPlans(plans: readonly SectionPlan[], totalFrames: number): Se
  * The slice a velocity plays, measured from a render of docs/calibration/probe-chopper.koala: the 128 velocity steps are shared out evenly, so velocity v
  * plays slice floor(v x count / 128) (with 16 slices, 1 to 7 is slice 0, 8 to 15 is slice 1 ...; with 127, velocity v plays slice v - 1).
  */
-export const sliceOfVelocity = (velocity: number, count: number): number => Math.floor((velocity * count) / 128);
+export const sliceOfVelocity = (velocity: number, count: number): number =>
+  Math.floor((velocity * count) / 128);
 
 /** The velocity that plays slice `slice` of `count`: the middle of the whole velocities that play it (never 0). */
 export function sliceVelocity(slice: number, count: number): number {
@@ -77,22 +99,99 @@ export interface ChopperExport {
    * The pattern the pattern maker laid out: one pattern of `bars` bars holding a note per chop. When set it replaces the pattern per section. `gate` says a note's
    * length cuts the chop short (a slot cut short, or silence after it), so the chopper's ONE SHOT is switched off and the note length decides.
    */
-  pattern?: { notes: MakerNote[]; bars: number; gate: boolean };
+  pattern?: {
+    notes: (MakerNote & { padIndex?: number; sliceCount?: number })[];
+    bars: number;
+    gate: boolean;
+  };
   /** Semitones on the pad's pitch knob. The pad is not stretched, so this also changes its tempo (the caller has put that in the project tempo). */
   pitch: number;
 }
 
-const eq = () => ({ enabled: "false", hi: { freq: 8000.0, gain: 0.0, q: 1.0, type: "highshelf" }, lo: { freq: 100.0, gain: 0.0, q: 1.0, type: "lowshelf" }, mid: { freq: 1000.0, gain: 0.0, q: 1.0, type: "peaking" } });
+const eq = () => ({
+  enabled: "false",
+  hi: { freq: 8000.0, gain: 0.0, q: 1.0, type: "highshelf" },
+  lo: { freq: 100.0, gain: 0.0, q: 1.0, type: "lowshelf" },
+  mid: { freq: 1000.0, gain: 0.0, q: 1.0, type: "peaking" },
+});
 
 /**
  * Adds the chopper pad and a pattern per section: one note on the chopper pad, at the velocity of that section's slice, held for the section's bars.
  * Returns how many section patterns were written (Koala has 32 pattern slots; the chops beyond them can still be played from the pad).
  */
-export async function addChopperPad(project: ParsedKoalaProject, samplerJson: any, chopper: ChopperExport): Promise<number> {
-  const pads: any[] = (samplerJson.pads = Array.isArray(samplerJson.pads) ? samplerJson.pads : []);
-  const samples: any[] = (samplerJson.samples = Array.isArray(samplerJson.samples) ? samplerJson.samples : []);
+export async function addChopperPad(
+  project: ParsedKoalaProject,
+  samplerJson: any,
+  chopper: ChopperExport,
+  padOnly = false,
+): Promise<number> {
+  const totalSlices = chopper.layout.starts.length;
+  if (totalSlices > CHOPPER_MAX_SLICES) {
+    const pageCount = Math.ceil(totalSlices / CHOPPER_MAX_SLICES);
+    if (pageCount > 16)
+      throw new Error(
+        "Bank D is full: maximum 2032 unique chops across 16 pads.",
+      );
+    let written = 0;
+    for (let page = 0; page < pageCount; page++) {
+      const first = page * CHOPPER_MAX_SLICES;
+      const last = Math.min(totalSlices, first + CHOPPER_MAX_SLICES);
+      const from = chopper.layout.starts[first];
+      const to = chopper.layout.starts[last] ?? chopper.channelData[0].length;
+      const pattern =
+        page === 0 && chopper.pattern
+          ? {
+              ...chopper.pattern,
+              notes: chopper.pattern.notes.map((n) => {
+                const target = Math.floor(n.slice / CHOPPER_MAX_SLICES);
+                return {
+                  ...n,
+                  slice: n.slice % CHOPPER_MAX_SLICES,
+                  padIndex: 48 + target,
+                  sliceCount: Math.min(
+                    CHOPPER_MAX_SLICES,
+                    totalSlices - target * CHOPPER_MAX_SLICES,
+                  ),
+                };
+              }),
+            }
+          : chopper.pattern
+            ? { ...chopper.pattern, notes: [] }
+            : undefined;
+      written += await addChopperPad(
+        project,
+        samplerJson,
+        {
+          ...chopper,
+          index: 48 + page,
+          label: `${chopper.label} ${page + 1}`,
+          independentSample: true,
+          channelData: chopper.channelData.map((c) => c.slice(from, to)),
+          layout: {
+            starts: chopper.layout.starts
+              .slice(first, last)
+              .map((n) => n - from),
+            sections: chopper.layout.sections
+              .filter((s) => s.slice >= first && s.slice < last)
+              .map((s) => ({ ...s, slice: s.slice - first })),
+          },
+          pattern,
+        },
+        !!chopper.pattern && page > 0,
+      );
+    }
+    return written;
+  }
+  const pads: any[] = (samplerJson.pads = Array.isArray(samplerJson.pads)
+    ? samplerJson.pads
+    : []);
+  const samples: any[] = (samplerJson.samples = Array.isArray(
+    samplerJson.samples,
+  )
+    ? samplerJson.samples
+    : []);
   if (chopper.independentSample) {
-    const ids = samples.map(s => Number(s.id)).filter(Number.isFinite);
+    const ids = samples.map((s) => Number(s.id)).filter(Number.isFinite);
     let id = Math.max(0, ...ids, chopper.sampleId) + 1;
     while (project.zip.file(`sampler/${id}.wav`)) id++;
     chopper = { ...chopper, sampleId: id };
@@ -100,20 +199,47 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
   const base = project.padBase;
   const stringPads = pads.some((p) => typeof p.pad === "string");
   const slot = chopper.index + base;
-  for (let i = pads.length - 1; i >= 0; i--) if (Number(pads[i].pad) === slot) pads.splice(i, 1);
+  for (let i = pads.length - 1; i >= 0; i--)
+    if (Number(pads[i].pad) === slot) pads.splice(i, 1);
 
   // The song's own file is shared. It is only written again when the export dropped it (its pad was deleted or sat in the hot-swap pool).
   if (!project.zip.file(`sampler/${chopper.sampleId}.wav`)) {
-    project.zip.file(`sampler/${chopper.sampleId}.wav`, await encodeWav({ sampleRate: chopper.sampleRate, channelData: chopper.channelData, bitDepth: 24 }).arrayBuffer());
+    project.zip.file(
+      `sampler/${chopper.sampleId}.wav`,
+      await encodeWav({
+        sampleRate: chopper.sampleRate,
+        channelData: chopper.channelData,
+        bitDepth: 24,
+      }).arrayBuffer(),
+    );
   }
   if (!samples.some((s) => s.id === chopper.sampleId)) {
-    samples.push({ id: chopper.sampleId, metadata: { bpm: 0.0, musicalKey: "", originalPath: `${chopper.label}.wav`, rootNote: "none", source: "Imported", tags: [] } });
+    samples.push({
+      id: chopper.sampleId,
+      metadata: {
+        bpm: 0.0,
+        musicalKey: "",
+        originalPath: `${chopper.label}.wav`,
+        rootNote: "none",
+        source: "Imported",
+        tags: [],
+      },
+    });
   }
 
   const count = chopper.layout.starts.length;
   pads.push({
     chops: {
-      slices: chopper.layout.starts.map((start) => ({ deleting: 0.0, dragStart: -10000.0, dragging: false, originalStartPosition: start, power: 1.0, start, touchId: -1, userEdited: true })),
+      slices: chopper.layout.starts.map((start) => ({
+        deleting: 0.0,
+        dragStart: -10000.0,
+        dragging: false,
+        originalStartPosition: start,
+        power: 1.0,
+        start,
+        touchId: -1,
+        userEdited: true,
+      })),
     },
     pad: stringPads ? String(slot) : slot,
     sampleId: chopper.sampleId,
@@ -143,15 +269,33 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
   });
   pads.sort((a, b) => Number(a.pad) - Number(b.pad));
 
+  if (padOnly) return 0;
+
   const sequenceEntry = project.zip.file("sequence.json");
   const sequence = sequenceEntry
     ? JSON.parse(await sequenceEntry.async("string"))
-    : { autoPlay: "next", beatsPerBar: 4, bpm: 120, currSequenceId: 0, quantizeDivision: 16, quantizing: true, seqSnap: "Sequence", swing: 0 };
-  const sequences: any[] = (sequence.sequences = Array.isArray(sequence.sequences) ? sequence.sequences : []);
+    : {
+        autoPlay: "next",
+        beatsPerBar: 4,
+        bpm: 120,
+        currSequenceId: 0,
+        quantizeDivision: 16,
+        quantizing: true,
+        seqSnap: "Sequence",
+        swing: 0,
+      };
+  const sequences: any[] = (sequence.sequences = Array.isArray(
+    sequence.sequences,
+  )
+    ? sequence.sequences
+    : []);
   while (sequences.length < SEQUENCE_SLOTS) sequences.push(emptySequence());
   if (chopper.beatsPerBar > 0) sequence.beatsPerBar = chopper.beatsPerBar;
-  const beatsPerBar = Number(sequence.beatsPerBar) > 0 ? Number(sequence.beatsPerBar) : 4;
-  const free = sequences.map((s, i) => (isEmpty(s) ? i : -1)).filter((i) => i >= 0);
+  const beatsPerBar =
+    Number(sequence.beatsPerBar) > 0 ? Number(sequence.beatsPerBar) : 4;
+  const free = sequences
+    .map((s, i) => (isEmpty(s) ? i : -1))
+    .filter((i) => i >= 0);
   let written = 0;
   if (chopper.pattern) {
     // The pattern maker's sequence: one pattern, each note at its place (`timeOffset`, 1024 ticks to a step, a sixteenth note) held for its steps.
@@ -164,13 +308,13 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
             notes: chopper.pattern.notes.map((n) => ({
               chance: 1.0,
               length: noteTicks(n.start, n.steps, TICKS_PER_BEAT).length,
-              num: chopper.index + base,
+              num: (n.padIndex ?? chopper.index) + base,
               pan: -1.0078740119934082,
               pitch: 0.0,
               start: 0.0,
               subPad: -1,
               timeOffset: noteTicks(n.start, n.steps, TICKS_PER_BEAT).start,
-              vel: sliceVelocity(n.slice, count),
+              vel: sliceVelocity(n.slice, n.sliceCount ?? count),
             })),
           },
         },
