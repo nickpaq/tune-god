@@ -203,7 +203,7 @@ export const ChopTimeline = forwardRef<
       ctx.fillText(text, x, bottom + flag / 2 + ratio);
     };
     for (const frame of downs) downFlag(frame, "1");
-    if (one111 !== null) downFlag(one111, "1.1.1");
+    if (one111 !== null) downFlag(one111, "ANCHOR");
 
     // Chop markers: a line in the colour of the section that starts there (the last one takes the colour of the section it ends), a numbered flag on top.
     cuts.forEach((frame, i) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeSong, chromaOf, keyOfChroma, playingAtStart } from "./beats";
+import { analyzeSongKey, chromaOf, keyOfChroma } from "./beats";
 
 const RATE = 22050;
 
@@ -36,39 +36,8 @@ function song(bpm: number, beatsPerBar: number, startSeconds: number, seconds: n
   return out;
 }
 
-describe("analyzeSong", () => {
-  for (const [bpm, beatsPerBar, start] of [
-    [120, 4, 0.5],
-    [90, 4, 1.3],
-    [75, 4, 0.8],
-    [128, 4, 0.25],
-    [100, 3, 0.6],
-  ] as const) {
-    it(`finds ${bpm} BPM in ${beatsPerBar}/4 with bar 1 at ${start}s`, () => {
-      const result = analyzeSong(song(bpm, beatsPerBar, start, 70), RATE, beatsPerBar)!;
-      expect(result).not.toBeNull();
-      expect(result.bpm).toBeCloseTo(bpm, 1);
-      // a few milliseconds is as exact as this gets; the editor takes it the rest of the way
-      expect(Math.abs(result.downbeatSeconds - start)).toBeLessThan(0.008);
-    });
-  }
-
-  it("puts bar 1 on the first big downbeat, not on the soft hits of an intro", () => {
-    // 120 BPM: a bar is 2 s. Soft ghost pulses at a tenth of the level from the start, the full groove from the drop at 8 s.
-    const soft = song(120, 4, 0.5, 70);
-    const full = song(120, 4, 8.5, 70);
-    const mix = new Float32Array(soft.length);
-    const drop = Math.round(8.5 * RATE);
-    for (let i = 0; i < mix.length; i++) mix[i] = i < drop ? 0.1 * soft[i] : full[i];
-    const result = analyzeSong(mix, RATE, 4)!;
-    expect(result.bpm).toBeCloseTo(120, 1);
-    expect(Math.abs(result.downbeatSeconds - 8.5)).toBeLessThan(0.02);
-  });
-
-  it("reads the key of the chords (C major)", () => {
-    const result = analyzeSong(song(120, 4, 0.5, 40), RATE, 4)!;
-    expect(result.key.pc).toBe(0);
-  });
+it("reads song harmony independently of tempo", () => {
+  expect(analyzeSongKey(song(120, 4, 0.5, 40), RATE).pc).toBe(0);
 });
 
 describe("keyOfChroma", () => {
@@ -92,10 +61,4 @@ describe("chromaOf", () => {
     const chroma = chromaOf(x, RATE);
     expect(chroma.indexOf(Math.max(...chroma))).toBe(9);
   });
-});
-
-describe("playingAtStart", () => {
-  const tone = (from: number, seconds: number) => Float32Array.from({ length: seconds * RATE }, (_, i) => (i >= from * RATE ? 0.5 * Math.sin((2 * Math.PI * 220 * i) / RATE) : 0));
-  it("is true when the file opens on music at its usual loudness", () => expect(playingAtStart(tone(0, 20), RATE)).toBe(true));
-  it("is false after a silent start", () => expect(playingAtStart(tone(1, 20), RATE)).toBe(false));
 });

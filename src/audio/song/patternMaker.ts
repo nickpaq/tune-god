@@ -26,7 +26,7 @@ export const STEPS_PER_BEAT = 4;
 /** Steps in a bar. */
 export const stepsPerBar = (beatsPerBar: number): number => beatsPerBar * STEPS_PER_BEAT;
 
-export type Slot = { kind: "chop"; chop: number; steps: number } | { kind: "silence"; steps: number };
+export type Slot = { kind: "chop"; chop: number; steps: number; alignedStart?: number } | { kind: "silence"; steps: number };
 
 /** The finest a chop or silence can be cut to, in steps (a sixteenth note). */
 export const MIN_STEPS = 1;
@@ -117,6 +117,7 @@ export function positionText(steps: number, beatsPerBar: number): string {
   const bar = Math.floor(steps / stepsPerBar(beatsPerBar));
   const inBar = steps - bar * stepsPerBar(beatsPerBar);
   const beat = Math.floor(inBar / STEPS_PER_BEAT);
+  if (!Number.isInteger(inBar)) return `${bar + 1}.${(1 + inBar / STEPS_PER_BEAT).toFixed(3)}`;
   return `${bar + 1}.${beat + 1}${["", "e", "&", "a"][inBar % STEPS_PER_BEAT]}`;
 }
 
