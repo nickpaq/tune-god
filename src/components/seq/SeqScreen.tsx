@@ -14,6 +14,7 @@ import { KeyboardControls } from "./KeyboardControls";
 export interface SeqPad {
   label: string;
   color: string;
+  oneShot?: boolean;
   chops?: ChopTile[];
 }
 

@@ -55,8 +55,8 @@ export function playSeqSound(sound: SeqSound, pitch: number, velocity: number, w
   const releaseAt = (at: number, seconds: number) => {
     if (ended) return;
     gain.gain.cancelAndHoldAtTime(at);
-    gain.gain.linearRampToValueAtTime(0, at + Math.max(0, seconds));
-    source.stop(at + Math.max(0, seconds));
+    gain.gain.linearRampToValueAtTime(0, at + Math.max(0.003, seconds));
+    source.stop(at + Math.max(0.003, seconds));
   };
   const release = (seconds = 0.025) => releaseAt(ctx.currentTime, seconds);
   if (lengthSeconds !== undefined) releaseAt(startAt + lengthSeconds, 0.025);
@@ -70,7 +70,13 @@ export function playSeqSound(sound: SeqSound, pitch: number, velocity: number, w
     if (seconds > 0) rate.exponentialRampToValueAtTime(target, now + seconds);
     else rate.setValueAtTime(target, now);
   };
-  return { release, glide, isEnded: () => ended, cut: (at = ctx.currentTime) => { if (!ended) source.stop(at); } };
+  return { release, glide, isEnded: () => ended, cut: (at = ctx.currentTime) => {
+    if (ended) return;
+    if (at <= startAt && startAt > ctx.currentTime) { source.stop(at); return; }
+    // A tiny ramp removes discontinuities without an audible release tail.
+    const begins = Math.max(ctx.currentTime, at - 0.003);
+    releaseAt(begins, Math.max(0.003, at - begins));
+  } };
 }
 export function startSequencer(read: () => { session: SeqSession; bpm: number; beatsPerBar: number }, sound: (pad: number) => SeqSound | null) {
   const ctx = getAudioContext(); void ctx.resume();

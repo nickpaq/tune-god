@@ -21,7 +21,7 @@ import { pitchKnobFor, shiftFor, snapSemitones } from "./audio/shift";
 import { fadeIn, fadeMsFor, kickTransientMs, medianTransientMs } from "./audio/kickTransient";
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { CATEGORIES, categoryIndex, is808Name, isDrumCategory, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { chopColor, colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { applyIconLinks, applyScheme } from "./audio/theme";
 import { SchemeModal } from "./components/SchemeModal";
@@ -60,6 +60,7 @@ import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemito
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { LiveSeqScreen } from "./components/seq/LiveSeqScreen";
+import { DEFAULT_PAD_FILTERS, renderPadFilters, type PadFilters } from "./audio/seq/effects";
 import { type SeqPad } from "./components/seq/SeqScreen";
 import { useSafeArea } from "./components/useSafeArea";
 import { SIDECHAIN_HINT, sidechainStatus } from "./audio/sidechain";
@@ -194,6 +195,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [seqFilters, setSeqFilters] = useState<Record<number, PadFilters>>({});
   const [normalizing, setNormalizing] = useState(false);
   /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
   const [exportProgress, setExportProgress] = useState("");
@@ -290,6 +292,7 @@ function App() {
   const [importStatus, setImportStatus] = useState("");
 
   const loadProject = useCallback(async (file: File, restore = false, ignoreLong = false) => {
+    setSeqFilters({});
     const token = ++loadToken.current;
     setLoading(true);
     try {
@@ -1592,6 +1595,8 @@ function App() {
         // The pad's audio was already cut to Koala's start/end points on load, so a stretched loop stays in time.
         let channelData = retimed ? await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(snap)) : pad.channelData;
         if (fade && isEight(pad)) channelData = fadeIn(channelData, pad.sampleRate, fade);
+        const filters = seqFilters[pad.origIndex];
+        if (filters) channelData = await renderPadFilters(channelData, pad.sampleRate, filters);
         stats.push(await getRenderWorker().measure({ channelData, sampleRate: pad.sampleRate, category: pad.category }));
         rendered.push({ pad, channelData, retimed });
       }
@@ -1699,7 +1704,7 @@ function App() {
   const seqPadsOfBank = (b: number): (SeqPad | null)[] =>
     Array.from({ length: 16 }, (_, slot) => {
       const p = pads[b * 16 + slot];
-      return p && !p.placeholder ? { label: captionOf(p) || labelOf(p), color: litColor(p), chops: p.chopper ? (p.chopper.maker?.chops ?? []).map((chop, id) => ({ id, label: `Chop ${id + 1}`, color: chopColor(palette.colors, chop.colorIndex) })) : undefined } : null;
+      return p && !p.placeholder ? { label: captionOf(p) || labelOf(p), color: litColor(p), oneShot: isDrumCategory(p.category) || p.category === undefined || p.category === "other" || p.category === "fx", chops: p.chopper ? (p.chopper.maker?.chops ?? []).map((chop, id) => ({ id, label: `Chop ${id + 1}`, color: chopColor(palette.colors, chop.colorIndex) })) : undefined } : null;
     });
   /** The loaders have already placed, labelled and coloured every sound, so a project with sounds in it can always be exported. */
   const canExport = hasProject && analyzing === 0 && !exporting;
@@ -2073,8 +2078,8 @@ function App() {
           <LiveSeqScreen bpm={projectBpm} padsOfBank={seqPadsOfBank} soundFor={(index, keyboard) => {
             const pad = pads[index];
             if (!pad || pad.placeholder) return null;
-            return { channelData: audioOf(pad), sampleRate: pad.sampleRate, pitch: shiftFor(pad, tunedTarget, a4, keyboard ? false : keyMajor), volume: 10 ** ((pad.knobDb ?? 0) / 20) };
-          }} onBack={() => setSeqOpen(false)} />
+            return { channelData: audioOf(pad), sampleRate: pad.sampleRate, pitch: shiftFor(pad, tunedTarget, a4, keyboard ? false : keyMajor), volume: 10 ** ((pad.knobDb ?? 0) / 20), filters: seqFilters[pad.origIndex] };
+          }} filtersFor={index => seqFilters[pads[index]?.origIndex] ?? DEFAULT_PAD_FILTERS} onFiltersChange={(index, filters) => { const pad = pads[index]; if (pad) setSeqFilters(previous => ({ ...previous, [pad.origIndex]: filters })); }} onBack={() => setSeqOpen(false)} />
         ) : (
         <>
         <div className="upper">
