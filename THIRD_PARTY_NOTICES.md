@@ -18,3 +18,19 @@ This project bundles the following libraries. Their upstream licenses govern the
 ## Other dependencies
 
 React, Vite, `vite-plugin-pwa`, `jszip`, and `comlink` are used under their respective permissive (MIT) licenses — see each package's `node_modules/<package>/LICENSE` for details.
+
+## Music Tempo (`music-tempo`, 1.0.3)
+
+- Used for: the Music Tempo option in the waveform view, running its beat tracker in an analysis worker on mono audio resampled to 44,100 Hz.
+- License: **MIT**, copyright (c) 2017 killercrush.
+- Source: https://github.com/killercrush/music-tempo
+- License text: `node_modules/music-tempo/LICENCE`.
+
+## Web Audio Beat Detector (`web-audio-beat-detector`, 8.2.39)
+
+- Used for: the Web Audio Beat Detector option in the waveform view, with its native low-pass preprocessing and background worker.
+- License: **MIT**, copyright (c) 2026 Christoph Guttandin.
+- Source: https://github.com/chrisguttandin/web-audio-beat-detector
+- License text: `node_modules/web-audio-beat-detector/LICENSE`.
+
+Both options find beat timing, not the musical first beat of a bar. The existing 1.1.1 and downbeat markers provide manual bar alignment; the first known marker also excludes preceding audio from detection.

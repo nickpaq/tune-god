@@ -3,6 +3,7 @@ import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
 import { chopColor, type Palette } from "../audio/palettes";
 import { mixToMono, snapToAttack } from "../audio/song/beats";
+import { detectSongTempo, type BeatDetector } from "../audio/song/detectors";
 import type { SectionPlan } from "../audio/song/chop";
 import {
   barLineNear,
@@ -38,15 +39,14 @@ export interface ChopSettings {
   beatsPerBar: number;
   /** The sections, on the song's own frames. */
   plans: SectionPlan[];
-  /** The song's key as detected (null when no beat, so no key, was found): what the key picked on the piano is compared with. */
+  /** The song's detected key, independently of beat detection: what the piano's key is compared with. */
   key: SongKey | null;
 }
 
-/** What the automatic detection found: the tempo and where bar 1 starts. */
+/** The selected tracker's tempo and provisional bar 1 (a user downbeat overrides its beat origin). */
 interface Detected {
   bpm: number;
   downbeatSeconds: number;
-  key: SongKey;
 }
 
 /** The BPM readout: a finger that moves this far (CSS pixels) is scrubbing; two taps within this (ms) are a double tap. */
@@ -143,7 +143,9 @@ export function SongChopModal({
   const fine = unit === "chop";
   const colorOf = (i: number) => chopColor(palette.colors, i);
 
+  const [detector, setDetector] = useState<BeatDetector>("music-tempo");
   const [detected, setDetected] = useState<Detected | "none" | null>(null);
+  const [detectedKey, setDetectedKey] = useState<SongKey | null>(null);
   // The markers are kept under the song's name and length, so they come back after the editor is closed or the app is reopened.
   const songKey = `${padTitle(pad)}|${totalFrames}|${sampleRate}`;
   const [history, setHistory] = useState(() => {
@@ -164,24 +166,27 @@ export function SongChopModal({
   const [magnetOn, setMagnetOn] = useState(true);
 
 
-  // The song's tempo, bar 1 and key are found in the background.
+  // A reliable marker excludes a quiet intro from tempo detection and anchors both methods exactly.
+  const detectionAnchor = marks.oneOne ?? (marks.downbeats.length ? Math.min(...marks.downbeats) : null);
   useEffect(() => {
     let alive = true;
-    const copy = mixToMono(pad.channelData);
-    nextAnalysisWorker()
-      .analyzeSong(Comlink.transfer(copy, [copy.buffer]), sampleRate, beatsPerBar)
-      .then((result) => {
-        if (!alive) return;
-        if (!result) return setDetected("none");
-        setDetected({ bpm: result.bpm, downbeatSeconds: result.downbeatSeconds, key: { pc: result.key.pc, minor: result.key.minor } });
-      })
+    setDetected(null);
+    detectSongTempo(mono, sampleRate, detector, detectionAnchor)
+      .then((result) => alive && setDetected(result))
       .catch(() => alive && setDetected("none"));
-    return () => {
-      alive = false;
-    };
-    // the analysis runs once, for the song as it was opened
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => { alive = false; };
+  }, [mono, sampleRate, detector, detectionAnchor]);
+
+  // Key detection stays the same, independently of the selected beat tracker and markers.
+  useEffect(() => {
+    let alive = true;
+    const copy = mono.slice();
+    nextAnalysisWorker()
+      .analyzeSongKey(Comlink.transfer(copy, [copy.buffer]), sampleRate)
+      .then((key) => alive && setDetectedKey({ pc: key.pc, minor: key.minor }))
+      .catch(() => alive && setDetectedKey(null));
+    return () => { alive = false; };
+  }, [mono, sampleRate]);
 
   /** The detected grid, or a plain 120 BPM one when no beat could be found (the downbeat markers then do the work). */
   const base = useMemo<TapGrid | null>(() => {
@@ -233,7 +238,6 @@ export function SongChopModal({
   const fits = Math.min(plans.length, freeSlots);
   // Chopper mode has no limit on a section's length (acapella and synced mode keep the 16 bar maximum).
   const longOnes = grid && !fine ? sections.map((s, i) => (tooLong(grid, s) ? i + 1 : 0)).filter(Boolean) : [];
-  const detectedKey = detected && detected !== "none" ? detected.key : null;
   const tempo = grid ? bpmAt(grid, sections.length > 0 ? sections[0].first : 0) : 0;
 
   const gridRef = useRef(grid);
@@ -504,7 +508,7 @@ export function SongChopModal({
   const drawnSections = grid ? sections.map((s, i) => ({ start: lineFrame(grid, s.first), end: lineFrame(grid, s.last), color: colorOf(i) })) : [];
   const chopFrames = grid ? lines.map((n) => lineFrame(grid, n)) : [];
   
-  const note = "Scroll the waveform to a cut and add a chop. A downbeat marker locks the grid in where it drifts; 1.1.1 sets bar 1.";
+  const note = detected === null ? "Detecting the beat…" : detected === "none" ? "No beat found. Set BPM by hand and place 1.1.1 or a downbeat marker." : "Check the click against the song. Place 1.1.1 or a downbeat after a quiet intro to help detection.";
   const bpmText = detected === null ? "..." : detected === "none" && marks.downbeats.length === 0 && marks.oneOne === null ? "--" : (grid ? bpmAt(grid, 0) : 0).toFixed(2);
 
   return (
@@ -522,6 +526,19 @@ export function SongChopModal({
           <p className="chop__note">{note}</p>
 
           <div className="chop__screen">
+            <label className="chop__detector">
+              <span>Detector</span>
+              <select aria-label="Beat detector" value={detector} onChange={(e) => {
+                player.stop();
+                setLiveBpm(null);
+                setDetected(null);
+                setHistory((h) => commit(h, { ...h.present, bpm: null, tempoScale: 1 }));
+                setDetector(e.target.value as BeatDetector);
+              }}>
+                <option value="music-tempo">Music Tempo</option>
+                <option value="web-audio">Web Audio Beat Detector</option>
+              </select>
+            </label>
             <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
             <div className="chop__readout">
               <button className={`chop__nudge${marks.oneOne !== null && marks.bpm == null ? " chop__nudge--on" : ""}`} disabled={!grid || marks.bpm == null} onClick={autoTempo} aria-pressed={marks.oneOne !== null && marks.bpm == null} aria-label="Automatic tempo">

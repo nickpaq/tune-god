@@ -6,11 +6,15 @@ import { bpmFromName, keyFromName } from "../audio/pitch/nameKey";
 import { frequencyToMidi } from "../audio/theory";
 import { classifySample, extractFeatures, isTunedCategory, type CategoryId } from "../audio/classify";
 import { classifyDetail, type Detail } from "../audio/padLabels";
-import { analyzeSong, type SongAnalysis } from "../audio/song/beats";
+import { analyzeSong, analyzeSongKey, type SongAnalysis } from "../audio/song/beats";
+import { detectMusicTempo } from "../audio/song/musicTempo";
 import { correctDrift, type DriftFix } from "../audio/song/driftFix";
 import type { TapGrid } from "../audio/song/tapGrid";
 
 const api = {
+  /** Alternative beat tracker, supplied mono audio resampled to 44,100 Hz. */
+  detectMusicTempo,
+  analyzeSongKey,
   /** Fractional MIDI note of the sample's dominant pitch, or null when it has no clear one (drums, noise). */
   detectMidi(mono: Float32Array, sampleRate: number): number | null {
     const pitch = dominantPitch(mono, sampleRate);

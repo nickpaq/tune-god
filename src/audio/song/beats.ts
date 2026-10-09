@@ -530,6 +530,12 @@ export function playingAtStart(mono: Float32Array, sampleRate: number): boolean 
   return median > 0 && rms[0] >= 0.5 * median;
 }
 
+/** Keep harmonic analysis independent when a different library supplies the beat grid. */
+export function analyzeSongKey(mono: Float32Array, sampleRate: number): KeyGuess {
+  const factor = Math.max(1, Math.round(sampleRate / ANALYSIS_RATE));
+  return keyOfChroma(chromaOf(decimate(mono, factor), sampleRate / factor));
+}
+
 /** Tempo, bar 1 and key of a song, from its mono mix. Null when no beat could be found. */
 export function analyzeSong(mono: Float32Array, sampleRate: number, beatsPerBar: number): SongAnalysis | null {
   const factor = Math.max(1, Math.round(sampleRate / ANALYSIS_RATE));

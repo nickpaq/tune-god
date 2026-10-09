@@ -1578,6 +1578,27 @@
   text-transform: uppercase;
 }
 
+.chop__detector {
+  display: flex;
+  align-items: center;
+  gap: 2cqw;
+  font: inherit;
+  text-shadow: none;
+}
+
+.chop__detector select {
+  flex: 1;
+  min-width: 0;
+  padding: 1cqw;
+  border: 1px solid var(--oled);
+  border-radius: 1cqw;
+  background: var(--bezel);
+  color: var(--oled);
+  font: inherit;
+  font-family: "Barlow Semi Condensed", sans-serif;
+  text-transform: none;
+}
+
 .chop__readout {
   display: flex;
   align-items: center;
