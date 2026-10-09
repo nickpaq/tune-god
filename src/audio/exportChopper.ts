@@ -2,8 +2,9 @@
 // read from docs/calibration/chopper-reference.koala. A slice runs from its start frame to the next slice's start (the last to the end of the sample),
 // and the velocity of a note picks the slice (`TRIGGER MODE` 1): the velocities are shared out over the slices, so one note from the lowest to the highest
 // velocity plays every slice in turn. The note's own pitch transposes the slice (0 here), and the pad pitch knob is in semitones. The pad plays at the sample's own tempo (no stretch), so the project tempo is written to match it.
+import { noteTicks } from "./song/noteLengths";
 import type { SectionPlan } from "./song/chop";
-import { STEPS_PER_BEAT, type MakerNote } from "./song/patternMaker";
+import { type MakerNote } from "./song/patternMaker";
 import { emptySequence, isEmpty, SEQUENCE_SLOTS, TICKS_PER_BEAT } from "./exportSong";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
@@ -162,13 +163,13 @@ export async function addChopperPad(project: ParsedKoalaProject, samplerJson: an
             numBars: chopper.pattern.bars,
             notes: chopper.pattern.notes.map((n) => ({
               chance: 1.0,
-              length: n.steps * (TICKS_PER_BEAT / STEPS_PER_BEAT),
+              length: noteTicks(n.start, n.steps, TICKS_PER_BEAT).length,
               num: chopper.index + base,
               pan: -1.0078740119934082,
               pitch: 0.0,
               start: 0.0,
               subPad: -1,
-              timeOffset: n.start * (TICKS_PER_BEAT / STEPS_PER_BEAT),
+              timeOffset: noteTicks(n.start, n.steps, TICKS_PER_BEAT).start,
               vel: sliceVelocity(n.slice, count),
             })),
           },

@@ -1,4 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  NOTE_VALUES,
+  noteLength,
+  quantizeNote,
+  SHORTEST_NOTE,
+  type NoteValue,
+} from "../audio/song/noteLengths";
 import { getAudioContext } from "../audio/decode";
 import { chopColor } from "../audio/palettes";
 import {
@@ -14,6 +21,7 @@ import {
   clamp,
   mod,
   nextOffset,
+  slotFades,
   sourceCandidates,
   type WorkspaceResult,
   type WorkspaceState,
@@ -95,7 +103,10 @@ export function SectionWorkspace({
   const [libraryLength, setLibraryLength] = useState<number | null>(null);
   const [bars, setBars] = useState(4);
   const [point, setPoint] = useState(0);
+  const [noteValue, setNoteValue] = useState<NoteValue>("bar");
+  const [triplet, setTriplet] = useState(false);
   const [wanted, setWanted] = useState(stepsPerBar(beatsPerBar));
+  const lengthView = useRef({ total: -1, length: 0 });
   const [selected, setSelected] = useState(0);
   const [dragX, setDragX] = useState(0);
   const [notice, setNotice] = useState("");
@@ -158,9 +169,7 @@ export function SectionWorkspace({
             ),
           }
         : active;
-  useEffect(() => {
-    setLibraryLength(null);
-  }, [active?.start, library]);
+
   const audio = useChopAudition(channelData, sampleRate, beatFrames, pitch);
   const pyramid = useMemo(() => buildPyramid(channelData), [channelData]);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -189,7 +198,7 @@ export function SectionWorkspace({
   const trimDistance =
     finger.current?.trimDistance ??
     Math.min(
-      ((last?.steps ?? 0) / Math.max(1, span.current)) *
+      ((last?.steps ?? 0) / Math.max(SHORTEST_NOTE, span.current)) *
         (canvas.current?.clientWidth ?? 374) *
         0.55,
       (canvas.current?.clientWidth ?? 374) * 0.55,
@@ -197,9 +206,10 @@ export function SectionWorkspace({
   const trim =
     last && dragX > 0
       ? Math.max(
-          1,
-          last.steps -
-            Math.round((dragX / Math.max(1, trimDistance)) * last.steps),
+          SHORTEST_NOTE,
+          quantizeNote(
+            last.steps - (dragX / Math.max(1, trimDistance)) * last.steps,
+          ),
         )
       : last?.steps;
   const removeArmed = !!last && dragX > trimDistance + 72;
@@ -226,18 +236,23 @@ export function SectionWorkspace({
         "#92999d";
     ctx.clearRect(0, 0, w, h);
     const join = w * (mode === "source" ? 0.1 : 0.19),
-      fit = w * (mode === "source" ? 0.65 : 0.55),
+      fit = w - join - 12,
       center = h / 2;
     const target =
       mode === "source"
         ? sectionSteps
-        : Math.max(1, candidate?.steps ?? wanted);
+        : Math.max(SHORTEST_NOTE, candidate?.steps ?? wanted);
+    if (lengthView.current.total !== total) {
+      lengthView.current = { total, length: target + 4 };
+    }
+    const viewSteps = Math.max(lengthView.current.length, target);
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!finger.current)
       position.current += (index - position.current) * (reduce ? 1 : 0.22);
     span.current += (target - span.current) * (reduce ? 1 : 0.2);
     const shift = Math.min(0, dragX),
-      px = fit / span.current;
+      px = fit / (mode === "source" ? span.current : viewSteps);
+    const historyPx = fit / stepsPerBar(beatsPerBar);
     const eaten = trimDistance;
     const resisted = dragX <= eaten ? dragX : eaten + (dragX - eaten) * 0.34;
     const candidateShift = shift + Math.min(18, Math.max(0, resisted) * 0.12);
@@ -300,7 +315,7 @@ export function SectionWorkspace({
       const slot = state.slots[i],
         length =
           i === state.slots.length - 1 ? (trim ?? slot.steps) : slot.steps;
-      const width = length * px;
+      const width = length * historyPx;
       edge -= width;
       wave(
         slot.kind === "chop" ? state.chops[slot.chop] : null,
@@ -330,7 +345,9 @@ export function SectionWorkspace({
             ? (candidate ?? rows[row.i])
             : rows[row.i],
         height = 44 + 44 * row.mag,
-        width = fit * (0.55 + 0.45 * row.mag);
+        width =
+          (mode === "source" ? fit : span.current * px) *
+          (0.55 + 0.45 * row.mag);
       const alpha = 0.3 + 0.7 * Math.exp(-Math.abs(row.y - center) / 180);
       wave(c, join + candidateShift, row.y, width, height, alpha);
       ctx.fillStyle = ink;
@@ -357,20 +374,28 @@ export function SectionWorkspace({
         ctx.fillRect(join + (local / sectionSteps) * fit, center - 47, 2, 94);
       }
     }
-    for (let n = 0; n < 4; n++) {
-      const x = join + fit + 8 + (n * (w - join - fit - 18)) / 4;
-      ctx.fillStyle =
-        phases[
-          mod(
-            Math.floor(
-              (total + (active?.steps ?? 0)) / stepsPerBar(beatsPerBar),
-            ) + n,
-            4,
-          )
-        ];
-      ctx.globalAlpha = 0.65;
-      ctx.fillRect(x, center - 44, 1, 88);
-      ctx.fillText(String(n + 1), x + 2, center + 62);
+    if (mode === "pattern") {
+      const end = total + target;
+      const barSteps = stepsPerBar(beatsPerBar);
+      const boundary = Math.ceil((end - 1e-8) / barSteps) * barSteps;
+      const gap = boundary - end;
+      const highlighted = gap > 1e-8 && gap <= 4;
+      const marker = highlighted ? boundary : end;
+      const x = join + (marker - total) * px;
+      const completedBars = Math.round(boundary / barSteps);
+      const milestone = [2, 4, 8, 16].includes(completedBars);
+      ctx.fillStyle = highlighted ? (milestone ? "#f0cd82" : ink) : muted;
+      ctx.globalAlpha = highlighted ? 1 : 0.45;
+      ctx.fillRect(x - 1, center - 52, highlighted ? 2 : 1, 104);
+      ctx.textAlign = "right";
+      ctx.fillText(
+        highlighted
+          ? `${completedBars} BARS · +${(gap / 4).toFixed(2)} BEAT`
+          : `END ${positionText(end, beatsPerBar)}`,
+        Math.min(w - 8, x),
+        center + 67,
+      );
+      ctx.textAlign = "left";
       ctx.globalAlpha = 1;
     }
     if (dragX < 0 && mode === "pattern") {
@@ -383,8 +408,11 @@ export function SectionWorkspace({
       if (mode === "source")
         x = join + ((point + audio.position.steps) / sectionSteps) * fit;
       else if (audio.position.kind === "sequence")
-        x = join + (audio.position.steps - total) * px;
-      else x = join + audio.position.steps * px;
+        x = join + (audio.position.steps - total) * historyPx;
+      else
+        x =
+          join +
+          audio.position.steps * (audio.position.steps < 0 ? historyPx : px);
       ctx.fillStyle = ink;
       ctx.beginPath();
       ctx.arc(clamp(x, 3, w - 3), center + 48, 3, 0, Math.PI * 2);
@@ -420,7 +448,7 @@ export function SectionWorkspace({
       const target =
         mode === "source"
           ? sectionSteps
-          : Math.max(1, candidate?.steps ?? wanted);
+          : Math.max(SHORTEST_NOTE, candidate?.steps ?? wanted);
       if (
         finger.current ||
         Math.abs(position.current - index) > 0.005 ||
@@ -589,9 +617,10 @@ export function SectionWorkspace({
         const slots = state.slots.slice();
         const removed = f.dx > f.trimDistance + 72;
         const shortened = Math.max(
-          1,
-          last.steps -
-            Math.round((f.dx / Math.max(1, f.trimDistance)) * last.steps),
+          SHORTEST_NOTE,
+          quantizeNote(
+            last.steps - (f.dx / Math.max(1, f.trimDistance)) * last.steps,
+          ),
         );
         if (removed) slots.pop();
         else slots[slots.length - 1] = { ...last, steps: shortened };
@@ -621,7 +650,8 @@ export function SectionWorkspace({
     return () => window.removeEventListener("blur", cancel);
   }, []);
   const pieces = (): AuditionPiece[] =>
-    state.slots.map((s) => ({
+    state.slots.map((s, i) => ({
+      ...slotFades(state.slots, i),
       chop: s.kind === "chop" ? state.chops[s.chop] : undefined,
       steps: s.steps,
     }));
@@ -633,6 +663,7 @@ export function SectionWorkspace({
       const s = state.slots[i],
         steps = Math.min(remaining, s.steps);
       lead.unshift({
+        ...slotFades(state.slots, i),
         chop: s.kind === "chop" ? state.chops[s.chop] : undefined,
         steps,
         skip: s.steps - steps,
@@ -640,7 +671,14 @@ export function SectionWorkspace({
       remaining -= steps;
     }
     void audio.play(
-      [...lead, { chop: candidate, steps: candidate.steps }],
+      [
+        ...lead,
+        {
+          chop: candidate,
+          steps: candidate.steps,
+          fadeIn: last?.kind === "silence" ? 0.003 : 0.002,
+        },
+      ],
       "join",
       -(4 - remaining),
     );
@@ -830,11 +868,17 @@ export function SectionWorkspace({
                 change({
                   ...state,
                   slots:
-                    last.steps === 1
+                    last.steps <= SHORTEST_NOTE
                       ? state.slots.slice(0, -1)
                       : [
                           ...state.slots.slice(0, -1),
-                          { ...last, steps: last.steps - 1 },
+                          {
+                            ...last,
+                            steps: Math.max(
+                              SHORTEST_NOTE,
+                              quantizeNote(last.steps - 1 / 12),
+                            ),
+                          },
                         ],
                 });
             }}
@@ -846,30 +890,67 @@ export function SectionWorkspace({
             : "Swipe vertically to browse. Swipe left to confirm; right to shorten, then through resistance to remove. The dot follows audio; the line follows your finger."}
         </p>
         {mode === "pattern" && (
-          <label className="section-volume">
-            Length
-            <input
-              type="range"
-              aria-label="Candidate length in sixteenth notes"
-              min={1}
-              max={
-                library
-                  ? Math.max(1, rows[index]?.steps ?? 1)
-                  : Math.max(1, sectionSteps - offset)
-              }
-              value={
-                library
-                  ? (libraryLength ?? active?.steps ?? 1)
-                  : Math.min(wanted, sectionSteps - offset)
-              }
-              onChange={(e) => {
+          <div
+            className="section-length"
+            role="group"
+            aria-label="Candidate note length"
+          >
+            <div className="section-length__notes">
+              {NOTE_VALUES.map((note) => {
+                const length = noteLength(note.id, triplet, beatsPerBar);
+                return (
+                  <button
+                    key={note.id}
+                    className="chop__btn"
+                    aria-label={`${note.label}${triplet ? " triplet" : ""}`}
+                    aria-pressed={noteValue === note.id}
+                    onClick={() => {
+                      audio.stop();
+                      setNoteValue(note.id);
+                      setWanted(length);
+                      lengthView.current = { total, length: length + 4 };
+                      setLibraryLength(length);
+                    }}
+                  >
+                    {note.label}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              className="chop__btn section-length__triplet"
+              aria-label="Triplet"
+              aria-pressed={triplet}
+              title="Triplet: three notes in the time of two"
+              onClick={() => {
                 audio.stop();
-                if (library) setLibraryLength(+e.target.value);
-                else setWanted(+e.target.value);
+                const next = !triplet;
+                const length = noteLength(noteValue, next, beatsPerBar);
+                setTriplet(next);
+                setWanted(length);
+                lengthView.current = { total, length: length + 4 };
+                setLibraryLength(length);
               }}
-            />
-            <span>{candidate?.steps ?? 0} steps</span>
-          </label>
+            >
+              Triplet
+            </button>
+            <button
+              className="chop__btn section-length__plus"
+              aria-label="Lengthen candidate"
+              onClick={() => {
+                audio.stop();
+                const current = candidate?.steps ?? wanted;
+                const barSteps = stepsPerBar(beatsPerBar);
+                const end = total + current;
+                const gap = Math.ceil((end + 1e-8) / barSteps) * barSteps - end;
+                const length = quantizeNote(current + Math.min(1, gap));
+                setWanted(length);
+                setLibraryLength(length);
+              }}
+            >
+              +
+            </button>
+          </div>
         )}
         <div className="section-transport">
           <button

@@ -138,4 +138,17 @@ describe("the chopper in the export", () => {
     expect(notes.map((n: any) => [n.timeOffset, n.length, n.vel])).toEqual([[0, 16384, sliceVelocity(0, 2)], [20480, 8192, sliceVelocity(1, 2)]]);
   });
 
+  it("exports triplet 64th notes on integer ticks without accumulating timing drift", async () => {
+    const project = await load("probe-sidechain.koala");
+    const sourceId = project.samplerJson.pads[0].sampleId;
+    const notes = Array.from({ length: 96 }, (_, i) => ({ slice: 0, start: i / 6, steps: 1 / 6 }));
+    const { blob } = await buildTunedKoala(project, [], { chopper: { index: 48, label: "Triplets", sampleId: sourceId, sampleRate: 44100, channelData: [new Float32Array(1000)], layout: { starts: [0], sections: [] }, beatsPerBar: 4, pitch: 0, pattern: { notes, bars: 1, gate: true } } });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const sequence = JSON.parse(await zip.file("sequence.json")!.async("string"));
+    const written = sequence.sequences.flatMap((s: any) => s.noteSequence?.pattern?.notes ?? []).filter((n: any) => n?.num === 48);
+    expect(written).toHaveLength(96);
+    expect(written.slice(0,3).map((n: any) => [n.timeOffset,n.length])).toEqual([[0,171],[171,170],[341,171]]);
+    expect(written.at(-1).timeOffset + written.at(-1).length).toBe(16384);
+  });
+
 });

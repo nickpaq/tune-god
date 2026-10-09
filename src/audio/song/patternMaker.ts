@@ -117,6 +117,7 @@ export function positionText(steps: number, beatsPerBar: number): string {
   const bar = Math.floor(steps / stepsPerBar(beatsPerBar));
   const inBar = steps - bar * stepsPerBar(beatsPerBar);
   const beat = Math.floor(inBar / STEPS_PER_BEAT);
+  if (!Number.isInteger(inBar)) return `${bar + 1}.${(1 + inBar / STEPS_PER_BEAT).toFixed(3)}`;
   return `${bar + 1}.${beat + 1}${["", "e", "&", "a"][inBar % STEPS_PER_BEAT]}`;
 }
 

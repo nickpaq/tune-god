@@ -110,11 +110,23 @@ describe("preview and packed Koala audio", () => {
       { slice: 0, start: 20, steps: 8 },
     ]);
     expect(packed.channelData[0].subarray(0, 1000)).toEqual(
-      pieceAudio(data, piece, 8, 500, 1000)[0],
+      pieceAudio(data, piece, 8, 500, 1000, { fadeOut: 0.005 })[0],
     );
     expect(packed.channelData[1].subarray(1000)).toEqual(
-      pieceAudio(data, other, 8, 500, 1000)[1],
+      pieceAudio(data, other, 8, 500, 1000, { fadeIn: 0.003 })[1],
     );
+  });
+  it("uses short asymmetric envelopes around silence without shortening notes", () => {
+    const constant = [new Float32Array(10000).fill(1)];
+    const out = pieceAudio(constant, piece, 8, 500, 1000, { fadeOut: .005 })[0];
+    const incoming = pieceAudio(constant, piece, 8, 500, 1000, { fadeIn: .003 })[0];
+    expect(out.length).toBe(1000);
+    expect(out[996]).toBeCloseTo(.6);
+    expect(out[999]).toBe(0);
+    expect(incoming[0]).toBe(0);
+    expect(incoming[1]).toBeCloseTo(1 / 3);
+    expect(incoming[3]).toBe(1);
+    expect(constant[0][piece.start]).toBe(1);
   });
   it("supports silence-only sequences and rejects more than 127 unique pieces explicitly", () => {
     const silent = packArrangement(

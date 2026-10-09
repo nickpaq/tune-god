@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAudioContext } from "../audio/decode";
-import { pieceAudio } from "../audio/song/sectionWorkspace";
+import { pieceAudio, type PieceFades } from "../audio/song/sectionWorkspace";
 import type { MakerChop } from "../audio/song/patternMaker";
 
-export interface AuditionPiece {
+export interface AuditionPiece extends PieceFades {
   chop?: MakerChop;
   steps: number;
   skip?: number;
@@ -29,16 +29,34 @@ export function useChopAudition(
   const stop = useCallback(() => {
     epoch.current++;
     cancelAnimationFrame(raf.current);
-    for (const source of voices.current) {
-      source.onended = null;
-      try {
-        source.stop();
-      } catch {
-        /* ended */
+    const ctx = voices.current.length ? getAudioContext() : null;
+    voices.current.forEach((source, i) => {
+      const gain = gains.current[i];
+      const cleanup = () => {
+        source.disconnect();
+        gain?.disconnect();
+      };
+      if (ctx?.state === "running" && gain) {
+        const now = ctx.currentTime;
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(gain.gain.value, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.005);
+        source.onended = cleanup;
+        try {
+          source.stop(now + 0.006);
+        } catch {
+          cleanup();
+        }
+      } else {
+        source.onended = null;
+        try {
+          source.stop();
+        } catch {
+          /* already ended */
+        }
+        cleanup();
       }
-      source.disconnect();
-    }
-    for (const gain of gains.current) gain.disconnect();
+    });
     voices.current = [];
     gains.current = [];
     setPosition(null);
@@ -60,7 +78,7 @@ export function useChopAudition(
       const cache = new Map<string, AudioBuffer>();
       const buffers = pieces.map((p) => {
         if (!p.chop) return null;
-        const key = `${p.chop.start}:${p.chop.length}:${p.steps + (p.skip ?? 0)}`;
+        const key = `${p.chop.start}:${p.chop.length}:${p.steps + (p.skip ?? 0)}:${p.fadeIn}:${p.fadeOut}`;
         const reused = cache.get(key);
         if (reused) return reused;
         const audio = pieceAudio(
@@ -69,6 +87,7 @@ export function useChopAudition(
           p.steps + (p.skip ?? 0),
           beatFrames,
           sampleRate,
+          p,
         );
         const buffer = ctx.createBuffer(
           audio.length,

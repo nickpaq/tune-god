@@ -1,3 +1,4 @@
+import { quantizeNote, SHORTEST_NOTE } from "./noteLengths";
 import { lineFrame, fineLineNear, type TapGrid } from "./tapGrid";
 import {
   stepsPerBar,
@@ -35,7 +36,9 @@ export function nextOffset(
   const index = state.slots.lastIndexOf(prior);
   const after = state.slots.slice(index).reduce((n, s) => n + s.steps, 0);
   return mod(
-    Math.round(fineLineNear(grid, state.chops[prior.chop].start) * 4) + after,
+    quantizeNote(
+      fineLineNear(grid, state.chops[prior.chop].start, 48) * 4 + after,
+    ),
     sectionSteps,
   );
 }
@@ -61,7 +64,7 @@ export function sourceCandidates(
       totalFrames,
       Math.round(lineFrame(grid, (step + steps) / 4)),
     );
-    if (steps < 1 || start < 0 || end <= start) continue;
+    if (steps < SHORTEST_NOTE - 1e-9 || start < 0 || end <= start) continue;
     const colorIndex = mod(Math.floor(step / stepsPerBar(grid.beatsPerBar)), 4);
     out.push({
       slice: section,
@@ -130,6 +133,25 @@ export function quietBoundary(
   return best;
 }
 
+export interface PieceFades {
+  fadeIn?: number;
+  fadeOut?: number;
+}
+/** Repeated choices share the strongest required boundary fades, so preview and packed slices agree. */
+export function slotFades(slots: readonly Slot[], at: number): PieceFades {
+  const slot = slots[at];
+  if (!slot || slot.kind === "silence") return {};
+  let fadeIn = 0.002,
+    fadeOut = 0.002;
+  slots.forEach((s, i) => {
+    if (s.kind !== "chop" || s.chop !== slot.chop || s.steps !== slot.steps)
+      return;
+    if (slots[i - 1]?.kind === "silence") fadeIn = 0.003;
+    if (slots[i + 1]?.kind === "silence") fadeOut = 0.005;
+  });
+  return { fadeIn, fadeOut };
+}
+
 /** A piece stays on its musical duration. Quiet boundaries only change which source frames fill it. */
 export function pieceAudio(
   data: readonly Float32Array[],
@@ -137,6 +159,7 @@ export function pieceAudio(
   steps: number,
   beatFrames: number,
   rate: number,
+  fades: PieceFades = {},
 ): Float32Array[] {
   const length = Math.max(1, Math.round((steps * beatFrames) / 4));
   const radius = Math.max(1, Math.round(rate * 0.001));
@@ -149,20 +172,24 @@ export function pieceAudio(
       radius,
     ),
   );
-  const fade = Math.min(Math.round(rate * 0.002), Math.floor(length / 2));
+  const fadeIn = Math.min(
+    Math.round(rate * (fades.fadeIn ?? 0.002)),
+    Math.floor(length / 2),
+  );
+  const fadeOut = Math.min(
+    Math.round(rate * (fades.fadeOut ?? 0.002)),
+    Math.floor(length / 2),
+  );
   return data.map((channel) => {
     const out = new Float32Array(length);
     out.set(channel.subarray(from, Math.min(end, from + length)));
-    for (let i = 0; i < fade; i++) {
-      const gain = i / fade;
-      out[i] *= gain;
-      out[length - 1 - i] *= gain;
-    }
+    for (let i = 0; i < fadeIn; i++) out[i] *= i / fadeIn;
+    for (let i = 0; i < fadeOut; i++) out[length - 1 - i] *= i / fadeOut;
     // If the source ended before its musical duration, soften that actual end too.
     const filled = Math.min(length, end - from);
     if (filled < length)
-      for (let i = 0; i < Math.min(fade, filled); i++)
-        out[filled - 1 - i] *= i / Math.max(1, fade);
+      for (let i = 0; i < Math.min(fadeOut, filled); i++)
+        out[filled - 1 - i] *= i / Math.max(1, fadeOut);
     return out;
   });
 }
@@ -192,7 +219,14 @@ export function packArrangement(
       unique.push({
         chop: slot.chop,
         steps: slot.steps,
-        audio: pieceAudio(data, chops[slot.chop], slot.steps, beatFrames, rate),
+        audio: pieceAudio(
+          data,
+          chops[slot.chop],
+          slot.steps,
+          beatFrames,
+          rate,
+          slotFades(slots, i),
+        ),
       });
     }
     notes.push({ slice, start: starts[i], steps: slot.steps });
