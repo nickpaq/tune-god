@@ -1,0 +1,31 @@
+.live-seq { padding: max(12px, var(--safe-top)) 0 max(12px, var(--safe-bottom)); gap: 10px; background: var(--chassis1); overflow-y: auto; }
+.live-seq__transport, .live-seq__nav, .live-seq__banks { margin: 0 10px; flex: none; }
+.live-seq__title { flex: 2; display: grid; place-items: center; font-size: 16px; }
+.live-seq__sample { display: flex; justify-content: space-between; margin: 0 14px; font-size: 16px; color: var(--ink); }
+.live-seq__sample small { opacity: 0.55; }
+.live-seq__body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.live-seq__pads { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(70px, 1fr)); gap: 10px; margin: 12px; }
+.live-seq__pad { color: #242629; padding: 8px; font: 600 13px "Barlow Semi Condensed", sans-serif; }
+.live-seq__pad.is-selected { outline: 2px solid var(--ink); outline-offset: 3px; }
+.live-seq__controls { margin: 12px; }
+.live-seq__controls .waveform { width: 100%; height: 100px; color: var(--ink); }
+.live-seq__octave { display: flex; justify-content: space-between; align-items: center; margin: 0 12px 12px; min-height: 36px; color: var(--ink); background: var(--well); border-radius: 5px; }
+.live-seq__octave button { border: 0; background: transparent; color: inherit; width: 48px; height: 36px; font-size: 28px; }
+.live-keybed { display: block; width: 100%; height: auto; aspect-ratio: 942 / 978; flex: none; touch-action: none; user-select: none; }
+.live-keybed__white { fill: #c5c5c6; stroke: #151619; stroke-width: 3; }
+.live-keybed__black { fill: #333437; stroke: #151619; stroke-width: 3; }
+.live-keybed .is-held { fill: var(--accent, #a9cfb2); }
+.live-keybed [role="button"] { cursor: pointer; }
+.live-keybed [role="button"]:focus-visible { stroke: var(--ink); stroke-width: 6; }
+.live-seq__memory { display: grid; gap: 8px; color: var(--ink); margin: 12px 0; }
+.live-seq__memory select { min-height: 40px; font: inherit; background: var(--well); color: inherit; border: 1px solid var(--seam-l); border-radius: 5px; }
+.live-seq__body--keys { justify-content: flex-end; }
+.live-keybed__hit { fill: transparent; touch-action: none; }
+.live-repeat { flex: 1; min-height: 300px; display: flex; gap: 10px; margin: 8px 12px; }
+.live-repeat__panel { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--well); color: var(--ink); border: 1px solid var(--seam-d); border-radius: 5px; }
+
+.live-repeat__panel header { padding: 10px; border-bottom: 1px solid var(--seam-l); font-size: 16px; }
+.live-repeat__surface { position: relative; flex: 1; touch-action: none; user-select: none; background: repeating-linear-gradient(to top, transparent 0%, transparent 9.5%, color-mix(in srgb, var(--ink) 18%, transparent) 9.6%, transparent 9.8%); }
+.live-repeat__surface span, .live-repeat__surface b { position: absolute; left: 10%; right: 10%; text-align: center; font-size: 13px; transform: translateY(50%); pointer-events: none; }
+.live-repeat__surface b, .live-repeat__surface .is-current { color: var(--accent, #ff8a4c); font-size: 18px; font-weight: 600; }
+.live-repeat__surface .is-held { text-decoration: underline; text-underline-offset: 4px; }

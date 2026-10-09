@@ -1,6 +1,40 @@
+# Current direction: Koala-backed recording and independent piano tracks
+
+This section supersedes conflicting prototype decisions below. Implementation is in progress; the older UI remains a prototype.
+
+- Keep `.koala` as the project file. Present eight pattern slots (1–8) for each bank and each independent piano track, then compile the arrangement into one long Koala pattern using native note timing, pitch, velocity, and length. Preserve imported note properties and automation when editing.
+- Banks A–D are pad tracks. Selecting a pad provides normal pad play, velocity levels, or Piano assignment.
+- A Piano assignment removes that pad from normal bank triggering, displays it greyed out there, and gives it a separate sequencer lane, pattern selector, gain and mute. Bank mute must not silence the independent piano lane.
+- Keyboard C represents the sample's selected tuning root; chromatic offsets and major-scale shapes are relative to that root. Match the reference key proportions using TuneGod's visual style.
+- Keyboard touches own their first key until pointer release/cancel; finger movement never changes the note. Mono means monophonic musical playback, independent of stereo channels. In Mono, a second held note glides the current voice over the selected time; releasing it returns to the most recently held note. Glide is disabled in polyphonic mode. One-shot ignores release and disables Glide; Mono plus One-shot immediately cuts the previous voice. Polyphonic held notes play simultaneously. Attack controls onset fade; Decay controls release fade (25 ms default); Glide Time controls pitch transition duration. Do not force sample endings to align.
+- Recording, overdubbing, velocity mode and Undo should follow the requested iMaschine 2 workflow. Undo groups each completed recording pass. Velocity mapping awaits clarification.
+- Save all played notes against the original sample's Koala pad number. The user explicitly chose one long pattern for saving. Flatten section selections into chronological notes; a lane with no selected pattern contributes no notes. Preserve unrelated imported patterns.
+- “No pattern” is section-local silence for that lane. Section combinations do not consume separate Koala pattern slots.
+- Sequence mode alone uses the reference layout; exiting restores the current interface. Pads retain TuneGod appearance and bank colours, with reference sizing and placement. Horizontal gestures browse all eight patterns. Single-tap enables a pattern for the scene; tapping that selected pattern again sets No pattern in scene without deleting the stored pattern. Record becomes Undo while recording; Play ends recording and keeps the take. Pattern taps no longer invoke Undo. Undo discards all notes in the active take and keeps recording a fresh take. Play commits the take and continues playback.
+- Short patterns repeat across longer sections (one bar repeats eight times alongside eight bars). Sections automatically match their longest active pattern. The shortening menu offers only Keep first half and Keep last half.
+- The shared sample screen is reachable through the waveform icon from both Pad and Piano modes, editing the same selected pad. Add per-pad high-pass and low-pass filters alongside waveform, volume and voice controls. Bake filters into exported samples, retaining source audio for TuneGod editing. Use cascaded Butterworth sections for a smooth, steep response. Both filters use 48 dB/octave (8-pole). Add adjustable sampler colour with independent Warmth and Bit-depth reduction toggles; neither is required for the filters. Enabled colour processing is also baked into export. RX950 is a sonic reference; exact proprietary emulation is not claimed.
+- Route sequencer banks and independent piano lanes through one master soft clipper; the user accepts that master processing need not carry over to native Koala playback. Browser-native Web Audio, not Apple Audio Units.
+- Full-screen Velocity view for a selected chopper pad shows chop points as colour-only tiles (no waveforms), in source order, using the Period editor colour mapping. Taps trigger the selected chop at fixed velocity. Use horizontal swiped pages for overflow.
+- Step mode opens a piano roll for a keyboard instrument; other instruments use an eight-step-per-row editor, adding rows as pattern length grows. Quantize mapping, bank versus selected-pad scope, and piano-roll gestures await clarification.
+- Halftime remains a separate effect: bounce to an empty melodic-loop pad, retain the source, and label BPM and bars.
+
+---
+
 # SEQ: sequencer page, plan
 
-Status: UI drawn and built (not connected to audio or patterns yet). The drawings are in `docs/seq-designs/` (HTML boards, `seq.css` and PNG screenshots, `png/seq-ui-sheet.png` has all seven pages). Every number below that is a latency figure is a target to measure, not a measurement.
+Status: focused live pad/keyboard audio test is wired; the original full sequencer UI remains a prototype. The drawings are in `docs/seq-designs/` (HTML boards, `seq.css` and PNG screenshots, `png/seq-ui-sheet.png` has all seven pages). Every number below that is a latency figure is a target to measure, not a measurement.
+
+## Live velocity and repeat controls
+
+Velocity stays on the left and Note Repeat on the right, each occupying half the available width. The panel-swap proposal is superseded. Remove the horizontal note-division strip. Rates rise vertically from 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32, 1/32T, 1/64 to 1/64T. Velocity triggers one hit per touch. From Piano, use the last selected keyboard note. Include these controls in the latency build. Entry does not trigger sound. Hold the repeat panel to play; lift to stop repeats. Velocity movement changes the next hit without retriggering. Every repeat trigger is BPM-grid quantized. A held lower division sets chunk size; a briefly pressed faster division latches one full chunk at the next lower-rate boundary before returning to the held division (1/16 + brief 1/64 gives four hits). Releasing the lower division does not erase an unfinished chunk: a new hold on a different division waits for the previous chunk to end before switching.
+
+## Preloading and stress tests
+
+Preload the current bank, prioritizing its selected sample, before accepting live hits. The user authorized exceeding 32 MB for stress testing. The test screen exposes 32/64/128/256 MB limits (128 MB initial), clears playback cache on exit, and shows prepared memory plus preparation time. Use the shared interactive-latency context. Phone touch-to-sound latency must be tested on-device; browser automation checks correctness only.
+
+## Latency milestone
+
+User requested live pads and keyboard first. Sequence currently opens a focused live-playback test screen; recording and arrangement controls remain deferred until latency testing. Next stages: recording testing, then a BPM-aligned continuous acapella/sample lane above the sequencer spanning all sections.
 
 ## 1. What SEQ is
 
