@@ -22,6 +22,34 @@ export interface WorkspaceResult {
   grid?: TapGrid;
 }
 
+/** Keep the timeline prefix, splitting the crossing piece without changing source data. */
+export function slotsThrough(slots: Slot[], endpoint: number): Slot[] {
+  const kept: Slot[] = [];
+  let at = 0;
+  for (const slot of slots) {
+    const steps = quantizeNote(Math.min(slot.steps, endpoint - at));
+    if (steps <= 0) break;
+    kept.push({ ...slot, steps });
+    at += steps;
+    if (at >= endpoint - 1e-8) break;
+  }
+  return kept;
+}
+export function trimPrevious(slots: Slot[], amount: number): Slot[] {
+  if (!slots.length) return slots;
+  const last = slots[slots.length - 1];
+  const steps = quantizeNote(last.steps - amount);
+  return steps > 0
+    ? [...slots.slice(0, -1), { ...last, steps }]
+    : slots.slice(0, -1);
+}
+export function rewindLastBar(slots: Slot[], beatsPerBar: number): Slot[] {
+  const total = slotStarts(slots).total;
+  const bar = stepsPerBar(beatsPerBar);
+  const endpoint = Math.max(0, Math.floor((total - 1e-8) / bar) * bar);
+  return slotsThrough(slots, endpoint);
+}
+
 /** The next source position belongs to the last piece's endpoint, not to the assembled timeline. */
 export function nextOffset(
   state: WorkspaceState,
@@ -37,7 +65,8 @@ export function nextOffset(
   const after = state.slots.slice(index).reduce((n, s) => n + s.steps, 0);
   return mod(
     quantizeNote(
-      fineLineNear(grid, state.chops[prior.chop].start, 48) * 4 + after,
+      (prior.alignedStart ??
+        fineLineNear(grid, state.chops[prior.chop].start, 48) * 4) + after,
     ),
     sectionSteps,
   );

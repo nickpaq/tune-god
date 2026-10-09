@@ -6,6 +6,8 @@ import {
   packArrangement,
   pieceAudio,
   sourceCandidates,
+  trimPrevious,
+  rewindLastBar,
   type WorkspaceState,
 } from "./sectionWorkspace";
 import type { MakerChop } from "./patternMaker";
@@ -28,6 +30,37 @@ describe("source sections and inherited offsets", () => {
     expect(candidates.map((c) => c.start)).toEqual([750, 8750, 16750, 24750]);
     expect(candidates.every((c) => c.steps === 8)).toBe(true);
     expect(candidates.map((c) => c.colorIndex)).toEqual([0, 0, 0, 0]);
+  });
+  it("stacks all 100 one-bar sections with the selected offset", () => {
+    const candidates = sourceCandidates(grid, 200125, 1, 3, 1, colors);
+    expect(candidates).toHaveLength(100);
+    expect(candidates[99].start).toBe(198500);
+    expect(candidates.every((c) => c.steps === 1)).toBe(true);
+  });
+  it("resumes alignment after a wildcard, silence, trimming, and undo", () => {
+    const elsewhere = { ...piece, start: 125 + 29 * 125, steps: 2 };
+    const state: WorkspaceState = {
+      chops: [piece, elsewhere],
+      cuts: [],
+      slots: [
+        { kind: "chop", chop: 0, steps: 8 },
+        { kind: "chop", chop: 1, steps: 2, alignedStart: 13 },
+      ],
+    };
+    expect(nextOffset(state, 64, grid)).toBe(15);
+    expect(
+      nextOffset(
+        { ...state, slots: [...state.slots, { kind: "silence", steps: 2 }] },
+        64,
+        grid,
+      ),
+    ).toBe(17);
+    expect(
+      nextOffset({ ...state, slots: trimPrevious(state.slots, 1) }, 64, grid),
+    ).toBe(14);
+    expect(
+      nextOffset({ ...state, slots: state.slots.slice(0, -1) }, 64, grid),
+    ).toBe(13);
   });
   it("inherits the endpoint after shortening, silence, and section wrap", () => {
     const state: WorkspaceState = {
@@ -71,6 +104,34 @@ describe("source sections and inherited offsets", () => {
     expect(undo(h).present).toBe(state);
     expect(state.chops).toHaveLength(0);
     expect(next.slots).toEqual([{ kind: "chop", chop: 0, steps: 8 }]);
+  });
+});
+
+describe("quantized backwards editing", () => {
+  const chop = (steps: number) => ({ kind: "chop" as const, chop: 0, steps });
+  it("trims an eighth by exactly one selected sixteenth without mutating confirmed history", () => {
+    const slots = [chop(16), chop(2)];
+    expect(trimPrevious(slots, 1)).toEqual([chop(16), chop(1)]);
+    expect(slots[1].steps).toBe(2);
+    expect(trimPrevious(slots, 2)).toEqual([chop(16)]);
+  });
+  it("retains fractional triplet durations while trimming", () => {
+    expect(trimPrevious([chop(2 / 3)], 1 / 6)[0].steps).toBe(0.5);
+  });
+  it("rewinds across several pieces and silence, splitting a piece at the bar boundary", () => {
+    const slots = [
+      chop(12),
+      chop(6),
+      { kind: "silence" as const, steps: 1 },
+      chop(2),
+    ];
+    expect(rewindLastBar(slots, 4)).toEqual([chop(12), chop(4)]);
+    expect(slots[1].steps).toBe(6);
+  });
+  it("rewinds a completed bar to its own beginning and respects other meters", () => {
+    expect(rewindLastBar([chop(16), chop(16)], 4)).toEqual([chop(16)]);
+    expect(rewindLastBar([chop(4)], 4)).toEqual([]);
+    expect(rewindLastBar([chop(13)], 3)).toEqual([chop(12)]);
   });
 });
 
@@ -118,10 +179,14 @@ describe("preview and packed Koala audio", () => {
   });
   it("uses short asymmetric envelopes around silence without shortening notes", () => {
     const constant = [new Float32Array(10000).fill(1)];
-    const out = pieceAudio(constant, piece, 8, 500, 1000, { fadeOut: .005 })[0];
-    const incoming = pieceAudio(constant, piece, 8, 500, 1000, { fadeIn: .003 })[0];
+    const out = pieceAudio(constant, piece, 8, 500, 1000, {
+      fadeOut: 0.005,
+    })[0];
+    const incoming = pieceAudio(constant, piece, 8, 500, 1000, {
+      fadeIn: 0.003,
+    })[0];
     expect(out.length).toBe(1000);
-    expect(out[996]).toBeCloseTo(.6);
+    expect(out[996]).toBeCloseTo(0.6);
     expect(out[999]).toBe(0);
     expect(incoming[0]).toBe(0);
     expect(incoming[1]).toBeCloseTo(1 / 3);

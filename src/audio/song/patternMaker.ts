@@ -26,7 +26,7 @@ export const STEPS_PER_BEAT = 4;
 /** Steps in a bar. */
 export const stepsPerBar = (beatsPerBar: number): number => beatsPerBar * STEPS_PER_BEAT;
 
-export type Slot = { kind: "chop"; chop: number; steps: number } | { kind: "silence"; steps: number };
+export type Slot = { kind: "chop"; chop: number; steps: number; alignedStart?: number } | { kind: "silence"; steps: number };
 
 /** The finest a chop or silence can be cut to, in steps (a sixteenth note). */
 export const MIN_STEPS = 1;

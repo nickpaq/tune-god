@@ -543,7 +543,7 @@ export function SongChopModal({
             player.stop();
             const origin = marks.oneOne === null ? 0 : fineLineNear(grid, marks.oneOne);
             setWorkspaceGrid({ ...grid, segments: grid.segments.map(s => ({ ...s, line: s.line - origin })), downbeats: grid.downbeats.map(n => n - origin), offsets: Object.fromEntries(Object.entries(grid.offsets).map(([n, v]) => [Number(n) - origin, v])) });
-          }}>Open section workspace · 4 / 8 / 16 bars</button>}
+          }}>Open section workspace · 1–16 bars</button>}
 
           <div className="chop__screen">
             <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { NOTE_VALUES, noteLength, noteTicks } from "./noteLengths";
+import {
+  NOTE_VALUES,
+  noteLength,
+  noteTicks,
+  noteOptions,
+  tripletProgress,
+} from "./noteLengths";
 import { baseGrid } from "./chopMarks";
 import { nextOffset, sourceCandidates } from "./sectionWorkspace";
 import { positionText } from "./patternMaker";
@@ -15,6 +21,42 @@ describe("musical length buttons", () => {
         12,
       );
     expect(noteLength("bar", false, 3)).toBe(12);
+  });
+  it("interleaves every triplet and regular size in increasing duration order", () => {
+    const options = noteOptions(4);
+    expect(options.map((n) => n.id)).toEqual([
+      "64T",
+      "64",
+      "32T",
+      "32",
+      "16T",
+      "16",
+      "8T",
+      "8",
+      "4T",
+      "4",
+      "2T",
+      "2",
+      "barT",
+      "bar",
+    ]);
+    expect(
+      options.every((n, i) => i === 0 || n.steps > options[i - 1].steps),
+    ).toBe(true);
+    expect(noteOptions(3).at(-1)!.steps).toBe(12);
+  });
+  it("tracks real triplet grid alignment through added regular notes and undo", () => {
+    const slot = (steps: number) => ({ kind: "chop" as const, chop: 0, steps });
+    const triplet = noteLength("16", true, 4);
+    const slots = [slot(triplet)];
+    expect(tripletProgress([], triplet)).toBe(0);
+    expect(tripletProgress(slots, triplet)).toBe(1);
+    expect(tripletProgress([...slots, slot(1)], triplet)).toBe(1);
+    slots.push(slot(triplet));
+    expect(tripletProgress(slots, triplet)).toBe(2);
+    slots.push(slot(triplet));
+    expect(tripletProgress(slots, triplet)).toBe(3);
+    expect(tripletProgress(slots.slice(0, -1), triplet)).toBe(2);
   });
   it("keeps inherited offsets for mixed straight and triplet 64ths", () => {
     const grid = baseGrid(48000, 4, 120, 0);

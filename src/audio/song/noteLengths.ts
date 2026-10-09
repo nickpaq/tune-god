@@ -1,3 +1,4 @@
+import type { Slot } from "./patternMaker";
 /** Durations keep the existing sixteenth-note step unit, including fractional steps. */
 export const NOTE_VALUES = [
   { id: "64", label: "1/64", beats: 1 / 16 },
@@ -21,6 +22,32 @@ export function noteLength(
   const note = NOTE_VALUES.find((n) => n.id === value)!;
   return quantizeNote((note.beats ?? beatsPerBar) * 4 * (triplet ? 2 / 3 : 1));
 }
+/** Interleave by actual duration; a triplet note is two thirds of its regular value. */
+export function noteOptions(beatsPerBar: number) {
+  return NOTE_VALUES.flatMap((note) =>
+    [false, true].map((triplet) => ({
+      id: `${note.id}${triplet ? "T" : ""}`,
+      label: `${note.label}${triplet ? "T" : ""}`,
+      accessibleLabel: `${note.label}${triplet ? " triplet" : ""}`,
+      steps: noteLength(note.id, triplet, beatsPerBar),
+    })),
+  ).sort((a, b) => a.steps - b.steps);
+}
+
+/** A triplet group is complete when its endpoint is back on the corresponding straight-note grid. */
+export function tripletProgress(
+  slots: Slot[],
+  tripletSteps: number,
+): 0 | 1 | 2 | 3 {
+  if (!slots.some((slot) => Math.abs(slot.steps - tripletSteps) < 1e-8))
+    return 0;
+  const total = slots.reduce((n, slot) => n + slot.steps, 0);
+  const regular = tripletSteps * 1.5;
+  const remainder = ((total % regular) + regular) % regular;
+  if (remainder < 1e-8 || regular - remainder < 1e-8) return 3;
+  return remainder / regular > 0.5 ? 1 : 2;
+}
+
 /** Round absolute endpoints, rather than every duration, to avoid accumulating triplet rounding drift. */
 export function noteTicks(start: number, steps: number, ticksPerBeat: number) {
   const at = Math.round((start * ticksPerBeat) / 4);
