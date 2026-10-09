@@ -6,7 +6,7 @@ import { BANK_ZONES, bankTakes, MAX_LOAD_SECONDS, numberedLabel, placeBank, plan
 import { displayName, packTags } from "./audio/sampleName";
 import { packByteBudget, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
-import { decodeNative, monoFromChannelData } from "./audio/decode";
+import { decodeNative, getAudioContext, monoFromChannelData } from "./audio/decode";
 import {
   parseKoalaProject,
   koalaPadToFile,
@@ -21,7 +21,7 @@ import { pitchKnobFor, shiftFor, snapSemitones } from "./audio/shift";
 import { fadeIn, fadeMsFor, kickTransientMs, medianTransientMs } from "./audio/kickTransient";
 import { balanceFromStats, FILE_CEILING_DB, type BalanceStats } from "./audio/loudness";
 import { balancedSpread } from "./audio/spread";
-import { CATEGORIES, categoryIndex, is808Name, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
+import { CATEGORIES, categoryIndex, is808Name, isDrumCategory, isKitCategory, isTunedCategory, migrateCategory, type CategoryId } from "./audio/classify";
 import { chopColor, colorFor, darker, paletteById, shade, DEFAULT_PALETTE_ID } from "./audio/palettes";
 import { applyIconLinks, applyScheme } from "./audio/theme";
 import { SchemeModal } from "./components/SchemeModal";
@@ -40,6 +40,8 @@ import { makeGhostPad } from "./audio/ghostPads";
 import { freeSongSlots, makeSectionPads } from "./audio/songPads";
 import { scalePlans } from "./audio/song/tapGrid";
 import { checkStems, findAcapellaPair } from "./audio/song/stems";
+import { HalftimeModal, type HalftimeBounce } from "./components/HalftimeModal";
+import { freeHalftimeLoopSlot, stageHalftimeLoop, MELODIC_LOOP_SLOTS } from "./audio/halftime/loopPad";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
 import { projectTimeSignature } from "./audio/koalaProject";
 import { addSongSections, songTemplate, type SongExport, type SongTemplate } from "./audio/exportSong";
@@ -57,10 +59,12 @@ import { clearProjectFile, loadProjectFile, loadState, saveProjectFile, saveStat
 import { A4_REFERENCE_RANGE, clampA4Reference, NOTE_NAMES, referenceOffsetSemitones, semitonesToRatio, splitTrim, trimCents, bassLiftSemitones } from "./audio/theory";
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
-import { SeqScreen, type SeqPad } from "./components/seq/SeqScreen";
+import { LiveSeqScreen } from "./components/seq/LiveSeqScreen";
+import { DEFAULT_PAD_FILTERS, renderPadFilters, type PadFilters } from "./audio/seq/effects";
+import { type SeqPad } from "./components/seq/SeqScreen";
 import { useSafeArea } from "./components/useSafeArea";
 import { SIDECHAIN_HINT, sidechainStatus } from "./audio/sidechain";
-import { ACAPELLA_ICON, DELETE_ICON, DRUM_ICON, HOLD_ICON, K_ICON, KEYS_ICON, LOCK_ICON, UNLOCK_ICON } from "./components/dropIcons";
+import { ACAPELLA_ICON, DELETE_ICON, DRUM_ICON, HALFTIME_ICON, K_ICON, KEYS_ICON, LOCK_ICON, UNLOCK_ICON } from "./components/dropIcons";
 import { ACTIVE_MIX_PRESET, MASTER_STYLES, type MasterStyle } from "./audio/mixPresets";
 import "./App.css";
 
@@ -191,6 +195,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [seqFilters, setSeqFilters] = useState<Record<number, PadFilters>>({});
   const [normalizing, setNormalizing] = useState(false);
   /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
   const [exportProgress, setExportProgress] = useState("");
@@ -211,6 +216,8 @@ function App() {
   /** Pre-rendered normalized audio per pad (by original slot, so it follows a moved pad); only used for playback while Normalize is on. */
   const [normalizedData, setNormalizedData] = useState<Record<number, Float32Array[]>>({});
   const [menuOpen, setMenuOpen] = useState(false);
+  const [halftime, setHalftime] = useState<{ pad: Pad | null; beatsPerBar: number } | null>(null);
+  const [loopReplacement, setLoopReplacement] = useState<{ choose: (index: number | null) => void } | null>(null);
   /** The sequencer screens (SEQ key). Interface only for now: nothing on them plays or records. */
   const [seqOpen, setSeqOpen] = useState(false);
   const [masterStyle, setMasterStyle] = useState<MasterStyle>(saved.masterStyle ?? "loud");
@@ -285,6 +292,7 @@ function App() {
   const [importStatus, setImportStatus] = useState("");
 
   const loadProject = useCallback(async (file: File, restore = false, ignoreLong = false) => {
+    setSeqFilters({});
     const token = ++loadToken.current;
     setLoading(true);
     try {
@@ -533,6 +541,39 @@ function App() {
       await new Promise((resolve) => setTimeout(resolve));
     }
     return projectRef.current ? { project: projectRef.current, started } : null;
+  };
+
+  const launchHalftime = async (pad: Pad | null = null) => {
+    holdVoice.current?.release();
+    setMenuOpen(false);
+    setHalftime({ pad, beatsPerBar: await beatsPerBarOfProject() });
+  };
+
+  const bounceHalftime = async (bounce: HalftimeBounce) => {
+    const opened = await ensureProject();
+    if (!opened) throw new Error("The project could not be opened. Source kept.");
+    let slot = freeHalftimeLoopSlot(latest.current.pads);
+    if (slot === null) {
+      if (!MELODIC_LOOP_SLOTS.some(i => !latest.current.pads[i]?.locked && i !== halftime?.pad?.index)) throw new Error("All melodic-loop pads are locked. Unlock one to save the bounce.");
+      slot = await new Promise<number | null>(resolve => setLoopReplacement({ choose: resolve }));
+      setLoopReplacement(null);
+      if (slot === null) throw new Error("Bounce cancelled. Source kept.");
+    }
+    if (latest.current.pads[slot]?.locked) throw new Error("That pad is locked. Source kept.");
+    const project = projectRef.current!;
+    const signature = await projectTimeSignature(project);
+    const staged = await stageHalftimeLoop(project, bounce, signature.beatsPerBar);
+    const pad: Pad = { index: slot, origIndex: staged.origIndex, sampleId: staged.sampleId, name: staged.name, label: staged.label,
+      sampleRate: bounce.sampleRate, channelData: bounce.channelData, category: "melodicLoop", bpm: bounce.bpm,
+      tune: false, tuneLocked: true, semis: 0, cents: 0, knobDb: 0 };
+    recordEdit();
+    projectRef.current = staged.project;
+    projectFile.current = staged.file;
+    void saveProjectFile(staged.file);
+    setPads(previous => ({ ...previous, [slot!]: pad }));
+    setNormalizedData(previous => { const next = { ...previous }; delete next[slot!]; return next; });
+    setBank(1); setSelected(slot); setHalftime(null);
+    setNotice(`${staged.label} saved on Bank B pad ${slot - 15}. Original source kept.`);
   };
 
   /** The bank that is shown once a loader has filled its pads. */
@@ -1295,6 +1336,12 @@ function App() {
       setPads((prev) => (prev[from] ? { ...prev, [from]: { ...prev[from], locked: !prev[from].locked } } : prev));
       return;
     }
+    if (kind === "halftime") {
+      const source = cur[from];
+      if (source && isReal(source)) void launchHalftime(source);
+      else setNotice("Halftime needs an audio pad");
+      return;
+    }
     if (kind === "chop") {
       // The chopper zone chops the dragged sound: acapella or chopper mode is asked, and acapella mode looks for its pair.
       const dragged = cur[from];
@@ -1353,8 +1400,7 @@ function App() {
     drags.current.delete(pointerId);
     liftPad(d.from);
     if (d.active && !cancelled) {
-      if (d.hover === "hold:") holdPad(d.from);
-      else dropOn(d.from, d.hover);
+      dropOn(d.from, d.hover);
     }
     endDrag(d);
   };
@@ -1378,14 +1424,6 @@ function App() {
     };
   }, []);
 
-  /** Plays a pad's sample on a loop until any pad is pressed; tuning changes retune it live. */
-  const holdPad = (index: number) => {
-    const pad = pads[index];
-    if (!pad || pad.placeholder) return;
-    holdVoice.current?.release();
-    holdIndex.current = index;
-    holdVoice.current = startPad(-2, audioOf(pad), pad.sampleRate, shiftFor(pad, tunedTarget, a4, keyMajor), null, "loop", undefined, normalize ? pad.knobDb : undefined);
-  };
 
   /**
    * Pitch slider grabbed: the selected pad loops at its current tuning (bass lifted by octaves to sit near the tone) with a steady tone on its key,
@@ -1557,6 +1595,8 @@ function App() {
         // The pad's audio was already cut to Koala's start/end points on load, so a stretched loop stays in time.
         let channelData = retimed ? await getRenderWorker().resamplePitch(pad.channelData, semitonesToRatio(snap)) : pad.channelData;
         if (fade && isEight(pad)) channelData = fadeIn(channelData, pad.sampleRate, fade);
+        const filters = seqFilters[pad.origIndex];
+        if (filters) channelData = await renderPadFilters(channelData, pad.sampleRate, filters);
         stats.push(await getRenderWorker().measure({ channelData, sampleRate: pad.sampleRate, category: pad.category }));
         rendered.push({ pad, channelData, retimed });
       }
@@ -1614,7 +1654,7 @@ function App() {
         const seconds = p.channelData[0].length / p.sampleRate;
         if (p.category === "melodicLoop" || p.category === "drumLoop" || p.category === "percLoop") {
           const beats = p.bpm ? seconds * (p.bpm / 60) : seconds * (projectBpm / 60);
-          stretch.set(p.sampleId, p.bpm || beats < beatsPerBar ? Math.max(1, Math.round(beats)) : Math.round(beats / beatsPerBar) * beatsPerBar);
+          stretch.set(p.sampleId, p.label?.startsWith("Half · ") ? beats : p.bpm || beats < beatsPerBar ? Math.max(1, Math.round(beats)) : Math.round(beats / beatsPerBar) * beatsPerBar);
         } else if (p.stretch && p.bpm) stretch.set(p.sampleId, Math.max(1, Math.round(seconds * (p.bpm / 60))));
       }
       const colors = new Map<number, { color: string; label: string }>();
@@ -1664,7 +1704,7 @@ function App() {
   const seqPadsOfBank = (b: number): (SeqPad | null)[] =>
     Array.from({ length: 16 }, (_, slot) => {
       const p = pads[b * 16 + slot];
-      return p && !p.placeholder ? { label: captionOf(p) || labelOf(p), color: litColor(p) } : null;
+      return p && !p.placeholder ? { label: captionOf(p) || labelOf(p), color: litColor(p), oneShot: isDrumCategory(p.category) || p.category === undefined || p.category === "other" || p.category === "fx", chops: p.chopper ? (p.chopper.maker?.chops ?? []).map((chop, id) => ({ id, label: `Chop ${id + 1}`, color: chopColor(palette.colors, chop.colorIndex) })) : undefined } : null;
     });
   /** The loaders have already placed, labelled and coloured every sound, so a project with sounds in it can always be exported. */
   const canExport = hasProject && analyzing === 0 && !exporting;
@@ -1761,6 +1801,7 @@ function App() {
   /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
   const captionOf = (pad: Pad | undefined): string => {
     if (!pad) return "";
+    if (pad.label?.startsWith("Half · ")) return pad.label;
     if (pad.section) return `${CATEGORIES[categoryIndex("vox")].short} ${pad.section.number}`;
     if (pad.chopper) return "Chopper";
     if (pad.placeholder || pad.ghost) return labelOf(pad);
@@ -2023,6 +2064,8 @@ function App() {
                 Reset to A440
               </button>
             )}
+            <button className="menu__button" onClick={() => { void getAudioContext().resume(); setMenuOpen(false); setSeqOpen(true); }}>Sequence · latency test</button>
+            <button className="menu__button" onClick={() => void launchHalftime()}>Halftime</button>
             <div className="menu__version">
               tunegod v{__APP_VERSION__} · {__APP_BUILD__}
               <br />
@@ -2032,7 +2075,11 @@ function App() {
         )}
 
         {seqOpen ? (
-          <SeqScreen bpm={projectBpm} padsOfBank={seqPadsOfBank} soundsFor={(bank, slot) => (pads[bank * 16 + slot] ? swapListFor(pads[bank * 16 + slot]) : null)} onBack={() => setSeqOpen(false)} />
+          <LiveSeqScreen bpm={projectBpm} padsOfBank={seqPadsOfBank} soundFor={(index, keyboard) => {
+            const pad = pads[index];
+            if (!pad || pad.placeholder) return null;
+            return { channelData: audioOf(pad), sampleRate: pad.sampleRate, pitch: shiftFor(pad, tunedTarget, a4, keyboard ? false : keyMajor), volume: 10 ** ((pad.knobDb ?? 0) / 20), filters: seqFilters[pad.origIndex] };
+          }} filtersFor={index => seqFilters[pads[index]?.origIndex] ?? DEFAULT_PAD_FILTERS} onFiltersChange={(index, filters) => { const pad = pads[index]; if (pad) setSeqFilters(previous => ({ ...previous, [pad.origIndex]: filters })); }} onBack={() => setSeqOpen(false)} />
         ) : (
         <>
         <div className="upper">
@@ -2056,12 +2103,10 @@ function App() {
                 </button>
               );
             })}
-            {/* SEQ key hidden for now; the SEQ screen and its code stay in place.
-            <button className="cap cap--mode" aria-label="Sequencer" onClick={() => { setMenuOpen(false); setSeqOpen(true); }}>
+            <button className="cap cap--mode" aria-label="Sequencer" onClick={() => { void getAudioContext().resume(); setMenuOpen(false); setSeqOpen(true); }}>
               <span className="cap__led" />
               <span className="cap__legend">Seq</span>
             </button>
-            */}
           </div>
           <div className="tray">
             {BANKS.map((name, i) => {
@@ -2186,7 +2231,7 @@ function App() {
                   <div className="dropzone__choices">
                     {(
                       [
-                        { kind: "hold", word: "Hold", icon: HOLD_ICON },
+                        { kind: "halftime", word: "Halftime", icon: HALFTIME_ICON },
                         { kind: "trash", word: "Delete", icon: DELETE_ICON },
                         { kind: "lock", word: pads[drag.from]?.locked ? "Unlock" : "Lock", icon: pads[drag.from]?.locked ? UNLOCK_ICON : LOCK_ICON },
                         { kind: "chop", word: "Chopper", icon: ACAPELLA_ICON },
@@ -2357,6 +2402,9 @@ function App() {
             onCancel={() => setSourcePick(null)}
           />
         )}
+
+        {halftime && !loopReplacement && <HalftimeModal initialPad={halftime.pad} initialBpm={projectBpm} beatsPerBar={halftime.beatsPerBar} onClose={() => setHalftime(null)} onImportProject={async file => { await loadProject(file, false, true); setHalftime(null); setNotice("Drag a pad onto the Halftime symbol to process it."); }} onBounce={bounceHalftime} />}
+        {loopReplacement && <div className="palette-backdrop"><div className="palette-modal" role="dialog" aria-modal="true" aria-label="Choose a melodic loop to replace"><div className="palette-modal__head"><strong>Melodic loops are full</strong><button onClick={() => loopReplacement.choose(null)} aria-label="Cancel replacement">×</button></div><p>Choose an unlocked loop to replace. The original Halftime source stays intact.</p><div className="palette-modal__list">{MELODIC_LOOP_SLOTS.filter(i => !pads[i]?.locked && i !== halftime?.pad?.index).map(i => <button key={i} className="menu__button" onClick={() => loopReplacement.choose(i)}>Replace B{i - 15} · {pads[i]?.label ?? pads[i]?.name ?? "Empty"}</button>)}</div></div></div>}
 
         {chop && (
           <SongChopModal

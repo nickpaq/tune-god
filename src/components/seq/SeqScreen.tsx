@@ -1,5 +1,9 @@
 import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import "./seq.css";
+import { TRACK_PATTERN_COUNT } from "../../audio/seq/model";
+import { ChopGrid, type ChopTile } from "./ChopGrid";
+import { DEFAULT_KEYBOARD_OPTIONS } from "../../audio/seq/keyboard";
+import { KeyboardControls } from "./KeyboardControls";
 
 /**
  * The sequencer's screens (docs/seq-sequencer-plan.md, drawings in docs/seq-designs/). This is the interface only: nothing here plays a sound, records
@@ -10,6 +14,8 @@ import "./seq.css";
 export interface SeqPad {
   label: string;
   color: string;
+  oneShot?: boolean;
+  chops?: ChopTile[];
 }
 
 export type SeqPage = "play" | "vel" | "pattern" | "edit" | "sounds" | "tempo" | "mixer" | "keys";
@@ -279,9 +285,10 @@ interface TransportProps {
   onPage: (p: SeqPage) => void;
   onPlaying: (on: boolean) => void;
   onRecording: (on: boolean) => void;
+  onUndoRecording: () => void;
 }
 
-function Transport({ page, playing, recording, bpm, onBack, onPage, onPlaying, onRecording }: TransportProps) {
+function Transport({ page, playing, recording, bpm, onBack, onPage, onPlaying, onRecording, onUndoRecording }: TransportProps) {
   return (
     <div className="s-tray s-transport">
       <Key icon="back" legend="Back" label="Back to the other pages" onClick={onBack} />
@@ -289,8 +296,8 @@ function Transport({ page, playing, recording, bpm, onBack, onPage, onPlaying, o
         <b>{bpm}</b>
         <i>BPM</i>
       </button>
-      <Key icon="play" legend="Play" on={playing} label="Play" onClick={() => onPlaying(!playing)} />
-      <Key icon="rec" legend="Rec" on={recording} label="Record" onClick={() => onRecording(!recording)} />
+      <Key icon="play" legend="Play" on={playing} label={recording ? "Keep take and continue playing" : "Play"} onClick={() => { if (recording) { onRecording(false); onPlaying(true); } else onPlaying(!playing); }} />
+      <Key icon={recording ? "undo" : "rec"} legend={recording ? "Undo" : "Rec"} on={recording} label={recording ? "Discard current take and keep recording" : "Record"} onClick={() => { if (recording) onUndoRecording(); else { onPlaying(true); onRecording(true); } }} />
       <Key icon="mix" legend="Mix" on={page === "mixer"} label="Mixer" onClick={() => onPage(page === "mixer" ? "play" : "mixer")} />
     </div>
   );
@@ -409,16 +416,16 @@ function PatternPage() {
       <section className="screen s-screen s-screen--bar" aria-label="Pattern">
         <div className="oled">
           <div className="oled__head">
-            <span>Pattern {pattern + 1}</span>
+            <span>{noPattern ? "No pattern in scene" : `Pattern ${pattern + 1}`}</span>
             <button type="button" className="s-oled-btn" aria-label="Delete pattern">
               Delete
             </button>
           </div>
         </div>
       </section>
-      <div className="s-tray s-tray--tall">
-        {THUMBS.map((t, i) => (
-          <button key={i} type="button" className={`s-cap s-cap--pat${pattern === i ? " s-cap--on" : ""}`} aria-label={`Pattern ${i + 1}`} aria-pressed={pattern === i} onClick={() => setPattern(i)}>
+      <div className="s-tray s-tray--tall s-pattern-slots">
+        {Array.from({ length: TRACK_PATTERN_COUNT }, (_, i) => THUMBS[i] ?? "................").map((t, i) => (
+          <button key={i} type="button" className={`s-cap s-cap--pat${pattern === i && !noPattern ? " s-cap--on" : ""}`} aria-label={`Pattern ${i + 1}`} aria-pressed={pattern === i && !noPattern} onClick={() => { if (pattern === i && !noPattern) setNoPattern(true); else { setPattern(i); setNoPattern(false); } }}>
             <span className="s-led" />
             <b>{i + 1}</b>
             <span className="s-mx">
@@ -697,7 +704,7 @@ function whiteClip(k: WhiteKey, h: number): string | undefined {
   return k.kind === "L" ? `polygon(0 0, ${t}% 0, ${t}% ${step}%, 100% ${step}%, 100% 100%, 0 100%)` : `polygon(${100 - t}% 0, 100% 0, 100% 100%, 0 100%, 0 ${step}%, ${100 - t}% ${step}%)`;
 }
 
-function KeyboardOctave({ octave, down, picked, onDown, onUp }: { octave: 0 | 1; down: string | null; picked: string | null; onDown: (id: string) => void; onUp: () => void }) {
+export function KeyboardOctave({ octave, down, picked, onDown, onUp }: { octave: 0 | 1; down: ReadonlySet<string>; picked: string | null; onDown: (id: string, pointerId: number) => void; onUp: (pointerId: number) => void }) {
   const dy = octave * OCTAVE_STEP;
   return (
     <>
@@ -707,7 +714,7 @@ function KeyboardOctave({ octave, down, picked, onDown, onUp }: { octave: 0 | 1;
         const top = (tallPart ? TALL_Y : SHORT_Y) + dy - TOP;
         const h = WHITE_BOTTOM - (tallPart ? TALL_Y : SHORT_Y);
         return (
-          <div key={id} className={`s-wk${down === id ? " s-wk--down" : ""}${picked === id ? " s-wk--picked" : ""}`} style={{ left: P(k.x), top: P(top), width: P(k.w), height: P(h) }}>
+          <div key={id} className={`s-wk${down.has(id) ? " s-wk--down" : ""}${picked === id ? " s-wk--picked" : ""}`} style={{ left: P(k.x), top: P(top), width: P(k.w), height: P(h) }}>
             <svg viewBox={`0 0 ${k.w} ${h}`} preserveAspectRatio="none" aria-hidden="true">
               <path className="s-wk__edge" d={whitePath(k, h)} transform="translate(0 9)" />
               <path className="s-wk__face" d={whitePath(k, h)} />
@@ -715,18 +722,18 @@ function KeyboardOctave({ octave, down, picked, onDown, onUp }: { octave: 0 | 1;
             <span className="s-wk__name" style={{ top: P(h - 70) }}>
               {k.note}
             </span>
-            <button type="button" aria-label={k.note} style={{ clipPath: whiteClip(k, h) }} onPointerDown={() => onDown(id)} onPointerUp={onUp} onPointerLeave={onUp} onPointerCancel={onUp} />
+            <button type="button" aria-label={k.note} style={{ clipPath: whiteClip(k, h) }} onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); onDown(id, e.pointerId); }} onPointerUp={(e) => onUp(e.pointerId)} onPointerCancel={(e) => onUp(e.pointerId)} onLostPointerCapture={(e) => onUp(e.pointerId)} />
           </div>
         );
       })}
       {BLACK_KEYS.map((k) => {
         const id = `${octave}${k.note}`;
         return (
-          <div key={id} className={`s-bk${down === id ? " s-bk--down" : ""}${picked === id ? " s-bk--picked" : ""}`} style={{ left: P(k.x), top: P(BLACK_Y + dy - TOP), width: P(k.w), height: P(BLACK_H) }}>
+          <div key={id} className={`s-bk${down.has(id) ? " s-bk--down" : ""}${picked === id ? " s-bk--picked" : ""}`} style={{ left: P(k.x), top: P(BLACK_Y + dy - TOP), width: P(k.w), height: P(BLACK_H) }}>
             <span className="s-bk__ring" />
             <span className="s-bk__cap" />
             <span className="s-bk__name">{k.note}</span>
-            <button type="button" aria-label={k.note} onPointerDown={() => onDown(id)} onPointerUp={onUp} onPointerLeave={onUp} onPointerCancel={onUp} />
+            <button type="button" aria-label={k.note} onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); onDown(id, e.pointerId); }} onPointerUp={(e) => onUp(e.pointerId)} onPointerCancel={(e) => onUp(e.pointerId)} onLostPointerCapture={(e) => onUp(e.pointerId)} />
           </div>
         );
       })}
@@ -741,15 +748,22 @@ const OCT_C0_X = 135;
 const OCT_STEP_X = (707 - 135) / 3;
 
 function KeysPage() {
+  const [keyboardOptions, setKeyboardOptions] = useState(DEFAULT_KEYBOARD_OPTIONS);
   const [scale, setScale] = useState(false);
   const [chord, setChord] = useState(false);
   const [octave, setOctave] = useState(3);
-  const [down, setDown] = useState<string | null>(null);
+  const [down, setDown] = useState<ReadonlySet<string>>(new Set());
+  const heldKeys = useRef(new Map<number, string>());
   const [picked, setPicked] = useState<string | null>("1C");
   const trackRef = useRef<HTMLDivElement>(null);
-  const hold = (id: string) => {
-    setDown(id);
+  const hold = (id: string, pointerId: number) => {
+    heldKeys.current.set(pointerId, id);
+    setDown(new Set(heldKeys.current.values()));
     setPicked(id);
+  };
+  const releaseKey = (pointerId: number) => {
+    heldKeys.current.delete(pointerId);
+    setDown(new Set(heldKeys.current.values()));
   };
   const dragOctave = (e: PointerEvent<HTMLDivElement>) => {
     const r = trackRef.current!.getBoundingClientRect();
@@ -758,6 +772,7 @@ function KeysPage() {
   };
   return (
     <div className="s-page s-page--keys">
+      <KeyboardControls value={keyboardOptions} onChange={setKeyboardOptions} />
       <div className="s-keys2">
         <Key legend="Scale" on={scale} label="Scale" onClick={() => setScale((x) => !x)} />
         <Key legend="Chord" on={chord} label="Chord" onClick={() => setChord((x) => !x)} />
@@ -786,8 +801,8 @@ function KeysPage() {
           </span>
         </div>
         <span className="s-kb__divider" style={{ top: P(755 - TOP) }} />
-        <KeyboardOctave octave={0} down={down} picked={picked} onDown={hold} onUp={() => setDown(null)} />
-        <KeyboardOctave octave={1} down={down} picked={picked} onDown={hold} onUp={() => setDown(null)} />
+        <KeyboardOctave octave={0} down={down} picked={picked} onDown={hold} onUp={releaseKey} />
+        <KeyboardOctave octave={1} down={down} picked={picked} onDown={hold} onUp={releaseKey} />
       </div>
     </div>
   );
@@ -896,7 +911,7 @@ function EditPage({ pad, slotName }: { pad: SeqPad | null; slotName: string }) {
 
 /** ---- the whole sequencer screen ---- */
 
-export function SeqScreen({ bpm, padsOfBank, soundsFor, onBack }: { /** The project tempo (set in the menu). */ bpm: number; padsOfBank: (bank: number) => (SeqPad | null)[]; soundsFor: (bank: number, slot: number) => ReactNode; onBack: () => void }) {
+export function SeqScreen({ bpm, padsOfBank, soundsFor, onBack, onChopTrigger, onUndoRecording }: { /** The project tempo (set in the menu). */ bpm: number; padsOfBank: (bank: number) => (SeqPad | null)[]; soundsFor: (bank: number, slot: number) => ReactNode; onBack: () => void; onChopTrigger?: (bank: number, slot: number, chop: number) => void; onUndoRecording?: () => void }) {
   const [page, setPage] = useState<SeqPage>("play");
   const [bank, setBank] = useState(0);
   const [selected, setSelected] = useState(15);
@@ -926,7 +941,7 @@ export function SeqScreen({ bpm, padsOfBank, soundsFor, onBack }: { /** The proj
     <div className="seq">
       <div className="s-upper">
         {showTransport ? (
-          <Transport page={page} playing={playing} recording={recording} bpm={bpm} onBack={onBack} onPage={go} onPlaying={setPlaying} onRecording={setRecording} />
+          <Transport page={page} playing={playing} recording={recording} bpm={bpm} onBack={onBack} onPage={go} onPlaying={setPlaying} onRecording={setRecording} onUndoRecording={() => onUndoRecording?.()} />
         ) : (
           <div className="s-tray s-tabs">
             <Key icon="back" legend="Back" label="Back to the other pages" onClick={onBack} />
@@ -936,7 +951,7 @@ export function SeqScreen({ bpm, padsOfBank, soundsFor, onBack }: { /** The proj
         )}
         {showStrip && <Strip looping={looping} onLoop={setLooping} playhead={playing ? 0.34 : 0} />}
         {page === "play" && <PlayPage pads={pads} bank={bank} selected={selected} onSelect={(s) => { setSelected(s); setHit(s); window.setTimeout(() => setHit(null), 120); }} hit={hit} />}
-        {page === "vel" && <VelocityPage />}
+        {page === "vel" && (pads[selected]?.chops ? <ChopGrid chops={pads[selected]!.chops!} onTrigger={chop => onChopTrigger?.(bank, selected, chop)} /> : <VelocityPage />)}
         {page === "pattern" && <PatternPage />}
         {page === "keys" && <KeysPage />}
         {page === "tempo" && <TempoPage bpm={bpm} />}

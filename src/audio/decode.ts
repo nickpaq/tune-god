@@ -6,7 +6,7 @@ let sharedContext: AudioContext | null = null;
 /** A single shared AudioContext for decoding, reused across the session. */
 export function getAudioContext(): AudioContext {
   if (!sharedContext) {
-    sharedContext = new AudioContext();
+    sharedContext = new AudioContext({ latencyHint: "interactive" });
   }
   return sharedContext;
 }
