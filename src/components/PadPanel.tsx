@@ -6,6 +6,7 @@ import type { CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
 import type { GhostKind } from "../audio/ghost";
 import { formatTrim, trimCents } from "../audio/theory";
+import type { TapGrid } from "../audio/song/tapGrid";
 import type { MakerChop, Slot } from "../audio/song/patternMaker";
 
 /** The trim slider reaches 12 semitones either way. */
@@ -50,7 +51,7 @@ export interface Pad {
   /** Set on a pad that is one section of a chopped song: made from the song's pad, written to the export as a new pad with a pattern of its own. */
   section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Whole bars in the section. */ bars: number; /** The colour it was given in the chop editor, as a place in the selected palette. */ colorIndex?: number; /** The colour (hex) it was given in the chop editor, kept as it was: the section pads keep it whatever palette is chosen later. */ color?: string; /** Semitones the key picked on the piano moves it, written to Koala's pitch knob. */ pitch?: number; /** Made by synced mode (the sample cut into its own sections): labelled "Chop", not "Vox". */ synced?: boolean };
   /** Set on the pad Chopper mode makes: Koala's own chopper holding the whole sample, written to the export as one new pad with the slices in it. */
-  chopper?: { sourceSampleId: number; slices: number; bpm: number; beatsPerBar: number; pitch: number; layout: { starts: number[]; sections: { slice: number; bars: number }[] }; color?: string; /** The chops as the pattern maker lists them, and the sequence it made (none until Done). */ maker?: { chops: MakerChop[]; /** The sample's frames to a beat at its own tempo. */ beatFrames: number; slots?: Slot[] } };
+  chopper?: { sourceSampleId: number; slices: number; bpm: number; beatsPerBar: number; pitch: number; layout: { starts: number[]; sections: { slice: number; bars: number }[] }; color?: string; /** The chops as the pattern maker lists them, and the sequence it made (none until Done). */ maker?: { chops: MakerChop[]; /** The sample's frames to a beat at its own tempo. */ beatFrames: number; grid?: TapGrid; slots?: Slot[] } };
   /** The tempo the file name states ("140bpm"), when it does: a loop of this tempo can be stretched to the project's. */
   bpm?: number;
   /** The key the pad is tuned from was read from its file name (a sure one), not detected from the audio: its pad is shaded darker. */

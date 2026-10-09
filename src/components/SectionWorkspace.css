@@ -1,0 +1,121 @@
+.section-backdrop {
+  padding: 0;
+  background: var(--chassis1);
+}
+.section-workspace {
+  --phase-0: #ce7b63;
+  --phase-1: #bbad78;
+  --phase-2: #76a89b;
+  --phase-3: #8e96bd;
+  box-sizing: border-box;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: max(12px, var(--safe-top, env(safe-area-inset-top)))
+    max(14px, env(safe-area-inset-right))
+    max(12px, var(--safe-bottom, env(safe-area-inset-bottom)))
+    max(14px, env(safe-area-inset-left));
+  background: var(--chassis1);
+  color: var(--ink);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overflow: hidden;
+  font-size: 14px;
+}
+.section-workspace .chop__head {
+  font-size: 17px;
+}
+.section-workspace button {
+  min-height: 44px;
+}
+.section-tabs,
+.section-transport,
+.section-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.section-tabs button,
+.section-actions button {
+  flex: 1;
+}
+.section-tabs .chop__btn {
+  font-size: 14px;
+}
+.section-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--ink3);
+  font-size: 12px;
+  min-height: 18px;
+}
+.section-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.section-stage {
+  position: relative;
+  flex: 1;
+  min-height: 180px;
+  border-radius: var(--radius);
+  background: var(--screen-bg, #0a0e11);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  overflow: hidden;
+}
+.section-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  outline-offset: -3px;
+}
+.section-hint {
+  margin: 0;
+  color: var(--ink3);
+  font-size: 12px;
+  line-height: 1.4;
+  min-height: 34px;
+}
+.section-transport {
+  flex-wrap: wrap;
+}
+.section-transport button {
+  flex: 1;
+  min-width: 70px;
+  font-size: 13px;
+}
+.section-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.section-volume input {
+  flex: 1;
+  min-height: 30px;
+  accent-color: var(--accent);
+}
+.section-notice {
+  min-height: 18px;
+  color: var(--ink3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.section-workspace .chop__go {
+  min-height: 48px;
+  flex: none;
+  font-size: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .section-workspace * {
+    scroll-behavior: auto;
+  }
+}

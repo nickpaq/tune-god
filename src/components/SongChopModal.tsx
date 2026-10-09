@@ -32,7 +32,12 @@ import { padTitle } from "../audio/song/stems";
 import { loadChopMarks, saveChopMarks } from "../storage";
 import type { Pad } from "./PadPanel";
 
+import { SectionWorkspace } from "./SectionWorkspace";
+import type { WorkspaceResult } from "../audio/song/sectionWorkspace";
+
 export interface ChopSettings {
+  maker?: WorkspaceResult;
+  grid?: TapGrid;
   /** The tempo of the grid where the first section starts: the project tempo the export writes. */
   bpm: number;
   beatsPerBar: number;
@@ -120,6 +125,7 @@ export function SongChopModal({
   freeSlots,
   unit = "pattern",
   onConfirm,
+  pitchForKey,
   onClose,
 }: {
   /** The song: the cuts are found on it. */
@@ -131,7 +137,8 @@ export function SongChopModal({
   freeSlots: number;
   /** What the chop makes: a pattern per section (acapella mode) or a chop on the chopper (chopper mode). */
   unit?: "pattern" | "chop";
-  onConfirm: (settings: ChopSettings, openMaker?: boolean) => void;
+  pitchForKey?: (key: SongKey | null) => number;
+  onConfirm: (settings: ChopSettings, openMaker?: boolean) => void | Promise<void>;
   onClose: () => void;
 }) {
   const sampleRate = pad.sampleRate;
@@ -141,6 +148,7 @@ export function SongChopModal({
   const timeline = useRef<ChopTimelineHandle>(null);
   /** Chopper mode: the grid and the chops go down to sixteenth notes (the pattern maker's finest step too). */
   const fine = unit === "chop";
+  const [workspaceGrid, setWorkspaceGrid] = useState<TapGrid | null>(null);
   const colorOf = (i: number) => chopColor(palette.colors, i);
 
   const [detected, setDetected] = useState<Detected | "none" | null>(null);
@@ -387,7 +395,7 @@ export function SongChopModal({
     const chosen = planSections(totalFrames, grid, picked);
     if (chosen.length === 0) return setStatus("No whole bars to chop");
     change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)) }, `Chopped by ${bars}`);
-    onConfirm({ bpm: bpmAt(grid, picked[0].first), beatsPerBar, plans: chosen, key: detectedKey });
+    onConfirm({ bpm: bpmAt(grid, picked[0].first), grid, beatsPerBar, plans: chosen, key: detectedKey });
   };
 
   autoChopRef.current = autoChop;
@@ -507,6 +515,16 @@ export function SongChopModal({
   const note = "Scroll the waveform to a cut and add a chop. A downbeat marker locks the grid in where it drifts; 1.1.1 sets bar 1.";
   const bpmText = detected === null ? "..." : detected === "none" && marks.downbeats.length === 0 && marks.oneOne === null ? "--" : (grid ? bpmAt(grid, 0) : 0).toFixed(2);
 
+  if (workspaceGrid) {
+    return <SectionWorkspace channelData={pad.channelData} sampleRate={sampleRate} beatFrames={60 * sampleRate / bpmAt(workspaceGrid, 0)} beatsPerBar={beatsPerBar} grid={workspaceGrid} pitch={pitchForKey?.(detectedKey) ?? 0} colors={palette.colors} chops={plans.map((p, i) => ({ slice: i, start: p.start, length: p.length, bars: p.bars, steps: Math.max(1, Math.round(p.length / (60 * sampleRate / tempo) * 4)), barIndex: p.barIndex ?? 0, colorIndex: (p.barIndex ?? 0) % 4, color: colorOf((p.barIndex ?? 0) % 4) }))} initial={[]} startInSource onClose={() => setWorkspaceGrid(null)} onDone={maker => {
+      const used = [...new Set(maker.slots.flatMap(s => s.kind === 'chop' ? [s.chop] : []))];
+      const selectedPlans: SectionPlan[] = used.map((i, index) => { const c = maker.chops[i]; return { start: c.start, length: c.length, audioFrames: c.length, bars: c.bars, barIndex: c.barIndex, colorIndex: c.colorIndex, index }; });
+      // A silence-only pattern still needs a source pad for Koala's chopper.
+      if (!selectedPlans.length) selectedPlans.push({ start: 0, length: 1, audioFrames: 1, bars: 1, index: 0 });
+      return onConfirm({ bpm: bpmAt(workspaceGrid, 0), beatsPerBar, plans: selectedPlans, key: detectedKey, maker });
+    }} />;
+  }
+
   return (
     <div className="palette-backdrop chop-backdrop" onClick={askClose}>
       <div className="chop" role="dialog" aria-label="Chop song to patterns" onClick={(e) => e.stopPropagation()}>
@@ -520,6 +538,12 @@ export function SongChopModal({
         </div>
         <div className="chop__scroll">
           <p className="chop__note">{note}</p>
+          {fine && <button className="chop__btn" disabled={!grid} onClick={() => {
+            if (!grid) return;
+            player.stop();
+            const origin = marks.oneOne === null ? 0 : fineLineNear(grid, marks.oneOne);
+            setWorkspaceGrid({ ...grid, segments: grid.segments.map(s => ({ ...s, line: s.line - origin })), downbeats: grid.downbeats.map(n => n - origin), offsets: Object.fromEntries(Object.entries(grid.offsets).map(([n, v]) => [Number(n) - origin, v])) });
+          }}>Open section workspace · 4 / 8 / 16 bars</button>}
 
           <div className="chop__screen">
             <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[...marks.downbeats]} oneOne={marks.oneOne} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
@@ -620,11 +644,11 @@ export function SongChopModal({
         </div>
 
         {unit === "chop" && (
-          <button className="chop__btn" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, key: detectedKey }, true)}>
+          <button className="chop__btn" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey }, true)}>
             Finish and open pattern maker
           </button>
         )}
-        <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, beatsPerBar, plans, key: detectedKey })}>
+        <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey })}>
           Chop into {fits} {unit}{fits === 1 ? "" : "s"}
         </button>
       </div>

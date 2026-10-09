@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
 import { CHOPPER_MAX_SLICES, fitPlans, sliceLayout, sliceOfVelocity, sliceVelocity } from "./exportChopper";
 import type { ParsedKoalaProject } from "./koalaProject";
+import { packArrangement } from "./song/sectionWorkspace";
+import type { MakerChop } from "./song/patternMaker";
 import type { SectionPlan } from "./song/chop";
 
 async function load(file: string): Promise<ParsedKoalaProject> {
@@ -114,4 +116,26 @@ describe("the chopper in the export", () => {
       [12 * 1024, 3 * 1024, sliceVelocity(0, 2)],
     ]);
   });
+  it("writes overlapping arrangement pieces into a new sample without altering the existing Koala source", async () => {
+    const project = await load("probe-sidechain.koala");
+    const sourceId = project.samplerJson.pads[0].sampleId;
+    const original = await project.zip.file(`sampler/${sourceId}.wav`)!.async("uint8array");
+    const data = [Float32Array.from({ length: 4000 }, (_, i) => Math.sin(i * 0.04))];
+    const chop: MakerChop = { slice: 0, start: 0, length: 2000, steps: 16, bars: 1, barIndex: 0, colorIndex: 0, color: "#fff" };
+    const packed = packArrangement(data, [chop, { ...chop, start: 1000 }], [{ kind: "chop", chop: 0, steps: 16 }, { kind: "silence", steps: 4 }, { kind: "chop", chop: 1, steps: 8 }], 500, 1000);
+    const { blob } = await buildTunedKoala(project, [], {
+      chopper: { index: 48, label: "Pattern", sampleId: sourceId, independentSample: true, sampleRate: 1000, channelData: packed.channelData, layout: packed.layout, beatsPerBar: 4, pitch: 0, pattern: { notes: packed.notes, bars: 2, gate: true } },
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const sampler = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
+    const pad = sampler.pads.find((p: any) => p.synth === "CHOPPER");
+    expect(pad.sampleId).not.toBe(sourceId);
+    expect(pad.chops.slices.map((s: any) => s.start)).toEqual([0, 2000]);
+    expect(zip.file(`sampler/${pad.sampleId}.wav`)).not.toBeNull();
+    expect(await zip.file(`sampler/${sourceId}.wav`)!.async("uint8array")).toEqual(original);
+    const sequence = JSON.parse(await zip.file("sequence.json")!.async("string"));
+    const notes = sequence.sequences.flatMap((s: any) => (s.noteSequence?.pattern?.notes ?? [])).filter((n: any) => n?.num === 48);
+    expect(notes.map((n: any) => [n.timeOffset, n.length, n.vel])).toEqual([[0, 16384, sliceVelocity(0, 2)], [20480, 8192, sliceVelocity(1, 2)]]);
+  });
+
 });

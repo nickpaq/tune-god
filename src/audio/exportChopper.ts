@@ -65,6 +65,8 @@ export interface ChopperExport {
   bus?: number;
   /** The sample the chopper slices (the song's own, shared: it is not written twice). */
   sampleId: number;
+  /** A packed arrangement gets a new sample; the original source stays available for editing. */
+  independentSample?: boolean;
   sampleRate: number;
   /** Only written when the sample is no longer in the project (the song's pad was deleted). */
   channelData: Float32Array[];
@@ -88,6 +90,12 @@ const eq = () => ({ enabled: "false", hi: { freq: 8000.0, gain: 0.0, q: 1.0, typ
 export async function addChopperPad(project: ParsedKoalaProject, samplerJson: any, chopper: ChopperExport): Promise<number> {
   const pads: any[] = (samplerJson.pads = Array.isArray(samplerJson.pads) ? samplerJson.pads : []);
   const samples: any[] = (samplerJson.samples = Array.isArray(samplerJson.samples) ? samplerJson.samples : []);
+  if (chopper.independentSample) {
+    const ids = samples.map(s => Number(s.id)).filter(Number.isFinite);
+    let id = Math.max(0, ...ids, chopper.sampleId) + 1;
+    while (project.zip.file(`sampler/${id}.wav`)) id++;
+    chopper = { ...chopper, sampleId: id };
+  }
   const base = project.padBase;
   const stringPads = pads.some((p) => typeof p.pad === "string");
   const slot = chopper.index + base;
