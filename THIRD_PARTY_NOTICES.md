@@ -9,11 +9,11 @@ This project bundles the following libraries. Their upstream licenses govern the
 - Because of this, this repository is distributed under the GPL as well (see `LICENSE`). If you need to relicense, `src/audio/stretch/rubberband.ts` is written as a narrow, swappable interface specifically so an alternative engine (e.g. an MIT-licensed one) can replace it without touching the rest of the app.
 - Source: https://github.com/breakfastquay/rubberband (WASM build via https://github.com/Daninet/rubberband-wasm)
 
-## essentia.js
+## Music Tempo (`music-tempo`)
 
-- Used for: key detection and BPM detection (`src/audio/key/essentiaKey.ts`).
-- License: **AGPL-3.0**.
-- Source: https://github.com/MTG/essentia.js
+- Used for: all automatic song tempo and beat detection, in the analysis worker.
+- License: **MIT**.
+- Source: https://github.com/killercrush/music-tempo
 
 ## Other dependencies
 

@@ -47,30 +47,20 @@ describe("gridWithMarks", () => {
     expect(lineFrame(grid, 0)).toBe(3040);
   });
 
-  it("homes in on the exact tempo as downbeat markers are added", () => {
-    // the real tempo is 121 BPM (beat 495.87 frames); the detection said 120
-    const beat = (60 * RATE) / 121;
-    const at = (bars: number) => 2000 + bars * 4 * beat;
-    const two = gridWithMarks(base, marks([at(0), at(32)]));
-    expect(bpmAt(two, 0)).toBeCloseTo(121, 6);
-    const three = gridWithMarks(base, marks([at(0), at(32), at(60)]));
-    expect(bpmAt(three, 0)).toBeCloseTo(121, 6);
-    // a marker a little off barely moves it
-    const off = gridWithMarks(base, marks([at(0), at(32) + 8, at(60) - 5]));
-    expect(Math.abs(bpmAt(off, 0) - 121)).toBeLessThan(0.02);
-  });
-
-  it("is one tempo for the whole song, each anchor only re-locking the phase", () => {
+  it("never fits tempo through multiple legacy anchors", () => {
     const grid = gridWithMarks(base, marks([0, 8030, 16010]));
-    const beats = new Set(grid.segments.map((s) => s.beatFrames));
-    expect(beats.size).toBe(1);
-    expect(lineFrame(grid, 16)).toBe(8030);
-    expect(Math.abs(lineFrame(grid, 8) - 4000)).toBeLessThan(40);
+    expect(bpmAt(grid, 0)).toBe(120);
+    expect(lineFrame(grid, 0)).toBe(16010);
+    expect(lineFrame(grid, 4)).toBe(18010);
   });
 
-  it("does not let a stray marker bend the tempo far", () => {
-    const grid = gridWithMarks(base, marks([0, 9000])); // 4.5 bars on: counts as 5 bars, a 10 % slower tempo
-    expect(Math.abs(bpmAt(grid, 0) - 120)).toBeLessThan(120 * 0.16);
+  it("replacing a later anchor shifts all lines equally without warping", () => {
+    const first = gridWithMarks(base, marks([], 777));
+    const next = gridWithMarks(base, marks([], 4782));
+    for (const n of [-8, 0, 4, 80]) {
+      expect(lineFrame(next, n) - lineFrame(first, n)).toBe(4005);
+      expect(bpmAt(next, n)).toBe(120);
+    }
   });
 
   it("takes the tempo half or double", () => {
