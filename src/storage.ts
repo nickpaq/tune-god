@@ -101,6 +101,7 @@ export function saveState(patch: SavedState): void {
 const CHOP_KEY = "tune-god:chop:";
 
 export interface SavedChopMarks {
+  gridOffsetFrames?: number;
   chops: readonly number[];
   downbeats: readonly number[];
   oneOne: number | null;
@@ -113,6 +114,7 @@ export function loadChopMarks(songKey: string): SavedChopMarks | null {
     const raw = JSON.parse(localStorage.getItem(CHOP_KEY + songKey) ?? "null");
     const numbers = (v: unknown) => Array.isArray(v) && v.every((n) => typeof n === "number" && Number.isFinite(n));
     if (!raw || !numbers(raw.chops) || !numbers(raw.downbeats) || !(raw.oneOne === null || Number.isFinite(raw.oneOne)) || !(raw.tempoScale > 0)) return null;
+    if (raw.gridOffsetFrames !== undefined && !Number.isFinite(raw.gridOffsetFrames)) return null;
     return raw as SavedChopMarks;
   } catch {
     return null;

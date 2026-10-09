@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barLineNear, baseGrid, chopLines, fineChopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
+import { anchorAtPlayhead, nudgeGridMarks, NO_MARKS, barLineNear, baseGrid, chopLines, fineChopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
 import { bpmAt, fineLineNear, isBarLine, lineFrame, planSections } from "./tapGrid";
 
 const RATE = 1000;
@@ -220,4 +220,56 @@ describe("chops on sixteenth notes (chopper mode)", () => {
     expect(plans[0].start).toBe(1000);
     expect(plans[0].length).toBe(2125);
   });
+});
+
+describe("BPM radiates from the sole anchor", () => {
+  it("keeps the anchor fixed and changes equal distances on both sides", () => {
+    const anchor = 41321;
+    const original = gridWithMarks(base, { downbeats: [], oneOne: anchor, tempoScale: 1 });
+    for (const bpm of [87.5, 137.25]) {
+      const adjusted = gridWithMarks(base, { downbeats: [], oneOne: anchor, tempoScale: 1, bpm });
+      expect(lineFrame(adjusted, 0)).toBe(anchor);
+      for (const beats of [1, 4, 16, 64]) {
+        const before = anchor - lineFrame(adjusted, -beats);
+        const after = lineFrame(adjusted, beats) - anchor;
+        expect(before).toBeCloseTo(after, 8);
+        expect(after).toBeCloseTo((lineFrame(original, beats) - anchor) * 120 / bpm, 8);
+      }
+    }
+  });
+});
+
+describe("single anchor and phase nudges", () => {
+  it("snap selects an existing beat without shifting beat positions", () => {
+    const anchor = anchorAtPlayhead(base, 2666, true);
+    expect(anchor).toBe(2500);
+    const anchored = gridWithMarks(base, { ...NO_MARKS, oneOne: anchor });
+    for (const n of [-8, 0, 4, 12]) expect(lineFrame(anchored, n)).toBe(lineFrame(base, n + 3));
+    expect(isBarLine(anchored, 0)).toBe(true);
+  });
+  it("free placement takes the precise playhead instead of a beat", () => {
+    expect(anchorAtPlayhead(base, 2666, false)).toBe(2666);
+  });
+  it("nudges every line and the BPM pivot by 1 ms, preserving BPM and the analysis anchor", () => {
+    const marks = { ...NO_MARKS, oneOne: 41000, bpm: 127.5 };
+    const before = gridWithMarks(base, marks);
+    const nudged = nudgeGridMarks(marks, RATE, -1);
+    expect(nudged.oneOne).toBe(41000);
+    const after = gridWithMarks(base, nudged);
+    for (const n of [-16, 0, 4, 64]) {
+      expect(lineFrame(after, n)).toBe(lineFrame(before, n) - 1);
+      expect(bpmAt(after, n)).toBeCloseTo(127.5, 8);
+    }
+    expect(nudgeGridMarks(nudged, RATE, 1).gridOffsetFrames).toBe(0);
+    expect(lineFrame(gridWithMarks(base, { ...nudged, bpm: 90 }), 0)).toBe(40999);
+  });
+  it("keeps fractional source frames for a precise 1 ms nudge at 44.1 kHz", () => {
+    expect(nudgeGridMarks(NO_MARKS, 44100, 1).gridOffsetFrames).toBeCloseTo(44.1, 9);
+  });
+});
+
+it("snap chooses an in-file beat at the audio boundaries", () => {
+  const grid = baseGrid(RATE, 4, 120, 0.26);
+  expect(anchorAtPlayhead(grid, 0, true, 3999)).toBe(260);
+  expect(anchorAtPlayhead(grid, 3999, true, 3999)).toBe(3760);
 });
