@@ -11,19 +11,18 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 PUBLIC = ROOT / "public"
-FONT = HERE / "Fredoka.ttf"  # rounded bold sans, as the user's 1.0.4 example (variable font, set to Bold below)
+FONT = HERE / "LiberationSans-Regular.ttf"  # a plain regular sans, as the user asked
 
 # Where the number sits on the 512 px artwork: centred under the viewer's left eye, sloping down to the right like the user's 1.0.4 example.
-CENTRE = (186, 288)
-ANGLE = -32  # degrees (PIL turns counter-clockwise, so negative slopes it down to the right)
-SIZE = 32  # px, the font size (digits about 22 px tall)
+CENTRE = (196, 291)
+ANGLE = -30  # degrees (PIL turns counter-clockwise, so negative slopes it down to the right)
+SIZE = 26  # px, the font size
 INK = (22, 20, 20, 255)
 SUPER = 4  # drawn this many times larger and scaled down, for smooth edges
 
 
 def stamp(base: Image.Image, text: str) -> Image.Image:
     font = ImageFont.truetype(str(FONT), SIZE * SUPER)
-    font.set_variation_by_axes([700, 100])  # weight, width
     box = font.getbbox(text)
     w, h = box[2] - box[0], box[3] - box[1]
     pad = 20 * SUPER
