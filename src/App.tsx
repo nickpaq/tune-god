@@ -512,6 +512,7 @@ function App() {
   const [addPackStatus, setAddPackStatus] = useState("");
   const projectInput = useRef<HTMLInputElement>(null);
   /** The folder pickers of the four loaders (and the acapella file picker). They live outside the menu: closing the menu unmounts it. */
+  const kitInput = useRef<HTMLInputElement>(null);
   const drumsInput = useRef<HTMLInputElement>(null);
   const loopsInput = useRef<HTMLInputElement>(null);
   const bassInput = useRef<HTMLInputElement>(null);
@@ -928,6 +929,7 @@ function App() {
     loops: 1,
     bass: 1,
     oneShots: 2,
+    kit: 0,
   };
 
   /**
@@ -1076,7 +1078,8 @@ function App() {
         ),
         ...Object.fromEntries(spares.map((p) => [p.origIndex, p])),
       }));
-      if (bank === "drums") setLayout({ on: true, id: lay.id, pre: {} });
+      if (bank === "drums" || bank === "kit")
+        setLayout({ on: true, id: lay.id, pre: {} });
       // A project this load started gets Organize too.
       if (started) setOrganize(true);
       setSelected(null);
@@ -2861,6 +2864,19 @@ function App() {
       <div className="phone">
         {/* Outside the menu: closing the menu unmounts it, and an input that is gone never reports the folder that was picked. */}
         <input
+          ref={kitInput}
+          type="file"
+          hidden
+          // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
+          webkitdirectory=""
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length)
+              void loadBank("kit", () => findPackInFileList(files));
+          }}
+        />
+        <input
           ref={drumsInput}
           type="file"
           hidden
@@ -3013,6 +3029,17 @@ function App() {
               disabled={!sidechainReady}
               onChange={setSidechainOn}
             />
+            <button
+              className="menu__button"
+              disabled={analyzing > 0 || loading || !!addPackStatus}
+              title="Choose one kit folder. Every audio file is sorted by its type folder or filename into banks A–C; categories the folder does not contain stay blank."
+              onClick={() => {
+                kitInput.current?.click();
+                setMenuOpen(false);
+              }}
+            >
+              {addPackStatus || "Load Kit Folder: All Types"}
+            </button>
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
@@ -3309,6 +3336,12 @@ function App() {
                                 label: "Project",
                                 aria: "Open a .koala project",
                                 input: projectInput,
+                              },
+                              {
+                                icon: DRUM_ICON,
+                                label: "Kit",
+                                aria: "Load a kit folder (all sound types)",
+                                input: kitInput,
                               },
                               {
                                 icon: DRUM_ICON,

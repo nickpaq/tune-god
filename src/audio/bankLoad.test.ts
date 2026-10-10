@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bankFileName, BANK_ZONES, fillKitGaps, numberedLabel, parseBankName, placeBank, planBank, planBass, planDrums, planLoops, planOneShots, type PlacedSound } from "./bankLoad";
+import { bankFileName, BANK_ZONES, fillKitGaps, numberedLabel, parseBankName, placeBank, planBank, planBass, planDrums, planKit, planLoops, planOneShots, type PlacedSound } from "./bankLoad";
 import { FINGER_LAYOUTS } from "./fingerLayouts";
 import type { PackFile } from "./samplePack";
 
@@ -30,7 +30,7 @@ describe("Bank A: drums by subfolder name", () => {
   it("goes by the subfolder, not the file name, and leaves loops, 808s and unsorted files out", () => {
     const plan = planDrums(pack);
     const files = plan.groups.flatMap((g) => g.candidates);
-    expect(files.some((f) => f.name.includes("root") || f.name.includes("by name only"))).toBe(false);
+    expect(files.some((f) => f.name.includes("root"))).toBe(false);
     expect(files.some((f) => f.folders.includes("808s") || f.folders.includes("Drum Loops"))).toBe(false);
     expect(plan.groups.find((g) => g.category === "kick")!.candidates.every((f) => f.folders.includes("Kicks"))).toBe(true);
   });
@@ -70,6 +70,37 @@ describe("Banks B and C: a folder of sound files only", () => {
     const files = many([], 30);
     expect(planBank("loops", files, () => 0.1).groups[0].candidates.map((f) => f.name)).toEqual(planBank("loops", files, () => 0.1).groups[0].candidates.map((f) => f.name));
     expect(planBank("oneShots", [], () => 0.5).problem).toMatch(/No audio/);
+  });
+});
+
+describe("kit folder import", () => {
+  it("recognizes the exact 808 folder and plural Claps, and keeps clap separate from 808 bass", () => {
+    const plan = planKit([
+      file(["808"], "sub.wav"),
+      file(["Claps"], "808 Clap.wav"),
+    ]);
+    expect(plan.groups.map(({ category, is808 }) => ({ category, is808 }))).toEqual([
+      { category: "bass", is808: true },
+      { category: "clap", is808: undefined },
+    ]);
+  });
+
+  it("only fills the matching slots and leaves types without files blank", () => {
+    const plan = planKit([...many(["Kicks"], 3), ...many(["Claps"], 2), ...many(["Melodic Loops"], 2)]);
+    const sounds = plan.groups.flatMap((group, groupIndex) => group.candidates.map((_, key) => ({ key: groupIndex * 10 + key, category: group.category, is808: group.is808 })));
+    const placement = placeBank("kit", sounds, horizontal);
+    expect(placement.positions.size).toBe(4);
+    expect(sounds.filter((sound) => sound.category === "melodicLoop").some((sound) => placement.positions.has(sound.key))).toBe(true);
+    expect(placement.placeholders).toEqual([]);
+    expect(placement.ghosts).toEqual([]);
+    const mapped = sounds.filter((sound) => placement.positions.has(sound.key));
+    expect(mapped.every((sound) => {
+      const position = placement.positions.get(sound.key)!;
+      if (position < 16) return horizontal.slots[position]?.category === sound.category;
+      if (sound.category === "melodicLoop") return position >= 16 && position < 28;
+      return false;
+    })).toBe(true);
+    expect([...placement.positions.values()].some((position) => position < 16 && horizontal.slots[position]?.category === "snare")).toBe(false);
   });
 });
 

@@ -69,7 +69,8 @@ export async function findPackInEntries(entries: Entry[]): Promise<FoundPack> {
   const files: PackFile<PackSource>[] = [];
   const root = entries.length === 1 && entries[0].isDirectory ? (entries[0] as FileSystemDirectoryEntry) : null;
   if (root) {
-    for (const child of await readAll(root.createReader())) await walk(child, [], files);
+    const rootFolders = /^808s?$/i.test(root.name) ? [root.name] : [];
+    for (const child of await readAll(root.createReader())) await walk(child, rootFolders, files);
   } else {
     for (const entry of entries) await walk(entry, [], files);
   }
@@ -83,7 +84,8 @@ export function findPackInFileList(list: FileList | File[]): FoundPack {
   for (const file of Array.from(list)) {
     const parts = (file.webkitRelativePath || file.name).split("/");
     if (parts.length > 1) name = parts[0];
-    const folders = parts.slice(1, -1);
+    const rootFolders = /^808s?$/i.test(parts[0]) ? [parts[0]] : [];
+    const folders = [...rootFolders, ...parts.slice(1, -1)];
     if (parts.some((p) => p.startsWith(".") || p === "__MACOSX") || !AUDIO_EXTENSIONS.test(file.name)) continue;
     files.push({ folders, name: file.name, size: file.size, source: async () => file });
   }
