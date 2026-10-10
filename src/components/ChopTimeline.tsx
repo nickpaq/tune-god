@@ -90,7 +90,7 @@ export const ChopTimeline = forwardRef<
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
   /** Whether the snap is in force: the magnet is on and the view is not zoomed all the way in (there it gives way to exact placement). */
-  const snapping = () => latest.current.magnetOn && view.current.span > minSpan * 1.01;
+  const snapping = () => latest.current.magnetOn && view.current.span > minSpan;
 
   /**
    * The grid lines for this zoom, which are both the lines drawn and the lines the snap goes to: bar lines only, never anything finer. Every bar when a
