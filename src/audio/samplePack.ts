@@ -28,6 +28,40 @@ export interface PackFile<T = unknown> {
   size: number;
   /** Whatever the caller needs to read the file later. */
   source: T;
+  /** Stable identity from the on-device sample library, when this is a saved favorite. */
+  libraryId?: string;
+  /** Favorite sounds are always retained as hot-swap choices, never chosen as part of a new kit. */
+  favorite?: boolean;
+  /** Original pack labels are kept when a saved favorite is re-imported. */
+  sourceName?: string;
+  sourcePack?: string;
+}
+
+/** Top-level pack identity inside a selected folder; type folders themselves are not treated as separate packs. */
+export function sourcePackOf<T>(file: PackFile<T>): string {
+  const typedAt = file.folders.findIndex((folder) => categoryOfFolder(folder) !== null || /^(one ?shots?|shots?)$/i.test(folder));
+  const parent = typedAt >= 0 ? file.folders.slice(0, typedAt) : file.folders.slice(0, 1);
+  return parent.join("/") || "(selected folder)";
+}
+
+/** Randomizes within each source pack, then alternates packs so a huge sub-pack cannot dominate the kit. */
+export function fairPackOrder<T>(files: PackFile<T>[], random: () => number = Math.random): PackFile<T>[] {
+  const packs = new Map<string, PackFile<T>[]>();
+  for (const file of files) {
+    const key = sourcePackOf(file);
+    const pack = packs.get(key);
+    if (pack) pack.push(file);
+    else packs.set(key, [file]);
+  }
+  const rows = shuffled([...packs.values()].map((pack) => shuffled(pack, random)), random);
+  const result: PackFile<T>[] = [];
+  const longest = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  for (let i = 0; i < longest; i++) {
+    for (const row of rows) {
+      if (i < row.length) result.push(row[i]);
+    }
+  }
+  return result;
 }
 
 export const AUDIO_EXTENSIONS = /\.(wav|wave|aif|aiff|flac|mp3|ogg|m4a)$/i;

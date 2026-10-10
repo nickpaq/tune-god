@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryOfFile, categoryOfFolder, packByteBudget } from "./samplePack";
+import { categoryOfFile, categoryOfFolder, fairPackOrder, packByteBudget } from "./samplePack";
 
 describe("hats and effects the names only hint at", () => {
   it("reads open and closed from separate words next to a hat word", () => {
@@ -55,6 +55,19 @@ describe("classifying from folder names", () => {
     expect(categoryOfFile(["Hats"], "open_01.wav")).toBe("openHat");
     expect(categoryOfFile(["Hats"], "open hat 01.wav")).toBe("openHat");
     expect(categoryOfFile(["Hats"], "hat 01.wav")).toBe("closedHat");
+  });
+});
+
+describe("balanced kit selection", () => {
+  it("alternates source packs before taking more samples from a larger pack", () => {
+    const files = [
+      ...Array.from({ length: 12 }, (_, i) => ({ folders: ["Large Pack", "Kicks"], name: `kick-${i}.wav`, size: 1, source: null })),
+      ...Array.from({ length: 2 }, (_, i) => ({ folders: ["Small Pack", "Kicks"], name: `kick-${i}.wav`, size: 1, source: null })),
+    ];
+    const chosen = fairPackOrder(files, () => 0.5).slice(0, 8);
+    const counts = chosen.reduce((map, file) => map.set(file.folders[0], (map.get(file.folders[0]) ?? 0) + 1), new Map<string, number>());
+    expect(counts.get("Small Pack")).toBe(2);
+    expect(counts.get("Large Pack")).toBe(6);
   });
 });
 

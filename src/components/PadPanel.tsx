@@ -48,6 +48,10 @@ export interface Pad {
   knobDb?: number;
   /** A bass sound that is an 808 (by its name or folder); a sample pack keeps two of these and two ordinary basses on bank C. */
   is808?: boolean;
+  /** The on-device sample-library entry this imported sound came from. */
+  libraryId?: string;
+  /** Favorite sounds survive kit changes and can be inserted from any pad's hot-swap list. */
+  favorite?: boolean;
   /** Set on a pad that is one section of a chopped song: made from the song's pad, written to the export as a new pad with a pattern of its own. */
   section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Whole bars in the section. */ bars: number; /** The colour it was given in the chop editor, as a place in the selected palette. */ colorIndex?: number; /** The colour (hex) it was given in the chop editor, kept as it was: the section pads keep it whatever palette is chosen later. */ color?: string; /** Semitones the key picked on the piano moves it, written to Koala's pitch knob. */ pitch?: number; /** Made by synced mode (the sample cut into its own sections): labelled "Chop", not "Vox". */ synced?: boolean };
   /** Set on the pad Chopper mode makes: Koala's own chopper holding the whole sample, written to the export as one new pad with the slices in it. */

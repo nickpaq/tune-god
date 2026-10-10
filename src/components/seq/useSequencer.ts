@@ -25,6 +25,9 @@ interface Saved {
   settings: Record<number, PadSettings>;
   grid: number;
   duck: Duck;
+  metronome: boolean;
+  autoMetronome: boolean;
+  countInBars: number;
 }
 export function useSequencer(
   sounds: Sound[],
@@ -51,6 +54,9 @@ export function useSequencer(
   const [duck, setDuck] = useState<Duck>(
     saved.duck ?? { on: true, db: 6, attack: 5, release: 120 },
   );
+  const [metronome, setMetronome] = useState(saved.metronome ?? false);
+  const [autoMetronome, setAutoMetronome] = useState(saved.autoMetronome ?? false);
+  const [countInBars, setCountInBars] = useState(saved.countInBars ?? 0);
   const [scene, setScene] = useState(0),
     [playing, setPlaying] = useState(false),
     [recording, setRecording] = useState(false),
@@ -90,6 +96,12 @@ export function useSequencer(
     >(),
   );
   const muteRef = useRef<Record<number, boolean>>({});
+  const countInTimer = useRef<number | null>(null);
+  const countInClicks = useRef<OscillatorNode[]>([]);
+  const metronomeRef = useRef(metronome);
+  const autoMetronomeRef = useRef(autoMetronome);
+  metronomeRef.current = metronome;
+  autoMetronomeRef.current = autoMetronome;
   function config(sound: Sound): PadSettings {
     const p = sound.pad,
       c = p.category ?? "other",
@@ -164,9 +176,16 @@ export function useSequencer(
         )
       : 0;
   function stop() {
+    if (countInTimer.current !== null) window.clearTimeout(countInTimer.current);
+    countInTimer.current = null;
+    for (const oscillator of countInClicks.current) {
+      try { oscillator.stop(); } catch { /* already stopped */ }
+    }
+    countInClicks.current = [];
     running.current = false;
     setPlaying(false);
     setRecording(false);
+    setStatus("Ready");
     recordRef.current = false;
     audio.current?.stop();
     held.current.clear();
@@ -202,6 +221,43 @@ export function useSequencer(
     const a = audio.current;
     if (!a) return;
     await a.resume();
+    if (countInTimer.current !== null) stop();
+    if (!running.current && record && countInBars > 0) {
+      setStatus("Count-in");
+      recordRef.current = false;
+      setRecording(false);
+      const startAt = a.ctx.currentTime + 0.04;
+      const totalBeats = countInBars * beatsPerBar;
+      if (metronome || autoMetronome) {
+        for (let beat = 0; beat < totalBeats; beat++) {
+          const when = startAt + (beat * 60) / bpm;
+          const osc = a.ctx.createOscillator();
+          const gain = a.ctx.createGain();
+          osc.frequency.value = beat % beatsPerBar === 0 ? 1320 : 880;
+          gain.gain.setValueAtTime(0.0001, when);
+          gain.gain.exponentialRampToValueAtTime(0.22, when + 0.003);
+          gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.045);
+          osc.connect(gain).connect(a.ctx.destination);
+          osc.start(when);
+          osc.stop(when + 0.05);
+          countInClicks.current.push(osc);
+        }
+      }
+      countInTimer.current = window.setTimeout(() => {
+        countInTimer.current = null;
+        countInClicks.current = [];
+        if (audio.current !== a) return;
+        origin.current = a.ctx.currentTime + 0.015;
+        scheduled.current = 0;
+        eligible.current.clear();
+        running.current = true;
+        setPlaying(true);
+        recordRef.current = true;
+        setRecording(true);
+        setStatus("Ready");
+      }, (totalBeats * 60 * 1000) / bpm);
+      return;
+    }
     if (!running.current) {
       a.stop();
       origin.current = a.ctx.currentTime + 0.015;
@@ -381,12 +437,12 @@ export function useSequencer(
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ sequence, settings, grid, duck, mix }),
+        JSON.stringify({ sequence, settings, grid, duck, mix, metronome, autoMetronome, countInBars }),
       );
     } catch {
       setStatus("Storage full — download a pattern backup");
     }
-  }, [sequence, settings, grid, duck, mix, storageKey]);
+  }, [sequence, settings, grid, duck, mix, metronome, autoMetronome, countInBars, storageKey]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       const a = audio.current;
@@ -404,6 +460,23 @@ export function useSequencer(
         ),
       );
       const until = now + (0.08 * bpm) / 60;
+      if (metronomeRef.current || (recordRef.current && autoMetronomeRef.current)) {
+        const first = Math.ceil((scheduled.current - 1e-8) / 1);
+        const last = Math.ceil((until - 1e-8) / 1);
+        for (let beat = first; beat < last; beat++) {
+          const when = origin.current + (beat * 60) / bpm;
+          if (when < a.ctx.currentTime - 0.005) continue;
+          const osc = a.ctx.createOscillator();
+          const gain = a.ctx.createGain();
+          osc.frequency.value = beat % beatsPerBar === 0 ? 1320 : 880;
+          gain.gain.setValueAtTime(0.0001, when);
+          gain.gain.exponentialRampToValueAtTime(0.16, when + 0.003);
+          gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.045);
+          osc.connect(gain).connect(a.ctx.destination);
+          osc.start(when);
+          osc.stop(when + 0.05);
+        }
+      }
       let from = scheduled.current;
       while (from < until - 1e-8) {
         const at = locate(from);
@@ -508,6 +581,12 @@ export function useSequencer(
     setGrid,
     duck,
     setDuck,
+    metronome,
+    setMetronome,
+    autoMetronome,
+    setAutoMetronome,
+    countInBars,
+    setCountInBars,
     scene,
     chooseScene,
     playing,

@@ -9,7 +9,7 @@ import { applyGainDb } from "./gain";
 import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { bankFileName, type BankGroup } from "./bankLoad";
-import { AUDIO_EXTENSIONS, maxFileBytesFor, type PackFile } from "./samplePack";
+import { AUDIO_EXTENSIONS, maxFileBytesFor, sourcePackOf, type PackFile } from "./samplePack";
 
 /** A dropped file the pack can read later. */
 export type PackSource = () => Promise<File>;
@@ -111,6 +111,10 @@ export interface WrittenSound {
   /** Which of the plan's groups it came from and its number there. */
   group: number;
   number: number;
+  libraryId: string;
+  sourceName: string;
+  sourcePack: string;
+  favorite: boolean;
 }
 
 export interface WriteResult {
@@ -210,7 +214,21 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
     samples.push({ id: sampleId, metadata: { originalPath: fileName } });
     pads.push({ pad: pad + base, type: "sample", sampleId, vol: volFromDb(knobDb), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
     project.pads.push({ pad, sampleId, fileName });
-    sounds.push({ pad, sampleId, fileName, category, is808: !!is808, knobDb, group, number });
+    const libraryId = file.libraryId ?? `sample-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    sounds.push({
+      pad,
+      sampleId,
+      fileName,
+      category,
+      is808: !!is808,
+      knobDb,
+      group,
+      number,
+      libraryId,
+      sourceName: file.sourceName ?? file.name,
+      sourcePack: file.sourcePack ?? sourcePackOf(file),
+      favorite: !!file.favorite,
+    });
   }
   project.zip.file("sampler/sampler.json", JSON.stringify(json));
   const blob = await project.zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true });

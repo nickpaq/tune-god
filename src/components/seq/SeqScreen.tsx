@@ -209,13 +209,12 @@ function Arrangement({
         .filter((s) => Math.floor(s.pad.index / 16) === bank)
         .map((s) => ({
           id: `pad:${s.pad.index}`,
-          label: s.label,
           color: s.color,
           pad: s.pad.index,
           bank,
         }))
     : [
-        ...BANKS.map((name, b) => {
+        ...BANKS.map((_, b) => {
           const members = sounds.filter(
             (s) =>
               Math.floor(s.pad.index / 16) === b &&
@@ -224,7 +223,6 @@ function Arrangement({
           return members.length
             ? {
                 id: `bank:${b}`,
-                label: `Bank ${name}`,
                 color: members[0].color,
                 pad: -1,
                 bank: b,
@@ -235,7 +233,6 @@ function Arrangement({
           .filter((s) => ownTrack(s.pad.category ?? "other"))
           .map((s) => ({
             id: `pad:${s.pad.index}`,
-            label: s.label,
             color: s.color,
             pad: s.pad.index,
             bank: Math.floor(s.pad.index / 16),
@@ -244,7 +241,6 @@ function Arrangement({
   return (
     <div
       className="q-arrangement"
-      style={{ height: Math.min(196, Math.max(110, rows.length * 11 + 20)) }}
       aria-label={drill ? `Bank ${BANKS[bank]} pad patterns` : "Arrangement"}
     >
       <button
@@ -312,9 +308,6 @@ function Arrangement({
             aria-pressed={i === seq.scene && seq.looping}
             title="Double-tap to toggle section loop; swipe down to copy; swipe up to delete"
           >
-            <span className="q-scene-number">
-              {Object.keys(scene.refs).length ? i + 1 : ""}
-            </span>
             <div className="q-scene-rows">
               {rows.map((row) => {
                 const p = patternFor(seq.sequence, i, `bank:${row.bank}`),
@@ -327,7 +320,6 @@ function Arrangement({
                     key={row.id}
                     className="q-track"
                     style={{ "--track": row.color } as CSSProperties}
-                    title={`${row.label}: ${unit / beats} bars`}
                   >
                     {Array.from(
                       { length: Math.ceil(sceneLength / unit) },
@@ -346,15 +338,7 @@ function Arrangement({
                           style={{
                             width: `${(Math.min(unit, sceneLength - n * unit) / sceneLength) * 100}%`,
                           }}
-                        >
-                          {row.pad >= 0
-                            ? lane
-                              ? `${unit / beats}`
-                              : "No pattern"
-                            : p
-                              ? `${(seq.sequence.libraries[`bank:${row.bank}`]?.findIndex((x) => x?.id === p.id) ?? 0) + 1}`
-                              : "No pattern"}
-                        </span>
+                        />
                       ),
                     )}
                   </div>
@@ -1050,6 +1034,37 @@ export function SeqScreen({
                     {name}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label>
+              Metronome{" "}
+              <input
+                aria-label="Metronome"
+                type="checkbox"
+                checked={seq.metronome}
+                onChange={(e) => seq.setMetronome(e.target.checked)}
+              />
+            </label>
+            <label>
+              Auto-enable when recording{" "}
+              <input
+                aria-label="Auto-enable metronome when recording"
+                type="checkbox"
+                checked={seq.autoMetronome}
+                onChange={(e) => seq.setAutoMetronome(e.target.checked)}
+              />
+            </label>
+            <label>
+              Count-in length{" "}
+              <select
+                aria-label="Count-in length"
+                value={seq.countInBars}
+                onChange={(e) => seq.setCountInBars(Number(e.target.value))}
+              >
+                <option value={0}>Off</option>
+                <option value={1}>1 bar</option>
+                <option value={2}>2 bars</option>
+                <option value={4}>4 bars</option>
               </select>
             </label>
             <p className="q-hint">

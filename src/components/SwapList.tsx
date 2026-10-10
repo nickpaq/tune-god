@@ -28,6 +28,7 @@ export function SwapList({
   audioOf,
   nameOf,
   onSwap,
+  onFavorite,
 }: {
   /** Identifies the tapped slot; the list starts from the top again when it changes. */
   slotLabel: string;
@@ -36,6 +37,7 @@ export function SwapList({
   /** How a sound is named in the list. */
   nameOf: (pad: Pad) => string;
   onSwap: (pad: Pad) => void;
+  onFavorite: (pad: Pad, favorite: boolean) => void;
 }) {
   const preview = useSoundPreview();
   const rows = useRef<HTMLDivElement>(null);
@@ -52,10 +54,16 @@ export function SwapList({
         {candidates.map((pad) => {
           const name = nameOf(pad);
           return (
-            <div key={pad.origIndex} className="swap-row">
+          <div key={pad.libraryId ?? pad.origIndex} className="swap-row">
               <span className="swap-row__name" title={pad.name}>
                 {name}
               </span>
+              <button
+                className={`swap-row__btn swap-row__favorite${pad.favorite ? " is-favorite" : ""}`}
+                onClick={() => onFavorite(pad, !pad.favorite)}
+                aria-label={`${pad.favorite ? "Remove" : "Add"} ${name} ${pad.favorite ? "from" : "to"} favorites`}
+                title={pad.favorite ? "Remove favorite" : "Keep on this device and add to hot swap"}
+              >{pad.favorite ? "★" : "☆"}</button>
               <button
                 className={`swap-row__btn${preview.playing === pad.origIndex ? " swap-row__btn--on" : ""}`}
                 onClick={() => preview.toggle(pad.origIndex, audioOf(pad), pad.sampleRate)}

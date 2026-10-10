@@ -12,7 +12,7 @@
 import { arrangeFingerDrumming, SUBSTITUTE_GROUP } from "./fingerDrumming";
 import type { FingerLayout } from "./fingerLayouts";
 import { categoryLabel, is808Name, type CategoryId } from "./classify";
-import { categoryOfFile, categoryOfFolder, shuffled, type PackFile } from "./samplePack";
+import { categoryOfFile, categoryOfFolder, fairPackOrder, shuffled, type PackFile } from "./samplePack";
 
 export type BankLoad = "drums" | "loops" | "bass" | "oneShots" | "kit";
 
@@ -204,7 +204,7 @@ export function planKit<T>(files: PackFile<T>[], random: () => number = Math.ran
   const groups = [...buckets.values()].map(({ category, is808, files: candidates }) => ({
     category,
     ...(is808 ? { is808: true } : {}),
-    candidates: shuffled(candidates, random),
+    candidates: fairPackOrder(candidates, random),
     want: wanted(category, is808),
   }));
   return { groups };

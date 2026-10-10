@@ -5,6 +5,20 @@ import type { CategoryId } from "./audio/classify";
 const STATE_KEY = "tune-god:state";
 const DB_NAME = "tune-god";
 const STORE = "project";
+const SAMPLE_LIBRARY_STORE = "sample-library";
+
+export interface SampleLibraryRecord {
+  id: string;
+  name: string;
+  pack: string;
+  category: CategoryId;
+  is808?: boolean;
+  importedAt: number;
+  favorite: boolean;
+  /** Audio is kept only for favorites, so imported logs do not duplicate all sample data on-device. */
+  audio?: Blob;
+  sampleRate?: number;
+}
 
 export interface SavedPad {
   tune: boolean;
@@ -16,6 +30,8 @@ export interface SavedPad {
   category?: CategoryId;
   /** A bass sound that is an 808 (see Pad.is808). */
   is808?: boolean;
+  libraryId?: string;
+  favorite?: boolean;
   /** The Tune screen's Stretch key was on for this loop (see Pad.stretch). */
   stretch?: boolean;
   /** The pad is locked (see Pad.locked). */
@@ -131,11 +147,69 @@ export function saveChopMarks(songKey: string, marks: SavedChopMarks): void {
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    const req = indexedDB.open(DB_NAME, 2);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
+      if (!req.result.objectStoreNames.contains(SAMPLE_LIBRARY_STORE)) req.result.createObjectStore(SAMPLE_LIBRARY_STORE, { keyPath: "id" });
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+}
+
+/** Records the sounds actually imported (not every file found in a selected folder). */
+export async function recordImportedSamples(records: SampleLibraryRecord[]): Promise<void> {
+  if (!records.length) return;
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(SAMPLE_LIBRARY_STORE, "readwrite");
+      const store = tx.objectStore(SAMPLE_LIBRARY_STORE);
+      for (const record of records) store.put(record);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    /* Device storage may be unavailable or full; the project import remains usable. */
+  }
+}
+
+export async function loadSampleLibrary(): Promise<SampleLibraryRecord[]> {
+  try {
+    const db = await openDb();
+    const records = await new Promise<SampleLibraryRecord[]>((resolve, reject) => {
+      const req = db.transaction(SAMPLE_LIBRARY_STORE).objectStore(SAMPLE_LIBRARY_STORE).getAll();
+      req.onsuccess = () => resolve((req.result as SampleLibraryRecord[]).sort((a, b) => b.importedAt - a.importedAt));
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return records;
+  } catch {
+    return [];
+  }
+}
+
+/** Pin or unpin one sound; audio is retained only while it is a favorite. */
+export async function setSampleFavorite(id: string, favorite: boolean, audio?: Blob, sampleRate?: number): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(SAMPLE_LIBRARY_STORE, "readwrite");
+      const store = tx.objectStore(SAMPLE_LIBRARY_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const old = req.result as SampleLibraryRecord | undefined;
+        if (!old) return;
+        store.put({ ...old, favorite, ...(favorite && audio ? { audio, sampleRate } : {}), ...(!favorite ? { audio: undefined, sampleRate: undefined } : {}) });
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    /* Favorites are best-effort if the device has no storage quota left. */
+  }
 }
 
 export async function saveProjectFile(file: File): Promise<void> {
