@@ -24,6 +24,7 @@ import {
   type Marks,
 } from "../audio/song/chopMarks";
 import { detectSongTempo } from "../audio/song/detectors";
+import { zeroCrossingNear } from "../audio/song/zeroCrossing";
 import { bpmAt, fineLineNear, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
 import { buildPyramid } from "../audio/song/waveform";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
@@ -62,6 +63,8 @@ const BPM_DOUBLE_MS = 320;
 const BPM_PER_PX = 0.03;
 const BPM_MIN = 30;
 const BPM_MAX = 300;
+/** How far (seconds) a point set without the snap looks for a zero crossing. */
+const ZERO_REACH_SECONDS = 0.005;
 /** The + and - keys: a tap nudges by this much; held, after a pause, the rate climbs from BPM_HOLD_START (BPM per second) to a semitone of tempo per second. */
 const BPM_NUDGE = 0.01;
 const BPM_HOLD_DELAY_MS = 350;
@@ -316,9 +319,18 @@ export function SongChopModal({
     setStatus(message);
   };
 
+  /** Where a point set at the cursor goes: onto the grid line while snapping, else onto the nearest zero crossing, so a cut does not click. */
+  const pointAtCursor = (): number => {
+    const cursor = timeline.current?.cursor() ?? 0;
+    if (timeline.current?.snapping() ?? magnetOn) return cursor;
+    const point = zeroCrossingNear(mono, cursor, Math.round(sampleRate * ZERO_REACH_SECONDS));
+    timeline.current?.setCursor(point);
+    return point;
+  };
+
   const addChop = () => {
     if (!grid) return;
-    const cursor = timeline.current?.cursor() ?? 0;
+    const cursor = pointAtCursor();
     const lineOf = (frame: number) => (fine ? fineLineNear(grid, frame) : barLineNear(grid, frame));
     const line = lineOf(cursor);
     const at = lineFrame(grid, line);
@@ -444,7 +456,7 @@ export function SongChopModal({
 
   const placeAnchor = () => {
     if (!grid) return;
-    const cursor = Math.max(0, Math.min(totalFrames, timeline.current?.cursor() ?? 0));
+    const cursor = Math.max(0, Math.min(totalFrames, pointAtCursor()));
     const frame = anchorAtPlayhead(grid, cursor, timeline.current?.snapping() ?? magnetOn, totalFrames - 1);
     if (frame < 0 || frame >= totalFrames) return;
     // Stop a pending glide without moving the playhead or source audio.
