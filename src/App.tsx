@@ -401,9 +401,9 @@ function App() {
     Record<number, Float32Array[]>
   >({});
   const [menuOpen, setMenuOpen] = useState(false);
-  /** The sequencer screens (SEQ key). Interface only for now: nothing on them plays or records. */
+  /** Temporarily disabled: live-input performance needs a later sequencer port. Keep the screen code for that work. */
   const [seqOpen, setSeqOpen] = useState(false);
-  const [seqBeatsPerBar, setSeqBeatsPerBar] = useState(4);
+  const seqBeatsPerBar = 4;
   const [masterStyle, setMasterStyle] = useState<MasterStyle>(
     saved.masterStyle ?? "loud",
   );
@@ -3286,19 +3286,7 @@ function App() {
                       </button>
                     );
                   })}
-                  {/* Sequencer performance pages follow the selected pad type. */}
-                  <button
-                    className="cap cap--mode"
-                    aria-label="Sequencer"
-                    onClick={async () => {
-                      setMenuOpen(false);
-                      setSeqBeatsPerBar(await beatsPerBarOfProject());
-                      setSeqOpen(true);
-                    }}
-                  >
-                    <span className="cap__led" />
-                    <span className="cap__legend">Seq</span>
-                  </button>
+                  {/* Sequencer entry point is disabled until its live-input port is ready. */}
                 </div>
                 <div className="tray">
                   {BANKS.map((name, i) => {
