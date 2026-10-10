@@ -277,3 +277,64 @@ export function dominantPitch(mono: Float32Array, sampleRate: number): YinFrameR
   if (isBassHeavy(head, sampleRate)) return measureBass(head, sampleRate) ?? measure(head, sampleRate, 0);
   return measure(head, sampleRate, 0) ?? measureBass(head, sampleRate);
 }
+import { PitchDetector } from "pitchy";
+
+
+/**
+ * Pitchy/McLeod alternative used by the pitch-detection preview branch. It
+ * shares the same frame voting, bass lifting, and long-window refinement as
+ * YIN so the preview compares the estimator instead of changing the whole
+ * analysis strategy at once.
+ */
+export function dominantPitchMpm(mono: Float32Array, sampleRate: number): YinFrameResult | null {
+  const head = mono.subarray(0, Math.min(mono.length, ANALYSIS_SECONDS * sampleRate));
+  if (isBassHeavy(head, sampleRate)) return measureMpmBass(head, sampleRate) ?? measureMpm(head, sampleRate, 0);
+  return measureMpm(head, sampleRate, 0) ?? measureMpmBass(head, sampleRate);
+}
+
+function mpmTrack(mono: Float32Array, sampleRate: number): YinFrameResult[] {
+  const frameSize = 4096;
+  const hopSize = 1024;
+  const detector = PitchDetector.forFloat32Array(frameSize);
+  detector.clarityThreshold = 0.8;
+  const results: YinFrameResult[] = [];
+  for (let start = 0; start + frameSize <= mono.length; start += hopSize) {
+    const [frequency, confidence] = detector.findPitch(mono.subarray(start, start + frameSize), sampleRate);
+    if (frequency > 0) results.push({ frequency, confidence, timeSeconds: start / sampleRate });
+  }
+  return results;
+}
+
+function pickMpm(mono: Float32Array, sampleRate: number): YinFrameResult | null {
+  const track = mpmTrack(mono, sampleRate);
+  if (track.length === 0) return null;
+  const pool = track.filter((f) => f.confidence >= 0.5);
+  const eligible = pool.length ? pool : track;
+  const weights = new Array<number>(12).fill(0);
+  for (const frame of eligible) weights[pitchClassOfFrequency(frame.frequency)] += frame.confidence;
+  let bestClass = weights.indexOf(Math.max(...weights));
+  const rootCandidate = (bestClass + 5) % 12;
+  if (weights[rootCandidate] >= weights[bestClass] / 3) bestClass = rootCandidate;
+  const winners = eligible.filter((frame) => pitchClassOfFrequency(frame.frequency) === bestClass);
+  const sorted = [...winners].sort((a, b) => a.frequency - b.frequency);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  return { ...median, confidence: winners.reduce((sum, f) => sum + f.confidence, 0) / winners.length };
+}
+
+function measureMpm(mono: Float32Array, sampleRate: number, octavesUp: number): YinFrameResult | null {
+  const audio = octavesUp ? transposeUp(mono, octavesUp) : mono;
+  const picked = pickMpm(audio, sampleRate);
+  if (!picked) return null;
+  return { ...picked, frequency: refineFrequency(audio, sampleRate, picked) / 2 ** octavesUp };
+}
+
+function measureMpmBass(mono: Float32Array, sampleRate: number): YinFrameResult | null {
+  for (let octaves = 1; octaves <= MAX_OCTAVES_UP; octaves++) {
+    const audio = transposeUp(mono, octaves);
+    const picked = pickMpm(audio, sampleRate);
+    if (picked && picked.frequency >= MIN_RELIABLE_HZ) {
+      return { ...picked, frequency: refineFrequency(audio, sampleRate, picked) / 2 ** octaves };
+    }
+  }
+  return null;
+}

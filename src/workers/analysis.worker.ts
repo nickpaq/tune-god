@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import * as Comlink from "comlink";
-import { dominantPitch } from "../audio/pitch/yin";
+import { dominantPitch, dominantPitchMpm } from "../audio/pitch/yin";
 import { loopKey } from "../audio/pitch/loopKey";
 import { bpmFromName, keyFromName } from "../audio/pitch/nameKey";
 import { frequencyToMidi } from "../audio/theory";
@@ -13,6 +13,12 @@ const api = {
   /** Fractional MIDI note of the sample's dominant pitch, or null when it has no clear one (drums, noise). */
   detectMidi(mono: Float32Array, sampleRate: number): number | null {
     const pitch = dominantPitch(mono, sampleRate);
+    return pitch ? frequencyToMidi(pitch.frequency) : null;
+  },
+
+  /** Alternative McLeod Pitch Method analysis, exposed for the preview comparison. */
+  detectMidiMpm(mono: Float32Array, sampleRate: number): number | null {
+    const pitch = dominantPitchMpm(mono, sampleRate);
     return pitch ? frequencyToMidi(pitch.frequency) : null;
   },
 
