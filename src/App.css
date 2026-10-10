@@ -1130,6 +1130,7 @@
   height: 5cqw;
 }
 
+.menu .menu__a4 .scrub-field,
 .menu .menu__a4 input {
   width: 18cqw;
   padding: 1.5cqw;
@@ -1140,6 +1141,14 @@
   color: var(--ink);
   font: inherit;
   font-size: 16px; /* at least 16px so iOS doesn't zoom on focus */
+}
+
+.scrub-field {
+  display: inline-block;
+  box-sizing: border-box;
+  text-align: right;
+  touch-action: none;
+  cursor: ew-resize;
 }
 
 .menu__button {
@@ -1602,7 +1611,7 @@
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  cursor: ns-resize;
+  cursor: ew-resize;
 }
 
 .chop__nudge {

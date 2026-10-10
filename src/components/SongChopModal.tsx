@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { scrubSpeed } from "./scrub";
 import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
 import { chopColor, type Palette } from "../audio/palettes";
@@ -57,9 +58,8 @@ interface Detected {
 /** The BPM readout: a finger that moves this far (CSS pixels) is scrubbing; two taps within this (ms) are a double tap. */
 const BPM_DRAG_PX = 8;
 const BPM_DOUBLE_MS = 320;
-/** Scrubbing: BPM per pixel dragged up, shrinking as 1 / (1 + dx / BPM_FINE_PX) with dx the finger's distance right of where it went down. */
-const BPM_PER_PX = 0.08;
-const BPM_FINE_PX = 70;
+/** Scrubbing: BPM per pixel dragged to the right at full speed; the lower the finger is on the screen the slower, to a tenth at the bottom (`scrubSpeed`). */
+const BPM_PER_PX = 0.03;
 const BPM_MIN = 30;
 const BPM_MAX = 300;
 /** The + and - keys: a tap nudges by this much; held, after a pause, the rate climbs from BPM_HOLD_START (BPM per second) to a semitone of tempo per second. */
@@ -366,24 +366,23 @@ export function SongChopModal({
 
   const scaleTempo = (factor: number) => change({ ...marks, tempoScale: marks.tempoScale * factor, bpm: marks.bpm == null ? null : marks.bpm * factor }, factor > 1 ? "Tempo doubled" : "Tempo halved");
 
-  // ---- the BPM readout: double tap goes back to the automatic tempo; a drag up or down scrubs it, finer the further right the finger is ----
-  const bpmTouch = useRef<{ x0: number; y0: number; y: number; bpm: number; moved: boolean } | null>(null);
+  // ---- the BPM readout: double tap goes back to the automatic tempo; a drag left or right scrubs it, slower the lower the finger is ----
+  const bpmTouch = useRef<{ x0: number; y0: number; x: number; bpm: number; moved: boolean } | null>(null);
   const lastBpmTap = useRef(0);
   const bpmNow = grid ? bpmAt(grid, 0) : 0;
   const bpmDown = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (!grid) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    bpmTouch.current = { x0: e.clientX, y0: e.clientY, y: e.clientY, bpm: bpmNow, moved: false };
+    bpmTouch.current = { x0: e.clientX, y0: e.clientY, x: e.clientX, bpm: bpmNow, moved: false };
   };
   const bpmMove = (e: React.PointerEvent<HTMLSpanElement>) => {
     const t = bpmTouch.current;
     if (!t) return;
-    if (!t.moved && Math.hypot(e.clientX - t.x0, e.clientY - t.y0) < BPM_DRAG_PX) return;
+    if (!t.moved && Math.abs(e.clientX - t.x0) < BPM_DRAG_PX) return;
     t.moved = true;
-    // Each step counts at the fineness of where the finger is now: the further right of where it went down, the smaller the BPM per pixel.
-    const perPixel = BPM_PER_PX / (1 + Math.max(0, e.clientX - t.x0) / BPM_FINE_PX);
-    t.bpm = Math.min(BPM_MAX, Math.max(BPM_MIN, t.bpm + (t.y - e.clientY) * perPixel));
-    t.y = e.clientY;
+    // Each step counts at the speed of where the finger is now: slower the lower it is on the screen.
+    t.bpm = Math.min(BPM_MAX, Math.max(BPM_MIN, t.bpm + (e.clientX - t.x) * BPM_PER_PX * scrubSpeed(t.y0, e.clientY)));
+    t.x = e.clientX;
     setLiveBpm(t.bpm);
   };
   const bpmUp = () => {
@@ -512,7 +511,7 @@ export function SongChopModal({
               <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(-1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo down by 0.01">
                 <NudgeIcon plus={false} />
               </button>
-              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: nearest whole BPM. Drag up or down to scrub; move right to go finer.">
+              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: nearest whole BPM. Drag left or right to scrub; slower toward the bottom of the screen.">
                 {bpmText}
               </span>
               <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo up by 0.01">

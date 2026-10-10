@@ -1,17 +1,17 @@
-import { useRef } from "react";
+import { useScrub } from "./scrub";
 
 /** The sweep of the dial: from 7 o'clock to 5 o'clock, in degrees from straight up. */
 const MIN_DEG = -135;
 const MAX_DEG = 135;
-/** Pixels of dragging that cover the whole range. */
+/** Pixels of sideways dragging that cover the whole range (at full speed). */
 const TRAVEL_PX = 140;
 
 /**
- * A rotary knob in the screen's colours for a value from 0 to 1: drag up or right to turn it up, down or left to turn it down (the whole range takes
- * about 140 px of travel), or use the arrow keys. It is a slider as far as assistive tech is concerned.
+ * A rotary knob in the screen's colours for a value from 0 to 1: drag right to turn it up and left to turn it down (the whole range takes
+ * about 140 px of travel, slowing to a tenth by the bottom of the screen: `scrub.ts`), or use the arrow keys. It is a slider as far as assistive tech is concerned.
  */
 export function Knob({ value, onChange, label }: { value: number; onChange: (value: number) => void; label: string }) {
-  const drag = useRef<{ id: number; x: number; y: number; value: number } | null>(null);
+  const scrub = useScrub({ value, perPx: 1 / TRAVEL_PX, min: 0, max: 1, onChange });
   const angle = MIN_DEG + (MAX_DEG - MIN_DEG) * value;
   const clamp = (v: number) => Math.min(1, Math.max(0, v));
   const point = (deg: number, r: number) => [20 + r * Math.sin((deg * Math.PI) / 180), 20 - r * Math.cos((deg * Math.PI) / 180)];
@@ -30,18 +30,7 @@ export function Knob({ value, onChange, label }: { value: number; onChange: (val
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(value * 100)}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          e.currentTarget.setPointerCapture(e.pointerId);
-          drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, value };
-        }}
-        onPointerMove={(e) => {
-          const d = drag.current;
-          if (!d || d.id !== e.pointerId) return;
-          onChange(clamp(d.value + (d.y - e.clientY + (e.clientX - d.x)) / TRAVEL_PX));
-        }}
-        onPointerUp={() => (drag.current = null)}
-        onPointerCancel={() => (drag.current = null)}
+        {...scrub}
         onKeyDown={(e) => {
           if (e.key === "ArrowUp" || e.key === "ArrowRight") onChange(clamp(value + 0.05));
           else if (e.key === "ArrowDown" || e.key === "ArrowLeft") onChange(clamp(value - 0.05));

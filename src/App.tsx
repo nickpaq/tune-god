@@ -45,6 +45,7 @@ import { projectTimeSignature } from "./audio/koalaProject";
 import { addSongSections, songTemplate, type SongExport, type SongTemplate } from "./audio/exportSong";
 import { addChopperPad, CHOPPER_MAX_SLICES, fitPlans, sliceLayout, type ChopperExport } from "./audio/exportChopper";
 import { keyOffset } from "./audio/song/keyOffset";
+import { ScrubField } from "./components/ScrubField";
 import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
 import { packArrangement, type WorkspaceResult } from "./audio/song/sectionWorkspace";
 import { PatternMaker } from "./components/PatternMaker";
@@ -1850,21 +1851,7 @@ function App() {
           <div className="menu">
             <label className="menu__a4">
               Project BPM
-              <input
-                type="number"
-                inputMode="decimal"
-                min={20}
-                max={300}
-                step={1}
-                value={bpmText}
-                onChange={(e) => {
-                  setBpmText(e.target.value);
-                  const bpm = parseFloat(e.target.value);
-                  if (Number.isFinite(bpm) && bpm >= 20 && bpm <= 300) setProjectBpm(bpm);
-                }}
-                onBlur={() => setBpmText(String(projectBpm))}
-                aria-label="Project BPM"
-              />
+              <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.1} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
             </label>
             <button
               className="menu__button menu__button--primary"
@@ -1997,20 +1984,7 @@ function App() {
             </label>
             <label className="menu__a4">
               A4 reference (Hz)
-              <input
-                type="number"
-                inputMode="decimal"
-                min={A4_REFERENCE_RANGE.min}
-                max={A4_REFERENCE_RANGE.max}
-                step={0.1}
-                value={a4Text}
-                onChange={(e) => {
-                  setA4Text(e.target.value);
-                  const hz = parseFloat(e.target.value);
-                  if (Number.isFinite(hz) && hz >= A4_REFERENCE_RANGE.min && hz <= A4_REFERENCE_RANGE.max) setA4(hz);
-                }}
-                onBlur={() => setA4Text(String(a4))}
-              />
+              <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v * 10) / 10)} />
             </label>
             {a4 !== 440 && (
               <button
