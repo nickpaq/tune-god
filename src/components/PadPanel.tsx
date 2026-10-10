@@ -1,6 +1,6 @@
 import type { RhythmPattern } from "../audio/song/rhythmLengths";
 import { useLayoutEffect, useRef, useState } from "react";
-import { PrecisionSlider } from "./PrecisionSlider";
+import { PitchSlider } from "./PitchSlider";
 import { ToneKnob } from "./ToneKnob";
 import { Waveform } from "./Waveform";
 import type { CategoryId } from "../audio/classify";
@@ -148,6 +148,8 @@ export function PadPanel({
   /** The two squares (minor left, major right) are shown while the slider is dragged up. */
   const [above, setAbove] = useState(false);
   const boxes = useRef<(HTMLDivElement | null)[]>([]);
+  /** Cents mode of the pitch slider: a tap swaps it with semitone mode. */
+  const [centsMode, setCentsMode] = useState(false);
   const shown = chords ? chords[relative ? 1 : 0] : null;
 
   return (
@@ -189,13 +191,7 @@ export function PadPanel({
       <Waveform channelData={pad.channelData} />
 
       <div className="pad-panel__slider">
-        <PrecisionSlider
-          min={-TRIM_RANGE_CENTS}
-          max={TRIM_RANGE_CENTS}
-          step={0.1}
-          keyStep={10}
-          fineSpan={10}
-          coarseStep={100}
+        <PitchSlider
           onAbove={(point) => {
             if (!isLoop) return;
             setAbove(point !== null);
@@ -206,14 +202,15 @@ export function PadPanel({
             }
           }}
           value={trim}
-          bipolar
           disabled={needsKey}
           onChange={onTrim}
+          cents={centsMode}
+          onCents={setCentsMode}
           onDragStart={onHoldStart}
           onDragEnd={onHoldEnd}
-          onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
+          onReset={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={(cents) => formatTrim(pad.tune ? autoShift * 100 + cents : cents)}
-          title="Pitch of the sound: hold and slide along the slider to repitch it by semitones, drag down for fine steps. Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset."
+          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), tap to swap to cents mode (a tuner dial, 100 cents either side). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
         />
         {chords && above && (
           <>
@@ -233,8 +230,8 @@ export function PadPanel({
             <span>Select a key first</span>
           ) : (
             <>
-              <span>-12st</span>
-              <span>+12st</span>
+              <span>{centsMode ? "-100c" : "-12st"}</span>
+              <span>{centsMode ? "+100c" : "+12st"}</span>
             </>
           )}
         </div>
