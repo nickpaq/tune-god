@@ -61,6 +61,21 @@ body {
   overscroll-behavior: none;
 }
 
+/* No long-press callout, text selection, image drag or tap highlight anywhere. Text fields are the exception: iOS Safari will not let a field with
+   user-select none take typing (the BPM and A4 boxes). */
+* {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -webkit-user-callout: none;
+  -webkit-user-drag: none;
+  -webkit-highlight: none;
+}
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body {
   margin: 0;
   background: var(--stage);

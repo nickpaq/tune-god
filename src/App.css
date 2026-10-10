@@ -547,6 +547,54 @@
   outline-offset: var(--cell);
 }
 
+/* the pitch slider: a line with a mark for every semitone that bends into a tuner dial (cents mode) */
+.pitch-slider {
+  position: relative;
+  height: calc(var(--cell) * 10);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.pitch-slider:focus-visible {
+  outline: none;
+}
+
+.pitch-slider__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.pitch-slider__line,
+.pitch-slider__mark,
+.pitch-slider__hand {
+  fill: none;
+  stroke: var(--oled);
+  stroke-width: var(--cell);
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: butt;
+}
+
+.pitch-slider__line {
+  stroke-linejoin: round;
+}
+
+.pitch-slider__mark {
+  stroke-width: calc(var(--cell) * 0.5);
+}
+
+.pitch-slider__hand {
+  stroke-width: calc(var(--cell) * 1.5);
+}
+
+.pitch-slider__thumb {
+  fill: #000;
+  stroke: var(--oled);
+  stroke-width: var(--cell);
+  vector-effect: non-scaling-stroke;
+}
+
 /* ---- Swap screen ---- */
 .swap-list {
   /* its own cell (set by useOledCell), so the list reads the same however many sounds it holds */
@@ -1130,6 +1178,7 @@
   height: 5cqw;
 }
 
+.menu .menu__a4 .scrub-field,
 .menu .menu__a4 input {
   width: 18cqw;
   padding: 1.5cqw;
@@ -1140,6 +1189,14 @@
   color: var(--ink);
   font: inherit;
   font-size: 16px; /* at least 16px so iOS doesn't zoom on focus */
+}
+
+.scrub-field {
+  display: inline-block;
+  box-sizing: border-box;
+  text-align: right;
+  touch-action: none;
+  cursor: ew-resize;
 }
 
 .menu__button {
@@ -1602,7 +1659,7 @@
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  cursor: ns-resize;
+  cursor: ew-resize;
 }
 
 .chop__nudge {

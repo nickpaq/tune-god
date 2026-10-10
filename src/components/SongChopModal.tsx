@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { scrubSpeed } from "./scrub";
 import * as Comlink from "comlink";
 import { nextAnalysisWorker } from "../workers/workerClient";
 import { chopColor, type Palette } from "../audio/palettes";
@@ -23,6 +24,7 @@ import {
   type Marks,
 } from "../audio/song/chopMarks";
 import { detectSongTempo } from "../audio/song/detectors";
+import { zeroCrossingNear } from "../audio/song/zeroCrossing";
 import { bpmAt, fineLineNear, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
 import { buildPyramid } from "../audio/song/waveform";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
@@ -33,7 +35,8 @@ import { padTitle } from "../audio/song/stems";
 import { loadChopMarks, saveChopMarks } from "../storage";
 import type { Pad } from "./PadPanel";
 
-import { SectionWorkspace } from "./SectionWorkspace";
+import { SliceDice } from "./SliceDice";
+import { DEFAULT_SIZE, SIZES, sizeSteps } from "../audio/song/sliceDice";
 import type { WorkspaceResult } from "../audio/song/sectionWorkspace";
 
 export interface ChopSettings {
@@ -57,11 +60,12 @@ interface Detected {
 /** The BPM readout: a finger that moves this far (CSS pixels) is scrubbing; two taps within this (ms) are a double tap. */
 const BPM_DRAG_PX = 8;
 const BPM_DOUBLE_MS = 320;
-/** Scrubbing: BPM per pixel dragged up, shrinking as 1 / (1 + dx / BPM_FINE_PX) with dx the finger's distance right of where it went down. */
-const BPM_PER_PX = 0.08;
-const BPM_FINE_PX = 70;
+/** Scrubbing: BPM per pixel dragged to the right at full speed; the lower the finger is on the screen the slower, to a tenth at the bottom (`scrubSpeed`). */
+const BPM_PER_PX = 0.03;
 const BPM_MIN = 30;
 const BPM_MAX = 300;
+/** How far (seconds) a point set without the snap looks for a zero crossing. */
+const ZERO_REACH_SECONDS = 0.005;
 /** The + and - keys: a tap nudges by this much; held, after a pause, the rate climbs from BPM_HOLD_START (BPM per second) to a semitone of tempo per second. */
 const BPM_NUDGE = 0.01;
 const BPM_HOLD_DELAY_MS = 350;
@@ -133,7 +137,7 @@ export function SongChopModal({
   /** What the chop makes: a pattern per section (acapella mode) or a chop on the chopper (chopper mode). */
   unit?: "pattern" | "chop";
   pitchForKey?: (key: SongKey | null) => number;
-  onConfirm: (settings: ChopSettings, openMaker?: boolean) => void | Promise<void>;
+  onConfirm: (settings: ChopSettings) => void | Promise<void>;
   onClose: () => void;
 }) {
   const sampleRate = pad.sampleRate;
@@ -143,7 +147,9 @@ export function SongChopModal({
   const timeline = useRef<ChopTimelineHandle>(null);
   /** Chopper mode: the grid and the chops go down to sixteenth notes (the pattern maker's finest step too). */
   const fine = unit === "chop";
-  const [workspaceGrid, setWorkspaceGrid] = useState<TapGrid | null>(null);
+  /** Slice and dice: the grid it opened on, and the size of its pieces (the knob beside the button picks it). */
+  const [diceGrid, setDiceGrid] = useState<TapGrid | null>(null);
+  const [sizeIndex, setSizeIndex] = useState(DEFAULT_SIZE);
   const colorOf = (i: number) => chopColor(palette.colors, i);
 
   const [detected, setDetected] = useState<Detected | "none" | null>(null);
@@ -316,9 +322,18 @@ export function SongChopModal({
     setStatus(message);
   };
 
+  /** Where a point set at the cursor goes: onto the grid line while snapping, else onto the nearest zero crossing, so a cut does not click. */
+  const pointAtCursor = (): number => {
+    const cursor = timeline.current?.cursor() ?? 0;
+    if (timeline.current?.snapping() ?? magnetOn) return cursor;
+    const point = zeroCrossingNear(mono, cursor, Math.round(sampleRate * ZERO_REACH_SECONDS));
+    timeline.current?.setCursor(point);
+    return point;
+  };
+
   const addChop = () => {
     if (!grid) return;
-    const cursor = timeline.current?.cursor() ?? 0;
+    const cursor = pointAtCursor();
     const lineOf = (frame: number) => (fine ? fineLineNear(grid, frame) : barLineNear(grid, frame));
     const line = lineOf(cursor);
     const at = lineFrame(grid, line);
@@ -366,24 +381,23 @@ export function SongChopModal({
 
   const scaleTempo = (factor: number) => change({ ...marks, tempoScale: marks.tempoScale * factor, bpm: marks.bpm == null ? null : marks.bpm * factor }, factor > 1 ? "Tempo doubled" : "Tempo halved");
 
-  // ---- the BPM readout: double tap goes back to the automatic tempo; a drag up or down scrubs it, finer the further right the finger is ----
-  const bpmTouch = useRef<{ x0: number; y0: number; y: number; bpm: number; moved: boolean } | null>(null);
+  // ---- the BPM readout: double tap goes back to the automatic tempo; a drag left or right scrubs it, slower the lower the finger is ----
+  const bpmTouch = useRef<{ x0: number; y0: number; x: number; bpm: number; moved: boolean } | null>(null);
   const lastBpmTap = useRef(0);
   const bpmNow = grid ? bpmAt(grid, 0) : 0;
   const bpmDown = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (!grid) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    bpmTouch.current = { x0: e.clientX, y0: e.clientY, y: e.clientY, bpm: bpmNow, moved: false };
+    bpmTouch.current = { x0: e.clientX, y0: e.clientY, x: e.clientX, bpm: bpmNow, moved: false };
   };
   const bpmMove = (e: React.PointerEvent<HTMLSpanElement>) => {
     const t = bpmTouch.current;
     if (!t) return;
-    if (!t.moved && Math.hypot(e.clientX - t.x0, e.clientY - t.y0) < BPM_DRAG_PX) return;
+    if (!t.moved && Math.abs(e.clientX - t.x0) < BPM_DRAG_PX) return;
     t.moved = true;
-    // Each step counts at the fineness of where the finger is now: the further right of where it went down, the smaller the BPM per pixel.
-    const perPixel = BPM_PER_PX / (1 + Math.max(0, e.clientX - t.x0) / BPM_FINE_PX);
-    t.bpm = Math.min(BPM_MAX, Math.max(BPM_MIN, t.bpm + (t.y - e.clientY) * perPixel));
-    t.y = e.clientY;
+    // Each step counts at the speed of where the finger is now: slower the lower it is on the screen.
+    t.bpm = Math.min(BPM_MAX, Math.max(BPM_MIN, t.bpm + (e.clientX - t.x) * BPM_PER_PX * scrubSpeed(t.y0, e.clientY)));
+    t.x = e.clientX;
     setLiveBpm(t.bpm);
   };
   const bpmUp = () => {
@@ -445,8 +459,8 @@ export function SongChopModal({
 
   const placeAnchor = () => {
     if (!grid) return;
-    const cursor = Math.max(0, Math.min(totalFrames, timeline.current?.cursor() ?? 0));
-    const frame = anchorAtPlayhead(grid, cursor, magnetOn, totalFrames - 1);
+    const cursor = Math.max(0, Math.min(totalFrames, pointAtCursor()));
+    const frame = anchorAtPlayhead(grid, cursor, timeline.current?.snapping() ?? magnetOn, totalFrames - 1);
     if (frame < 0 || frame >= totalFrames) return;
     // Stop a pending glide without moving the playhead or source audio.
     timeline.current?.setCursor(cursor);
@@ -474,13 +488,13 @@ export function SongChopModal({
   const note = detecting ? "Music Tempo is detecting BPM from the anchor…" : detectionFailed ? "Detection failed. Previous BPM kept; adjust BPM and listen to the click." : "Anchor locks a downbeat. Adjust BPM around it; nudge grid −/+ moves timing by 1 ms.";
   const bpmText = detected === null ? "..." : detected === "none" && marks.bpm == null && marks.downbeats.length === 0 && marks.oneOne === null ? "--" : (grid ? bpmAt(grid, 0) : 0).toFixed(2);
 
-  if (workspaceGrid) {
-    return <SectionWorkspace channelData={pad.channelData} sampleRate={sampleRate} beatFrames={60 * sampleRate / bpmAt(workspaceGrid, 0)} beatsPerBar={beatsPerBar} grid={workspaceGrid} pitch={pitchForKey?.(detectedKey) ?? 0} colors={palette.colors} chops={plans.map((p, i) => ({ slice: i, start: p.start, length: p.length, bars: p.bars, steps: Math.max(1, Math.round(p.length / (60 * sampleRate / tempo) * 4)), barIndex: p.barIndex ?? 0, colorIndex: (p.barIndex ?? 0) % 4, color: colorOf((p.barIndex ?? 0) % 4) }))} initial={[]} startInSource onClose={() => setWorkspaceGrid(null)} onDone={maker => {
+  if (diceGrid) {
+    return <SliceDice channelData={pad.channelData} sampleRate={sampleRate} beatFrames={60 * sampleRate / bpmAt(diceGrid, 0)} beatsPerBar={beatsPerBar} grid={diceGrid} size={sizeSteps(sizeIndex, beatsPerBar)} startStep={detectionAnchor === null ? undefined : 0} pitch={pitchForKey?.(detectedKey) ?? 0} colors={palette.colors} onClose={() => setDiceGrid(null)} onDone={maker => {
       const used = [...new Set(maker.slots.flatMap(s => s.kind === 'chop' ? [s.chop] : []))];
       const selectedPlans: SectionPlan[] = used.map((i, index) => { const c = maker.chops[i]; return { start: c.start, length: c.length, audioFrames: c.length, bars: c.bars, barIndex: c.barIndex, colorIndex: c.colorIndex, index }; });
       // A silence-only pattern still needs a source pad for Koala's chopper.
       if (!selectedPlans.length) selectedPlans.push({ start: 0, length: 1, audioFrames: 1, bars: 1, index: 0 });
-      return onConfirm({ bpm: bpmAt(workspaceGrid, 0), beatsPerBar, plans: selectedPlans, key: detectedKey, maker });
+      return onConfirm({ bpm: bpmAt(diceGrid, 0), beatsPerBar, plans: selectedPlans, key: detectedKey, maker });
     }} />;
   }
 
@@ -497,11 +511,6 @@ export function SongChopModal({
         </div>
         <div className="chop__scroll">
           <p className="chop__note">{note}</p>
-          {fine && <button className="chop__btn" disabled={!grid} onClick={() => {
-            if (!grid) return;
-            player.stop();
-            setWorkspaceGrid(grid);
-          }}>Open section workspace · 1–16 bars</button>}
 
           <div className="chop__screen">
             <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[]} oneOne={detectionAnchor === null ? null : detectionAnchor + (marks.gridOffsetFrames ?? 0)} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
@@ -512,7 +521,7 @@ export function SongChopModal({
               <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(-1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo down by 0.01">
                 <NudgeIcon plus={false} />
               </button>
-              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: nearest whole BPM. Drag up or down to scrub; move right to go finer.">
+              <span className="chop__bpm" onPointerDown={bpmDown} onPointerMove={bpmMove} onPointerUp={bpmUp} onPointerCancel={() => ((bpmTouch.current = null), setLiveBpm(null))} title="BPM. Double tap: nearest whole BPM. Drag left or right to scrub; slower toward the bottom of the screen.">
                 {bpmText}
               </span>
               <button className="chop__nudge" disabled={!grid} onPointerDown={nudgeStart(1)} onPointerUp={nudgeStop} onPointerCancel={nudgeStop} onContextMenu={(e) => e.preventDefault()} aria-label="Tempo up by 0.01">
@@ -567,14 +576,23 @@ export function SongChopModal({
             <button className="chop__btn chop__grow" disabled={!grid} onClick={() => nudgeGrid(-1)} aria-label="Nudge grid earlier by 1 millisecond">Nudge grid −</button>
             <button className="chop__btn chop__grow" disabled={!grid} onClick={() => nudgeGrid(1)} aria-label="Nudge grid later by 1 millisecond">Nudge grid +</button>
           </div>
-          <div className="chop__row">
-            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops the vocal into patterns.">
-              Chop by 8
-            </button>
-            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song and chops the vocal into patterns.">
-              Chop by 16
-            </button>
-          </div>
+          {fine ? (
+            <div className="chop__row chop__dice">
+              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => { if (!grid) return; player.stop(); setDiceGrid(grid); }} title="Opens the chop rearranger on the song cut into pieces of the size the knob picks, starting from the anchor (or the beginning of the song).">
+                Slice and dice
+              </button>
+              <Knob value={sizeIndex / (SIZES.length - 1)} onChange={(v) => setSizeIndex(Math.round(v * (SIZES.length - 1)))} label={SIZES[sizeIndex].label} />
+            </div>
+          ) : (
+            <div className="chop__row">
+              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops the vocal into patterns.">
+                Chop by 8
+              </button>
+              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song and chops the vocal into patterns.">
+                Chop by 16
+              </button>
+            </div>
+          )}
           <div className="chop__row">
             <button className="chop__btn chop__grow" disabled={history.past.length === 0} onClick={() => stepHistory(undo, "Undone")}>
               Undo
@@ -602,11 +620,6 @@ export function SongChopModal({
 
         </div>
 
-        {unit === "chop" && (
-          <button className="chop__btn" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey }, true)}>
-            Finish and open pattern maker
-          </button>
-        )}
         <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey })}>
           Chop into {fits} {unit}{fits === 1 ? "" : "s"}
         </button>

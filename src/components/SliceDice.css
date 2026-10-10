@@ -1,0 +1,51 @@
+/* Slice and dice (the chopper's pattern maker) is laid out like the chop editor: the same panel, and the same screen. */
+.slice__nav {
+  display: flex;
+  align-items: center;
+  gap: 2cqw;
+}
+.slice__nav .chop__btn {
+  flex: 0 0 18cqw;
+  font-size: 6cqw;
+  line-height: 1;
+  padding: 2cqw 0;
+}
+.slice__nav span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink3);
+}
+.slice__row {
+  display: flex;
+  align-items: stretch;
+  gap: 2cqw;
+}
+.slice__row .chop__btn {
+  flex: 1;
+  min-height: 11cqw;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+.slice__row .slice__step {
+  flex: 0 0 11cqw;
+  font-size: 5cqw;
+  padding: 0;
+}
+.slice__bars {
+  flex: 0 0 15cqw;
+  align-self: center;
+  text-align: center;
+  color: var(--ink3);
+  text-transform: uppercase;
+}
+.slice__notice {
+  min-height: 1.4em;
+  overflow: hidden;
+  color: var(--ink3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

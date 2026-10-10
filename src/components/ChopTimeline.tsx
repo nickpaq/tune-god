@@ -6,7 +6,7 @@ import { MAX_SECTION_BARS, isBarLine, lineFrame, linesBetween, type TapGrid } fr
 /** Height (CSS pixels) of the strip along the top that carries the chop flags, and of the one along the bottom that carries the downbeat flags. */
 const FLAG_H = 14;
 /** The closest view, in seconds across. */
-const MIN_SPAN_SECONDS = 0.25;
+const MIN_SPAN_SECONDS = 0.1;
 /** A bar narrower than this on the screen (CSS pixels) is too small to be a line of its own: the grid then shows (and the snap takes) every fourth bar, and at the widest views every sixteenth. */
 const MIN_BAR_PX = 30;
 /** Zooming in eases up over about this much downward travel (px); zooming out has no ease. */
@@ -21,6 +21,10 @@ const COAST_STALE_MS = 70;
 const MIN_STEP_PX = 10;
 /** How much of the song the first view shows, in seconds. */
 const START_SECONDS = 12;
+/** The view counts as fully zoomed in until it is this much wider than the closest zoom: snapping stays off and the line does not coast, so a slight zoom out does not bring them back. */
+const CLOSEST_MARGIN = 1.08;
+/** Reaching the closest zoom (within this much of it) starts the free mode; it ends only once the view is CLOSEST_MARGIN wider. */
+const CLOSEST_REACHED = 1.005;
 
 /** A section as it is drawn: from frame to frame, in its colour. */
 export interface DrawnSection {
@@ -36,6 +40,8 @@ export interface ChopTimelineHandle {
   setCursor: (frame: number) => void;
   /** Glides the line onto the nearest bar line and returns that line's frame (null with the magnet off or no line to go to). */
   snap: () => number | null;
+  /** Whether the snap is in force right now: the magnet is on and the view is not at its closest zoom. */
+  snapping: () => boolean;
   /** The divisions to a beat the grid shows at this zoom (4, 2, 1), or 0 for bar lines only. */
   division: () => number;
 }
@@ -87,6 +93,16 @@ export const ChopTimeline = forwardRef<
   const settling = useRef(0);
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
+  /** Free mode: set on reaching the closest zoom, cleared only after zooming out past CLOSEST_MARGIN, so a slight zoom out stays free. */
+  const free = useRef(false);
+  const inFreeMode = (): boolean => {
+    const span = view.current.span;
+    if (span <= minSpan * CLOSEST_REACHED) free.current = true;
+    else if (span > minSpan * CLOSEST_MARGIN) free.current = false;
+    return free.current;
+  };
+  /** Whether the snap is in force: the magnet is on and the view is not in free mode. */
+  const snapping = () => latest.current.magnetOn && !inFreeMode();
 
   /**
    * The grid lines for this zoom, which are both the lines drawn and the lines the snap goes to: bar lines only, never anything finer. Every bar when a
@@ -261,7 +277,8 @@ export const ChopTimeline = forwardRef<
         cancelAnimationFrame(settling.current);
         setCursor(frame);
       },
-      snap: () => (latest.current.magnetOn ? settle() : null),
+      snap: () => (snapping() ? settle() : null),
+      snapping,
       division: () => (latest.current.grid && canvas.current ? divisionAt(latest.current.grid, view.current.span, canvas.current.clientWidth) : 0),
     }),
     [setCursor],
@@ -342,6 +359,7 @@ export const ChopTimeline = forwardRef<
     const start = viewUnderFinger(d.pivot, across(e.clientX), span);
     // The line stays in the middle and follows the finger freely; the snap comes when the finger lets go.
     view.current = { cursor: view.current.cursor, span };
+    inFreeMode();
     const raw = Math.min(total, Math.max(0, start + span / 2));
     setCursor(raw);
     const now = performance.now();
@@ -356,16 +374,18 @@ export const ChopTimeline = forwardRef<
     const resumed = latest.current.onScrubEnd();
     if (resumed) return;
     const settleAfter = () => {
-      if (latest.current.magnetOn) settle();
+      if (snapping()) settle();
     };
     // Momentum: carry on at the speed the waveform was moving, slowing to a stop. The zoom stays as it was left.
     const now = performance.now();
     const first = trail.current[0];
     const last = trail.current[trail.current.length - 1];
     trail.current = [];
+    // Fully zoomed in the line is being placed exactly: it stays where the finger left it, with no momentum.
+    if (inFreeMode()) return;
     if (!first || !last || last === first || now - last.t > COAST_STALE_MS) return settleAfter();
     const speed = (last.cursor - first.cursor) / (last.t - first.t);
-    const tau = latest.current.magnetOn ? COAST_SNAP_TAU_MS : COAST_TAU_MS;
+    const tau = snapping() ? COAST_SNAP_TAU_MS : COAST_TAU_MS;
     let v = speed;
     let prev = now;
     cancelAnimationFrame(settling.current);

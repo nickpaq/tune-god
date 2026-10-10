@@ -127,24 +127,12 @@ import {
   type ChopperExport,
 } from "./audio/exportChopper";
 import { keyOffset } from "./audio/song/keyOffset";
-import {
-  AcapellaModeModal,
-  type ChopMode,
-} from "./components/AcapellaModeModal";
-import {
-  packArrangement,
-  type WorkspaceResult,
-} from "./audio/song/sectionWorkspace";
-import { PatternMaker } from "./components/PatternMaker";
-import {
-  patternBars,
-  slotNotes,
-  STEPS_PER_BEAT,
-} from "./audio/song/patternMaker";
-import {
-  CHOPPER_MIN_SECONDS,
-  ChopperSourceModal,
-} from "./components/ChopperSourceModal";
+import { ScrubField } from "./components/ScrubField";
+import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
+import { packArrangement, type WorkspaceResult } from "./audio/song/sectionWorkspace";
+import { SliceDice } from "./components/SliceDice";
+import { patternBars, slotNotes, STEPS_PER_BEAT } from "./audio/song/patternMaker";
+import { CHOPPER_MIN_SECONDS, ChopperSourceModal } from "./components/ChopperSourceModal";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadButton } from "./components/PadButton";
@@ -378,7 +366,7 @@ function App() {
   const [keyMajor, setKeyMajor] = useState(saved.keyMajor ?? false);
   /** The project's tempo: the menu edits it, the Tune screen's stretch button and the sequencer's tempo read it, and the export writes it to the project's sequence. */
   const [projectBpm, setProjectBpm] = useState(saved.bpm ?? 120);
-  const [bpmText, setBpmText] = useState(String(saved.bpm ?? 120));
+  const [, setBpmText] = useState(String(saved.bpm ?? 120));
   const [projectName, setProjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
@@ -452,9 +440,7 @@ function App() {
   );
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
-  const [a4Text, setA4Text] = useState(
-    String(clampA4Reference(saved.a4 ?? 440)),
-  );
+  const [, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
   /** Ghost under the finger while a pad is being dragged, and the drop target under it ("kind:index"). */
   const [drag, setDrag] = useState<{
     from: number;
@@ -1582,31 +1568,12 @@ function App() {
   const [makerPad, setMakerPad] = useState<number | null>(null);
 
   /** Done in the pattern maker: the sequence goes on the chopper pad (checked by writing it into a copy of the project first). */
-  const finishMaker = async ({
-    slots,
-    chops,
-    grid,
-    rhythm,
-  }: WorkspaceResult) => {
+  const finishMaker = async ({ slots, chops, grid }: WorkspaceResult) => {
     const selected = latest.current.pads[makerPad ?? -1];
     const pad = selected?.chopper?.page ? latest.current.pads[48] : selected;
     if (!pad?.chopper?.maker) return void setMakerPad(null);
-    const slices = Math.max(
-      1,
-      new Set(
-        slots.flatMap((s) =>
-          s.kind === "chop" ? [`${s.chop}:${s.steps}`] : [],
-        ),
-      ).size,
-    );
-    const next: Pad = {
-      ...pad,
-      chopper: {
-        ...pad.chopper,
-        slices,
-        maker: { ...pad.chopper.maker, slots, chops, grid, rhythm },
-      },
-    };
+    const slices = Math.max(1, new Set(slots.flatMap(s => s.kind === 'chop' ? [`${s.chop}:${s.steps}`] : [])).size);
+    const next: Pad = { ...pad, chopper: { ...pad.chopper, slices, maker: { ...pad.chopper.maker, slots, chops, grid } } };
     let result: Awaited<ReturnType<typeof trialWriteChopper>>;
     try {
       result = await trialWriteChopper(next);
@@ -1774,11 +1741,7 @@ function App() {
    * If step 1 or 2 fails nothing at all is changed. Nothing is tuned: when a key was picked on the piano, Koala's pitch knob on the new pads is set to
    * move the song into it (the audio is never altered). Acapella mode never touches the project's tempo; chopper mode sets it to the sample's.
    */
-  const chopSong = async (
-    job: { mode: ChopMode; song: Pad; vocals: Pad },
-    settings: ChopSettings,
-    openMaker = false,
-  ) => {
+  const chopSong = async (job: { mode: ChopMode; song: Pad; vocals: Pad }, settings: ChopSettings) => {
     if (chopping.current) return;
     chopping.current = true;
     try {
@@ -1848,7 +1811,6 @@ function App() {
             maker: {
               beatFrames: (60 * song.sampleRate) / settings.bpm,
               grid: settings.maker?.grid ?? settings.grid,
-              rhythm: settings.maker?.rhythm,
               slots: settings.maker?.slots,
               chops:
                 settings.maker?.chops ??
@@ -1896,13 +1858,7 @@ function App() {
         setSelected(null);
         setBank(3);
         setChop(null);
-        if (openMaker) {
-          setMakerPad(slot);
-          return;
-        }
-        const missing = settings.maker
-          ? 0
-          : layout.sections.length - result.patterns;
+        const missing = settings.maker ? 0 : layout.sections.length - result.patterns;
         setNotice(
           `Chopper on pad ${(slot % PADS_PER_BANK) + 1} of Bank D: ${pad.chopper!.slices} chops. The project tempo is now ${tempo} BPM.${pitchNote}${missing > 0 ? ` ${missing} chop${missing === 1 ? "" : "s"} got no pattern (32 slots) but still play from the pad.` : ""}`,
         );
@@ -2943,22 +2899,7 @@ function App() {
           <div className="menu">
             <label className="menu__a4">
               Project BPM
-              <input
-                type="number"
-                inputMode="decimal"
-                min={20}
-                max={300}
-                step={1}
-                value={bpmText}
-                onChange={(e) => {
-                  setBpmText(e.target.value);
-                  const bpm = parseFloat(e.target.value);
-                  if (Number.isFinite(bpm) && bpm >= 20 && bpm <= 300)
-                    setProjectBpm(bpm);
-                }}
-                onBlur={() => setBpmText(String(projectBpm))}
-                aria-label="Project BPM"
-              />
+              <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.1} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
             </label>
             <button
               className="menu__button menu__button--primary"
@@ -3126,25 +3067,7 @@ function App() {
             </label>
             <label className="menu__a4">
               A4 reference (Hz)
-              <input
-                type="number"
-                inputMode="decimal"
-                min={A4_REFERENCE_RANGE.min}
-                max={A4_REFERENCE_RANGE.max}
-                step={0.1}
-                value={a4Text}
-                onChange={(e) => {
-                  setA4Text(e.target.value);
-                  const hz = parseFloat(e.target.value);
-                  if (
-                    Number.isFinite(hz) &&
-                    hz >= A4_REFERENCE_RANGE.min &&
-                    hz <= A4_REFERENCE_RANGE.max
-                  )
-                    setA4(hz);
-                }}
-                onBlur={() => setA4Text(String(a4))}
-              />
+              <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v * 10) / 10)} onDoubleTap={() => setA4(440)} />
             </label>
             {a4 !== 440 && (
               <button
@@ -3728,15 +3651,13 @@ function App() {
             }
             unit={chop.mode === "chopper" ? "chop" : "pattern"}
             pitchForKey={(key) => keyOffset(key, tunedTarget, keyMajor)}
-            onConfirm={(settings, openMaker) =>
-              chopSong(chop, settings, openMaker)
-            }
+            onConfirm={(settings) => chopSong(chop, settings)}
             onClose={() => setChop(null)}
           />
         )}
 
         {makerPad !== null && pads[makerPad]?.chopper?.maker && (
-          <PatternMaker
+          <SliceDice
             channelData={pads[makerPad].channelData}
             sampleRate={pads[makerPad].sampleRate}
             beatFrames={pads[makerPad].chopper!.maker!.beatFrames}
@@ -3748,7 +3669,6 @@ function App() {
             initial={pads[makerPad].chopper!.maker!.slots ?? []}
             colors={palette.colors}
             grid={pads[makerPad].chopper!.maker!.grid}
-            rhythm={pads[makerPad].chopper!.maker!.rhythm}
             pitch={pads[makerPad].chopper!.pitch}
             onDone={finishMaker}
             onClose={() => setMakerPad(null)}

@@ -1,6 +1,5 @@
-import type { RhythmPattern } from "../audio/song/rhythmLengths";
 import { useLayoutEffect, useRef, useState } from "react";
-import { PrecisionSlider } from "./PrecisionSlider";
+import { PitchSlider } from "./PitchSlider";
 import { ToneKnob } from "./ToneKnob";
 import { Waveform } from "./Waveform";
 import type { CategoryId } from "../audio/classify";
@@ -52,7 +51,7 @@ export interface Pad {
   /** Set on a pad that is one section of a chopped song: made from the song's pad, written to the export as a new pad with a pattern of its own. */
   section?: { number: number; sourceSampleId: number; bpm: number; beatsPerBar: number; /** Whole bars in the section. */ bars: number; /** The colour it was given in the chop editor, as a place in the selected palette. */ colorIndex?: number; /** The colour (hex) it was given in the chop editor, kept as it was: the section pads keep it whatever palette is chosen later. */ color?: string; /** Semitones the key picked on the piano moves it, written to Koala's pitch knob. */ pitch?: number; /** Made by synced mode (the sample cut into its own sections): labelled "Chop", not "Vox". */ synced?: boolean };
   /** Set on the pad Chopper mode makes: Koala's own chopper holding the whole sample, written to the export as one new pad with the slices in it. */
-  chopper?: { page?: number; sourceSampleId: number; slices: number; bpm: number; beatsPerBar: number; pitch: number; layout: { starts: number[]; sections: { slice: number; bars: number }[] }; color?: string; /** The chops as the pattern maker lists them, and the sequence it made (none until Done). */ maker?: { chops: MakerChop[]; /** The sample's frames to a beat at its own tempo. */ beatFrames: number; grid?: TapGrid; rhythm?: RhythmPattern; slots?: Slot[] } };
+  chopper?: { page?: number; sourceSampleId: number; slices: number; bpm: number; beatsPerBar: number; pitch: number; layout: { starts: number[]; sections: { slice: number; bars: number }[] }; color?: string; /** The chops as the pattern maker lists them, and the sequence it made (none until Done). */ maker?: { chops: MakerChop[]; /** The sample's frames to a beat at its own tempo. */ beatFrames: number; grid?: TapGrid; slots?: Slot[] } };
   /** The tempo the file name states ("140bpm"), when it does: a loop of this tempo can be stretched to the project's. */
   bpm?: number;
   /** The key the pad is tuned from was read from its file name (a sure one), not detected from the audio: its pad is shaded darker. */
@@ -148,6 +147,8 @@ export function PadPanel({
   /** The two squares (minor left, major right) are shown while the slider is dragged up. */
   const [above, setAbove] = useState(false);
   const boxes = useRef<(HTMLDivElement | null)[]>([]);
+  /** Cents mode of the pitch slider: a tap swaps it with semitone mode. */
+  const [centsMode, setCentsMode] = useState(false);
   const shown = chords ? chords[relative ? 1 : 0] : null;
 
   return (
@@ -189,13 +190,7 @@ export function PadPanel({
       <Waveform channelData={pad.channelData} />
 
       <div className="pad-panel__slider">
-        <PrecisionSlider
-          min={-TRIM_RANGE_CENTS}
-          max={TRIM_RANGE_CENTS}
-          step={0.1}
-          keyStep={10}
-          fineSpan={10}
-          coarseStep={100}
+        <PitchSlider
           onAbove={(point) => {
             if (!isLoop) return;
             setAbove(point !== null);
@@ -206,14 +201,15 @@ export function PadPanel({
             }
           }}
           value={trim}
-          bipolar
           disabled={needsKey}
           onChange={onTrim}
+          cents={centsMode}
+          onCents={setCentsMode}
           onDragStart={onHoldStart}
           onDragEnd={onHoldEnd}
-          onDoubleClick={() => onChange({ semis: 0, cents: 0 })}
+          onReset={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={(cents) => formatTrim(pad.tune ? autoShift * 100 + cents : cents)}
-          title="Pitch of the sound: hold and slide along the slider to repitch it by semitones, drag down for fine steps. Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset."
+          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), tap to swap to cents mode (a tuner dial, 55 cents either side: past that it snaps to the next semitone). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
         />
         {chords && above && (
           <>
@@ -233,8 +229,8 @@ export function PadPanel({
             <span>Select a key first</span>
           ) : (
             <>
-              <span>-12st</span>
-              <span>+12st</span>
+              <span>{centsMode ? "-55c" : "-12st"}</span>
+              <span>{centsMode ? "+55c" : "+12st"}</span>
             </>
           )}
         </div>

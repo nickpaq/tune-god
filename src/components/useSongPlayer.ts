@@ -33,8 +33,20 @@ export function useSongPlayer(channelData: Float32Array[], sampleRate: number, c
     return () => window.clearTimeout(wait);
   }, [channelData, sampleRate]);
 
+  /** Clicks already scheduled ahead: a stop silences them, so none sounds after a pause. */
+  const pending = useRef(new Set<OscillatorNode>());
+
   const stop = useCallback(() => {
     window.clearInterval(timer.current);
+    for (const osc of pending.current) {
+      try {
+        osc.stop();
+      } catch {
+        /* already ended */
+      }
+      osc.disconnect();
+    }
+    pending.current.clear();
     handle.current?.cut();
     handle.current = null;
     setPlaying(false);
@@ -69,6 +81,8 @@ export function useSongPlayer(channelData: Float32Array[], sampleRate: number, c
           osc.connect(gain).connect(ctx.destination);
           osc.start(when);
           osc.stop(when + 0.05);
+          pending.current.add(osc);
+          osc.onended = () => pending.current.delete(osc);
         }
       }, 40);
     },
