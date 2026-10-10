@@ -48,7 +48,7 @@ import { keyOffset } from "./audio/song/keyOffset";
 import { ScrubField } from "./components/ScrubField";
 import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
 import { packArrangement, type WorkspaceResult } from "./audio/song/sectionWorkspace";
-import { PatternMaker } from "./components/PatternMaker";
+import { SliceDice } from "./components/SliceDice";
 import { patternBars, slotNotes, STEPS_PER_BEAT } from "./audio/song/patternMaker";
 import { CHOPPER_MIN_SECONDS, ChopperSourceModal } from "./components/ChopperSourceModal";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
@@ -980,12 +980,12 @@ function App() {
   const [makerPad, setMakerPad] = useState<number | null>(null);
 
   /** Done in the pattern maker: the sequence goes on the chopper pad (checked by writing it into a copy of the project first). */
-  const finishMaker = async ({ slots, chops, grid, rhythm }: WorkspaceResult) => {
+  const finishMaker = async ({ slots, chops, grid }: WorkspaceResult) => {
     const selected = latest.current.pads[makerPad ?? -1];
     const pad = selected?.chopper?.page ? latest.current.pads[48] : selected;
     if (!pad?.chopper?.maker) return void setMakerPad(null);
     const slices = Math.max(1, new Set(slots.flatMap(s => s.kind === 'chop' ? [`${s.chop}:${s.steps}`] : [])).size);
-    const next: Pad = { ...pad, chopper: { ...pad.chopper, slices, maker: { ...pad.chopper.maker, slots, chops, grid, rhythm } } };
+    const next: Pad = { ...pad, chopper: { ...pad.chopper, slices, maker: { ...pad.chopper.maker, slots, chops, grid } } };
     let result: Awaited<ReturnType<typeof trialWriteChopper>>;
     try {
       result = await trialWriteChopper(next);
@@ -1060,7 +1060,7 @@ function App() {
    * If step 1 or 2 fails nothing at all is changed. Nothing is tuned: when a key was picked on the piano, Koala's pitch knob on the new pads is set to
    * move the song into it (the audio is never altered). Acapella mode never touches the project's tempo; chopper mode sets it to the sample's.
    */
-  const chopSong = async (job: { mode: ChopMode; song: Pad; vocals: Pad }, settings: ChopSettings, openMaker = false) => {
+  const chopSong = async (job: { mode: ChopMode; song: Pad; vocals: Pad }, settings: ChopSettings) => {
     if (chopping.current) return;
     chopping.current = true;
     try {
@@ -1106,7 +1106,6 @@ function App() {
             maker: {
               beatFrames: (60 * song.sampleRate) / settings.bpm,
               grid: settings.maker?.grid ?? settings.grid,
-              rhythm: settings.maker?.rhythm,
               slots: settings.maker?.slots,
               chops: settings.maker?.chops ?? plans.map((plan, i) => ({
                 slice: layout.sections[i].slice,
@@ -1139,10 +1138,6 @@ function App() {
         setSelected(null);
         setBank(3);
         setChop(null);
-        if (openMaker) {
-          setMakerPad(slot);
-          return;
-        }
         const missing = settings.maker ? 0 : layout.sections.length - result.patterns;
         setNotice(
           `Chopper on pad ${(slot % PADS_PER_BANK) + 1} of Bank D: ${pad.chopper!.slices} chops. The project tempo is now ${tempo} BPM.${pitchNote}${missing > 0 ? ` ${missing} chop${missing === 1 ? "" : "s"} got no pattern (32 slots) but still play from the pad.` : ""}`,
@@ -2340,13 +2335,13 @@ function App() {
             freeSlots={chop.mode === "chopper" ? CHOPPER_MAX_SLICES - 2 : PADS_PER_BANK}
             unit={chop.mode === "chopper" ? "chop" : "pattern"}
             pitchForKey={(key) => keyOffset(key, tunedTarget, keyMajor)}
-            onConfirm={(settings, openMaker) => chopSong(chop, settings, openMaker)}
+            onConfirm={(settings) => chopSong(chop, settings)}
             onClose={() => setChop(null)}
           />
         )}
 
         {makerPad !== null && pads[makerPad]?.chopper?.maker && (
-          <PatternMaker
+          <SliceDice
             channelData={pads[makerPad].channelData}
             sampleRate={pads[makerPad].sampleRate}
             beatFrames={pads[makerPad].chopper!.maker!.beatFrames}
@@ -2355,7 +2350,6 @@ function App() {
             initial={pads[makerPad].chopper!.maker!.slots ?? []}
             colors={palette.colors}
             grid={pads[makerPad].chopper!.maker!.grid}
-            rhythm={pads[makerPad].chopper!.maker!.rhythm}
             pitch={pads[makerPad].chopper!.pitch}
             onDone={finishMaker}
             onClose={() => setMakerPad(null)}
