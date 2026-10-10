@@ -6,7 +6,7 @@ import { MAX_SECTION_BARS, isBarLine, lineFrame, linesBetween, type TapGrid } fr
 /** Height (CSS pixels) of the strip along the top that carries the chop flags, and of the one along the bottom that carries the downbeat flags. */
 const FLAG_H = 14;
 /** The closest view, in seconds across. */
-const MIN_SPAN_SECONDS = 0.25;
+const MIN_SPAN_SECONDS = 0.1;
 /** A bar narrower than this on the screen (CSS pixels) is too small to be a line of its own: the grid then shows (and the snap takes) every fourth bar, and at the widest views every sixteenth. */
 const MIN_BAR_PX = 30;
 /** Zooming in eases up over about this much downward travel (px); zooming out has no ease. */
