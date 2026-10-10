@@ -11,6 +11,7 @@ export interface SampleLibraryRecord {
   id: string;
   name: string;
   pack: string;
+  sourcePath?: string;
   category: CategoryId;
   is808?: boolean;
   importedAt: number;

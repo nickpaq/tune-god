@@ -1,7 +1,7 @@
 // Reading a sample pack folder: the audio files in it (see packProject.ts), the sound type a folder name implies, and the
 // memory budget a project may use. What each bank takes from a folder is in bankLoad.ts. All of this works on file names
 // and sizes only; no audio is read until a file has been picked.
-import { classifyByName, hatOpenness, type CategoryId } from "./classify";
+import type { CategoryId } from "./classify";
 
 const MB = 1024 * 1024;
 /** Total file size of the sounds a project may hold: the default limit. Decoded audio takes about three times this in memory. */
@@ -24,6 +24,8 @@ export const maxFileBytesFor = (byteBudget: number) => Math.round(byteBudget / 6
 /** One audio file found in the pack: where it sits (folder names, outermost first) and how big it is. */
 export interface PackFile<T = unknown> {
   folders: string[];
+  /** Selected root, retained separately so flat bank loaders can still reject subfolders. */
+  rootFolder?: string;
   name: string;
   size: number;
   /** Whatever the caller needs to read the file later. */
@@ -34,6 +36,7 @@ export interface PackFile<T = unknown> {
   favorite?: boolean;
   /** Original pack labels are kept when a saved favorite is re-imported. */
   sourceName?: string;
+  sourcePath?: string;
   sourcePack?: string;
 }
 
@@ -82,12 +85,12 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["hat", /\b(hi ?hats?|hats?|hh)\b/],
   ["vox", /\b(vocals?|vox|voices?|choirs?|acapellas?|chants?|breaths?|ad ?libs?|speech|shouts?)\b/],
   ["fx", /\b(fx|sfx|effects?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|booms?|zaps?|lasers?|sirens?|reverses?|reversed|scratch(es)?|vinyl|crackles?|stingers?|stings?|rumbles?|bursts?|explosions?|sci ?fi)\b/],
-  // Named percussion instruments only; the generic "perc" words come after the melodic rule so "Melodic Percussion" or "Bells & Perc" stay melodic.
-  ["perc", /\b(toms?|congas?|bongos?|tamb(ourines?)?|cowbells?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
+  // Percussion folders take precedence over melodic keywords.
+  ["perc", /\b(toms?|congas?|bongos?|tamb(ourines?)?|cowbells?|bells?|chimes?|glock(enspiel)?s?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
+  ["perc", /\b(perc|percs|percussions?)\b/],
   ["bass", /\b(808s?|bass(es)?|subs?|reese)\b/],
   ["melodic", /\b(pianos?|keys?|keyboards?|bells?|plucks?|guitars?|harps?|mallets?|marimbas?|kalimbas?|rhodes|epianos?|stabs?|vibraphones?|glock(enspiel)?s?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|organs?|brass|horns?|flutes?|melod(y|ic|ies)|instruments?|tonal|pitched)\b/],
   ["other", /\b(other|misc|miscellaneous|uncategorized)\b/],
-  ["perc", /\b(perc|percs|percussions?)\b/],
 ];
 
 /** Folder names that say nothing about the sound (they only group files), so the next folder out is used. */
@@ -105,7 +108,7 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
   const isLoop = /\bloops?\b/.test(name);
   for (const [id, re] of FOLDER_RULES) {
     if (!re.test(name)) continue;
-    // "Hats & Cymbals" holds both: the file name decides, as in any hats folder.
+    // Mixed hats folders use the same default for every file.
     if (id === "cymbal" && /\b(hi ?hats?|hats?|hh)\b/.test(name)) return "hat";
     if (!isLoop) return id;
     // A "loops" folder holds loops of its type.
@@ -113,30 +116,17 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
     if (id === "bass" || id === "melodic" || id === "melodicLoop") return "melodicLoop";
     return "drumLoop";
   }
-  // A bare "Loops" folder gets drum loops, the commonest kind; the file name can still say otherwise.
+  // A bare Loops folder defaults to drum loops.
   return isLoop ? "drumLoop" : null;
 }
 
-/**
- * The category for a file: the nearest folder that names a sound type wins (so "Drums/Snares/x.wav" is a snare),
- * then the file name's own keywords, and "other" when nothing says.
- */
-export function categoryOfFile(folders: string[], fileName: string): CategoryId {
+/** The nearest typed folder is the only classification input. Unknown folders stay Other. */
+export function categoryOfFile(folders: string[], _fileName: string): CategoryId {
   for (let i = folders.length - 1; i >= 0; i--) {
-    if (tidy(folders[i]) === "other" || /^(misc|miscellaneous|uncategorized|other)$/i.test(tidy(folders[i]))) continue;
-    const byFolder = categoryOfFolder(folders[i]);
-    if (byFolder === "hat") {
-      // A hats folder does not say open or closed, so the file name gets to.
-      const hat = classifyByName(fileName);
-      if (hat === "openHat" || hat === "cymbal") return hat;
-      // Inside a hats folder a bare "open" or "closed" in the file name is enough ("Open_01").
-      return hatOpenness(tidy(fileName.replace(/\.[a-z0-9]+$/i, ""))) ?? "closedHat";
-    }
-    if (byFolder) return byFolder;
+    const category = categoryOfFolder(folders[i]);
+    if (category) return category === "hat" ? "closedHat" : category;
   }
-  const byName = classifyByName(fileName);
-  if (byName === "hat") return "closedHat";
-  return byName ?? "other";
+  return "other";
 }
 
 /** Fisher-Yates shuffle into a new array. `random` is injectable so tests are repeatable. */

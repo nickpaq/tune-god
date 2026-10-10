@@ -12,7 +12,7 @@
 import { arrangeFingerDrumming, SUBSTITUTE_GROUP } from "./fingerDrumming";
 import type { FingerLayout } from "./fingerLayouts";
 import { categoryLabel, is808Name, type CategoryId } from "./classify";
-import { categoryOfFile, categoryOfFolder, fairPackOrder, shuffled, type PackFile } from "./samplePack";
+import { categoryOfFile, fairPackOrder, shuffled, type PackFile } from "./samplePack";
 
 export type BankLoad = "drums" | "loops" | "bass" | "oneShots" | "kit";
 
@@ -136,12 +136,11 @@ export interface BankPlan<T = unknown> {
 
 const hasSubfolders = (files: { folders: string[] }[]) => files.some((f) => f.folders.length > 0);
 
-/** Bank A: files are sorted by the name of the nearest subfolder that names a drum type, never by their own names (only a hats folder's file names say open or closed). */
+/** Bank A: files are sorted by the name of the nearest subfolder that names a drum type, never by their own names. */
 export function planDrums<T>(files: PackFile<T>[], random: () => number = Math.random): BankPlan<T> {
   const byType = new Map<CategoryId, PackFile<T>[]>();
   for (const file of files) {
-    if (!file.folders.some((folder) => categoryOfFolder(folder) !== null)) continue;
-    const category = categoryOfFile(file.folders, file.name);
+    const category = categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
     if (!(category in DRUM_QUOTA)) continue;
     byType.set(category, [...(byType.get(category) ?? []), file]);
   }
@@ -154,8 +153,8 @@ export function planDrums<T>(files: PackFile<T>[], random: () => number = Math.r
 
 /** Bank B's bottom row: files in subfolders named 808 or bass. */
 export function planBass<T>(files: PackFile<T>[], random: () => number = Math.random): BankPlan<T> {
-  const bass = files.filter((f) => f.folders.some((folder) => categoryOfFolder(folder) === "bass"));
-  const eights = bass.filter((f) => [f.name, ...f.folders].some(is808Name));
+  const bass = files.filter((f) => categoryOfFile([...(f.rootFolder ? [f.rootFolder] : []), ...f.folders], f.name) === "bass");
+  const eights = bass.filter((f) => [...(f.rootFolder ? [f.rootFolder] : []), ...f.folders].some(is808Name));
   const plain = bass.filter((f) => !eights.includes(f));
   const groups: BankGroup<T>[] = [];
   if (plain.length) groups.push({ category: "bass", candidates: shuffled(plain, random), want: BASS_PADS + BASS_SPARES });
@@ -168,7 +167,9 @@ export function planBass<T>(files: PackFile<T>[], random: () => number = Math.ra
 function planFlat<T>(files: PackFile<T>[], category: CategoryId, want: number, random: () => number): BankPlan<T> {
   if (hasSubfolders(files)) return { groups: [], problem: "That folder has subfolders. Choose a folder that holds only sound files, with nothing inside it but the sounds themselves." };
   if (!files.length) return { groups: [], problem: "No audio files (wav, aiff, flac, mp3, ogg or m4a) were found in that folder." };
-  return { groups: [{ category, candidates: shuffled(files, random), want }] };
+  const candidates = files.filter((file) => categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name) === category);
+  if (!candidates.length) return { groups: [], problem: `No ${category === "melodicLoop" ? "melodic loops" : "melodic one shots"} were identified by folder name. Choose a folder named for its sound type.` };
+  return { groups: [{ category, candidates: shuffled(candidates, random), want }] };
 }
 
 /** Bank B's top twelve pads: melodic loops, taken at random (and tuned by default). */
@@ -178,17 +179,15 @@ export const planLoops = <T>(files: PackFile<T>[], random: () => number = Math.r
 export const planOneShots = <T>(files: PackFile<T>[], random: () => number = Math.random) => planFlat(files, "melodic", ONE_SHOT_PADS + ONE_SHOT_SPARES, random);
 
 /**
- * Classify every audio file in a kit by its nearest typed folder, then its filename. Unknown files remain usable as Other.
+ * Classify every audio file in a kit by its nearest typed folder, using folders only. Unknown files remain usable as Other.
  * Missing categories have no group, so the placement leaves their pads empty.
  */
 export function planKit<T>(files: PackFile<T>[], random: () => number = Math.random): BankPlan<T> {
   if (!files.length) return { groups: [], problem: "No audio files were found in that kit folder." };
   const buckets = new Map<string, { category: CategoryId; is808?: boolean; files: PackFile<T>[] }>();
   for (const file of files) {
-    let category = categoryOfFile(file.folders, file.name);
-    // “One Shots” is a common type folder even though flat loaders treat it as a grouping name.
-    if (category === "other" && file.folders.some((folder) => /^(one ?shots?|shots?)$/i.test(folder))) category = "melodic";
-    const is808 = category === "bass" && [file.name, ...file.folders].some(is808Name);
+    const category = categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
+    const is808 = category === "bass" && [...(file.rootFolder ? [file.rootFolder] : []), ...file.folders].some(is808Name);
     const key = `${category}:${is808 ? "808" : "plain"}`;
     const bucket = buckets.get(key) ?? { category, is808, files: [] };
     bucket.files.push(file);

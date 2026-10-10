@@ -537,6 +537,7 @@ function App() {
             libraryId: record.id,
             favorite: true,
             name: record.name,
+            sourcePath: record.sourcePath,
             sampleId: -1,
             sampleRate: record.sampleRate || decoded.sampleRate,
             channelData: decoded.channelData,
@@ -639,6 +640,7 @@ function App() {
             index: at,
             origIndex: ref.pad,
             name: ref.fileName,
+            sourcePath: ref.sourcePath,
             label: ref.label || undefined,
             sampleId: ref.sampleId,
             sampleRate: decoded.sampleRate,
@@ -665,7 +667,9 @@ function App() {
             .analyze(
               monoFromChannelData(pad.channelData),
               pad.sampleRate,
-              ref.fileName,
+              pad.sourcePath ?? ref.fileName,
+              false,
+              categoryHints.current[ref.pad] ?? (restore ? restorePads.current[ref.pad]?.category : undefined),
             )
             .catch(() => ({
               midi: null,
@@ -1075,6 +1079,7 @@ function App() {
             : (placement.positions.get(sound.pad) ?? -1),
           origIndex: sound.pad,
           name: sound.fileName,
+          sourcePath: sound.sourcePath,
           sampleId: sound.sampleId,
           sampleRate: decoded.sampleRate,
           channelData: decoded.channelData,
@@ -1095,6 +1100,7 @@ function App() {
         id: sound.libraryId,
         name: sound.sourceName,
         pack: sound.sourcePack,
+        sourcePath: sound.sourcePath,
         category: sound.category,
         is808: sound.is808,
         importedAt,
@@ -1144,6 +1150,7 @@ function App() {
             pad.sampleRate,
             pad.name,
             pad.category === "melodicLoop",
+            pad.category,
           )
           .catch(() => ({
             midi: null,
@@ -2802,6 +2809,7 @@ function App() {
       await recordImportedSamples([{
         id: pad.libraryId,
         name: pad.name,
+        sourcePath: pad.sourcePath,
         pack: "(sample pack)",
         category: pad.category ?? "other",
         is808: pad.is808,
@@ -2818,7 +2826,7 @@ function App() {
       return exists ? prev.map((p) => p.libraryId === pad.libraryId ? { ...p, favorite: true } : p) : [...prev, { ...pad, index: -1, favorite: true }];
     });
     setSampleLibrary((prev) => {
-      const entry: SampleLibraryRecord = old ?? { id: pad.libraryId!, name: pad.name, pack: "(sample pack)", category: pad.category ?? "other", is808: pad.is808, importedAt: Date.now(), favorite: false };
+      const entry: SampleLibraryRecord = old ?? { id: pad.libraryId!, name: pad.name, sourcePath: pad.sourcePath, pack: "(sample pack)", category: pad.category ?? "other", is808: pad.is808, importedAt: Date.now(), favorite: false };
       return [ { ...entry, favorite, audio: favorite ? audio : undefined, sampleRate: favorite ? pad.sampleRate : undefined }, ...prev.filter((r) => r.id !== pad.libraryId) ];
     });
   };
@@ -2829,7 +2837,7 @@ function App() {
     if (!opened) return;
     const candidate: PackFile<() => Promise<File>> = {
       folders: [record.pack, record.category], name: record.name, source: async () => new File([record.audio!], record.name, { type: "audio/wav" }), size: record.audio.size,
-      libraryId: record.id, favorite: true, sourceName: record.name, sourcePack: record.pack,
+      libraryId: record.id, favorite: true, sourceName: record.name, sourcePack: record.pack, sourcePath: record.sourcePath,
     };
     const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
     const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], {
@@ -2842,14 +2850,14 @@ function App() {
     const ref = opened.project.pads.find((p) => p.pad === written.pad);
     if (!ref) return;
     const decoded = await decodeNative(await koalaPadToFile(opened.project, ref));
-    const incoming: Pad = { index: target.index, origIndex: written.pad, libraryId: written.libraryId, favorite: true, name: written.fileName, sampleId: written.sampleId, sampleRate: decoded.sampleRate, channelData: decoded.channelData, category: written.category, is808: written.is808 || undefined, tune: tuneDefault(false, false, written.category, undefined, tunedTarget), semis: 0, cents: 0 };
+    const incoming: Pad = { index: target.index, origIndex: written.pad, libraryId: written.libraryId, favorite: true, name: written.fileName, sourcePath: written.sourcePath, sampleId: written.sampleId, sampleRate: decoded.sampleRate, channelData: decoded.channelData, category: written.category, is808: written.is808 || undefined, tune: tuneDefault(false, false, written.category, undefined, tunedTarget), semis: 0, cents: 0 };
     recordEdit();
     projectFile.current = result.file;
     void saveProjectFile(result.file);
     setPads((prev) => ({ ...prev, [target.index]: incoming }));
     if (isReal(target)) setHidden((prev) => ({ ...prev, [target.origIndex]: { ...target, index: -1 } }));
     setAnalyzing((n) => n + 1);
-    nextAnalysisWorker().analyze(monoFromChannelData(incoming.channelData), incoming.sampleRate, incoming.name).then((analysis) => {
+    nextAnalysisWorker().analyze(monoFromChannelData(incoming.channelData), incoming.sampleRate, incoming.name, false, incoming.category).then((analysis) => {
       setPads((prev) => prev[incoming.index]?.origIndex === incoming.origIndex ? { ...prev, [incoming.index]: { ...prev[incoming.index], detectedMidi: analysis.midi, centroid: analysis.centroid } } : prev);
       setAnalyzing((n) => Math.max(0, n - 1));
     }).catch(() => setAnalyzing((n) => Math.max(0, n - 1)));

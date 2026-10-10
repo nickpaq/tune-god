@@ -4,7 +4,8 @@ import { dominantPitch } from "../audio/pitch/yin";
 import { loopKey } from "../audio/pitch/loopKey";
 import { bpmFromName, keyFromName } from "../audio/pitch/nameKey";
 import { frequencyToMidi } from "../audio/theory";
-import { classifySample, extractFeatures, isTunedCategory, type CategoryId } from "../audio/classify";
+import { extractFeatures, isTunedCategory, type CategoryId } from "../audio/classify";
+import { categoryOfFile } from "../audio/samplePack";
 import { classifyDetail, type Detail } from "../audio/padLabels";
 import { analyzeSongKey } from "../audio/song/beats";
 import { detectMusicTempo } from "../audio/song/musicTempo";
@@ -19,16 +20,17 @@ const api = {
   analyzeSongKey,
   detectMusicTempo,
 
-  /** Pitch plus a best-guess sound category, sharing one pitch-detection pass. */
+  /** Pitch plus a folder-derived sound category, sharing one pitch-detection pass. */
   analyze(
     mono: Float32Array,
     sampleRate: number,
     fileName: string,
     /** The sound is a melodic loop (a loader said so): its key is read from the notes it holds, not from one pitch. */
     isLoop = false,
+    categoryHint?: CategoryId,
   ): { midi: number | null; category: CategoryId; detail: Detail | undefined; centroid: number | undefined; bpm: number | null; /** The key came from the file name. */ named: boolean } {
     let pitch = api.detectMidi(mono, sampleRate);
-    const category = classifySample(mono, sampleRate, fileName, pitch);
+    const category = categoryHint ?? categoryOfFile(fileName.replace(/\\/g, "/").split("/").slice(0, -1), fileName);
     // An 808 or bass glides down from its attack to the note it settles on, so its pitch is read from the second half of the sound only.
     if (category === "bass") pitch = api.detectMidi(mono.subarray(Math.floor(mono.length / 2)), sampleRate) ?? pitch;
     // A key written in the file name wins over anything measured. A loop's "pitch" is the tonic of its key (as the relative minor), a whole note; another

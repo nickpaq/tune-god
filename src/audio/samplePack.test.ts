@@ -1,21 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { categoryOfFile, categoryOfFolder, fairPackOrder, packByteBudget } from "./samplePack";
 
-describe("hats and effects the names only hint at", () => {
-  it("reads open and closed from separate words next to a hat word", () => {
-    for (const name of ["open hi-hat 3.wav", "HH Open 01.wav", "Hat_O_01.wav", "Hihat Open.wav"]) expect(categoryOfFile(["Pack"], name)).toBe("openHat");
-    for (const name of ["closed hihat 2.wav", "HH_Closed_01.wav", "Hat_C_01.wav", "Hihat Closed.wav"]) expect(categoryOfFile(["Pack"], name)).toBe("closedHat");
+describe("folder-only classification", () => {
+  it("ignores misleading filenames in every folder", () => {
+    for (const name of ["open hi-hat.wav", "Big Kick.wav", "Piano.wav", "Siren.wav"]) {
+      expect(categoryOfFile(["Pack"], name)).toBe("other");
+      expect(categoryOfFile(["Percussion"], name)).toBe("perc");
+      expect(categoryOfFile(["Hats"], name)).toBe("closedHat");
+    }
   });
-
-  it("splits a combined hats and cymbals folder by file name", () => {
-    expect(categoryOfFolder("Hats & Cymbals")).toBe("hat");
-    expect(categoryOfFile(["Hats & Cymbals"], "Crash 1.wav")).toBe("cymbal");
-    expect(categoryOfFile(["Hats & Cymbals"], "Open Hat 1.wav")).toBe("openHat");
-    expect(categoryOfFile(["Hats & Cymbals"], "Closed Hat 1.wav")).toBe("closedHat");
-  });
-
-  it("recognises more effect names", () => {
-    for (const name of ["Zap 1.wav", "Laser_02.wav", "Siren.wav"]) expect(categoryOfFile(["Pack"], name)).toBe("fx");
+  it("keeps bells and percussion out of melodic one shots", () => {
+    expect(categoryOfFile(["One Shots", "Bells"], "Piano.wav")).toBe("perc");
+    expect(categoryOfFile(["Melodic", "Percussion"], "Synth.wav")).toBe("perc");
+    expect(categoryOfFile(["Melodic", "Misc"], "Kick.wav")).toBe("other");
+    expect(categoryOfFile(["One Shots"], "Piano.wav")).toBe("other");
   });
 });
 
@@ -45,15 +43,15 @@ describe("classifying from folder names", () => {
     expect(categoryOfFolder("01")).toBeNull();
   });
 
-  it("uses the nearest folder that says something, then the file name", () => {
+  it("uses the nearest typed folder without a filename fallback", () => {
     expect(categoryOfFile(["Drums", "Snares", "One Shots"], "x.wav")).toBe("snare");
-    expect(categoryOfFile(["Pack", "Misc"], "Big Kick 3.wav")).toBe("kick");
+    expect(categoryOfFile(["Pack", "Misc"], "Big Kick 3.wav")).toBe("other");
     expect(categoryOfFile(["Pack"], "thing.wav")).toBe("other");
   });
 
-  it("lets a hats folder's file names say open, and calls the rest closed", () => {
-    expect(categoryOfFile(["Hats"], "open_01.wav")).toBe("openHat");
-    expect(categoryOfFile(["Hats"], "open hat 01.wav")).toBe("openHat");
+  it("defaults generic hats to closed, regardless of the filename", () => {
+    expect(categoryOfFile(["Hats"], "open_01.wav")).toBe("closedHat");
+    expect(categoryOfFile(["Hats"], "open hat 01.wav")).toBe("closedHat");
     expect(categoryOfFile(["Hats"], "hat 01.wav")).toBe("closedHat");
   });
 });

@@ -25,6 +25,8 @@ export interface Pad {
   origIndex: number;
   /** The sample's file name in the project, shown in the classifier. */
   name: string;
+  /** Original folder path before the sample was renamed for the kit. */
+  sourcePath?: string;
   /** The label on the pad in Koala, when the project had one: it is what a vocal stem is found by (see audio/song/stems.ts). */
   label?: string;
   /** The sample's id inside the .koala project, used when writing tuned audio back. */
@@ -78,7 +80,7 @@ export interface Pad {
 /** A chord name from the app ("C minor"). */
 const chordIsMinor = (chord: string) => chord.endsWith("minor");
 
-/** The sound's simplified name; a tap swaps it for the file name, which scrolls to and fro when it is wider than the screen. The choice lives only while the Tune screen does. */
+/** The sound's simplified name; a tap swaps it for the original source path, which scrolls to and fro when it is wider than the screen. The choice lives only while the Tune screen does. */
 function NameLine({ name, fileName }: { name: string; fileName: string }) {
   const [raw, setRaw] = useState(false);
   const box = useRef<HTMLButtonElement>(null);
@@ -90,7 +92,7 @@ function NameLine({ name, fileName }: { name: string; fileName: string }) {
     text.current?.classList.toggle("name-line__text--scroll", overflow > 0);
   }, [raw, shown]);
   return (
-    <button ref={box} type="button" className="name-line" onClick={() => setRaw((r) => !r)} aria-label={raw ? `File name ${fileName}: tap for the short name` : `${name}: tap for the file name`}>
+    <button ref={box} type="button" className="name-line" onClick={() => setRaw((r) => !r)} aria-label={raw ? `Source path ${fileName}: tap for the short name` : `${name}: tap for the source path`}>
       <span ref={text} className="name-line__text">
         {shown}
       </span>
@@ -118,7 +120,7 @@ export function PadPanel({
   onChange,
 }: {
   pad: Pad;
-  /** The simplified name of the sound; tapping it shows the file name (until the Tune screen is left). */
+  /** The simplified name of the sound; tapping it shows the source path (until the Tune screen is left). */
   name: string;
   /** Semitones the automatic tuning moves this pad; the panel adds the manual trim for display. */
   autoShift: number;
@@ -176,7 +178,7 @@ export function PadPanel({
         </div>
         <ToneKnob value={toneVolume} onChange={onToneVolume} dim={!toneOn} />
       </div>
-      <NameLine name={name} fileName={pad.name} />
+      <NameLine name={name} fileName={pad.sourcePath ?? pad.name} />
       {(pad.bpm || isLoopSound) && (
         <div className="pad-panel__toggles pad-panel__tempo">
           <span aria-label="Tempo of the sound">{pad.bpm ? (pad.stretch ? `${pad.bpm}>${projectBpm}` : pad.bpm) : "--"} BPM</span>
@@ -194,6 +196,9 @@ export function PadPanel({
 
       <Waveform channelData={pad.channelData} />
 
+      <button className="tune-toggle" aria-pressed={centsMode} onClick={() => setCentsMode(!centsMode)}>
+        {centsMode ? "Cents" : "Semitones"}
+      </button>
       <div className="pad-panel__slider">
         <PitchSlider
           onAbove={(point) => {
@@ -209,12 +214,11 @@ export function PadPanel({
           disabled={needsKey}
           onChange={onTrim}
           cents={centsMode}
-          onCents={setCentsMode}
           onDragStart={onHoldStart}
           onDragEnd={onHoldEnd}
           onReset={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={(cents) => formatTrim(pad.tune ? autoShift * 100 + cents : cents)}
-          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), tap to swap to cents mode (a tuner dial, 55 cents either side: past that it snaps to the next semitone). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
+          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), use the Cents/Semitones button to switch mode (a tuner dial, 55 cents either side: past that it snaps to the next semitone). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
         />
         {chords && above && (
           <>

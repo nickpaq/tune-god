@@ -60,20 +60,25 @@ describe("Banks B and C: a folder of sound files only", () => {
   it("refuses a folder with subfolders and takes any file of a flat one", () => {
     expect(planLoops([...many([], 5), ...many(["Sub"], 2)]).problem).toMatch(/subfolders/);
     expect(planOneShots(many(["x"], 3)).problem).toMatch(/subfolders/);
-    const loops = planLoops(many([], 40));
+    const loops = planLoops(many([], 40).map((f) => ({ ...f, rootFolder: "Melodic Loops" })));
     expect(loops.groups).toHaveLength(1);
     expect(loops.groups[0]).toMatchObject({ category: "melodicLoop", want: 16 });
-    expect(planOneShots(many([], 40)).groups[0]).toMatchObject({ category: "melodic", want: 20 });
+    expect(planOneShots(many([], 40).map((f) => ({ ...f, rootFolder: "Melodic One Shots" }))).groups[0]).toMatchObject({ category: "melodic", want: 20 });
   });
 
   it("shuffles with the random source it is given", () => {
-    const files = many([], 30);
+    const files = many([], 30).map((f) => ({ ...f, rootFolder: "Melodic Loops" }));
     expect(planBank("loops", files, () => 0.1).groups[0].candidates.map((f) => f.name)).toEqual(planBank("loops", files, () => 0.1).groups[0].candidates.map((f) => f.name));
     expect(planBank("oneShots", [], () => 0.5).problem).toMatch(/No audio/);
   });
 });
 
 describe("kit folder import", () => {
+  it("keeps filename hints and generic one shots from changing folder categories", () => {
+    const plan = planKit([file(["Bells"], "Synth.wav"), file(["Percussion"], "Piano.wav"), file(["One Shots"], "Chord.wav"), file(["Bass"], "808.wav")]);
+    expect(plan.groups.map((g) => [g.category, !!g.is808])).toEqual([["perc", false], ["other", false], ["bass", false]]);
+    expect(planOneShots([{ ...file([], "Piano.wav"), rootFolder: "Bells" }]).groups).toEqual([]);
+  });
   it("recognizes the exact 808 folder and plural Claps, and keeps clap separate from 808 bass", () => {
     const plan = planKit([
       file(["808"], "sub.wav"),

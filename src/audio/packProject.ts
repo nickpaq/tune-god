@@ -61,19 +61,19 @@ async function walk(entry: Entry, folders: string[], out: PackFile<PackSource>[]
   if (!AUDIO_EXTENSIONS.test(entry.name)) return;
   // Taking the File only gets a handle with its size; no bytes are read yet.
   const file = await fileOf(entry as FileSystemFileEntry);
-  out.push({ folders, name: entry.name, size: file.size, source: async () => file });
+  out.push({ folders, sourcePath: [...folders, entry.name].join("/"), name: entry.name, size: file.size, source: async () => file });
 }
 
-/** The audio files under dropped entries. One dropped folder is the pack and its name is the project's (it is not used to classify); several are all folders of one pack. */
+/** The audio files under dropped entries. One dropped folder is the pack; its name is retained for classification and source paths; several are all folders of one pack. */
 export async function findPackInEntries(entries: Entry[]): Promise<FoundPack> {
   const files: PackFile<PackSource>[] = [];
   const root = entries.length === 1 && entries[0].isDirectory ? (entries[0] as FileSystemDirectoryEntry) : null;
   if (root) {
-    const rootFolders = /^808s?$/i.test(root.name) ? [root.name] : [];
-    for (const child of await readAll(root.createReader())) await walk(child, rootFolders, files);
+    for (const child of await readAll(root.createReader())) await walk(child, [root.name], files);
   } else {
     for (const entry of entries) await walk(entry, [], files);
   }
+  if (root) for (const file of files) { file.folders = file.folders.slice(1); file.rootFolder = root.name; }
   return { name: root?.name ?? "Sample pack", files };
 }
 
@@ -84,10 +84,9 @@ export function findPackInFileList(list: FileList | File[]): FoundPack {
   for (const file of Array.from(list)) {
     const parts = (file.webkitRelativePath || file.name).split("/");
     if (parts.length > 1) name = parts[0];
-    const rootFolders = /^808s?$/i.test(parts[0]) ? [parts[0]] : [];
-    const folders = [...rootFolders, ...parts.slice(1, -1)];
+    const folders = parts.slice(1, -1);
     if (parts.some((p) => p.startsWith(".") || p === "__MACOSX") || !AUDIO_EXTENSIONS.test(file.name)) continue;
-    files.push({ folders, name: file.name, size: file.size, source: async () => file });
+    files.push({ folders, rootFolder: parts.length > 1 ? parts[0] : undefined, sourcePath: parts.join("/"), name: file.name, size: file.size, source: async () => file });
   }
   return { name, files };
 }
@@ -113,6 +112,7 @@ export interface WrittenSound {
   number: number;
   libraryId: string;
   sourceName: string;
+  sourcePath: string;
   sourcePack: string;
   favorite: boolean;
 }
@@ -211,7 +211,8 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
     const knobDb = balance.knobDb[existing.length + n];
     const fileName = bankFileName(category, number, is808);
     project.zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: decoded.sampleRate, channelData, bitDepth: 24 }).arrayBuffer());
-    samples.push({ id: sampleId, metadata: { originalPath: fileName } });
+    const sourcePath = file.sourcePath ?? [...(file.rootFolder ? [file.rootFolder] : []), ...file.folders, file.sourceName ?? file.name].join("/");
+    samples.push({ id: sampleId, metadata: { originalPath: fileName, sourcePath } });
     pads.push({ pad: pad + base, type: "sample", sampleId, vol: volFromDb(knobDb), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
     project.pads.push({ pad, sampleId, fileName });
     const libraryId = file.libraryId ?? `sample-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -226,6 +227,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
       number,
       libraryId,
       sourceName: file.sourceName ?? file.name,
+      sourcePath,
       sourcePack: file.sourcePack ?? sourcePackOf(file),
       favorite: !!file.favorite,
     });

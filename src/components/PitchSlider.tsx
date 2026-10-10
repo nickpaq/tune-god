@@ -38,13 +38,12 @@ function onLine(u: number, k: number) {
 /**
  * The Tune screen's pitch slider (the pad's trim, in cents, +-12 semitones). Drag left or right to scrub: the speed slows smoothly to a tenth toward the
  * bottom of the screen (`scrubSpeed`), but in semitone mode the value always lands on whole semitones (with any cents offset the pad already has kept).
- * A tap swaps between semitone mode and cents mode; a double tap puts the pitch back to the middle. In cents mode the line bends into a tuner dial
+ * A tap picks the marker up anywhere on the track; a double tap puts the pitch back to the middle. In cents mode the line bends into a tuner dial
  * with a hand, and the slider covers 55 cents either side of the semitone it was on (past that it snaps to the next semitone). Dragged up, the value stays put and `onAbove` reports the finger.
  */
 export function PitchSlider({
   value,
   cents,
-  onCents,
   onChange,
   onReset,
   onDragStart,
@@ -56,7 +55,6 @@ export function PitchSlider({
 }: {
   value: number;
   cents: boolean;
-  onCents: (cents: boolean) => void;
   onChange: (value: number) => void;
   onReset: () => void;
   onDragStart?: () => void;
@@ -68,7 +66,7 @@ export function PitchSlider({
 }) {
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: number; x0: number; y0: number; x: number; t0: number; raw: number; offset: number; anchor: number; moved: boolean } | null>(null);
-  const tap = useRef<{ at: number; was: boolean }>({ at: 0, was: cents });
+  const tap = useRef<{ at: number }>({ at: 0 });
   const [dragging, setDragging] = useState(false);
 
   // The bend follows the mode smoothly.
@@ -94,10 +92,15 @@ export function PitchSlider({
     if (disabled) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    const rect = e.currentTarget.getBoundingClientRect();
     const anchor = wholeSemitone(value);
-    drag.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, t0: performance.now(), raw: value, offset: value - anchor, anchor, moved: false };
+    // Grab the marker from the whole slider surface in either mode.
+    const u = clamp(((e.clientX - rect.left) / rect.width * W - X0) / (X1 - X0), 0, 1) * 2 - 1;
+    const picked = clamp(cents ? anchor + u * CENTS_RANGE : wholeSemitone(u * RANGE) + value - anchor, -RANGE, RANGE);
+    drag.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, t0: performance.now(), raw: picked, offset: value - anchor, anchor, moved: false };
     setDragging(true);
     onDragStart?.();
+    onChange(Math.round(picked * 10) / 10);
   };
 
   const move = (e: PointerEvent<HTMLDivElement>) => {
@@ -138,13 +141,12 @@ export function PitchSlider({
     if (!cancelled && !d.moved && performance.now() - d.t0 < TAP_MS) {
       const now = performance.now();
       if (now - tap.current.at < DOUBLE_MS) {
-        // Second tap: undo the first tap's mode swap and go back to the middle.
+        // Second tap resets to the middle.
         tap.current.at = 0;
-        onCents(tap.current.was);
         onReset();
       } else {
-        tap.current = { at: now, was: cents };
-        onCents(!cents);
+        tap.current = { at: now };
+        // A single tap picks the marker position; the mode button switches modes.
       }
     }
     onDragEnd?.();

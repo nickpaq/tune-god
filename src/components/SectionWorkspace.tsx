@@ -155,6 +155,7 @@ export function SectionWorkspace({
     startInSource ? "source" : "pattern",
   );
   const [stretch, setStretch] = useState(false);
+  const [repeatCount, setRepeatCount] = useState<1 | 2 | 4>(1);
   const [wildcard, setWildcard] = useState<MakerChop | null>(null);
   const [library, setLibrary] = useState(false);
   const [libraryLength, setLibraryLength] = useState<number | null>(null);
@@ -784,7 +785,7 @@ export function SectionWorkspace({
     }
     ctx.fillStyle = muted;
     ctx.fillText("↓ LATER SECTIONS", 12, 22);
-    ctx.fillText("↑ RANDOM OPTION", 12, h - 18);
+    ctx.fillText("↑ EARLIER SECTIONS", 12, h - 18);
     ctx.fillText(
       mode === "source"
         ? "MOVE TO POSITION · TAP TO CUT"
@@ -898,22 +899,20 @@ export function SectionWorkspace({
   };
   const repeat = () => {
     if (!canRepeat) return;
-    change(
-      repeatPrevious(
-        state,
-        editIndex,
-        grid,
-        channelData[0].length,
-        undefined,
-        offset,
-      ),
-    );
+    let next = state;
+    for (let i = 0; i < repeatCount; i++) {
+      next = repeatPrevious(
+        next, editIndex === null ? null : editIndex + i,
+        grid, channelData[0].length, undefined, offset,
+      );
+    }
+    change(next);
     if (editIndex !== null) {
-      setEditAt(editIndex + 1);
+      setEditAt(editIndex + repeatCount);
       setWanted(state.slots[editIndex].steps);
       setLibraryLength(state.slots[editIndex].steps);
     }
-    setNotice("Previous chop inserted again · alignment resumed");
+    setNotice(`Previous chop repeated ${repeatCount} ${repeatCount === 1 ? "time" : "times"} · alignment resumed`);
   };
   const addSilence = () => {
     const slots = state.slots.slice();
@@ -1149,7 +1148,6 @@ export function SectionWorkspace({
       f.axis = Math.abs(dy) > Math.abs(dx) * 1.15 ? "y" : "x";
     if (f.axis === "y") {
       f.dx = dy;
-      if (dy < 0) return;
       const now = performance.now();
       f.velocity = (e.clientY - f.lastY) / Math.max(8, now - f.time);
       f.lastY = e.clientY;
@@ -1162,7 +1160,7 @@ export function SectionWorkspace({
       if (mode === "source") {
         const next = clamp(
           Math.round(
-            f.point - (dx / e.currentTarget.clientWidth / 0.65) * sectionSteps,
+            f.point + (dx / e.currentTarget.clientWidth / 0.65) * sectionSteps,
           ),
           0,
           sectionSteps - 1,
@@ -1231,19 +1229,7 @@ export function SectionWorkspace({
       return;
     }
     if (f.axis === "y") {
-      const next =
-        f.dx < 0 && rows.length > 1
-          ? mod(
-              index + 1 + Math.floor(Math.random() * (rows.length - 1)),
-              rows.length,
-            )
-          : Math.round(
-              clamp(
-                position.current - clamp(f.velocity, -1, 1) * 1.4,
-                0,
-                rows.length - 1,
-              ),
-            );
+      const next = Math.round(clamp(position.current - clamp(f.velocity, -1, 1) * 1.4, 0, rows.length - 1));
       setSelected(next);
       browse(rows[next]);
       if (rhythmActive && editIndex !== null && rows[next]) {
@@ -1688,6 +1674,20 @@ export function SectionWorkspace({
             </button>
           </div>
         )}
+        <button
+          className="chop__btn"
+          disabled={rows.length < 2 || saving || scrubMode}
+          onClick={() => {
+            const next = mod(index + 1 + Math.floor(Math.random() * (rows.length - 1)), rows.length);
+            setSelected(next);
+            browse(rows[next]);
+            if (rhythmActive && editIndex !== null && rows[next]) {
+              change(placeCandidate(state, { ...rows[next], steps: selectionLength }, editIndex, offset));
+            }
+          }}
+        >
+          Randomize source
+        </button>
         <div className="section-info">
           <span>
             {active
@@ -1707,7 +1707,7 @@ export function SectionWorkspace({
             aria-describedby="section-gesture-help"
             aria-label={
               mode === "source"
-                ? "Drag down to browse; up for a random section. Move horizontally to position; tap to cut."
+                ? "Drag vertically to browse. Move horizontally to position; tap to cut."
                 : scrubMode
                   ? "Drag sideways to scrub the arrangement; drag down to zoom in and up to zoom out. The chop under the line sounds as it is crossed."
                   : "Browse vertically. Short left confirms; long left inserts silence. Short right trims; long right rewinds to bar start."
@@ -1780,7 +1780,7 @@ export function SectionWorkspace({
           className={`section-hint ${mode === "pattern" ? "section-hint--hidden" : ""}`}
         >
           {mode === "source"
-            ? "Swipe down to browse; swipe up to randomize. Move sideways to position, then tap to cut. Tempo and bar 1 come from the alignment editor."
+            ? "Scroll up or down to browse. Move sideways to position, then tap to cut. Tempo and bar 1 come from the alignment editor."
             : "Short left: confirm; long left: silence. Short right: trim; long right: bar start. Swipe vertically to browse. Sequence scrolls under the playhead."}
         </p>
         {mode === "pattern" && (
@@ -1965,6 +1965,13 @@ export function SectionWorkspace({
             onChange={(e) => audio.setVolume(+e.target.value)}
           />
         </label>
+        {mode === "pattern" && (
+          <label className="section-volume">Repeat count
+            <select aria-label="Repeat count" value={repeatCount} onChange={(e) => setRepeatCount(Number(e.target.value) as 1 | 2 | 4)}>
+              {[1, 2, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+        )}
         <div className="section-actions">
           <button
             className="chop__btn"
@@ -1998,7 +2005,7 @@ export function SectionWorkspace({
               disabled={!canRepeat || saving}
               onClick={repeat}
             >
-              Repeat
+              Repeat ×{repeatCount}
             </button>
           )}
           {mode === "pattern" && (

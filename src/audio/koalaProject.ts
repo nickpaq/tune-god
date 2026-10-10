@@ -11,6 +11,7 @@ export interface KoalaPadRef {
   sampleId: number;
   /** Friendly name for the UI, derived from the sample's original import path when available. */
   fileName: string;
+  sourcePath?: string;
   /** The label on the pad in Koala (what the pad shows), or "" when it has none. */
   label?: string;
 }
@@ -40,9 +41,12 @@ export async function parseKoalaProject(file: File): Promise<ParsedKoalaProject>
   const samplerJson = JSON.parse(await samplerEntry.async("string"));
 
   const nameById = new Map<number, string>();
+  const pathById = new Map<number, string>();
   for (const s of samplerJson.samples ?? []) {
     const path = s?.metadata?.originalPath;
     nameById.set(s.id, path ? basename(path) : `sample-${s.id}.wav`);
+    const sourcePath = s?.metadata?.sourcePath ?? path;
+    if (typeof sourcePath === "string") pathById.set(s.id, sourcePath);
   }
 
   // Pad numbers are normalized to 0-based grid slots (some exports count from 1).
@@ -55,6 +59,7 @@ export async function parseKoalaProject(file: File): Promise<ParsedKoalaProject>
       pad: Number(p.pad) - padBase,
       sampleId: p.sampleId as number,
       fileName: nameById.get(p.sampleId) ?? `sample-${p.sampleId}.wav`,
+      sourcePath: pathById.get(p.sampleId),
       label: typeof p.label === "string" ? p.label.trim() : "",
     }))
     .sort((a: KoalaPadRef, b: KoalaPadRef) => a.pad - b.pad);
