@@ -24,6 +24,8 @@ describe("classifying from folder names", () => {
     expect(categoryOfFolder("Kicks")).toBe("kick");
     expect(categoryOfFolder("Snares & Rims")).toBe("snare");
     expect(categoryOfFolder("808s")).toBe("bass");
+    expect(categoryOfFolder("808")).toBe("bass");
+    expect(categoryOfFolder("Claps")).toBe("clap");
     expect(categoryOfFolder("Open Hats")).toBe("openHat");
     expect(categoryOfFolder("Closed_HiHats")).toBe("closedHat");
     expect(categoryOfFolder("Toms")).toBe("perc");

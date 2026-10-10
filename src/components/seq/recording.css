@@ -1,0 +1,416 @@
+.q-seq {
+  padding: max(8px, var(--safe-top)) 10px max(8px, var(--safe-bottom));
+  gap: 7px;
+  overflow: hidden;
+  background: var(--chassis1);
+  color: var(--ink);
+  font-size: 14px;
+}
+.q-seq button,
+.q-seq select,
+.q-seq input {
+  font: inherit;
+}
+.q-seq button:not(.pad):not(.cap) {
+  color: var(--ink);
+  border: 1px solid var(--seam-d);
+  background: var(--key);
+  border-radius: 6px;
+  padding: 8px;
+  touch-action: none;
+  box-shadow: 0 2px 2px #0005;
+}
+.q-seq button:not(.pad):not(.cap)[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
+}
+.q-seq button:not(.pad):not(.cap):disabled {
+  opacity: 0.35;
+}
+.q-seq button:not(.pad):not(.cap):active {
+  filter: brightness(1.3);
+}
+.q-transport {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  flex: none;
+  height: 48px;
+}
+.q-transport button {
+  font-weight: 700;
+}
+.q-transport small {
+  display: block;
+  font-size: 9px;
+}
+.q-arrangement {
+  display: flex;
+  height: 110px;
+  min-height: 80px;
+  flex: none;
+  gap: 4px;
+}
+.q-track-labels {
+  display: flex;
+  flex-direction: column;
+  width: 62px;
+  padding-top: 16px;
+  overflow: hidden;
+}
+.q-track-labels button {
+  flex: 1;
+  min-height: 0;
+  line-height: 1;
+  font-size: 10px;
+  padding: 0 2px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: left;
+  border: 0;
+  box-shadow: none;
+}
+.q-scenes {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  flex: 1;
+  padding: 2px;
+  touch-action: pan-x;
+}
+.q-seq .q-scene {
+  position: relative;
+  min-width: 80px;
+  flex-shrink: 0;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.q-scene.selected {
+  outline: 2px solid var(--accent);
+}
+.q-scene-number {
+  font-size: 10px;
+  height: 12px;
+  text-align: left;
+}
+.q-scene-rows {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+.q-track {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.q-track span {
+  display: block;
+  background: var(--track);
+  border-right: 1px solid #0007;
+  color: #101410;
+  font-size: 9px;
+  text-align: left;
+  line-height: 1;
+  overflow: hidden;
+}
+.q-track span.empty {
+  opacity: 0.25;
+}
+.q-playhead {
+  position: absolute;
+  top: 15px;
+  bottom: 0;
+  width: 2px;
+  background: white;
+  pointer-events: none;
+}
+.q-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 11px;
+  flex: none;
+}
+.q-status button {
+  padding: 4px;
+}
+.q-status span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.q-main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.q-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 3px;
+}
+.q-panel h3 {
+  font-size: 16px;
+  margin: 0;
+}
+.q-panel p {
+  margin: 0;
+}
+.q-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.75;
+}
+.q-control {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.q-control span {
+  display: flex;
+  justify-content: space-between;
+}
+.q-seq input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  min-height: 24px;
+  touch-action: none;
+}
+.q-seq select,
+.q-seq input[type="number"] {
+  background: var(--well);
+  border: 1px solid var(--seam-l);
+  color: var(--ink);
+  padding: 7px;
+  border-radius: 5px;
+  max-width: 100%;
+}
+.q-selection {
+  font-size: 12px;
+  min-height: 24px;
+}
+.q-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding-top: 4px;
+}
+.q-banks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+.q-nav {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+.q-nav button {
+  font-size: 11px;
+  padding: 10px 2px;
+  min-height: 44px;
+}
+.q-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.q-toggle > * {
+  flex: 1;
+}
+.q-slots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.q-slots small {
+  display: block;
+  font-size: 10px;
+}
+.q-event-roll {
+  height: 100px;
+  position: relative;
+  background: var(--well);
+  border-radius: 5px;
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent calc(6.25% - 1px),
+    #ffffff22 calc(6.25% - 1px),
+    #ffffff22 6.25%
+  );
+}
+.q-event-roll i {
+  position: absolute;
+  height: 7px;
+  min-width: 2px;
+}
+.q-wave {
+  height: 105px;
+  position: relative;
+  background: var(--well);
+  border-radius: 6px;
+  flex: none;
+  overflow: hidden;
+}
+.q-wave canvas {
+  height: 100%;
+  width: 100%;
+}
+.q-region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  background: #ffffff12;
+  pointer-events: none;
+}
+.q-marker {
+  position: absolute;
+  left: 0;
+  margin: 0;
+  opacity: 0.4;
+}
+.q-marker--start {
+  top: 0;
+}
+.q-marker--end {
+  bottom: 0;
+}
+.q-seq .q-quant-mute {
+  min-height: 48px;
+}
+.q-key-page {
+  flex: 1;
+}
+.q-keyboard {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 3px;
+  min-height: 190px;
+  flex: 1;
+}
+.q-keyboard button {
+  font-size: 10px;
+  padding: 4px 0;
+}
+.q-keyboard .white {
+  background: #e4e4de;
+  color: #141714;
+}
+.q-keyboard .black {
+  background: #171b19;
+  color: #e4e4de;
+  align-self: start;
+  height: 65%;
+}
+.q-drum-performance {
+  flex: 1;
+  min-height: 260px;
+}
+.q-repeat {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.q-repeat label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.q-velocity-panels {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  gap: 8px;
+  flex: 1;
+  min-height: 190px;
+}
+.q-velocity-panels > label {
+  background: var(--well);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.q-velocity-panels input {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  flex: 1;
+  width: 100%;
+}
+.q-velocity-panels button {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  background: var(--well);
+}
+.q-velocity-panels button i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+.q-links {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.q-link-pick button:not(:disabled) {
+  animation: link-pulse 0.85s ease-in-out infinite alternate;
+}
+@keyframes link-pulse {
+  from {
+    filter: brightness(0.75);
+  }
+  to {
+    filter: brightness(1.35);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .q-link-pick button:not(:disabled) {
+    animation: none;
+    outline: 2px dashed var(--accent);
+  }
+}
+
+.q-padzone {
+  margin-top: auto;
+  margin-bottom: auto;
+  flex: none;
+}
+.q-padzone .pads {
+  --pad-h: var(--pad-w);
+}
+.q-banks .cap {
+  min-height: 38px;
+}
+
+.q-arrangement > .q-add {
+  flex: 0 0 36px;
+  font-size: 24px;
+}
+.q-seq .q-scene {
+  touch-action: pan-x;
+}

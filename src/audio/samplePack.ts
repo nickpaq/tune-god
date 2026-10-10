@@ -52,6 +52,7 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["perc", /\b(toms?|congas?|bongos?|tamb(ourines?)?|cowbells?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
   ["bass", /\b(808s?|bass(es)?|subs?|reese)\b/],
   ["melodic", /\b(pianos?|keys?|keyboards?|bells?|plucks?|guitars?|harps?|mallets?|marimbas?|kalimbas?|rhodes|epianos?|stabs?|vibraphones?|glock(enspiel)?s?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|organs?|brass|horns?|flutes?|melod(y|ic|ies)|instruments?|tonal|pitched)\b/],
+  ["other", /\b(other|misc|miscellaneous|uncategorized)\b/],
   ["perc", /\b(perc|percs|percussions?)\b/],
 ];
 
@@ -66,7 +67,7 @@ function tidy(name: string): string {
 /** The category one folder name implies, or null. */
 export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
   const name = tidy(folder);
-  if (!name || GENERIC_FOLDER.test(name)) return null;
+  if (!name || (GENERIC_FOLDER.test(name) && name !== "808" && !/^(misc|miscellaneous|uncategorized|other)$/i.test(name))) return null;
   const isLoop = /\bloops?\b/.test(name);
   for (const [id, re] of FOLDER_RULES) {
     if (!re.test(name)) continue;
@@ -88,6 +89,7 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
  */
 export function categoryOfFile(folders: string[], fileName: string): CategoryId {
   for (let i = folders.length - 1; i >= 0; i--) {
+    if (tidy(folders[i]) === "other" || /^(misc|miscellaneous|uncategorized|other)$/i.test(tidy(folders[i]))) continue;
     const byFolder = categoryOfFolder(folders[i]);
     if (byFolder === "hat") {
       // A hats folder does not say open or closed, so the file name gets to.

@@ -84,7 +84,7 @@ interface Kit {
  * Fills bank A with an exact category match per slot; slots still empty then take a leftover drum of the same
  * family, bottom row first (the slots under the thumbs).
  */
-function fillKit(layout: FingerLayout, drums: ArrangeSound[]): Kit {
+function fillKit(layout: FingerLayout, drums: ArrangeSound[], strict: boolean): Kit {
   const slots: (ArrangeSound | null)[] = Array(PADS_PER_BANK).fill(null);
   const used = new Set<number>();
 
@@ -102,12 +102,14 @@ function fillKit(layout: FingerLayout, drums: ArrangeSound[]): Kit {
     });
   }
 
-  for (let i = layout.slots.length - 1; i >= 0; i--) {
-    if (slots[i] || layout.slots[i].ghostOf) continue;
-    const pick = drums.find((d) => !used.has(d.key) && SUBSTITUTE_GROUP[d.category!] === SUBSTITUTE_GROUP[layout.slots[i].category]);
-    if (!pick) continue;
-    slots[i] = pick;
-    used.add(pick.key);
+  if (!strict) {
+    for (let i = layout.slots.length - 1; i >= 0; i--) {
+      if (slots[i] || layout.slots[i].ghostOf) continue;
+      const pick = drums.find((d) => !used.has(d.key) && SUBSTITUTE_GROUP[d.category!] === SUBSTITUTE_GROUP[layout.slots[i].category]);
+      if (!pick) continue;
+      slots[i] = pick;
+      used.add(pick.key);
+    }
   }
 
   return { slots, leftover: drums.filter((d) => !used.has(d.key)) };
@@ -151,10 +153,10 @@ function placePack(tonal: ArrangeSound[], leftoverDrums: ArrangeSound[], taken: 
   });
 }
 
-export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayout, { pack = false }: { pack?: boolean } = {}): FingerArrangement {
+export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayout, { pack = false, strict = false }: { pack?: boolean; strict?: boolean } = {}): FingerArrangement {
   const drums = sounds.filter((s) => isKitCategory(s.category));
   const tonal = sounds.filter((s) => !isKitCategory(s.category));
-  const kit = fillKit(layout, drums);
+  const kit = fillKit(layout, drums, strict);
   const leftoverDrums = kit.leftover
     .slice()
     .sort((a, b) => categoryIndex(a.category ?? "other") - categoryIndex(b.category ?? "other") || byFrequency(a, b));
@@ -168,7 +170,7 @@ export function arrangeFingerDrumming(sounds: ArrangeSound[], layout: FingerLayo
     else placeholders.set(i, { index: i, kind: "missing", label: `add ${layout.slots[i].label}` });
   });
   // A ghost slot holds a quieter copy of the kit's own snare or kick (the first one the layout fills, bottom row first).
-  layout.slots.forEach((slot, i) => {
+  if (!strict) layout.slots.forEach((slot, i) => {
     if (!slot.ghostOf) return;
     const source = layout.slots
       .map((s, j) => ({ s, j }))
