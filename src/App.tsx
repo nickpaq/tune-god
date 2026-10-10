@@ -1979,7 +1979,7 @@ function App() {
             </label>
             <label className="menu__a4">
               A4 reference (Hz)
-              <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v * 10) / 10)} />
+              <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v * 10) / 10)} onDoubleTap={() => setA4(440)} />
             </label>
             {a4 !== 440 && (
               <button
