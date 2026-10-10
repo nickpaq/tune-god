@@ -23,6 +23,8 @@ const MIN_STEP_PX = 10;
 const START_SECONDS = 12;
 /** The view counts as fully zoomed in until it is this much wider than the closest zoom: snapping stays off and the line does not coast, so a slight zoom out does not bring them back. */
 const CLOSEST_MARGIN = 1.08;
+/** Reaching the closest zoom (within this much of it) starts the free mode; it ends only once the view is CLOSEST_MARGIN wider. */
+const CLOSEST_REACHED = 1.005;
 
 /** A section as it is drawn: from frame to frame, in its colour. */
 export interface DrawnSection {
@@ -91,8 +93,16 @@ export const ChopTimeline = forwardRef<
   const settling = useRef(0);
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
-  /** Whether the snap is in force: the magnet is on and the view is not zoomed all the way in (there it gives way to exact placement). */
-  const snapping = () => latest.current.magnetOn && view.current.span > minSpan * CLOSEST_MARGIN;
+  /** Free mode: set on reaching the closest zoom, cleared only after zooming out past CLOSEST_MARGIN, so a slight zoom out stays free. */
+  const free = useRef(false);
+  const inFreeMode = (): boolean => {
+    const span = view.current.span;
+    if (span <= minSpan * CLOSEST_REACHED) free.current = true;
+    else if (span > minSpan * CLOSEST_MARGIN) free.current = false;
+    return free.current;
+  };
+  /** Whether the snap is in force: the magnet is on and the view is not in free mode. */
+  const snapping = () => latest.current.magnetOn && !inFreeMode();
 
   /**
    * The grid lines for this zoom, which are both the lines drawn and the lines the snap goes to: bar lines only, never anything finer. Every bar when a
@@ -349,6 +359,7 @@ export const ChopTimeline = forwardRef<
     const start = viewUnderFinger(d.pivot, across(e.clientX), span);
     // The line stays in the middle and follows the finger freely; the snap comes when the finger lets go.
     view.current = { cursor: view.current.cursor, span };
+    inFreeMode();
     const raw = Math.min(total, Math.max(0, start + span / 2));
     setCursor(raw);
     const now = performance.now();
@@ -371,7 +382,7 @@ export const ChopTimeline = forwardRef<
     const last = trail.current[trail.current.length - 1];
     trail.current = [];
     // Fully zoomed in the line is being placed exactly: it stays where the finger left it, with no momentum.
-    if (view.current.span <= minSpan * CLOSEST_MARGIN) return;
+    if (inFreeMode()) return;
     if (!first || !last || last === first || now - last.t > COAST_STALE_MS) return settleAfter();
     const speed = (last.cursor - first.cursor) / (last.t - first.t);
     const tau = snapping() ? COAST_SNAP_TAU_MS : COAST_TAU_MS;
