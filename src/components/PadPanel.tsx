@@ -229,8 +229,8 @@ export function PadPanel({
             <span>Select a key first</span>
           ) : (
             <>
-              <span>{centsMode ? "-100c" : "-12st"}</span>
-              <span>{centsMode ? "+100c" : "+12st"}</span>
+              <span>{centsMode ? "-55c" : "-12st"}</span>
+              <span>{centsMode ? "+55c" : "+12st"}</span>
             </>
           )}
         </div>
