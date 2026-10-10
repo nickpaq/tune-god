@@ -187,7 +187,7 @@ function App() {
   const [keyMajor, setKeyMajor] = useState(saved.keyMajor ?? false);
   /** The project's tempo: the menu edits it, the Tune screen's stretch button and the sequencer's tempo read it, and the export writes it to the project's sequence. */
   const [projectBpm, setProjectBpm] = useState(saved.bpm ?? 120);
-  const [bpmText, setBpmText] = useState(String(saved.bpm ?? 120));
+  const [, setBpmText] = useState(String(saved.bpm ?? 120));
   const [projectName, setProjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
@@ -239,7 +239,7 @@ function App() {
   useLayoutEffect(() => applyScheme(palette, document.documentElement), [palette]);
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
   const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
-  const [a4Text, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
+  const [, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
   /** Ghost under the finger while a pad is being dragged, and the drop target under it ("kind:index"). */
   const [drag, setDrag] = useState<{ from: number; x: number; y: number } | null>(null);
   const [hover, setHover] = useState("");

@@ -24,7 +24,7 @@ export function scrubSpeed(startY: number, y: number, screenHeight = window.inne
 export function useScrub({ value, perPx, min, max, onChange, onStart, onEnd }: { value: number; perPx: number; min: number; max: number; onChange: (value: number) => void; onStart?: () => void; onEnd?: () => void }) {
   const drag = useRef<{ id: number; x: number; y0: number; raw: number } | null>(null);
   return {
-    onPointerDown: (e: PointerEvent<HTMLElement>) => {
+    onPointerDown: (e: PointerEvent<Element>) => {
       e.stopPropagation();
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -34,7 +34,7 @@ export function useScrub({ value, perPx, min, max, onChange, onStart, onEnd }: {
       drag.current = { id: e.pointerId, x: e.clientX, y0: e.clientY, raw: value };
       onStart?.();
     },
-    onPointerMove: (e: PointerEvent<HTMLElement>) => {
+    onPointerMove: (e: PointerEvent<Element>) => {
       const d = drag.current;
       if (!d || d.id !== e.pointerId) return;
       d.raw = Math.min(max, Math.max(min, d.raw + (e.clientX - d.x) * perPx * scrubSpeed(d.y0, e.clientY)));

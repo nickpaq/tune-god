@@ -90,8 +90,6 @@ export function PitchSlider({
     return () => cancelAnimationFrame(raf);
   }, [cents]);
 
-  const widthPx = () => box.current?.getBoundingClientRect().width || 1;
-
   const down = (e: PointerEvent<HTMLDivElement>) => {
     if (disabled) return;
     e.preventDefault();
