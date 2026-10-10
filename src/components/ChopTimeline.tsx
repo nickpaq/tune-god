@@ -368,6 +368,8 @@ export const ChopTimeline = forwardRef<
     const first = trail.current[0];
     const last = trail.current[trail.current.length - 1];
     trail.current = [];
+    // Fully zoomed in the line is being placed exactly: it stays where the finger left it, with no momentum.
+    if (view.current.span <= minSpan) return;
     if (!first || !last || last === first || now - last.t > COAST_STALE_MS) return settleAfter();
     const speed = (last.cursor - first.cursor) / (last.t - first.t);
     const tau = snapping() ? COAST_SNAP_TAU_MS : COAST_TAU_MS;
