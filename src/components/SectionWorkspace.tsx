@@ -81,8 +81,22 @@ interface Finger {
   velocity: number;
   trimDistance: number;
   /** Rhythm mode: the arrangement is being scrubbed and zoomed instead of browsed. */
-  scrub?: { moved: boolean; pivot: number; y0: number; span: number };
+  scrub?: {
+    moved: boolean;
+    pivot: number;
+    y0: number;
+    span: number;
+    trail: { t: number; center: number }[];
+  };
 }
+
+/** Scrubbing the arrangement feels like the waveform view (ChopTimeline): the same zoom range, ease, momentum and fully-zoomed-in margin. */
+const SCRUB_CLOSEST_SECONDS = 0.1;
+const SCRUB_RESTING_SECONDS = 12;
+const SCRUB_ZOOM_EASE_PX = 40;
+const SCRUB_COAST_TAU_MS = 260;
+const SCRUB_COAST_STALE_MS = 70;
+const SCRUB_CLOSEST_MARGIN = 1.08;
 
 /** Shared source cutter and rearranger. Musical positions stay in steps; sample boundaries stay in frames. */
 export function SectionWorkspace({
@@ -290,6 +304,27 @@ export function SectionWorkspace({
     slot: -1,
     sounded: -1,
   });
+  const glideFrame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(glideFrame.current), []);
+  /** The zoom range in steps, from the waveform view's: closest 0.1 s across, resting 12 s, farthest the whole arrangement. */
+  const zoomLimits = () => {
+    const stepSeconds = beatFrames / 4 / sampleRate;
+    const farthest = Math.max(sequenceTotal, 2 * stepsPerBar(beatsPerBar));
+    return {
+      farthest,
+      closest: Math.min(farthest, SCRUB_CLOSEST_SECONDS / stepSeconds),
+      resting: Math.min(farthest, SCRUB_RESTING_SECONDS / stepSeconds),
+    };
+  };
+  /** Sounds the chop the playhead has just crossed into, and makes it the one being edited. */
+  const crossSlots = () => {
+    const a = arrangement.current;
+    const at = slotAt(a.center);
+    if (at === a.slot) return;
+    a.slot = at;
+    setEditAt(at);
+    auditionSlot(at);
+  };
   const slotAt = (step: number): number => {
     const { starts } = timeline;
     let lo = 0,
@@ -1039,6 +1074,7 @@ export function SectionWorkspace({
     if (saving || (e.pointerType === "mouse" && e.button !== 0)) return;
     // Let the system own gestures at the outer screen edges; this working canvas is inset.
     setConfigOpen(false);
+    cancelAnimationFrame(glideFrame.current);
     void getAudioContext().resume();
     e.currentTarget.setPointerCapture(e.pointerId);
     finger.current = {
@@ -1054,7 +1090,13 @@ export function SectionWorkspace({
       velocity: 0,
       trimDistance,
       scrub: scrubMode
-        ? { moved: false, pivot: 0, y0: 0, span: arrangement.current.span }
+        ? {
+            moved: false,
+            pivot: 0,
+            y0: 0,
+            span: arrangement.current.span,
+            trail: [],
+          }
         : undefined,
     };
   };
@@ -1078,11 +1120,11 @@ export function SectionWorkspace({
       }
       // Sideways pulls the arrangement along with the finger; down zooms in, up zooms out (eased in), as in the waveform view.
       const drop = e.clientY - s.y0;
-      const eased = drop > 0 ? (drop * drop) / (drop + 40) : drop;
-      const farthest = Math.max(sequenceTotal, 2 * stepsPerBar(beatsPerBar));
-      const closest = 2;
+      const eased =
+        drop > 0 ? (drop * drop) / (drop + SCRUB_ZOOM_EASE_PX) : drop;
+      const { farthest, closest, resting } = zoomLimits();
       const rate = zoomRate(
-        Math.max(s.span, Math.min(farthest, 4 * stepsPerBar(beatsPerBar))),
+        Math.max(s.span, resting),
         zoomRoom(rect.bottom, window.innerHeight),
         closest,
       );
@@ -1093,12 +1135,12 @@ export function SectionWorkspace({
         0,
         sequenceTotal,
       );
-      const at = slotAt(a.center);
-      if (at !== a.slot) {
-        a.slot = at;
-        if (at !== editIndex) setEditAt(at);
-        auditionSlot(at);
-      }
+      const now = performance.now();
+      s.trail = [
+        ...s.trail.filter((q) => now - q.t < 100),
+        { t: now, center: a.center },
+      ];
+      crossSlots();
       paint.current();
       return;
     }
@@ -1144,9 +1186,47 @@ export function SectionWorkspace({
     }
     if (f.scrub) {
       const a = arrangement.current;
-      if (!f.scrub.moved) auditionSlot(slotAt(a.center), true);
-      else if (a.sounded !== a.slot) auditionSlot(a.slot, true);
       setDragX(0);
+      if (!f.scrub.moved) {
+        auditionSlot(slotAt(a.center), true);
+        return;
+      }
+      // Momentum as in the waveform view: carry on at the speed the arrangement was moving, slowing to a stop. Fully zoomed in the line stays put.
+      const { closest } = zoomLimits();
+      const settle = () => {
+        if (a.sounded !== a.slot) auditionSlot(a.slot, true);
+      };
+      const now = performance.now();
+      const trail = f.scrub.trail;
+      const first = trail[0],
+        end = trail[trail.length - 1];
+      if (
+        a.span <= closest * SCRUB_CLOSEST_MARGIN ||
+        !first ||
+        !end ||
+        end === first ||
+        now - end.t > SCRUB_COAST_STALE_MS
+      )
+        return settle();
+      let v = (end.center - first.center) / (end.t - first.t);
+      let prev = now;
+      const glide = (t: number) => {
+        const dt = Math.min(50, t - prev);
+        prev = t;
+        const before = a.center;
+        a.center = clamp(before + v * dt, 0, sequenceTotal);
+        v *= Math.exp(-dt / SCRUB_COAST_TAU_MS);
+        crossSlots();
+        paint.current();
+        const atEdge = a.center === before && v !== 0;
+        if (
+          (Math.abs(v) * (canvas.current?.clientWidth ?? 1)) / a.span < 0.02 ||
+          atEdge
+        )
+          return settle();
+        glideFrame.current = requestAnimationFrame(glide);
+      };
+      glideFrame.current = requestAnimationFrame(glide);
       return;
     }
     if (f.axis === "y") {
