@@ -21,6 +21,8 @@ const COAST_STALE_MS = 70;
 const MIN_STEP_PX = 10;
 /** How much of the song the first view shows, in seconds. */
 const START_SECONDS = 12;
+/** The view counts as fully zoomed in until it is this much wider than the closest zoom: snapping stays off and the line does not coast, so a slight zoom out does not bring them back. */
+const CLOSEST_MARGIN = 1.08;
 
 /** A section as it is drawn: from frame to frame, in its colour. */
 export interface DrawnSection {
@@ -90,7 +92,7 @@ export const ChopTimeline = forwardRef<
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
   /** Whether the snap is in force: the magnet is on and the view is not zoomed all the way in (there it gives way to exact placement). */
-  const snapping = () => latest.current.magnetOn && view.current.span > minSpan;
+  const snapping = () => latest.current.magnetOn && view.current.span > minSpan * CLOSEST_MARGIN;
 
   /**
    * The grid lines for this zoom, which are both the lines drawn and the lines the snap goes to: bar lines only, never anything finer. Every bar when a
@@ -369,7 +371,7 @@ export const ChopTimeline = forwardRef<
     const last = trail.current[trail.current.length - 1];
     trail.current = [];
     // Fully zoomed in the line is being placed exactly: it stays where the finger left it, with no momentum.
-    if (view.current.span <= minSpan) return;
+    if (view.current.span <= minSpan * CLOSEST_MARGIN) return;
     if (!first || !last || last === first || now - last.t > COAST_STALE_MS) return settleAfter();
     const speed = (last.cursor - first.cursor) / (last.t - first.t);
     const tau = snapping() ? COAST_SNAP_TAU_MS : COAST_TAU_MS;
