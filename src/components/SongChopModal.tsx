@@ -35,8 +35,7 @@ import { padTitle } from "../audio/song/stems";
 import { loadChopMarks, saveChopMarks } from "../storage";
 import type { Pad } from "./PadPanel";
 
-import { SliceDice } from "./SliceDice";
-import { DEFAULT_SIZE, SIZES, sizeSteps } from "../audio/song/sliceDice";
+import { SectionWorkspace } from "./SectionWorkspace";
 import type { WorkspaceResult } from "../audio/song/sectionWorkspace";
 
 export interface ChopSettings {
@@ -137,7 +136,7 @@ export function SongChopModal({
   /** What the chop makes: a pattern per section (acapella mode) or a chop on the chopper (chopper mode). */
   unit?: "pattern" | "chop";
   pitchForKey?: (key: SongKey | null) => number;
-  onConfirm: (settings: ChopSettings) => void | Promise<void>;
+  onConfirm: (settings: ChopSettings, openMaker?: boolean) => void | Promise<void>;
   onClose: () => void;
 }) {
   const sampleRate = pad.sampleRate;
@@ -147,9 +146,7 @@ export function SongChopModal({
   const timeline = useRef<ChopTimelineHandle>(null);
   /** Chopper mode: the grid and the chops go down to sixteenth notes (the pattern maker's finest step too). */
   const fine = unit === "chop";
-  /** Slice and dice: the grid it opened on, and the size of its pieces (the knob beside the button picks it). */
-  const [diceGrid, setDiceGrid] = useState<TapGrid | null>(null);
-  const [sizeIndex, setSizeIndex] = useState(DEFAULT_SIZE);
+  const [workspaceGrid, setWorkspaceGrid] = useState<TapGrid | null>(null);
   const colorOf = (i: number) => chopColor(palette.colors, i);
 
   const [detected, setDetected] = useState<Detected | "none" | null>(null);
@@ -488,13 +485,13 @@ export function SongChopModal({
   const note = detecting ? "Music Tempo is detecting BPM from the anchor…" : detectionFailed ? "Detection failed. Previous BPM kept; adjust BPM and listen to the click." : "Anchor locks a downbeat. Adjust BPM around it; nudge grid −/+ moves timing by 1 ms.";
   const bpmText = detected === null ? "..." : detected === "none" && marks.bpm == null && marks.downbeats.length === 0 && marks.oneOne === null ? "--" : (grid ? bpmAt(grid, 0) : 0).toFixed(2);
 
-  if (diceGrid) {
-    return <SliceDice channelData={pad.channelData} sampleRate={sampleRate} beatFrames={60 * sampleRate / bpmAt(diceGrid, 0)} beatsPerBar={beatsPerBar} grid={diceGrid} size={sizeSteps(sizeIndex, beatsPerBar)} startStep={detectionAnchor === null ? undefined : 0} pitch={pitchForKey?.(detectedKey) ?? 0} colors={palette.colors} onClose={() => setDiceGrid(null)} onDone={maker => {
+  if (workspaceGrid) {
+    return <SectionWorkspace channelData={pad.channelData} sampleRate={sampleRate} beatFrames={60 * sampleRate / bpmAt(workspaceGrid, 0)} beatsPerBar={beatsPerBar} grid={workspaceGrid} pitch={pitchForKey?.(detectedKey) ?? 0} colors={palette.colors} chops={plans.map((p, i) => ({ slice: i, start: p.start, length: p.length, bars: p.bars, steps: Math.max(1, Math.round(p.length / (60 * sampleRate / tempo) * 4)), barIndex: p.barIndex ?? 0, colorIndex: (p.barIndex ?? 0) % 4, color: colorOf((p.barIndex ?? 0) % 4) }))} initial={[]} startInSource onClose={() => setWorkspaceGrid(null)} onDone={maker => {
       const used = [...new Set(maker.slots.flatMap(s => s.kind === 'chop' ? [s.chop] : []))];
       const selectedPlans: SectionPlan[] = used.map((i, index) => { const c = maker.chops[i]; return { start: c.start, length: c.length, audioFrames: c.length, bars: c.bars, barIndex: c.barIndex, colorIndex: c.colorIndex, index }; });
       // A silence-only pattern still needs a source pad for Koala's chopper.
       if (!selectedPlans.length) selectedPlans.push({ start: 0, length: 1, audioFrames: 1, bars: 1, index: 0 });
-      return onConfirm({ bpm: bpmAt(diceGrid, 0), beatsPerBar, plans: selectedPlans, key: detectedKey, maker });
+      return onConfirm({ bpm: bpmAt(workspaceGrid, 0), beatsPerBar, plans: selectedPlans, key: detectedKey, maker });
     }} />;
   }
 
@@ -511,6 +508,11 @@ export function SongChopModal({
         </div>
         <div className="chop__scroll">
           <p className="chop__note">{note}</p>
+          {fine && <button className="chop__btn" disabled={!grid} onClick={() => {
+            if (!grid) return;
+            player.stop();
+            setWorkspaceGrid(grid);
+          }}>Open section workspace · 1–16 bars</button>}
 
           <div className="chop__screen">
             <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[]} oneOne={detectionAnchor === null ? null : detectionAnchor + (marks.gridOffsetFrames ?? 0)} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
@@ -576,23 +578,14 @@ export function SongChopModal({
             <button className="chop__btn chop__grow" disabled={!grid} onClick={() => nudgeGrid(-1)} aria-label="Nudge grid earlier by 1 millisecond">Nudge grid −</button>
             <button className="chop__btn chop__grow" disabled={!grid} onClick={() => nudgeGrid(1)} aria-label="Nudge grid later by 1 millisecond">Nudge grid +</button>
           </div>
-          {fine ? (
-            <div className="chop__row chop__dice">
-              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => { if (!grid) return; player.stop(); setDiceGrid(grid); }} title="Opens the chop rearranger on the song cut into pieces of the size the knob picks, starting from the anchor (or the beginning of the song).">
-                Slice and dice
-              </button>
-              <Knob value={sizeIndex / (SIZES.length - 1)} onChange={(v) => setSizeIndex(Math.round(v * (SIZES.length - 1)))} label={SIZES[sizeIndex].label} />
-            </div>
-          ) : (
-            <div className="chop__row">
-              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops the vocal into patterns.">
-                Chop by 8
-              </button>
-              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song and chops the vocal into patterns.">
-                Chop by 16
-              </button>
-            </div>
-          )}
+          <div className="chop__row">
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops the vocal into patterns.">
+              Chop by 8
+            </button>
+            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song and chops the vocal into patterns.">
+              Chop by 16
+            </button>
+          </div>
           <div className="chop__row">
             <button className="chop__btn chop__grow" disabled={history.past.length === 0} onClick={() => stepHistory(undo, "Undone")}>
               Undo
@@ -620,6 +613,11 @@ export function SongChopModal({
 
         </div>
 
+        {unit === "chop" && (
+          <button className="chop__btn" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey }, true)}>
+            Finish and open pattern maker
+          </button>
+        )}
         <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey })}>
           Chop into {fits} {unit}{fits === 1 ? "" : "s"}
         </button>

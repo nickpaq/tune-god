@@ -26,8 +26,6 @@ export function useChopAudition(
   const gains = useRef<GainNode[]>([]);
   const epoch = useRef(0);
   const raf = useRef(0);
-  /** Counts the plays that ran to their end by themselves (not stopped). */
-  const [ended, setEnded] = useState(0);
   const [volume, setVolume] = useState(0.7);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
@@ -150,7 +148,6 @@ export function useChopAudition(
         const elapsed = Math.max(0, (ctx.currentTime - start) / stepSeconds);
         if (kind !== "stretch" && elapsed >= at) {
           stop();
-          setEnded((n) => n + 1);
           return;
         }
         setPosition({ kind, steps: kind === "stretch" ? 0 : origin + elapsed });
@@ -175,5 +172,5 @@ export function useChopAudition(
       stop();
     };
   }, [stop]);
-  return { play, stop, position, volume, setVolume, ended };
+  return { play, stop, position, volume, setVolume };
 }
