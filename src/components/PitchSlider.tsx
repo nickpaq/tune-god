@@ -4,8 +4,8 @@ import { scrubSpeed } from "./scrub";
 
 /** The slider's range: 12 semitones either way. */
 const RANGE = 1200;
-/** In cents mode the slider covers this many cents either side of the semitone it was set on. */
-const CENTS_RANGE = 100;
+/** In cents mode the slider covers this many cents either side of the semitone it was set on: just past the halfway point (50), where the pitch snaps to the next semitone and the dial centres on it. */
+const CENTS_RANGE = 55;
 /** A press that moves less than this (px) and ends within TAP_MS is a tap. */
 const TAP_PX = 6;
 const TAP_MS = 350;
@@ -39,7 +39,7 @@ function onLine(u: number, k: number) {
  * The Tune screen's pitch slider (the pad's trim, in cents, +-12 semitones). Drag left or right to scrub: the speed slows smoothly to a tenth toward the
  * bottom of the screen (`scrubSpeed`), but in semitone mode the value always lands on whole semitones (with any cents offset the pad already has kept).
  * A tap swaps between semitone mode and cents mode; a double tap puts the pitch back to the middle. In cents mode the line bends into a tuner dial
- * with a hand, and the slider covers 100 cents either side of the semitone it was on. Dragged up, the value stays put and `onAbove` reports the finger.
+ * with a hand, and the slider covers 55 cents either side of the semitone it was on (past that it snaps to the next semitone). Dragged up, the value stays put and `onAbove` reports the finger.
  */
 export function PitchSlider({
   value,
@@ -115,7 +115,12 @@ export function PitchSlider({
     const span = cents ? CENTS_RANGE * 2 : RANGE * 2;
     d.raw += (dx / rect.width) * span * scrubSpeed(d.y0, e.clientY);
     if (cents) {
-      d.raw = clamp(d.raw, Math.max(-RANGE, d.anchor - CENTS_RANGE), Math.min(RANGE, d.anchor + CENTS_RANGE));
+      d.raw = clamp(d.raw, -RANGE, RANGE);
+      // Past the edge of the dial the pitch snaps to the next semitone and the dial centres on it.
+      if (Math.abs(d.raw - d.anchor) > CENTS_RANGE) {
+        d.anchor = wholeSemitone(d.raw);
+        d.raw = d.anchor;
+      }
       onChange(Math.round(d.raw * 10) / 10);
     } else {
       d.raw = clamp(d.raw, -RANGE, RANGE);
@@ -156,7 +161,7 @@ export function PitchSlider({
 
   // The marks: a semitone mark for each of the 25 whole semitones (the detents), ten-cent marks for the dial; one set fades into the other as the line bends.
   const semiMarks = Array.from({ length: 25 }, (_, i) => ({ u: (i - 12) / 12, long: i === 12 || i % 12 === 0, mid: i % 6 === 0 }));
-  const centMarks = Array.from({ length: 21 }, (_, j) => ({ u: (j - 10) / 10, long: j === 10 || j % 10 === 0, mid: j % 5 === 0 }));
+  const centMarks = Array.from({ length: 11 }, (_, j) => ({ u: ((j - 5) * 10) / CENTS_RANGE, long: j === 5 || j === 0 || j === 10, mid: false }));
   const mark = (m: { u: number; long: boolean; mid: boolean }, key: string, opacity: number) => {
     if (opacity <= 0.01) return null;
     const p = onLine(m.u, bend);

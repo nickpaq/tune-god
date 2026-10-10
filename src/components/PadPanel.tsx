@@ -209,7 +209,7 @@ export function PadPanel({
           onDragEnd={onHoldEnd}
           onReset={() => onChange({ semis: 0, cents: 0 })}
           valueLabel={(cents) => formatTrim(pad.tune ? autoShift * 100 + cents : cents)}
-          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), tap to swap to cents mode (a tuner dial, 100 cents either side). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
+          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), tap to swap to cents mode (a tuner dial, 55 cents either side: past that it snaps to the next semitone). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
         />
         {chords && above && (
           <>
