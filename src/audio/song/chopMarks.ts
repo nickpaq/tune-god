@@ -83,6 +83,11 @@ export function fineChopLines(grid: TapGrid, chops: readonly number[]): number[]
   return [...new Set(chops.map((frame) => fineLineNear(grid, frame)))].sort((a, b) => a - b);
 }
 
+/** The beat lines the chop markers sit on (acapella and synced mode: the finest cut is a single beat), in song order (two markers on one beat are one). */
+export function beatChopLines(grid: TapGrid, chops: readonly number[]): number[] {
+  return [...new Set(chops.map((frame) => lineNear(grid, frame)))].sort((a, b) => a - b);
+}
+
 /** The sections between neighbouring chop markers, in song order, each given the palette colour of its place in the list. */
 export function sectionsBetween(lines: readonly number[]): PickedSection[] {
   const sections: PickedSection[] = [];

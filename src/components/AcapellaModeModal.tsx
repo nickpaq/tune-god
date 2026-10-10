@@ -3,8 +3,8 @@ export type ChopMode = "acapella" | "chopper" | "synced";
 const ACAPELLA_POINTS = [
   "Stays in time with the project, even if the BPM changes",
   "Can be repitched without going out of sync",
-  "Limited to 16 chops, one pad each",
-  "Overwrites everything on Bank D",
+  "As many chops as the pads you pick, one pad each",
+  "Overwrites only the pads you choose",
   "Leaves the project's BPM alone",
   "Needs a song and its VOCALS stem in the project",
 ];
@@ -12,8 +12,8 @@ const ACAPELLA_POINTS = [
 const SYNCED_POINTS = [
   "Like Acapella mode, but chops the sample itself (no vocal stem needed)",
   "Stays in time with the project, even if the BPM changes",
-  "Limited to 16 chops, one pad each",
-  "Overwrites everything on Bank D",
+  "As many chops as the pads you pick, one pad each",
+  "Overwrites only the pads you choose",
   "Works on any sample over 10 seconds",
 ];
 

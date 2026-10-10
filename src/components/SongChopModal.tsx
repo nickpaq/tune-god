@@ -7,11 +7,11 @@ import { mixToMono } from "../audio/song/beats";
 import type { SectionPlan } from "../audio/song/chop";
 import {
   barLineNear,
+  beatChopLines,
   anchorAtPlayhead,
   nudgeGridMarks,
   barsIn,
   baseGrid,
-  chopLines,
   fineChopLines,
   commit,
   gridWithMarks,
@@ -25,7 +25,7 @@ import {
 } from "../audio/song/chopMarks";
 import { detectSongTempo } from "../audio/song/detectors";
 import { zeroCrossingNear } from "../audio/song/zeroCrossing";
-import { bpmAt, fineLineNear, isBarLine, lineFrame, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
+import { bpmAt, fineLineNear, isBarLine, lineFrame, lineNear, linesBetween, MAX_SECTION_BARS, planSections, type TapGrid } from "../audio/song/tapGrid";
 import { buildPyramid } from "../audio/song/waveform";
 import { ChopTimeline, type ChopTimelineHandle } from "./ChopTimeline";
 import { Knob } from "./Knob";
@@ -33,6 +33,7 @@ import { useSongPlayer } from "./useSongPlayer";
 import type { SongKey } from "../audio/song/keyOffset";
 import { padTitle } from "../audio/song/stems";
 import { loadChopMarks, saveChopMarks } from "../storage";
+import { haptic } from "../audio/haptics";
 import type { Pad } from "./PadPanel";
 
 import { SectionWorkspace } from "./SectionWorkspace";
@@ -46,6 +47,8 @@ export interface ChopSettings {
   beatsPerBar: number;
   /** The sections, on the song's own frames. */
   plans: SectionPlan[];
+  /** How the export sequences them (acapella and synced mode): a pattern per chop, or one pattern holding every chop. */
+  pattern?: "multiple" | "single";
   /** The song's key as detected (null when no beat, so no key, was found): what the key picked on the piano is compared with. */
   key: SongKey | null;
 }
@@ -72,8 +75,6 @@ const BPM_HOLD_START = 0.05;
 const BPM_HOLD_DOUBLE_S = 0.6;
 const SEMITONE_RATIO = 2 ** (1 / 12) - 1;
 
-/** Bar-jump presses this close together keep stepping from the line the last one went to. */
-const JUMP_REPEAT_MS = 2500;
 /** A length in bars for the list: whole bars as a whole number, otherwise to two places. */
 const barsText = (bars: number) => {
   const shown = +bars.toFixed(2);
@@ -122,6 +123,7 @@ export function SongChopModal({
   beatsPerBar,
   freeSlots,
   unit = "pattern",
+  acapella = false,
   onConfirm,
   pitchForKey,
   onClose,
@@ -135,6 +137,8 @@ export function SongChopModal({
   freeSlots: number;
   /** What the chop makes: a pattern per section (acapella mode) or a chop on the chopper (chopper mode). */
   unit?: "pattern" | "chop";
+  /** Chop by 8 and Chop by 16 are acapella mode's alone. */
+  acapella?: boolean;
   pitchForKey?: (key: SongKey | null) => number;
   onConfirm: (settings: ChopSettings, openMaker?: boolean) => void | Promise<void>;
   onClose: () => void;
@@ -212,11 +216,12 @@ export function SongChopModal({
 
   const lines = useMemo(() => {
     if (!grid) return [];
-    return fine ? fineChopLines(grid, marks.chops) : chopLines(grid, marks.chops);
+    return fine ? fineChopLines(grid, marks.chops) : beatChopLines(grid, marks.chops);
   }, [grid, marks.chops, fine]);
   const sections = useMemo(() => sectionsBetween(lines), [lines]);
   const plans = useMemo(() => (grid ? planSections(totalFrames, grid, sections) : []), [grid, totalFrames, sections]);
-  const fits = Math.min(plans.length, freeSlots);
+  // Acapella and synced mode: the destination pads are picked after the export button, so only the chopper has a limit here.
+  const fits = unit === "chop" ? Math.min(plans.length, freeSlots) : plans.length;
   // Chopper mode has no limit on a section's length (acapella and synced mode keep the 16 bar maximum).
   const longOnes = grid && !fine ? sections.map((s, i) => (tooLong(grid, s) ? i + 1 : 0)).filter(Boolean) : [];
   const tempo = grid ? bpmAt(grid, sections.length > 0 ? sections[0].first : 0) : 0;
@@ -282,36 +287,6 @@ export function SongChopModal({
     return true;
   };
 
-  /** The last jump's target line, direction and time: presses within JUMP_REPEAT_MS of each other keep stepping from it. */
-  const lastJump = useRef<{ line: number; direction: number; at: number } | null>(null);
-  /** Jumps the line `bars` bars back or forward (`direction` -1 or 1) along the bar lines, and carries on playing from there if the song was playing. */
-  const jump = (direction: number, bars: number) => {
-    if (!grid) return;
-    pausedAt.current = null;
-    const cursor = timeline.current?.cursor() ?? 0;
-    const now = performance.now();
-    const last = lastJump.current;
-    lastJump.current = null;
-    let line: number;
-    if (last && last.direction === direction && now - last.at < JUMP_REPEAT_MS) {
-      // A repeat press soon after a jump counts from the line that jump went to, not from where the playing song has drifted since.
-      line = last.line + direction * grid.beatsPerBar * bars;
-    } else {
-      const near = barLineNear(grid, cursor);
-      const nearFrame = lineFrame(grid, near);
-      // From a bar line, the whole distance; from between two, the bar line already ahead in that direction counts as the first.
-      const onLine = Math.abs(nearFrame - cursor) < grid.segments[0].beatFrames / 8;
-      const ahead = !onLine && (direction > 0 ? nearFrame > cursor : nearFrame < cursor);
-      line = near + direction * grid.beatsPerBar * (ahead ? bars - 1 : bars);
-    }
-    const frame = Math.min(totalFrames, Math.max(0, lineFrame(grid, line)));
-    lastJump.current = { line, direction, at: now };
-    timeline.current?.setCursor(frame);
-    if (player.playing) {
-      player.start(frame);
-    }
-  };
-
   // ---- markers ----
 
   const change = (next: Marks, message: string) => {
@@ -331,11 +306,12 @@ export function SongChopModal({
   const addChop = () => {
     if (!grid) return;
     const cursor = pointAtCursor();
-    const lineOf = (frame: number) => (fine ? fineLineNear(grid, frame) : barLineNear(grid, frame));
+    const lineOf = (frame: number) => (fine ? fineLineNear(grid, frame) : lineNear(grid, frame));
     const line = lineOf(cursor);
     const at = lineFrame(grid, line);
     const there = marks.chops.find((f) => lineOf(f) === line);
     if (there !== undefined) return change({ ...marks, chops: marks.chops.filter((f) => f !== there) }, `Chop removed at ${formatTime(at / sampleRate)}`);
+    haptic("snap");
     // Outside chopper mode a section may not pass 16 bars: markers fill in every 16 bars from the nearest chop before this one when it is further back than that.
     const before = lines.filter((n) => n < line).pop();
     const filler: number[] = [];
@@ -367,11 +343,10 @@ export function SongChopModal({
     let end = barLineNear(grid, totalFrames);
     while (lineFrame(grid, end) > totalFrames) end -= grid.beatsPerBar;
     if (end - cuts[cuts.length - 1] >= grid.beatsPerBar) cuts.push(end);
-    const picked = sectionsBetween(cuts);
-    const chosen = planSections(totalFrames, grid, picked);
+    const chosen = planSections(totalFrames, grid, sectionsBetween(cuts));
     if (chosen.length === 0) return setStatus("No whole bars to chop");
-    change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)) }, `Chopped by ${bars}`);
-    onConfirm({ bpm: bpmAt(grid, picked[0].first), grid, beatsPerBar, plans: chosen, key: detectedKey });
+    // The markers are placed; the export button then says how they are written.
+    change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)) }, `Chop marker every ${bars} bars`);
   };
 
   autoChopRef.current = autoChop;
@@ -515,7 +490,7 @@ export function SongChopModal({
           }}>Open section workspace · 1–16 bars</button>}
 
           <div className="chop__screen">
-            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[]} oneOne={detectionAnchor === null ? null : detectionAnchor + (marks.gridOffsetFrames ?? 0)} sections={drawnSections} magnetOn={magnetOn} fine={fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
+            <ChopTimeline ref={timeline} pyramid={pyramid} sampleRate={sampleRate} grid={grid} chops={chopFrames} downbeats={[]} oneOne={detectionAnchor === null ? null : detectionAnchor + (marks.gridOffsetFrames ?? 0)} sections={drawnSections} magnetOn={magnetOn} fine={fine} beatGrid={!fine} onScrub={scrubStart} onScrubEnd={scrubEnd} />
             <div className="chop__readout">
               <button className={`chop__nudge${marks.oneOne !== null && marks.bpm == null ? " chop__nudge--on" : ""}`} disabled={!grid || marks.bpm == null} onClick={autoTempo} aria-pressed={marks.oneOne !== null && marks.bpm == null} aria-label="Automatic tempo">
                 <AutoIcon />
@@ -550,20 +525,6 @@ export function SongChopModal({
               <span>{player.playing ? "Pause" : "Play"}</span>
             </button>
             <Knob value={player.clickVolume} onChange={player.setClickVolume} label="Click" />
-            <div className="chop__jumps">
-              <button className="chop__btn" disabled={!grid} onClick={() => jump(-1, 1)} aria-label="Back one bar">
-                ◀ 1
-              </button>
-              <button className="chop__btn" disabled={!grid} onClick={() => jump(1, 1)} aria-label="Forward one bar">
-                1 ▶
-              </button>
-              <button className="chop__btn" disabled={!grid} onClick={() => jump(-1, 4)} aria-label="Back four bars">
-                ◀ 4
-              </button>
-              <button className="chop__btn" disabled={!grid} onClick={() => jump(1, 4)} aria-label="Forward four bars">
-                4 ▶
-              </button>
-            </div>
           </div>
 
           <div className="chop__row chop__markers">
@@ -578,14 +539,16 @@ export function SongChopModal({
             <button className="chop__btn chop__grow" disabled={!grid} onClick={() => nudgeGrid(-1)} aria-label="Nudge grid earlier by 1 millisecond">Nudge grid −</button>
             <button className="chop__btn chop__grow" disabled={!grid} onClick={() => nudgeGrid(1)} aria-label="Nudge grid later by 1 millisecond">Nudge grid +</button>
           </div>
-          <div className="chop__row">
-            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song and chops the vocal into patterns.">
-              Chop by 8
-            </button>
-            <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song and chops the vocal into patterns.">
-              Chop by 16
-            </button>
-          </div>
+          {acapella && (
+            <div className="chop__row">
+              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song.">
+                Chop by 8
+              </button>
+              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song.">
+                Chop by 16
+              </button>
+            </div>
+          )}
           <div className="chop__row">
             <button className="chop__btn chop__grow" disabled={history.past.length === 0} onClick={() => stepHistory(undo, "Undone")}>
               Undo
@@ -618,9 +581,19 @@ export function SongChopModal({
             Finish and open pattern maker
           </button>
         )}
-        <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey })}>
-          Chop into {fits} {unit}{fits === 1 ? "" : "s"}
-        </button>
+        {unit === "chop" ? (
+          <button className="chop__go" disabled={plans.length === 0 || fits === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey })}>
+            Chop into {fits} {unit}{fits === 1 ? "" : "s"}
+          </button>
+        ) : (
+          <div className="chop__exports">
+            {(["multiple", "single"] as const).map((pattern) => (
+              <button key={pattern} className="chop__go" disabled={plans.length === 0 || longOnes.length > 0} onClick={() => grid && onConfirm({ bpm: tempo, grid, beatsPerBar, plans, key: detectedKey, pattern })} title={pattern === "multiple" ? "A Koala pattern for each chop." : "One Koala pattern holding every chop at its place in the song."}>
+                {pattern === "multiple" ? "Chop to Multiple Patterns" : "Chop to One Pattern"}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

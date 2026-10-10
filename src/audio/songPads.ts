@@ -47,7 +47,7 @@ export function makeSectionPads(song: Pad, plans: SectionPlan[], bpm: number, be
       tune: false,
       semis: 0,
       cents: 0,
-      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar, bars: plan.bars, colorIndex: plan.colorIndex, color: colors && plan.colorIndex !== undefined ? chopColor(colors, plan.colorIndex) : undefined },
+      section: { number: n + 1, sourceSampleId: song.sampleId, bpm, beatsPerBar, bars: plan.bars, beats: plan.beats, startBeat: plan.startBeat, colorIndex: plan.colorIndex, color: colors && plan.colorIndex !== undefined ? chopColor(colors, plan.colorIndex) : undefined },
     });
   });
   return { pads, dropped: Math.max(0, plans.length - free.length), seconds: plans.slice(0, free.length).reduce((sum, p) => sum + p.length, 0) / song.sampleRate };

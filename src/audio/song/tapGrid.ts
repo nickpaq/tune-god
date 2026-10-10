@@ -180,7 +180,7 @@ export function planSections(totalFrames: number, grid: TapGrid, sections: reado
     const end = Math.round(lineFrame(grid, s.last));
     if (end <= start || end <= 0 || start >= totalFrames) continue;
     const audioFrames = Math.max(0, Math.min(end, totalFrames) - Math.max(start, 0));
-    plans.push({ start, length: end - start, bars: Math.max(1, Math.round((s.last - s.first) / grid.beatsPerBar)), audioFrames, index: plans.length, barIndex: Math.floor(s.first / grid.beatsPerBar), colorIndex: s.colorIndex });
+    plans.push({ start, length: end - start, bars: Math.max(1, Math.round((s.last - s.first) / grid.beatsPerBar)), audioFrames, index: plans.length, barIndex: Math.floor(s.first / grid.beatsPerBar), colorIndex: s.colorIndex, startBeat: s.first, beats: s.last - s.first });
   }
   return plans;
 }

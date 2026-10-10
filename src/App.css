@@ -1869,17 +1869,20 @@
   text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
-.chop__jumps {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* The two export buttons: equal width and height, the same accent key as the single button was. */
+.chop__exports {
+  flex: none;
+  display: flex;
   gap: 1.8cqw;
 }
 
-.chop__jumps .chop__btn {
-  padding: 2cqw 0;
-  white-space: nowrap;
+.chop__exports .chop__go {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 1.5cqw;
+  font-size: 3cqw;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
 }
 
 .knob {
@@ -2274,3 +2277,115 @@
 .sample-library__favorite.is-favorite { color: var(--accent); }
 .sample-library__hint { opacity: .55; font-size: .75rem; white-space: nowrap; }
 .sample-library__empty { padding: 24px 0; text-align: center; opacity: .7; }
+
+/* ---- the pad picker for the chops ---- */
+.alloc__banks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.4cqw;
+}
+
+.alloc__label {
+  display: block;
+  margin-bottom: 1cqw;
+  color: var(--ink3);
+  font-size: 2.8cqw;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.alloc__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1cqw;
+}
+
+.alloc__pad {
+  position: relative;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 1.2cqw;
+  background: var(--btn);
+  box-shadow: 0 2px 0 var(--key-edge), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: var(--ink2, var(--ink));
+  font: inherit;
+  font-size: 3cqw;
+  touch-action: manipulation;
+}
+
+.alloc__pad--on {
+  background: var(--accent);
+  box-shadow: 0 2px 0 var(--accent-edge);
+  color: var(--accent-ink);
+}
+
+/* A red mark that stays red in every scheme: a sample on this pad will be replaced. */
+.alloc__pad--warn {
+  box-shadow: 0 2px 0 var(--accent-edge), inset 0 0 0 0.6cqw #e5322d;
+}
+
+.alloc__warn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 3.4cqw solid #e5322d;
+  border-left: 3.4cqw solid transparent;
+  border-top-right-radius: 1.2cqw;
+}
+
+.alloc__pad--locked {
+  opacity: 0.35;
+}
+
+.alloc__num {
+  position: absolute;
+  top: 0.8cqw;
+  left: 1.2cqw;
+  line-height: 1;
+}
+
+.alloc__speaker {
+  position: absolute;
+  right: 1cqw;
+  bottom: 1cqw;
+  width: 3.6cqw;
+  height: auto;
+  opacity: 0.8;
+}
+
+.alloc__focus,
+.alloc__summary {
+  margin: 0;
+  color: var(--ink2, var(--ink));
+  font-size: 3cqw;
+  line-height: 1.35;
+}
+
+.alloc__focus {
+  min-height: 8.2cqw;
+}
+
+.alloc__focus[data-warn="true"] {
+  color: #ff6a64;
+}
+
+.alloc__count {
+  align-items: center;
+}
+
+.alloc__number {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 2cqw;
+  border: 0;
+  border-radius: 1.4cqw;
+  background: var(--btn);
+  color: var(--ink);
+  font: inherit;
+  text-align: center;
+}

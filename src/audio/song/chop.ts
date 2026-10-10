@@ -14,6 +14,9 @@ export interface SectionPlan {
   index: number;
   /** The bar the section starts on, counted in the song's grid (bar 1, the 1.1.1, is 0): where in the song it came from. */
   barIndex?: number;
+  /** Where the section starts on the grid and how long it is, in beats (line numbers): the exact musical position, whatever the tempo. */
+  startBeat?: number;
+  beats?: number;
   /** The palette colour the section was given when it was picked, if any. */
   colorIndex?: number;
 }
