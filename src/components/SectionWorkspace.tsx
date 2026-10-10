@@ -5,6 +5,13 @@ import {
 } from "../audio/song/rhythmLengths";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  isDrag,
+  spanAfterDrag,
+  viewUnderFinger,
+  zoomRate,
+  zoomRoom,
+} from "../audio/song/zoom";
+import {
   noteOptions,
   tripletProgress,
   quantizeNote,
@@ -73,6 +80,8 @@ interface Finger {
   time: number;
   velocity: number;
   trimDistance: number;
+  /** Rhythm mode: the arrangement is being scrubbed and zoomed instead of browsed. */
+  scrub?: { moved: boolean; pivot: number; y0: number; span: number };
 }
 
 /** Shared source cutter and rearranger. Musical positions stay in steps; sample boundaries stay in frames. */
@@ -214,9 +223,27 @@ export function SectionWorkspace({
     phases,
   ]);
   const index = clamp(selected, 0, Math.max(0, rows.length - 1));
-  const active = rows[index];
-  const candidate =
-    active && mode === "source"
+  const wheelActive = rows[index];
+  /** Rhythm mode: the arrangement is scrubbed and zoomed under a fixed playhead, and the chop under it is the one that is edited. */
+  const scrubMode =
+    mode === "pattern" && rhythmActive && state.slots.length > 0;
+  const scrubSlot =
+    scrubMode && editIndex !== null ? state.slots[editIndex] : null;
+  const scrubCandidate: MakerChop | undefined =
+    scrubSlot?.kind === "chop"
+      ? (() => {
+          const chop = state.chops[scrubSlot.chop];
+          return {
+            ...chop,
+            steps: scrubSlot.steps,
+            bars: scrubSlot.steps / stepsPerBar(beatsPerBar),
+            length: Math.round((chop.length * scrubSlot.steps) / chop.steps),
+          };
+        })()
+      : undefined;
+  const active = scrubMode ? scrubCandidate : wheelActive;
+  const wheelCandidate =
+    wheelActive && mode === "source"
       ? sourceCandidates(
           grid,
           channelData[0].length,
@@ -227,25 +254,27 @@ export function SectionWorkspace({
         ).find(
           (c) =>
             Math.floor(c.barIndex / bars) ===
-            Math.floor(active.barIndex / bars),
+            Math.floor(wheelActive.barIndex / bars),
         )
-      : active && (libraryLength !== null || rhythmActive) && library
+      : wheelActive && (libraryLength !== null || rhythmActive) && library
         ? {
-            ...active,
+            ...wheelActive,
             steps: Math.min(
-              active.steps,
+              wheelActive.steps,
               rhythmActive ? selectionLength : libraryLength!,
             ),
             length: Math.round(
-              (active.length *
+              (wheelActive.length *
                 Math.min(
-                  active.steps,
+                  wheelActive.steps,
                   rhythmActive ? selectionLength : libraryLength!,
                 )) /
-                active.steps,
+                wheelActive.steps,
             ),
           }
-        : active;
+        : wheelActive;
+
+  const candidate = scrubMode ? scrubCandidate : wheelCandidate;
 
   const audio = useChopAudition(channelData, sampleRate, beatFrames, pitch);
   const pyramid = useMemo(() => buildPyramid(channelData), [channelData]);
@@ -254,6 +283,49 @@ export function SectionWorkspace({
   const position = useRef(0),
     span = useRef(sectionSteps);
   const lastBrowse = useRef({ stamp: "", at: 0 });
+  /** Rhythm mode's view of the arrangement: the step under the playhead, how many steps the screen shows, and the chop last sounded. */
+  const arrangement = useRef({
+    center: 0,
+    span: 2 * stepsPerBar(beatsPerBar),
+    slot: -1,
+    sounded: -1,
+  });
+  const slotAt = (step: number): number => {
+    const { starts } = timeline;
+    let lo = 0,
+      hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid] <= step) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  /** Sounds the chop in a slot (silence stops the sound). Scrubbing is throttled; a tap or a let-go passes `force`. */
+  const auditionSlot = (i: number, force = false) => {
+    const slot = state.slots[i];
+    if (!slot) return;
+    arrangement.current.sounded = i;
+    if (slot.kind !== "chop") {
+      audio.stop();
+      return;
+    }
+    const chop = state.chops[slot.chop];
+    const stamp = `${i}:${chop.start}:${slot.steps}`,
+      now = performance.now();
+    if (
+      !force &&
+      (stamp === lastBrowse.current.stamp || now - lastBrowse.current.at < 85)
+    ) {
+      arrangement.current.sounded = -1;
+      return;
+    }
+    lastBrowse.current = { stamp, at: now };
+    void audio.play(
+      [{ ...slotFades(state.slots, i), chop, steps: slot.steps }],
+      "browse",
+    );
+  };
   const initialized = useRef(false);
   const [sizeVersion, setSizeVersion] = useState(0);
   useEffect(() => {
@@ -270,6 +342,16 @@ export function SectionWorkspace({
       setSelected(rows.length - 1);
     }
   }, [rows.length]);
+  useEffect(() => {
+    if (!scrubMode || editIndex === null || finger.current) return;
+    const { starts } = slotStarts(state.slots);
+    const start = starts[editIndex],
+      end = start + state.slots[editIndex].steps;
+    const a = arrangement.current;
+    if (a.center < start || a.center >= end)
+      a.center = start + (end - start) / 2;
+    a.slot = editIndex;
+  }, [scrubMode, editIndex, state.slots]);
   const last = priorSlots.at(-1);
   const canRepeat = priorSlots.some((slot) => slot.kind === "chop");
   const trimDistance =
@@ -437,6 +519,70 @@ export function SectionWorkspace({
         12,
         h - 18,
       );
+      return;
+    }
+    if (scrubMode) {
+      // Rhythm mode: the whole arrangement under a fixed playhead. Scrubbing and zooming work as in the waveform view.
+      const a = arrangement.current;
+      const perStep = w / a.span,
+        stepX = (step: number) => w / 2 + (step - a.center) * perStep;
+      const here = slotAt(a.center);
+      timeline.starts.forEach((start, i) => {
+        const slot = state.slots[i],
+          x = stepX(start),
+          width = slot.steps * perStep;
+        if (x + width < 0 || x > w) return;
+        wave(
+          slot.kind === "chop" ? state.chops[slot.chop] : null,
+          x,
+          center,
+          Math.max(1, width - 1),
+          88,
+          i === here ? 0.95 : 0.5,
+          slot.steps,
+        );
+        if (i === here) {
+          ctx.strokeStyle = ink;
+          ctx.globalAlpha = 0.8;
+          ctx.strokeRect(x + 0.5, center - 45.5, Math.max(1, width - 2), 91);
+          ctx.globalAlpha = 1;
+        }
+      });
+      const bar = stepsPerBar(beatsPerBar);
+      const unit =
+        [1, 2, 4, bar, bar * 4].find((u) => u * perStep >= 7) ?? bar * 16;
+      ctx.fillStyle = muted;
+      for (
+        let step = Math.floor((a.center - a.span / 2) / unit) * unit;
+        step <= a.center + a.span / 2;
+        step += unit
+      ) {
+        if (step < 0 || step > sequenceTotal) continue;
+        const barLine = step % bar === 0;
+        ctx.globalAlpha = barLine ? 0.85 : step % 4 === 0 ? 0.5 : 0.3;
+        const lineHeight = barLine ? 128 : step % 4 === 0 ? 88 : 44;
+        ctx.fillRect(
+          stepX(step),
+          center - lineHeight / 2,
+          barLine ? 2 : 1,
+          lineHeight,
+        );
+        if (barLine && bar * perStep >= 40)
+          ctx.fillText(`BAR ${step / bar + 1}`, stepX(step) + 3, center - 68);
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = ink;
+      ctx.fillRect(w / 2 - 1, center - 58, 2, 116);
+      const slot = state.slots[here];
+      ctx.fillStyle = muted;
+      ctx.fillText(
+        slot?.kind === "chop"
+          ? `CHOP ${here + 1} · SOURCE BAR ${state.chops[slot.chop].barIndex + 1}`
+          : `CHOP ${here + 1} · SILENCE`,
+        12,
+        h - 18,
+      );
+      ctx.fillText("← → SCRUB · ↑ ↓ ZOOM", 12, 22);
       return;
     }
     // History is clipped left of the join. It never shares the candidate's pointer handlers.
@@ -778,6 +924,62 @@ export function SectionWorkspace({
         : `Editing chop ${next + 1} · confirm to replace`,
     );
   };
+  /**
+   * Rhythm mode: gives the chop under the playhead the next source section up (+1, later in the song) or down (-1, earlier) the list of aligned
+   * alternatives. The chop's length and place in the arrangement stay; nothing else moves.
+   */
+  const swapSource = (direction: 1 | -1) => {
+    if (editIndex === null) return;
+    const slot = state.slots[editIndex];
+    if (slot.kind !== "chop") return;
+    const options = sourceCandidates(
+      grid,
+      channelData[0].length,
+      bars,
+      offset,
+      slot.steps,
+      phases,
+    );
+    const here = Math.floor(state.chops[slot.chop].barIndex / bars);
+    let k = options.findIndex((c) => Math.floor(c.barIndex / bars) === here);
+    if (k < 0)
+      k = options.reduce(
+        (best, c, i) =>
+          Math.abs(Math.floor(c.barIndex / bars) - here) <
+          Math.abs(Math.floor(options[best].barIndex / bars) - here)
+            ? i
+            : best,
+        0,
+      );
+    const next = options[k + direction];
+    if (!next) {
+      setNotice(
+        direction > 0
+          ? "Already the last source section"
+          : "Already the first source section",
+      );
+      return;
+    }
+    const picked = {
+      ...next,
+      steps: slot.steps,
+      bars: slot.steps / stepsPerBar(beatsPerBar),
+    };
+    change(placeCandidate(state, picked, editIndex, offset));
+    void audio.play(
+      [
+        {
+          ...slotFades(state.slots, editIndex),
+          chop: picked,
+          steps: slot.steps,
+        },
+      ],
+      "browse",
+    );
+    setNotice(
+      `Chop ${editIndex + 1} now from source bar ${picked.barIndex + 1} · rhythm length preserved`,
+    );
+  };
   const cut = () => {
     if (!active) return;
     const absolute = Math.floor(active.barIndex / bars) * sectionSteps + point;
@@ -851,6 +1053,9 @@ export function SectionWorkspace({
       time: performance.now(),
       velocity: 0,
       trimDistance,
+      scrub: scrubMode
+        ? { moved: false, pivot: 0, y0: 0, span: arrangement.current.span }
+        : undefined,
     };
   };
   const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -858,6 +1063,45 @@ export function SectionWorkspace({
     if (!f || f.id !== e.pointerId) return;
     const dx = e.clientX - f.x,
       dy = e.clientY - f.y;
+    if (f.scrub) {
+      const s = f.scrub,
+        a = arrangement.current,
+        rect = e.currentTarget.getBoundingClientRect();
+      const across = (x: number) => clamp((x - rect.left) / rect.width, 0, 1);
+      if (!s.moved) {
+        if (!isDrag(dx, dy)) return;
+        s.moved = true;
+        // Pin what is under the finger now, so the view does not jump by the distance the tap threshold swallowed.
+        s.span = a.span;
+        s.y0 = e.clientY;
+        s.pivot = a.center - a.span / 2 + across(e.clientX) * a.span;
+      }
+      // Sideways pulls the arrangement along with the finger; down zooms in, up zooms out (eased in), as in the waveform view.
+      const drop = e.clientY - s.y0;
+      const eased = drop > 0 ? (drop * drop) / (drop + 40) : drop;
+      const farthest = Math.max(sequenceTotal, 2 * stepsPerBar(beatsPerBar));
+      const closest = 2;
+      const rate = zoomRate(
+        Math.max(s.span, Math.min(farthest, 4 * stepsPerBar(beatsPerBar))),
+        zoomRoom(rect.bottom, window.innerHeight),
+        closest,
+      );
+      const wide = spanAfterDrag(s.span, eased, rate, farthest, closest);
+      a.span = wide;
+      a.center = clamp(
+        viewUnderFinger(s.pivot, across(e.clientX), wide) + wide / 2,
+        0,
+        sequenceTotal,
+      );
+      const at = slotAt(a.center);
+      if (at !== a.slot) {
+        a.slot = at;
+        if (at !== editIndex) setEditAt(at);
+        auditionSlot(at);
+      }
+      paint.current();
+      return;
+    }
     if (!f.axis && Math.hypot(dx, dy) > 8)
       f.axis = Math.abs(dy) > Math.abs(dx) * 1.15 ? "y" : "x";
     if (f.axis === "y") {
@@ -896,6 +1140,13 @@ export function SectionWorkspace({
       setDragX(0);
       setPoint(f.point);
       audio.stop();
+      return;
+    }
+    if (f.scrub) {
+      const a = arrangement.current;
+      if (!f.scrub.moved) auditionSlot(slotAt(a.center), true);
+      else if (a.sounded !== a.slot) auditionSlot(a.slot, true);
+      setDragX(0);
       return;
     }
     if (f.axis === "y") {
@@ -1217,6 +1468,7 @@ export function SectionWorkspace({
                 className="chop__btn"
                 disabled={!active}
                 onClick={() => {
+                  if (!active) return;
                   audio.stop();
                   const section = sourceCandidates(
                     grid,
@@ -1375,7 +1627,9 @@ export function SectionWorkspace({
             aria-label={
               mode === "source"
                 ? "Drag down to browse; up for a random section. Move horizontally to position; tap to cut."
-                : "Browse vertically. Short left confirms; long left inserts silence. Short right trims; long right rewinds to bar start."
+                : scrubMode
+                  ? "Drag sideways to scrub the arrangement; drag down to zoom in and up to zoom out. The chop under the line sounds as it is crossed."
+                  : "Browse vertically. Short left confirms; long left inserts silence. Short right trims; long right rewinds to bar start."
             }
             onPointerDown={down}
             onPointerMove={move}
@@ -1397,6 +1651,13 @@ export function SectionWorkspace({
                 ].includes(e.key)
               )
                 e.preventDefault();
+              if (scrubMode) {
+                if (e.key === "ArrowUp") swapSource(1);
+                else if (e.key === "ArrowDown") swapSource(-1);
+                else if (e.key === "ArrowLeft") navigate(-1);
+                else if (e.key === "ArrowRight") navigate(1);
+                return;
+              }
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                 const next = clamp(
                   index + (e.key === "ArrowDown" ? -1 : 1),
@@ -1448,43 +1709,68 @@ export function SectionWorkspace({
             aria-label="Candidate note length"
           >
             <div className="section-size-adjustments">
-              <button
-                className="chop__btn section-length__plus"
-                aria-label="Shorten candidate"
-                disabled={
-                  rhythmActive ||
-                  (candidate?.steps ?? selectionLength) <= SHORTEST_NOTE
-                }
-                onClick={() => {
-                  audio.stop();
-                  const length = Math.max(
-                    SHORTEST_NOTE,
-                    quantizeNote((candidate?.steps ?? selectionLength) - 1),
-                  );
-                  setWanted(length);
-                  setLibraryLength(length);
-                }}
-              >
-                −
-              </button>
-              <button
-                className="chop__btn section-length__plus"
-                aria-label="Lengthen candidate"
-                disabled={rhythmActive}
-                onClick={() => {
-                  audio.stop();
-                  const current = candidate?.steps ?? selectionLength;
-                  const barSteps = stepsPerBar(beatsPerBar);
-                  const end = total + current;
-                  const gap =
-                    Math.ceil((end + 1e-8) / barSteps) * barSteps - end;
-                  const length = quantizeNote(current + Math.min(1, gap));
-                  setWanted(length);
-                  setLibraryLength(length);
-                }}
-              >
-                +
-              </button>
+              {scrubMode ? (
+                <>
+                  <button
+                    className="chop__btn section-length__plus"
+                    aria-label="Swap chop up: the next source section, later in the song"
+                    title="Next source section (later in the song)"
+                    disabled={!active}
+                    onClick={() => swapSource(1)}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    className="chop__btn section-length__plus"
+                    aria-label="Swap chop down: the previous source section, earlier in the song"
+                    title="Previous source section (earlier in the song)"
+                    disabled={!active}
+                    onClick={() => swapSource(-1)}
+                  >
+                    ▼
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="chop__btn section-length__plus"
+                    aria-label="Shorten candidate"
+                    disabled={
+                      rhythmActive ||
+                      (candidate?.steps ?? selectionLength) <= SHORTEST_NOTE
+                    }
+                    onClick={() => {
+                      audio.stop();
+                      const length = Math.max(
+                        SHORTEST_NOTE,
+                        quantizeNote((candidate?.steps ?? selectionLength) - 1),
+                      );
+                      setWanted(length);
+                      setLibraryLength(length);
+                    }}
+                  >
+                    −
+                  </button>
+                  <button
+                    className="chop__btn section-length__plus"
+                    aria-label="Lengthen candidate"
+                    disabled={rhythmActive}
+                    onClick={() => {
+                      audio.stop();
+                      const current = candidate?.steps ?? selectionLength;
+                      const barSteps = stepsPerBar(beatsPerBar);
+                      const end = total + current;
+                      const gap =
+                        Math.ceil((end + 1e-8) / barSteps) * barSteps - end;
+                      const length = quantizeNote(current + Math.min(1, gap));
+                      setWanted(length);
+                      setLibraryLength(length);
+                    }}
+                  >
+                    +
+                  </button>
+                </>
+              )}
             </div>
             <div className="section-length__notes">
               {lengths.map((note) => {
@@ -1615,7 +1901,7 @@ export function SectionWorkspace({
           </button>
           <button
             className="chop__btn"
-            disabled={!active || saving}
+            disabled={!active || saving || scrubMode}
             onClick={mode === "source" ? cut : confirm}
           >
             {mode === "source"
