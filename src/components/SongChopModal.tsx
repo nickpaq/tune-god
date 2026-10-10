@@ -445,7 +445,7 @@ export function SongChopModal({
   const placeAnchor = () => {
     if (!grid) return;
     const cursor = Math.max(0, Math.min(totalFrames, timeline.current?.cursor() ?? 0));
-    const frame = anchorAtPlayhead(grid, cursor, magnetOn, totalFrames - 1);
+    const frame = anchorAtPlayhead(grid, cursor, timeline.current?.snapping() ?? magnetOn, totalFrames - 1);
     if (frame < 0 || frame >= totalFrames) return;
     // Stop a pending glide without moving the playhead or source audio.
     timeline.current?.setCursor(cursor);

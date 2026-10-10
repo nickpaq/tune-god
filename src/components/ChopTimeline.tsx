@@ -36,6 +36,8 @@ export interface ChopTimelineHandle {
   setCursor: (frame: number) => void;
   /** Glides the line onto the nearest bar line and returns that line's frame (null with the magnet off or no line to go to). */
   snap: () => number | null;
+  /** Whether the snap is in force right now: the magnet is on and the view is not at its closest zoom. */
+  snapping: () => boolean;
   /** The divisions to a beat the grid shows at this zoom (4, 2, 1), or 0 for bar lines only. */
   division: () => number;
 }
@@ -87,6 +89,8 @@ export const ChopTimeline = forwardRef<
   const settling = useRef(0);
   const buffers = useRef({ lo: new Float32Array(0), hi: new Float32Array(0) });
   const minSpan = Math.min(total, MIN_SPAN_SECONDS * sampleRate);
+  /** Whether the snap is in force: the magnet is on and the view is not zoomed all the way in (there it gives way to exact placement). */
+  const snapping = () => latest.current.magnetOn && view.current.span > minSpan * 1.01;
 
   /**
    * The grid lines for this zoom, which are both the lines drawn and the lines the snap goes to: bar lines only, never anything finer. Every bar when a
@@ -261,7 +265,8 @@ export const ChopTimeline = forwardRef<
         cancelAnimationFrame(settling.current);
         setCursor(frame);
       },
-      snap: () => (latest.current.magnetOn ? settle() : null),
+      snap: () => (snapping() ? settle() : null),
+      snapping,
       division: () => (latest.current.grid && canvas.current ? divisionAt(latest.current.grid, view.current.span, canvas.current.clientWidth) : 0),
     }),
     [setCursor],
@@ -356,7 +361,7 @@ export const ChopTimeline = forwardRef<
     const resumed = latest.current.onScrubEnd();
     if (resumed) return;
     const settleAfter = () => {
-      if (latest.current.magnetOn) settle();
+      if (snapping()) settle();
     };
     // Momentum: carry on at the speed the waveform was moving, slowing to a stop. The zoom stays as it was left.
     const now = performance.now();
@@ -365,7 +370,7 @@ export const ChopTimeline = forwardRef<
     trail.current = [];
     if (!first || !last || last === first || now - last.t > COAST_STALE_MS) return settleAfter();
     const speed = (last.cursor - first.cursor) / (last.t - first.t);
-    const tau = latest.current.magnetOn ? COAST_SNAP_TAU_MS : COAST_TAU_MS;
+    const tau = snapping() ? COAST_SNAP_TAU_MS : COAST_TAU_MS;
     let v = speed;
     let prev = now;
     cancelAnimationFrame(settling.current);
