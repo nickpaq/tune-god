@@ -233,3 +233,77 @@ describe("the section files and their knobs", () => {
     expect(pad.eq.lo.freq).toBe(150);
   });
 });
+
+describe("pattern modes, destinations anywhere, mute groups and pitch", () => {
+  const timed = (index: number, startBeat: number, beats: number, frames = 100) => ({ ...section(index, frames), startBeat, beats });
+  async function runMode(pattern: "multiple" | "single", sections: ReturnType<typeof timed>[], mutate?: (p: ParsedKoalaProject) => void, extra: object = {}) {
+    const project = await load("probe-sidechain.koala");
+    mutate?.(project);
+    const before = JSON.parse(await project.zip.file("sequence.json")!.async("string"));
+    const source = project.samplerJson.pads[0];
+    const { blob } = await buildTunedKoala(project, [], { song: { bpm: 100, sampleRate: 44100, sourceSampleId: source.sampleId, sections, bars: 8, pattern, ...extra } });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    return { sampler: JSON.parse(await zip.file("sampler/sampler.json")!.async("string")), sequence: JSON.parse(await zip.file("sequence.json")!.async("string")), before };
+  }
+  const withNotes = (seq: any) => seq.sequences.filter((s: any) => s.noteSequence.pattern.notes?.length);
+
+  it("one pattern: every chop's note at its musical start, held to the next chop, the last to the end", async () => {
+    const chops = [timed(33, 16, 4), timed(45, 20, 3), timed(55, 23, 5)];
+    const { sequence, before } = await runMode("single", chops);
+    const fresh = withNotes(sequence).filter((s: any) => !withNotes(before).some((b: any) => JSON.stringify(b) === JSON.stringify(s)));
+    expect(fresh).toHaveLength(1);
+    const { numBars, notes } = fresh[0].noteSequence.pattern;
+    expect(notes.map((n: any) => [n.num, n.timeOffset, n.length])).toEqual([
+      [33, 0, 4 * TICKS_PER_BEAT],
+      [45, 4 * TICKS_PER_BEAT, 3 * TICKS_PER_BEAT],
+      [55, 7 * TICKS_PER_BEAT, 5 * TICKS_PER_BEAT],
+    ]);
+    expect(numBars).toBe(3); // 12 beats of 4/4
+  });
+
+  it("multiple patterns: one per chop, with a fractional chop held for its exact beats", async () => {
+    const { sequence, before } = await runMode("multiple", [timed(40, 0, 6), timed(41, 6, 4)]);
+    const fresh = withNotes(sequence).filter((s: any) => !withNotes(before).some((b: any) => JSON.stringify(b) === JSON.stringify(s)));
+    expect(fresh.map((s: any) => [s.noteSequence.pattern.numBars, s.noteSequence.pattern.notes[0].length])).toEqual([
+      [2, 6 * TICKS_PER_BEAT],
+      [1, 4 * TICKS_PER_BEAT],
+    ]);
+  });
+
+  it("gives all the chops one mute group no other pad uses, Modern stretch on, stretch length in beats", async () => {
+    const { sampler } = await runMode("single", [timed(40, 0, 6), timed(41, 6, 4)]);
+    const added = sampler.pads.filter((p: any) => /^Section/.test(p.label));
+    const group = added[0].chokeGroup;
+    expect(group).toBeGreaterThan(0);
+    expect(added.every((p: any) => p.chokeGroup === group)).toBe(true);
+    expect(sampler.pads.filter((p: any) => !/^Section/.test(p.label)).map((p: any) => p.chokeGroup)).not.toContain(group);
+    expect(added.map((p: any) => String(p.oneshot))).toEqual(["true", "true"]);
+    expect(added.map((p: any) => String(p.stretching))).toEqual(["true", "true"]);
+    expect(added.map((p: any) => p.stretch)).toEqual([1, 1]); // Modern
+    expect(added.map((p: any) => p.stretchLength)).toEqual([6, 4]);
+  });
+
+  it("with every mute group taken, One Shot goes off and the notes are unchanged", async () => {
+    const taken = (project: ParsedKoalaProject) => {
+      const base = project.samplerJson.pads[0];
+      project.samplerJson.pads.push(...Array.from({ length: 16 }, (_, i) => ({ ...base, pad: 60 + (i % 4), sampleId: base.sampleId, chokeGroup: i + 1 })));
+    };
+    const full = await runMode("single", [timed(40, 0, 4), timed(41, 4, 4)], taken);
+    const free = await runMode("single", [timed(40, 0, 4), timed(41, 4, 4)]);
+    const added = full.sampler.pads.filter((p: any) => /^Section/.test(p.label));
+    expect(added.map((p: any) => String(p.oneshot))).toEqual(["false", "false"]);
+    expect(added.map((p: any) => p.chokeGroup)).toEqual([0, 0]);
+    expect(String(added[0].stretching)).toBe("true");
+    const notesOf = (r: typeof full) => withNotes(r.sequence).at(-1)!.noteSequence.pattern.notes;
+    expect(notesOf(full)).toEqual(notesOf(free));
+  });
+
+  it("writes the pitch on the knob, fitted to -12..+12, and never repitches the file", async () => {
+    const a = { ...timed(40, 0, 4), pitch: 5.25 };
+    const b = { ...timed(41, 4, 4), pitch: 14 };
+    const c = { ...timed(42, 8, 4), pitch: -13 };
+    const { sampler } = await runMode("multiple", [a, b, c]);
+    const added = sampler.pads.filter((p: any) => /^Section/.test(p.label));
+    expect(added.map((p: any) => p.pitch)).toEqual([5.25, 2, -1]);
+  });
+});

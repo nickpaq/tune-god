@@ -51,16 +51,24 @@ export function sliceLayout(
   };
 }
 
-/** How many sections can be chopped before the slices (the extras at the start and end included) pass 127: the plans that fit. */
+/** Most chopper pads (pages) one chop spreads over: bank D. */
+export const CHOPPER_MAX_PAGES = 16;
+/** The most slices a chop can have: 127 on each of the 16 pads of bank D. */
+export const CHOPPER_MAX_TOTAL = CHOPPER_MAX_SLICES * CHOPPER_MAX_PAGES;
+
+/**
+ * How many sections can be chopped before the slices (the extras at the start and end included) pass what bank D's chopper pads hold: the plans that fit.
+ * Past 127 slices the chopper is duplicated onto the next pad and the overflow is mapped to that copy.
+ */
 export function fitPlans(
   plans: readonly SectionPlan[],
   totalFrames: number,
+  max = CHOPPER_MAX_TOTAL,
 ): SectionPlan[] {
   let n = plans.length;
   while (
     n > 0 &&
-    sliceLayout(plans.slice(0, n), totalFrames).starts.length >
-      CHOPPER_MAX_SLICES
+    sliceLayout(plans.slice(0, n), totalFrames).starts.length > max
   )
     n--;
   return plans.slice(0, n);

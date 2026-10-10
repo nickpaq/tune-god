@@ -3,8 +3,8 @@ export type ChopMode = "acapella" | "chopper" | "synced";
 const ACAPELLA_POINTS = [
   "Stays in time with the project, even if the BPM changes",
   "Can be repitched without going out of sync",
-  "Limited to 16 chops, one pad each",
-  "Overwrites everything on Bank D",
+  "As many chops as the pads you pick, one pad each",
+  "Overwrites only the pads you choose",
   "Leaves the project's BPM alone",
   "Needs a song and its VOCALS stem in the project",
 ];
@@ -12,13 +12,13 @@ const ACAPELLA_POINTS = [
 const SYNCED_POINTS = [
   "Like Acapella mode, but chops the sample itself (no vocal stem needed)",
   "Stays in time with the project, even if the BPM changes",
-  "Limited to 16 chops, one pad each",
-  "Overwrites everything on Bank D",
+  "As many chops as the pads you pick, one pad each",
+  "Overwrites only the pads you choose",
   "Works on any sample over 10 seconds",
 ];
 
 const CHOPPER_POINTS = [
-  "Up to 127 chops, all on one pad",
+  "127 chops on one pad; past that the pad is duplicated and the overflow goes to the copy",
   "Does not stay in sync with the project",
   "Changing the pitch, or Koala's BPM, takes it out of time",
   "Sets the project's BPM to match the sample (and follows the pitch)",

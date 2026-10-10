@@ -78,13 +78,15 @@ export const ChopTimeline = forwardRef<
     onScrubEnd: () => boolean;
     /** Chopper mode: the grid and the snap go down to sixteenth notes when zoomed in, and chop markers may sit on them. */
     fine?: boolean;
+    /** Acapella and synced mode: the grid and the snap go down to single beats when zoomed in (never finer), instead of whole bars. */
+    beatGrid?: boolean;
   }
->(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine = false }, ref) {
+>(function ChopTimeline({ pyramid, sampleRate, grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine = false, beatGrid = false }, ref) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const time = useRef<HTMLSpanElement>(null);
   const total = pyramid.totalFrames;
-  const latest = useRef({ grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine });
-  latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine };
+  const latest = useRef({ grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine, beatGrid });
+  latest.current = { grid, chops, downbeats, oneOne, sections, magnetOn, onScrub, onScrubEnd, fine, beatGrid };
   const initialSpan = Math.min(total, START_SECONDS * sampleRate);
   const view = useRef({ cursor: 0, span: initialSpan });
   const drag = useRef<{ id: number; startX: number; startY: number; y0: number; moved: boolean; pivot: number; span: number } | null>(null);
@@ -109,10 +111,12 @@ export const ChopTimeline = forwardRef<
    * bar is wide enough on the screen to tell apart, otherwise every fourth bar, and at the widest views every sixteenth (the longest a section may be).
    * They are counted from the grid's first bar.
    */
-  /** Divisions to a beat the grid shows at this zoom: 4 (sixteenths), 2, 1 (beats), or 0 for bar lines only (always 0 outside chopper mode). */
+  /** Divisions to a beat the grid shows at this zoom: 4 (sixteenths), 2, 1 (beats), or 0 for bar lines only (chopper mode goes to sixteenths; acapella and synced mode to beats). */
   const divisionAt = (g: TapGrid, span: number, widthPx: number): number => {
-    if (!latest.current.fine) return 0;
+    if (!latest.current.fine && !latest.current.beatGrid) return 0;
     const beatPx = (g.segments[0].beatFrames * widthPx) / span;
+    // Outside chopper mode the finest the grid goes is a single beat.
+    if (!latest.current.fine) return beatPx >= MIN_STEP_PX ? 1 : 0;
     return beatPx / 4 >= MIN_STEP_PX ? 4 : beatPx / 2 >= MIN_STEP_PX ? 2 : beatPx >= MIN_STEP_PX ? 1 : 0;
   };
 

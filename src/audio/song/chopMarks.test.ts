@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorAtPlayhead, nudgeGridMarks, NO_MARKS, barLineNear, baseGrid, chopLines, fineChopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
+import { anchorAtPlayhead, nudgeGridMarks, NO_MARKS, barLineNear, baseGrid, beatChopLines, chopLines, fineChopLines, commit, gridWithMarks, markerAt, redo, sectionsBetween, startHistory, tooLong, undo, barsIn } from "./chopMarks";
 import { bpmAt, fineLineNear, isBarLine, lineFrame, planSections } from "./tapGrid";
 
 const RATE = 1000;
@@ -272,4 +272,15 @@ it("snap chooses an in-file beat at the audio boundaries", () => {
   const grid = baseGrid(RATE, 4, 120, 0.26);
   expect(anchorAtPlayhead(grid, 0, true, 3999)).toBe(260);
   expect(anchorAtPlayhead(grid, 3999, true, 3999)).toBe(3760);
+});
+
+describe("the finest chop outside chopper mode", () => {
+  it("is one beat: markers land on the nearest beat, two on one beat are one, and the sections are whole beats", () => {
+    const beat = base.segments[0].beatFrames;
+    const lines = beatChopLines(base, [base.segments[0].frame + beat * 1.2, base.segments[0].frame + beat * 0.9, base.segments[0].frame + beat * 5.6]);
+    expect(lines).toEqual([1, 6]);
+    const plans = planSections(1e9, base, sectionsBetween(lines));
+    expect(plans[0]).toMatchObject({ startBeat: 1, beats: 5 });
+    expect(plans[0].length).toBeCloseTo(5 * beat, 0);
+  });
 });

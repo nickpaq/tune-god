@@ -3,6 +3,8 @@
 // pitch it settles on, read from the second half of the sound); the pitch knob then carries what is left.
 import type { Pad } from "../components/PadPanel";
 import { referenceOffsetSemitones } from "./theory";
+import { keyOffset } from "./song/keyOffset";
+import { totalPitch } from "./pitchWrap";
 
 /** Rounds to Koala's pitch-knob precision, two decimals. */
 export const round2 = (x: number): number => Math.round(x * 100) / 100;
@@ -18,6 +20,8 @@ export function snapSemitones(pad: Pick<Pad, "category" | "detectedMidi">): numb
  * onto the target note, plus the manual trim, to two decimals. An 808 or bass with Tune off sits on its nearest semitone, unless the user switched Tune off on purpose.
  */
 export function shiftFor(pad: Pad, projectKey: number | null, a4: number, major = false): number {
+  // A chop section: the automatic key move (live, from the key on the piano) plus the manual trim, once. Playback and the export read this same number.
+  if (pad.section) return totalPitch(pad.section.key !== undefined ? keyOffset(pad.section.key, projectKey, major) : (pad.section.pitch ?? 0), pad.semis, pad.cents);
   if (!pad.tune) return pad.tuneLocked ? 0 : snapSemitones(pad);
   let target = pad.keyPc ?? projectKey;
   // A loop's detected pitch is its key's relative minor. The key picked on the piano is a minor key (the default) or a major one, whose relative minor is a minor third below.

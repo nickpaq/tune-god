@@ -86,7 +86,6 @@ import { SchemeModal } from "./components/SchemeModal";
 import {
   CHOP_BANK_START,
   emptyPadInBank,
-  inChopBank,
   movePad,
   nextEmptyPad,
   PADS_PER_BANK,
@@ -109,13 +108,21 @@ import { LongSamplesModal } from "./components/LongSamplesModal";
 import { layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
-import { freeSongSlots, makeSectionPads } from "./audio/songPads";
+import { makeSectionPads } from "./audio/songPads";
 import { scalePlans } from "./audio/song/tapGrid";
 import { checkStems, findAcapellaPair } from "./audio/song/stems";
 import { SongChopModal, type ChopSettings } from "./components/SongChopModal";
+import { PadAllocator } from "./components/PadAllocator";
+import { destinationPads } from "./audio/chopDestinations";
+import { copyProblem, protectedCopy } from "./audio/sourceProtect";
+import { validateChopExport } from "./audio/chopValidation";
+import { koalaPitch } from "./audio/pitchWrap";
+import { haptic } from "./audio/haptics";
 import { projectTimeSignature } from "./audio/koalaProject";
 import {
   addSongSections,
+  isEmpty as sequenceIsEmpty,
+  SEQUENCE_SLOTS,
   songTemplate,
   type SongExport,
   type SongTemplate,
@@ -123,6 +130,7 @@ import {
 import {
   addChopperPad,
   CHOPPER_MAX_SLICES,
+  CHOPPER_MAX_TOTAL,
   fitPlans,
   sliceLayout,
   type ChopperExport,
@@ -195,6 +203,9 @@ const MODES: { id: Mode; label: string; aria: string }[] = [
 /** How many edits undo can step back through. */
 const MAX_HISTORY = 100;
 /** Slider drags on the same control within this window count as one undo step. */
+/** The key the pad picker's preview voice plays under (startPad keys voices by pad number; real pads are 0 to 63), and the longest a preview plays. */
+const PREVIEW_PAD = -3;
+const PREVIEW_MAX_MS = 4000;
 const COALESCE_MS = 1000;
 /** A pad press that travels this far (CSS px) becomes a drag instead of a hit. */
 const DRAG_THRESHOLD_PX = 40;
@@ -1520,16 +1531,6 @@ function App() {
 
   /** Opens the chop editor in acapella mode. The chops overwrite everything on bank D, so the user is warned when something is there. */
   const launchAcapella = async (song: Pad, vocals: Pad) => {
-    const occupied = Object.values(latest.current.pads).filter(
-      (p) => inChopBank(p.index) && !p.locked,
-    ).length;
-    if (
-      occupied > 0 &&
-      !window.confirm(
-        `Acapella mode overwrites everything on Bank D except locked pads (${occupied} pad${occupied === 1 ? "" : "s"}). Continue?`,
-      )
-    )
-      return;
     const beatsPerBar = await beatsPerBarOfProject();
     acapellaTemplate.current = undefined;
     setMenuOpen(false);
@@ -1542,16 +1543,6 @@ function App() {
    * sample is cut into the section pads. Like acapella mode it overwrites bank D (locked pads excepted).
    */
   const launchSynced = async (song: Pad) => {
-    const occupied = Object.values(latest.current.pads).filter(
-      (p) => inChopBank(p.index) && !p.locked,
-    ).length;
-    if (
-      occupied > 0 &&
-      !window.confirm(
-        `Synced mode overwrites everything on Bank D except locked pads (${occupied} pad${occupied === 1 ? "" : "s"}). Continue?`,
-      )
-    )
-      return;
     const beatsPerBar = await beatsPerBarOfProject();
     acapellaTemplate.current = undefined;
     setSourcePick(null);
@@ -1574,9 +1565,10 @@ function App() {
       (a, b) => a.section!.number - b.section!.number,
     );
     if (!sorted.length) return undefined;
-    // No bpm: acapella mode never touches the project's tempo (the sections are stretched to whatever it is). The key offset goes on every pad's pitch knob.
+    // No bpm: acapella mode never touches the project's tempo (the sections are stretched to whatever it is). Each pad's pitch knob gets the key move plus
+    // its own trim (the same number the pad plays at in the app); the audio is never repitched.
     return {
-      pitch: sorted[0].section!.pitch,
+      pattern: sorted[0].section!.pattern,
       beatsPerBar: sorted[0].section!.beatsPerBar,
       sampleRate: sorted[0].sampleRate,
       sourceSampleId: sorted[0].section!.sourceSampleId,
@@ -1587,6 +1579,9 @@ function App() {
         label: labelOf(p),
         channelData: p.channelData,
         bars: p.section!.bars,
+        beats: p.section!.beats,
+        startBeat: p.section!.startBeat,
+        pitch: shiftFor(p, tunedTarget, a4, keyMajor),
         color: autoColorOf(p),
         bus: CATEGORY_BUS.melodic,
       })),
@@ -1600,37 +1595,55 @@ function App() {
   const trialWriteSections = async (
     sections: Pad[],
     sourceSampleId: number,
+    /** The app's pads once the chop is on them, less the sections: what stays beside the chops. */
+    remaining: Record<number, Pad>,
+    destinations: number[],
   ): Promise<string | null> => {
     if (!projectFile.current) return null;
     const project = await parseKoalaProject(projectFile.current);
     const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
     const template =
       acapellaTemplate.current ?? songTemplate(samplerJson, sourceSampleId);
-    // The project's own pads are moved and kept by the export's arrangement, so here only the sections are checked.
-    samplerJson.pads = [];
+    // The pads that stay, on the slots they have in the app (the export moves them the same way), so the mute group and the slots the chops need
+    // are judged against the real neighbours. The destinations are not among them: what was on them is replaced.
+    const base = project.padBase;
+    const now = new Map(
+      Object.values(remaining)
+        .filter(isReal)
+        .map((p) => [p.origIndex, p.index]),
+    );
+    samplerJson.pads = (samplerJson.pads ?? [])
+      .filter((sp: any) => now.has(Number(sp.pad) - base))
+      .map((sp: any) => {
+        const slot = now.get(Number(sp.pad) - base)! + base;
+        return { ...sp, pad: typeof sp.pad === "string" ? String(slot) : slot };
+      });
+    const padsBefore = JSON.parse(JSON.stringify(samplerJson.pads));
+    const sequenceBefore = JSON.parse(
+      (await project.zip.file("sequence.json")?.async("string")) ?? "{}",
+    );
     const song = songExportOf(sections)!;
     const added = await addSongSections(project, samplerJson, song, template);
     if (added < sections.length) {
-      return `the project has room for only ${added} of the ${sections.length} patterns (Koala has 32 pattern slots; free some and chop again)`;
+      return song.pattern === "single"
+        ? "the project has no free pattern (Koala has 32 pattern slots; free one and chop again)"
+        : `the project has room for only ${added} of the ${sections.length} patterns (Koala has 32 pattern slots; free some and chop again)`;
     }
     const sequence = JSON.parse(
       (await project.zip.file("sequence.json")?.async("string")) ?? "{}",
     );
-    const base = project.padBase;
-    for (const s of song.sections) {
-      const pad = samplerJson.pads.find(
-        (p: any) => Number(p.pad) - base === s.index,
-      );
-      if (!pad || !project.zip.file(`sampler/${pad.sampleId}.wav`))
-        return `${s.label} was not written`;
-      const held = (sequence.sequences ?? []).some((q: any) =>
-        (q?.noteSequence?.pattern?.notes ?? []).some(
-          (n: any) => Number(n.num) === s.index + base,
-        ),
-      );
-      if (!held) return `${s.label} got no pattern`;
-    }
-    return null;
+    const problems = validateChopExport({
+      samplerJson,
+      sequence,
+      padBase: base,
+      chops: song.sections.map((s) => ({ index: s.index, label: s.label })),
+      pattern: song.pattern ?? "multiple",
+      destinations,
+      padsBefore,
+      sequencesBefore: sequenceBefore.sequences ?? [],
+      zipHas: (id) => !!project.zip.file(`sampler/${id}.wav`),
+    });
+    return problems.length ? problems.join("; ") : null;
   };
 
   /** The chopper pad whose pattern the pattern maker is making, while it is open. */
@@ -1709,6 +1722,63 @@ function App() {
       };
     }
     return next;
+  };
+
+  /** The pad picker for acapella and synced mode's chops: the chop it is for, and how many patterns Koala still has room for. */
+  const [allocate, setAllocate] = useState<{
+    job: { mode: ChopMode; song: Pad; vocals: Pad; beatsPerBar: number };
+    settings: ChopSettings;
+    patternSlots: number;
+  } | null>(null);
+  const previewVoice = useRef<PadHandle | null>(null);
+  const previewTimer = useRef(0);
+
+  /** Opens the pad picker once the editor's export button was pressed. */
+  const openAllocator = async (
+    job: { mode: ChopMode; song: Pad; vocals: Pad; beatsPerBar: number },
+    settings: ChopSettings,
+  ) => {
+    let patternSlots = SEQUENCE_SLOTS;
+    try {
+      if (projectFile.current) {
+        const project = await parseKoalaProject(projectFile.current);
+        const text = await project.zip.file("sequence.json")?.async("string");
+        const list: any[] = text ? (JSON.parse(text).sequences ?? []) : [];
+        patternSlots = Math.max(
+          0,
+          SEQUENCE_SLOTS - list.filter((q) => !sequenceIsEmpty(q)).length,
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setAllocate({ job, settings, patternSlots });
+  };
+
+  /** Plays the sample on a pad as it is in the project (the pad's audio is already decoded, so a tap starts it at once); long ones stop after a few seconds. */
+  const previewPad = (index: number) => {
+    const pad = latest.current.pads[index];
+    if (!pad || pad.placeholder) return;
+    previewVoice.current?.release();
+    window.clearTimeout(previewTimer.current);
+    const cur = latest.current;
+    previewVoice.current = startPad(
+      PREVIEW_PAD,
+      pad.channelData,
+      pad.sampleRate,
+      shiftFor(pad, cur.tunedTarget, a4, keyMajor),
+      null,
+      "hold",
+    );
+    previewTimer.current = window.setTimeout(() => {
+      previewVoice.current?.release();
+      previewVoice.current = null;
+    }, PREVIEW_MAX_MS);
+  };
+  const stopPreview = () => {
+    window.clearTimeout(previewTimer.current);
+    previewVoice.current?.release();
+    previewVoice.current = null;
   };
 
   /** While a chop is being made: a second press of Chop does nothing. */
@@ -1810,7 +1880,7 @@ function App() {
    * If step 1 or 2 fails nothing at all is changed. Nothing is tuned: when a key was picked on the piano, Koala's pitch knob on the new pads is set to
    * move the song into it (the audio is never altered). Acapella mode never touches the project's tempo; chopper mode sets it to the sample's.
    */
-  const chopSong = async (job: { mode: ChopMode; song: Pad; vocals: Pad }, settings: ChopSettings, openMaker = false) => {
+  const chopSong = async (job: { mode: ChopMode; song: Pad; vocals: Pad }, settings: ChopSettings, openMaker = false, destinations: number[] = []) => {
     if (chopping.current) return;
     chopping.current = true;
     try {
@@ -1941,24 +2011,47 @@ function App() {
 
       // Acapella and synced mode. The cuts were found on the song; the stem may be at another sample rate, so the sections are put on the stem's own frames.
       const { song, vocals } = job;
+      if (destinations.length === 0) {
+        window.alert("No pads were chosen for the chops, so nothing was changed.");
+        return;
+      }
+      // The sound being cut is copied first when one of its own pads is a destination, the copy is checked, and every chop is cut from the copy: nothing
+      // is cut from audio that was overwritten, and the app's pads are not touched until the finished project has been checked.
+      const sourcePads = Object.values(cur.pads).filter(
+        (p) =>
+          p.channelData[0] === vocals.channelData[0] ||
+          p.channelData[0] === song.channelData[0],
+      );
+      const sourceHit = [vocals.index, song.index, ...sourcePads.map((p) => p.index)].some(
+        (i) => destinations.includes(i),
+      );
+      let source = vocals;
+      if (sourceHit) {
+        source = protectedCopy(vocals);
+        const bad = copyProblem(vocals, source);
+        if (bad) {
+          window.alert(`The chop was stopped before anything was overwritten: ${bad}. Nothing was changed.`);
+          return;
+        }
+      }
       const plans = scalePlans(
         settings.plans,
         song.sampleRate,
         vocals.sampleRate,
-      );
-      // The sections overwrite everything on bank D (the chop is the only thing that ever goes there).
-      // (a locked pad on bank D stays, and its slot is not used)
+      ).slice(0, destinations.length);
+      // Only the chosen pads are replaced (locked pads are never offered). The pads of an earlier chop that were not chosen go: one chop is kept at a time,
+      // and the pad picker said so.
       const without = Object.fromEntries(
         Object.entries(cur.pads).filter(
-          ([, p]) => !inChopBank(p.index) || p.locked,
+          ([, p]) => !destinations.includes(p.index) && (p.locked || !p.section),
         ),
       );
       const { pads: made } = makeSectionPads(
-        vocals,
+        source,
         plans,
         settings.bpm,
         settings.beatsPerBar,
-        freeSongSlots(without),
+        destinations,
         palette.colors,
       );
       const sections = made.map((p) => ({
@@ -1966,18 +2059,25 @@ function App() {
         section: {
           ...p.section!,
           pitch: offset,
+          key: settings.key,
+          pattern: settings.pattern ?? "multiple",
           ...(job.mode === "synced" ? { synced: true } : {}),
         },
       }));
       if (sections.length === 0) {
         window.alert(
-          "There are no sections to put on Bank D, so nothing was changed.",
+          "There are no sections to put on the pads, so nothing was changed.",
         );
         return;
       }
       let problem: string | null;
       try {
-        problem = await trialWriteSections(sections, vocals.sampleId);
+        problem = await trialWriteSections(
+          sections,
+          vocals.sampleId,
+          without,
+          destinations,
+        );
       } catch (err) {
         console.error(err);
         problem = "the project file could not be written";
@@ -1988,20 +2088,32 @@ function App() {
         );
         return;
       }
-      recordEdit();
+      // Every check passed on the copy: only now do the pads change.
       const grid: Record<number, Pad> = { ...without };
       for (const section of sections) grid[section.index] = section;
+      const changed = Object.keys({ ...cur.pads, ...grid }).filter(
+        (k) => cur.pads[+k] !== grid[+k],
+      );
+      if (changed.some((k) => !destinations.includes(+k) && !cur.pads[+k]?.section)) {
+        window.alert("The chop was stopped: it would have changed a pad that was not chosen. Nothing was changed.");
+        return;
+      }
+      recordEdit();
       setPads(grid);
       setSelected(null);
-      setBank(3);
+      setBank(Math.floor(destinations[0] / PADS_PER_BANK));
       setChop(null);
       setLongSamples([]);
       // With no key picked there is nothing built yet to keep in time with, so the project takes the acapella's tempo (the pitch knobs stay at 0). With a key
       // picked the project's tempo is left alone and the chops are stretched to it.
       const keyless = cur.tunedTarget === null;
       if (keyless) changeBpm(settings.bpm);
+      const octaveOff = sections.filter(
+        (p) => !koalaPitch(shiftFor(p, cur.tunedTarget, a4, keyMajor)).exact,
+      ).length;
+      haptic("success");
       setNotice(
-        `${sections.length} chop${sections.length === 1 ? "" : "s"} on Bank D, ${keyless ? `and the project tempo is now ${Math.round(settings.bpm * 100) / 100} BPM (no key was picked, so the pitch knobs are at 0)` : "stretched to the project's tempo"}.${pitchNote}`,
+        `${sections.length} chop${sections.length === 1 ? "" : "s"} on ${destinations.length === 1 ? "one pad" : `${sections.length} pads`}, ${settings.pattern === "single" ? "in one pattern" : "a pattern each"}, ${keyless ? `and the project tempo is now ${Math.round(settings.bpm * 100) / 100} BPM (no key was picked, so the pitch knobs are at 0)` : "stretched to the project's tempo"}.${pitchNote}${octaveOff ? ` ${octaveOff} chop${octaveOff === 1 ? " is" : "s are"} more than 12 semitones from the key, so Koala's knob plays the same note in another octave.` : ""}`,
       );
     } finally {
       chopping.current = false;
@@ -2624,6 +2736,7 @@ function App() {
         chopper: chopperPad ? chopperExportOf(chopperPad) : undefined,
       });
       downloadBlob(blob, filename);
+      haptic("success");
     } catch (err) {
       console.error(err);
     } finally {
@@ -3174,7 +3287,7 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, 16 chops, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample over 10 seconds, 127 chops on one pad). With no project open it asks for a Koala project first."
+              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, chopped onto the pads you pick, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample over 10 seconds, 127 chops per pad, duplicating the pad past that). With no project open it asks for a Koala project first."
               onClick={() => askChopMode()}
             >
               {addPackStatus || "Load Bank D: Chopper"}
@@ -3796,12 +3909,40 @@ function App() {
             palette={palette}
             beatsPerBar={chop.beatsPerBar}
             freeSlots={
-              chop.mode === "chopper" ? CHOPPER_MAX_SLICES - 2 : PADS_PER_BANK
+              chop.mode === "chopper" ? CHOPPER_MAX_TOTAL - 2 : PADS_PER_BANK
             }
             unit={chop.mode === "chopper" ? "chop" : "pattern"}
             pitchForKey={(key) => keyOffset(key, tunedTarget, keyMajor)}
-            onConfirm={(settings, openMaker) => chopSong(chop, settings, openMaker)}
+            acapella={chop.mode === "acapella"}
+            onConfirm={(settings, openMaker) =>
+              chop.mode === "chopper"
+                ? chopSong(chop, settings, openMaker)
+                : openAllocator(chop, settings)
+            }
             onClose={() => setChop(null)}
+          />
+        )}
+
+        {allocate && (
+          <PadAllocator
+            pads={destinationPads(pads, (p) => labelOf(p))}
+            chopsMarked={allocate.settings.plans.length}
+            patternSlots={allocate.patternSlots}
+            pattern={allocate.settings.pattern ?? "multiple"}
+            earlierChop={Object.values(pads)
+              .filter((p) => p.section && !p.locked)
+              .map((p) => p.index)}
+            onPreview={previewPad}
+            onCancel={() => {
+              stopPreview();
+              setAllocate(null);
+            }}
+            onConfirm={(destinations) => {
+              stopPreview();
+              const { job, settings } = allocate;
+              setAllocate(null);
+              void chopSong(job, settings, false, destinations);
+            }}
           />
         )}
 

@@ -41,3 +41,19 @@ describe("the 808's render and the pitch knob", () => {
     expect(pitchKnobFor(p, shiftFor(p, 0, 440))).toBe(-2.25);
   });
 });
+
+describe("a chop section's pitch", () => {
+  const section = (key: { pc: number; minor: boolean } | null | undefined, extra: Partial<Pad> = {}) =>
+    pad({ tune: false, category: "vox", section: { number: 1, sourceSampleId: 1, bpm: 100, beatsPerBar: 4, bars: 1, pitch: 2, key }, ...extra });
+  it("follows the key picked on the piano live: the key move plus the manual trim, once", () => {
+    const a = { pc: 9, minor: true };
+    expect(shiftFor(section(a), 0, 440)).toBe(3); // A minor to C minor
+    expect(shiftFor(section(a), 2, 440)).toBe(5);
+    expect(shiftFor(section(a, { semis: 1, cents: 25 }), 2, 440)).toBe(6.25);
+    expect(shiftFor(section(a), null, 440)).toBe(0);
+    expect(shiftFor(section(null), 0, 440)).toBe(0);
+  });
+  it("keeps the stored move for a chop made before the key was kept", () => {
+    expect(shiftFor(section(undefined), null, 440)).toBe(2);
+  });
+});
