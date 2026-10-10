@@ -3,7 +3,9 @@ import type { AnalysisWorkerApi } from "./analysis.worker";
 import type { RenderWorkerApi } from "./render.worker";
 
 // A small fixed pool keeps the UI thread free while a whole project's pads are analyzed.
-const POOL_SIZE = Math.max(2, Math.min(4, navigator.hardwareConcurrency || 2));
+// Essentia initializes a sizable WASM runtime per worker. Two workers retain
+// useful analysis parallelism without multiplying that footprint four times on phones.
+const POOL_SIZE = Math.max(1, Math.min(2, navigator.hardwareConcurrency || 2));
 
 let pool: Comlink.Remote<AnalysisWorkerApi>[] | null = null;
 let next = 0;
