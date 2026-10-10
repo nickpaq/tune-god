@@ -130,6 +130,7 @@ import {
 import {
   addChopperPad,
   CHOPPER_MAX_SLICES,
+  CHOPPER_MAX_TOTAL,
   fitPlans,
   sliceLayout,
   type ChopperExport,
@@ -3286,7 +3287,7 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, 16 chops, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample over 10 seconds, 127 chops on one pad). With no project open it asks for a Koala project first."
+              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, chopped onto the pads you pick, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample over 10 seconds, 127 chops per pad, duplicating the pad past that). With no project open it asks for a Koala project first."
               onClick={() => askChopMode()}
             >
               {addPackStatus || "Load Bank D: Chopper"}
@@ -3908,7 +3909,7 @@ function App() {
             palette={palette}
             beatsPerBar={chop.beatsPerBar}
             freeSlots={
-              chop.mode === "chopper" ? CHOPPER_MAX_SLICES - 2 : PADS_PER_BANK
+              chop.mode === "chopper" ? CHOPPER_MAX_TOTAL - 2 : PADS_PER_BANK
             }
             unit={chop.mode === "chopper" ? "chop" : "pattern"}
             pitchForKey={(key) => keyOffset(key, tunedTarget, keyMajor)}

@@ -47,9 +47,9 @@ describe("sliceLayout", () => {
     expect(layout.starts).toEqual([0, 500]);
     expect(layout.sections.map((s) => s.slice)).toEqual([0, 1]);
   });
-  it("keeps to 127 slices", () => {
+  it("keeps to the slices given (127 for one pad)", () => {
     const plans = Array.from({ length: 200 }, (_, i) => plan(i * 100, 100, i));
-    const fit = fitPlans(plans, 20000);
+    const fit = fitPlans(plans, 20000, CHOPPER_MAX_SLICES);
     expect(sliceLayout(fit, 20000).starts.length).toBeLessThanOrEqual(
       CHOPPER_MAX_SLICES,
     );
@@ -389,4 +389,34 @@ describe("Bank D arrangement overflow", () => {
       });
     },
   );
+});
+
+describe("more than 127 chops", () => {
+  it("spreads over duplicated chopper pads and fitPlans only stops at bank D's 2032", () => {
+    const plans = Array.from({ length: 300 }, (_, i) => ({ start: i * 100, length: 100, bars: 1, audioFrames: 100, index: i }));
+    expect(fitPlans(plans, 40000)).toHaveLength(300);
+    expect(Math.ceil(sliceLayout(plans, 40000).starts.length / CHOPPER_MAX_SLICES)).toBe(3);
+    const many = Array.from({ length: 2100 }, (_, i) => ({ start: i * 10, length: 10, bars: 1, audioFrames: 10, index: i }));
+    expect(sliceLayout(fitPlans(many, 30000), 30000).starts.length).toBeLessThanOrEqual(2032);
+  });
+});
+
+describe("a plain chop past 127 chops", () => {
+  it("duplicates the chopper onto the next pads and every slice is on one of them", async () => {
+    const count = 300;
+    const project = await load("probe-sidechain.koala");
+    const plans = Array.from({ length: count }, (_, i) => ({ start: i * 10, length: 10, bars: 1, audioFrames: 10, index: i }));
+    const layout = sliceLayout(plans, count * 10);
+    const { blob } = await buildTunedKoala(project, [], {
+      chopper: { index: 48, label: "Chopper", sampleId: 9999, sampleRate: 1000, channelData: [new Float32Array(count * 10).fill(0.1)], layout, beatsPerBar: 4, pitch: 0 },
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const sampler = JSON.parse(await zip.file("sampler/sampler.json")!.async("string"));
+    const choppers = sampler.pads.filter((p: any) => p.synth === "CHOPPER");
+    expect(choppers.map((p: any) => Number(p.pad))).toEqual([48, 49, 50]);
+    expect(choppers.map((p: any) => p.chops.slices.length)).toEqual([127, 127, 46]);
+    // Koala has 32 pattern slots, so only the first chops get a pattern; every chop still plays from the pad that holds its slice.
+    const sequence = JSON.parse(await zip.file("sequence.json")!.async("string"));
+    expect(sequence.sequences.filter((q: any) => q.noteSequence.pattern.notes?.some((n: any) => n.num === 48)).length).toBeGreaterThan(0);
+  });
 });

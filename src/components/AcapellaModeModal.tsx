@@ -18,7 +18,7 @@ const SYNCED_POINTS = [
 ];
 
 const CHOPPER_POINTS = [
-  "Up to 127 chops, all on one pad",
+  "127 chops on one pad; past that the pad is duplicated and the overflow goes to the copy",
   "Does not stay in sync with the project",
   "Changing the pitch, or Koala's BPM, takes it out of time",
   "Sets the project's BPM to match the sample (and follows the pitch)",
