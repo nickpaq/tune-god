@@ -300,7 +300,7 @@ export function SectionWorkspace({
   /** Rhythm mode's view of the arrangement: the step under the playhead, how many steps the screen shows, and the chop last sounded. */
   const arrangement = useRef({
     center: 0,
-    span: 2 * stepsPerBar(beatsPerBar),
+    span: (SCRUB_RESTING_SECONDS * sampleRate * 4) / beatFrames,
     slot: -1,
     sounded: -1,
   });
@@ -559,6 +559,7 @@ export function SectionWorkspace({
     if (scrubMode) {
       // Rhythm mode: the whole arrangement under a fixed playhead. Scrubbing and zooming work as in the waveform view.
       const a = arrangement.current;
+      a.span = Math.min(a.span, zoomLimits().farthest);
       const perStep = w / a.span,
         stepX = (step: number) => w / 2 + (step - a.center) * perStep;
       const here = slotAt(a.center);
