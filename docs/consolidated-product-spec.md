@@ -44,3 +44,6 @@ Native playback, recording, sequencing and editing remain a future product phase
 
 
 Library indexing reads file names, paths, sizes and modification times without decoding audio. A live progress bar explains file discovery, saved-index restoration, pack identification, classification and local persistence. Metadata processing yields between batches to keep the interface responsive. First-run duration depends primarily on file count and the browser/device, rather than total audio gigabytes. Browsers may enumerate the selected directory before providing its files to TuneGod; application progress begins once that file list is available. Unchanged entries reuse their classifications on subsequent connections. Audio analysis is limited to generated kit candidates and previews.
+
+
+Favorites now contain only sounds whose audio is explicitly saved on device. Loading the list deletes legacy non-favorite import records; imports no longer recreate those records. Removing a favorite deletes its cached entry. Tune includes a pixel star below the reference tone volume knob, using the same favorite storage and limits as hot swap. Hot-swap rows have larger touch targets and wider button spacing. Browser validation covers deleting 239 legacy records, saving/restoring/removing a Tune favorite, and the updated row dimensions.

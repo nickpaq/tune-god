@@ -237,7 +237,7 @@
   flex: none;
   display: flex;
   justify-content: space-between;
-  height: calc(var(--cell) * 10);
+  height: max(40px, calc(var(--cell) * 14));
   padding: 0 var(--cell);
   background: var(--oled);
   color: #000;
@@ -629,8 +629,8 @@
 .swap-row {
   display: flex;
   align-items: center;
-  gap: var(--cell);
-  height: calc(var(--cell) * 12);
+  gap: calc(var(--cell) * 3);
+  min-height: max(48px, calc(var(--cell) * 18));
   padding-left: var(--cell);
   scroll-snap-align: start;
 }
@@ -2424,3 +2424,8 @@
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
+
+.pad-panel__tone-controls { flex: none; margin-left: auto; display: flex; flex-direction: column; align-items: center; }
+.tone-favorite { display: grid; place-items: center; width: calc(var(--cell) * 19); height: calc(var(--cell) * 14); border: 0; border-radius: 0; background: transparent; color: var(--oled); opacity: .45; padding: 0; }
+.tone-favorite.is-favorite { color: var(--accent); opacity: 1; }
+.tone-favorite:focus-visible { outline: var(--cell) solid var(--oled); }

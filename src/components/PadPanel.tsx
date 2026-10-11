@@ -1,6 +1,7 @@
 import type { RhythmPattern } from "../audio/song/rhythmLengths";
 import { useLayoutEffect, useRef, useState } from "react";
 import { PitchSlider } from "./PitchSlider";
+import { PixelIcon } from "./PixelIcon";
 import { ToneKnob } from "./ToneKnob";
 import { Waveform } from "./Waveform";
 import type { SampleClassification } from "../audio/sampleClassification";
@@ -120,6 +121,7 @@ export function PadPanel({
   onHoldEnd,
   toneVolume,
   onToneVolume,
+  onFavorite,
   toneOn,
   onChange,
 }: {
@@ -148,6 +150,7 @@ export function PadPanel({
   /** The tone's volume knob (0 to 1), drawn on the screen at the right of the top row, and whether the tone is switched on (the knob dims when it is not). */
   toneVolume: number;
   onToneVolume: (volume: number) => void;
+  onFavorite: () => Promise<void>;
   toneOn: boolean;
   onChange: (patch: Partial<Pick<Pad, "tune" | "semis" | "cents" | "stretch">>) => void;
 }) {
@@ -156,6 +159,7 @@ export function PadPanel({
   const isLoop = chords !== null;
   const isLoopSound = pad.category === "melodicLoop" || pad.category === "drumLoop";
   /** The two squares (minor left, major right) are shown while the slider is dragged up. */
+  const [savingFavorite, setSavingFavorite] = useState(false);
   const [above, setAbove] = useState(false);
   const boxes = useRef<(HTMLDivElement | null)[]>([]);
   /** Cents mode of the pitch slider: a tap swaps it with semitone mode. */
@@ -180,7 +184,19 @@ export function PadPanel({
           </div>
           <div>Shift {pad.tune ? formatTrim(total * 100) : "0.000"}st</div>
         </div>
-        <ToneKnob value={toneVolume} onChange={onToneVolume} dim={!toneOn} />
+        <div className="pad-panel__tone-controls">
+          <ToneKnob value={toneVolume} onChange={onToneVolume} dim={!toneOn} />
+          <button className={`tone-favorite${pad.favorite ? " is-favorite" : ""}`}
+            aria-label={`${pad.favorite ? "Remove" : "Add"} ${name} ${pad.favorite ? "from" : "to"} favorites`}
+            aria-pressed={!!pad.favorite} disabled={savingFavorite}
+            onClick={async () => { setSavingFavorite(true); try { await onFavorite(); } finally { setSavingFavorite(false); } }}>
+            <PixelIcon scale={1} rows={[
+              ".....#.....", "....###....", "....###....", "###########",
+              ".#########.", "..#######..", "...#####...", "..#######..",
+              "..###.###..", ".###...###.", ".#.......#.",
+            ]} />
+          </button>
+        </div>
       </div>
       <NameLine name={name} fileName={pad.sourcePath ?? pad.name} />
       {(pad.bpm || isLoopSound) && (

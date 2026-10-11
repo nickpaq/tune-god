@@ -175,7 +175,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-/** Records the sounds actually imported (not every file found in a selected folder). */
+/** Persist saved favorites; importing a pack must not create audio-less device records. */
 export async function recordImportedSamples(records: SampleLibraryRecord[]): Promise<void> {
   if (!records.length) return;
   try {
@@ -187,7 +187,8 @@ export async function recordImportedSamples(records: SampleLibraryRecord[]): Pro
         const req = store.get(record.id);
         req.onsuccess = () => {
           const old = req.result as SampleLibraryRecord | undefined;
-          store.put(old?.favorite ? { ...record, favorite: true, audio: old.audio, sampleRate: old.sampleRate } : record);
+          if (old?.favorite) store.put({ ...record, favorite: true, audio: record.audio ?? old.audio, sampleRate: record.sampleRate ?? old.sampleRate });
+          else if (record.favorite && record.audio) store.put(record);
         };
       }
       tx.oncomplete = () => resolve();
@@ -199,12 +200,22 @@ export async function recordImportedSamples(records: SampleLibraryRecord[]): Pro
   }
 }
 
+/** Remove legacy non-favorite import logs and expose only favorites with locally stored audio. */
 export async function loadSampleLibrary(): Promise<SampleLibraryRecord[]> {
   try {
     const db = await openDb();
     const records = await new Promise<SampleLibraryRecord[]>((resolve, reject) => {
-      const req = db.transaction(SAMPLE_LIBRARY_STORE).objectStore(SAMPLE_LIBRARY_STORE).getAll();
-      req.onsuccess = () => resolve((req.result as SampleLibraryRecord[]).sort((a, b) => b.importedAt - a.importedAt));
+      const tx = db.transaction(SAMPLE_LIBRARY_STORE, "readwrite");
+      const store = tx.objectStore(SAMPLE_LIBRARY_STORE);
+      const req = store.getAll();
+      let favorites: SampleLibraryRecord[] = [];
+      req.onsuccess = () => {
+        const all = req.result as SampleLibraryRecord[];
+        for (const record of all) if (!record.favorite) store.delete(record.id);
+        favorites = all.filter((record) => record.favorite && record.audio).sort((a, b) => b.importedAt - a.importedAt);
+      };
+      tx.oncomplete = () => resolve(favorites);
+      tx.onerror = () => reject(tx.error);
       req.onerror = () => reject(req.error);
     });
     db.close();
@@ -225,7 +236,8 @@ export async function setSampleFavorite(id: string, favorite: boolean, audio?: B
       req.onsuccess = () => {
         const old = req.result as SampleLibraryRecord | undefined;
         if (!old) return;
-        store.put({ ...old, favorite, ...(favorite && audio ? { audio, sampleRate } : {}), ...(!favorite ? { audio: undefined, sampleRate: undefined } : {}) });
+        if (!favorite) store.delete(id);
+        else store.put({ ...old, favorite, ...(audio ? { audio, sampleRate } : {}) });
       };
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
