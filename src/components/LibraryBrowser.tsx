@@ -28,14 +28,14 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
   const previewToken = useRef(0);
   useEffect(() => () => { previewToken.current++; }, []);
   const [previewError, setPreviewError] = useState("");
-  const [selected, setSelected] = useState<string[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const packs = useMemo(() => (index ? libraryPacks(index).map((pack) => {
     const counts = new Map<CategoryId, number>();
     for (const sample of pack.samples) counts.set(sample.classification.category, (counts.get(sample.classification.category) ?? 0) + 1);
     return { ...pack, types: [...counts].sort((a,b) => b[1] - a[1]).map(([category]) => ({ category, label: categoryLabel(category), color: colorFor(palette, category) })) };
   }) : []), [index, palette]);
-  const chosen = packs.filter((pack) => selected === null || selected.includes(pack.id)).map((pack) => pack.id);
+  const chosen = packs.filter((pack) => selected.includes(pack.id)).map((pack) => pack.id);
   const chosenSet = new Set(chosen);
   const visible = tools ? index?.samples.filter((sample) => sample.path.toLowerCase().includes(query.toLowerCase())).slice(0,100) ?? [] : [];
   const audition = async (id: string) => {
@@ -49,7 +49,7 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
     catch (error) { if (token === previewToken.current) setPreviewError(error instanceof Error ? error.message : "Could not preview this sample."); }
   };
   return (
-    <div className="sample-library-backdrop">
+    <div className={`sample-library-backdrop${tools ? "" : " sample-library-backdrop--packs"}`}>
       <section ref={dialog} className={`sample-library ${tools ? "sample-library--tools" : "sample-library--packs"}`} role="dialog" aria-modal="true" aria-labelledby="library-title">
         <header className="sample-library__header">
           <h2 id="library-title">{tools ? "Sample Types" : "Sample library"}</h2>
@@ -77,7 +77,10 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
         </> : <>
           <p>{connected ? "Check the packs you want in your kit." : "Reconnect your sample folder, then choose your packs."}</p>
           {error && <p role="alert">{error}</p>}
-          <div className="library-actions"><button className="menu__button" onClick={onChoose} disabled={busy}>Reconnect files</button></div>
+          <div className="library-actions">
+            <button className="menu__button" onClick={onChoose} disabled={busy}>Reconnect files</button>
+            <button className="menu__button" onClick={() => setSelected(packs.map((pack) => pack.id))} disabled={busy || !packs.length}>Select all</button>
+          </div>
           {busy && progress && <div className="library-progress" aria-busy="true">
             <p role="status" aria-live="polite">{progress.stage} · {progress.processed.toLocaleString()} / {progress.total.toLocaleString()} files</p>
             <progress aria-label="Library indexing progress" max={100} value={progress.percent} />
