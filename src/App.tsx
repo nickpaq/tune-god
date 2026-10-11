@@ -3526,16 +3526,16 @@ function App() {
                                 input: projectInput,
                               },
                               {
-                                icon: FOLDER_ICON,
-                                label: "Kit",
-                                aria: "Load a kit folder (all sound types)",
-                                input: kitInput,
-                              },
-                              {
                                 icon: DRUM_ICON,
                                 label: "Drums",
                                 aria: "Load Bank A: Drums",
                                 input: drumsInput,
+                              },
+                              {
+                                icon: FOLDER_ICON,
+                                label: "Kit",
+                                aria: "Load a kit folder (all sound types)",
+                                input: kitInput,
                               },
                               {
                                 icon: ACAPELLA_ICON,
