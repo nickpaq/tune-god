@@ -3,7 +3,7 @@ import { useSoundPreview } from "./useSoundPreview";
 import { useModalFocus } from "./useModalFocus";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIES, type CategoryId } from "../audio/classify";
-import { libraryPacks, type LibraryIndex } from "../audio/libraryIndex";
+import { libraryPacks, type LibraryProgress, type LibraryIndex } from "../audio/libraryIndex";
 import {
   SUBTYPES,
   type SampleClassification,
@@ -11,6 +11,7 @@ import {
 import { colorFor, type Palette } from "../audio/palettes";
 
 export function LibraryBrowser({
+  progress,
   report,
   onRead,
   index,
@@ -24,6 +25,7 @@ export function LibraryBrowser({
   onCorrect,
   onClose,
 }: {
+  progress: LibraryProgress | null;
   report: { filled: number; requested: number; shortages: string[] } | null;
   onRead: (
     id: string,
@@ -115,6 +117,13 @@ export function LibraryBrowser({
             Refresh index
           </button>
         </div>
+        {progress && (
+          <div className="library-progress" aria-busy={busy}>
+            <p role="status" aria-live="polite">{progress.stage} · {progress.processed.toLocaleString()} / {progress.total.toLocaleString()} files</p>
+            <progress aria-label="Library indexing progress" max={100} value={progress.percent} />
+            <p>Reading names, folders and file metadata. Audio is analyzed only when you generate a kit or preview a sample.</p>
+          </div>
+        )}
         {previewError && <p role="status">{previewError}</p>}
         {report && (
           <details>
@@ -127,7 +136,7 @@ export function LibraryBrowser({
             ))}
           </details>
         )}
-        {index && (
+        {index && !busy && (
           <>
             <p>
               {index.name} · {index.samples.length} samples · {reused} restored

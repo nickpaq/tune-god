@@ -51,27 +51,36 @@ const sourcePath = <T>(file: PackFile<T>) =>
     file.name,
   ].join("/");
 
+export interface LibraryProgress {
+  stage: string;
+  processed: number;
+  total: number;
+  percent: number;
+}
+const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
 /** Rebind files without reading audio. Unchanged metadata retains its classification; refresh reruns rules, keeping corrections. */
-export function refreshLibrary<T>(
+function* refreshSteps<T>(
   name: string,
   files: PackFile<T>[],
   previous?: LibraryIndex | null,
   force = false,
-): { index: LibraryIndex; files: PackFile<T>[]; reused: number } {
+): Generator<LibraryProgress, { index: LibraryIndex; files: PackFile<T>[]; reused: number }> {
   const id = `library:${name}`;
-  const old = new Map(
-    previous?.id === id
-      ? previous.samples.map((sample) => [sample.path, sample])
-      : [],
-  );
-  // An untyped sibling (e.g. Extras or Unknown) belongs to an already recognized pack, not a new pack.
-  const established = new Set(
-    files
-      .filter((file) =>
-        file.folders.some((folder) => categoryOfFolder(folder) !== null),
-      )
-      .map(packPath),
-  );
+  const old = new Map<string, IndexedSample>();
+  const savedSamples = previous?.id === id ? previous.samples : [];
+  yield { stage: "Restoring saved index", processed: 0, total: savedSamples.length, percent: 15 };
+  for (let i = 0; i < savedSamples.length; i++) {
+    old.set(savedSamples[i].path, savedSamples[i]);
+    if ((i + 1) % 500 === 0) yield { stage: "Restoring saved index", processed: i + 1, total: savedSamples.length, percent: 15 + 5 * (i + 1) / savedSamples.length };
+  }
+  const established = new Set<string>();
+  yield { stage: "Identifying sample packs", processed: 0, total: files.length, percent: 20 };
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (file.folders.some((folder) => categoryOfFolder(folder) !== null)) established.add(packPath(file));
+    if ((i + 1) % 500 === 0) yield { stage: "Identifying sample packs", processed: i + 1, total: files.length, percent: 20 + 20 * (i + 1) / files.length };
+  }
   const packFor = (file: PackFile<T>) => {
     for (let length = file.folders.length; length > 0; length--) {
       const parent = file.folders.slice(0, length).join("/");
@@ -83,7 +92,9 @@ export function refreshLibrary<T>(
   const seen = new Set<string>();
   const rebound: PackFile<T>[] = [];
   const samples: IndexedSample[] = [];
-  for (const file of files) {
+  yield { stage: "Classifying samples and matching saved records", processed: 0, total: files.length, percent: 40 };
+  for (const [i, file] of files.entries()) {
+    if (i > 0 && i % 250 === 0) yield { stage: "Classifying samples and matching saved records", processed: i, total: files.length, percent: 40 + 50 * i / files.length };
     const path = sourcePath(file);
     if (seen.has(path)) continue;
     seen.add(path);
@@ -132,6 +143,25 @@ export function refreshLibrary<T>(
     reused,
   };
 }
+/** Synchronous entry point retained for callers and deterministic tests. */
+export function refreshLibrary<T>(name: string, files: PackFile<T>[], previous?: LibraryIndex | null, force = false) {
+  const steps = refreshSteps(name, files, previous, force);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+/** Metadata only: yield between batches so progress can paint and input stays responsive. */
+export async function refreshLibraryAsync<T>(name: string, files: PackFile<T>[], previous?: LibraryIndex | null, force = false, onProgress?: (progress: LibraryProgress) => void) {
+  const steps = refreshSteps(name, files, previous, force);
+  let step = steps.next();
+  while (!step.done) {
+    onProgress?.(step.value);
+    await yieldToBrowser();
+    step = steps.next();
+  }
+  return step.value;
+}
+
 export function libraryPacks(index: LibraryIndex): LibraryPack[] {
   const packs = new Map<string, IndexedSample[]>();
   for (const sample of index.samples) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { correctSample, libraryPacks, refreshLibrary } from "./libraryIndex";
+import { correctSample, libraryPacks, refreshLibrary, refreshLibraryAsync } from "./libraryIndex";
 import { classifyFile, type PackFile } from "./samplePack";
 import { validTypeSelection } from "./sampleClassification";
 const file = (path: string, lastModified = 1): PackFile<null> => {
@@ -90,4 +90,25 @@ describe("persistent library metadata", () => {
     for (const types of [["kick"], ["DRUM", "LOOP"], ["BASS", "LOOP"], ["FX"]])
       expect(validTypeSelection(types)).toBe(true);
   });
+});
+
+
+it("indexes large libraries in responsive metadata batches and restores unchanged records", async () => {
+  const files = Array.from({ length: 1500 }, (_, i) => ({
+    ...file(`Library/Pack/Kicks/kick_${i}.wav`),
+    size: 20_000_000_000 / 1500,
+    source: () => { throw new Error("Indexing must never read audio"); },
+  }));
+  let browserTurn = false;
+  setTimeout(() => { browserTurn = true; }, 0);
+  const progress: number[] = [];
+  const first = await refreshLibraryAsync("Library", files, undefined, false, (value) => {
+    progress.push(value.percent);
+  });
+  expect(browserTurn).toBe(true);
+  expect(progress.length).toBeGreaterThan(8);
+  expect(progress).toEqual([...progress].sort((a, b) => a - b));
+  expect(first.index.samples).toEqual(refreshLibrary("Library", files).index.samples);
+  const next = await refreshLibraryAsync("Library", files, first.index);
+  expect(next.reused).toBe(1500);
 });

@@ -2405,3 +2405,6 @@
 .layout-grid button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
 .sample-library select, .sample-library input { max-width: 100%; }
+
+.library-progress { border: 1px solid currentColor; padding: 12px; margin: 12px 0; }
+.library-progress progress { display: block; width: 100%; height: 12px; accent-color: var(--accent); border-radius: 0; }

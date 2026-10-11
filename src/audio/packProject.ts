@@ -92,6 +92,26 @@ export function findPackInFileList(list: FileList | File[]): FoundPack {
   return { name, files };
 }
 
+export async function findPackInFileListAsync(list: FileList | File[], onProgress: (processed: number, total: number) => void): Promise<FoundPack> {
+  const files: PackFile<PackSource>[] = [];
+  let name = "Sample pack";
+  onProgress(0, list.length);
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  for (let i = 0; i < list.length; i++) {
+    if (i > 0 && i % 500 === 0) {
+      onProgress(i, list.length);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    const file = list[i];
+    const parts = (file.webkitRelativePath || file.name).split("/");
+    if (parts.length > 1) name = parts[0];
+    const folders = parts.slice(1, -1);
+    if (parts.some((p) => p.startsWith(".") || p === "__MACOSX") || !AUDIO_EXTENSIONS.test(file.name)) continue;
+    files.push({ folders, rootFolder: parts.length > 1 ? parts[0] : undefined, sourcePath: parts.join("/"), name: file.name, size: file.size, lastModified: file.lastModified, source: async () => file });
+  }
+  return { name, files };
+}
+
 /** Pads numbered from here up hold hidden hot-swap alternatives: past the 64 pads of the grid, so never on one. */
 export const HIDDEN_PAD_BASE = 64;
 

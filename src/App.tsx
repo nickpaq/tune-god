@@ -14,6 +14,7 @@ import {
   entriesOfDrop,
   findPackInEntries,
   findPackInFileList,
+  findPackInFileListAsync,
   writeBankSounds,
   type FoundPack,
 } from "./audio/packProject";
@@ -105,7 +106,7 @@ import { SwapList } from "./components/SwapList";
 import { LibraryBrowser } from "./components/LibraryBrowser";
 import { PlaybackEditor } from "./components/PlaybackEditor";
 import { LayoutEditor } from "./components/LayoutEditor";
-import { correctSample, refreshLibrary, type LibraryIndex } from "./audio/libraryIndex";
+import { correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
 import { type SampleClassification } from "./audio/sampleClassification";
 import type { AdditionalBanks } from "./audio/kitGeneration";
 import { loadLibraryIndex, saveLibraryIndex } from "./storage";
@@ -518,6 +519,7 @@ function App() {
   const libraryInput = useRef<HTMLInputElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [indexBusy, setIndexBusy] = useState(false);
+  const [indexProgress, setIndexProgress] = useState<LibraryProgress | null>(null);
   const [kitReport, setKitReport] = useState<{ filled: number; requested: number; shortages: string[] } | null>(null);
   const [indexReused, setIndexReused] = useState(0);
   const [additionalBanks, setAdditionalBanks] = useState<AdditionalBanks>(saved.additionalBanks ?? 0);
@@ -535,16 +537,24 @@ function App() {
     void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); setLibraryOpen(true); } });
     return () => { cancelled = true; };
   }, [saved.libraryIndexId]);
-  const connectLibrary = async (found: FoundPack, force = false) => {
+  const connectLibrary = async (input: FoundPack | File[], force = false) => {
+    if (indexBusy) return;
     setIndexBusy(true);
+    setLibraryOpen(true);
+    setIndexProgress({ stage: "Reading file names and folder paths", processed: 0, total: Array.isArray(input) ? input.length : input.files.length, percent: 0 });
     try {
+      const found = Array.isArray(input) ? await findPackInFileListAsync(input, (processed, total) => setIndexProgress({ stage: "Reading file names and folder paths", processed, total, percent: total ? 15 * processed / total : 0 })) : input;
       const previous = libraryIndex?.name === found.name ? libraryIndex : await loadLibraryIndex(`library:${found.name}`);
-      const refreshed = refreshLibrary(found.name, found.files, previous, force);
+      const refreshed = await refreshLibraryAsync(found.name, found.files, previous, force, setIndexProgress);
       libraryFiles.current = { name: found.name, files: refreshed.files };
       setLibraryIndex(refreshed.index); setIndexReused(refreshed.reused);
       saveState({ libraryIndexId: refreshed.index.id });
+      setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
       if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
-      setLibraryOpen(true);
+      setIndexProgress({ stage: "Index ready", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
+    } catch (error) {
+      setIndexProgress(null);
+      setNotice(error instanceof Error ? error.message : "Could not index this folder.");
     } finally { setIndexBusy(false); }
   };
   const correctLibrarySample = (id: string, classification: SampleClassification) => {
@@ -3141,7 +3151,7 @@ function App() {
         {/* Outside the menu: closing the menu unmounts it, and an input that is gone never reports the folder that was picked. */}
         <input ref={libraryInput} type="file" hidden
           // @ts-expect-error browser directory picker
-          webkitdirectory="" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void connectLibrary(findPackInFileList(files)); }} />
+          webkitdirectory="" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void connectLibrary(files); }} />
         <input
           ref={kitInput}
           type="file"
@@ -3152,7 +3162,7 @@ function App() {
             const files = Array.from(e.target.files ?? []);
             e.target.value = "";
             if (files.length)
-              void connectLibrary(findPackInFileList(files));
+              void connectLibrary(files);
           }}
         />
         <input
@@ -3420,7 +3430,7 @@ function App() {
         )}
 
         {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
-        {libraryOpen && <LibraryBrowser key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus || analyzing > 0} palette={palette} onChoose={() => libraryInput.current?.click()} onRefresh={() => { if (libraryFiles.current) void connectLibrary(libraryFiles.current, true); }} onCorrect={correctLibrarySample} onClose={() => setLibraryOpen(false)} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
+        {libraryOpen && <LibraryBrowser progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus || analyzing > 0} palette={palette} onChoose={() => libraryInput.current?.click()} onRefresh={() => { if (libraryFiles.current) void connectLibrary(libraryFiles.current, true); }} onCorrect={correctLibrarySample} onClose={() => setLibraryOpen(false)} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
         {layoutEditorOpen && <LayoutEditor layout={activeLayout} templates={templates} onClose={() => setLayoutEditorOpen(false)} onSelect={(template) => setActiveLayout(template)} onSave={(template) => { setTemplates((prev) => [...prev.filter((old) => old.id !== template.id), template]); setActiveLayout(template); saveState({ layoutId: template.id }); }} onApply={(template) => { const applied = template.id === "horizontal" ? { ...template, id: "custom:active" } : template; setActiveLayout(applied); setTemplates((prev) => [...prev.filter((old) => old.id !== applied.id), applied]); setLayout((prev) => ({ ...prev, id: applied.id })); setLayoutEditorOpen(false); setNotice("Layout ready for the next kit generation."); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
