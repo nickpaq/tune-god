@@ -85,6 +85,12 @@ export function sameKitType(a: CategoryId, b: CategoryId): boolean {
   return a === b || (fx(a) && fx(b));
 }
 
+/** Display the template name only when the loaded sound actually fulfills it. */
+export function matchingTemplateLabel(slot: LayoutSlot | undefined, sound: Pick<KitSound, "category" | "classification">): string | undefined {
+  return slot && sound.category === slot.category && (!slot.subtype || sound.classification?.subtype === slot.subtype)
+    ? slot.label : undefined;
+}
+
 /** Specific subtypes reserve their candidates before generic slots; each sample can be used only once. */
 export function allocateKit(
   sounds: KitSound[],

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { allocateKit, generationSlots } from "./kitGeneration";
+import { allocateKit, generationSlots, matchingTemplateLabel } from "./kitGeneration";
 import { layoutById } from "./fingerLayouts";
 import type { CategoryId } from "./classify";
 const layout = layoutById(null);
@@ -108,5 +108,17 @@ describe("parent Type fallback", () => {
     const sound = sample(0, "snare");
     expect(allocateKit([sound], [{ category: "snare", subtype: "rimshot", label: "Rim" }]).shortages).toEqual([]);
     expect(sound.classification.subtype).toBeUndefined();
+  });
+});
+
+describe("resolved template labels", () => {
+  it("drops subtype labels for a parent Type fallback", () => {
+    expect(matchingTemplateLabel({ category: "fall", subtype: "noise-fall", label: "Noise Fall" }, sample(0, "fx"))).toBeUndefined();
+    expect(matchingTemplateLabel({ category: "fx", subtype: "sweep", label: "Sweep" }, sample(0, "fx"))).toBeUndefined();
+    expect(matchingTemplateLabel({ category: "snare", subtype: "rimshot", label: "Rim" }, sample(0, "snare"))).toBeUndefined();
+  });
+  it("retains labels for exact matches and repeated generic slots", () => {
+    expect(matchingTemplateLabel({ category: "fall", subtype: "noise-fall", label: "Noise Fall" }, sample(0, "fall", "noise-fall"))).toBe("Noise Fall");
+    expect(matchingTemplateLabel({ category: "kick", label: "Kick 2" }, sample(0, "kick"))).toBe("Kick 2");
   });
 });

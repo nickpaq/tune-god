@@ -110,7 +110,7 @@ import { PlaybackEditor } from "./components/PlaybackEditor";
 import { LayoutEditor } from "./components/LayoutEditor";
 import { correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
 import { type SampleClassification } from "./audio/sampleClassification";
-import type { AdditionalBanks } from "./audio/kitGeneration";
+import { matchingTemplateLabel, type AdditionalBanks } from "./audio/kitGeneration";
 import { loadLibraryIndex, saveLibraryIndex } from "./storage";
 import { SampleLibraryModal } from "./components/SampleLibraryModal";
 import { TypeKeys } from "./components/TypeKeys";
@@ -1156,7 +1156,7 @@ function App() {
             : (placement.positions.get(sound.pad) ?? -1),
           origIndex: sound.pad,
           name: sound.fileName,
-          label: (bank === "kit" || bank === "drums") && (placement.positions.get(sound.pad) ?? 64) < 16 ? lay.slots[placement.positions.get(sound.pad)!].label : undefined,
+          label: (bank === "kit" || bank === "drums") && (placement.positions.get(sound.pad) ?? 64) < 16 ? matchingTemplateLabel(lay.slots[placement.positions.get(sound.pad)!], sound) : undefined,
           sourcePath: sound.sourcePath,
           sampleId: sound.sampleId,
           sampleRate: decoded.sampleRate,
@@ -2856,6 +2856,12 @@ function App() {
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
   const sectionLabel = (p: Pad): string =>
     `${p.section!.synced ? "Chop" : CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
+  // Validate saved labels too, so projects generated before this fix display correctly.
+  const templateLabelOf = (p: Pad): string | undefined => {
+    if (!p.libraryId || !p.label) return undefined;
+    const slot = getLayout(layout.id).slots.find((slot) => slot.label === p.label);
+    return slot && p.category ? matchingTemplateLabel(slot, { category: p.category, classification: p.classification }) : p.label;
+  };
   const labelOf = (p: Pad): string =>
     p.placeholder
       ? p.placeholder.label
@@ -2865,7 +2871,7 @@ function App() {
           ? "Chopper"
           : p.section
             ? sectionLabel(p)
-            : (p.libraryId && p.label ? p.label : numberedLabel(p)?.label ?? padLabel(p));
+            : (templateLabelOf(p) ?? numberedLabel(p)?.label ?? padLabel(p));
   const colorOfPad = (p: Pad) =>
     p.placeholder ? placeholderColor(p) : autoColorOf(p);
   const hasProject =
@@ -3129,7 +3135,7 @@ function App() {
     if (pad.chopper) return "Chopper";
     if (pad.placeholder || pad.ghost) return labelOf(pad);
     return isReal(pad) && pad.category
-      ? (pad.libraryId && pad.label ? pad.label : numberedLabel(pad)?.caption ??
+      ? (templateLabelOf(pad) ?? numberedLabel(pad)?.caption ??
           CATEGORIES[categoryIndex(pad.category)].short)
       : "";
   };
