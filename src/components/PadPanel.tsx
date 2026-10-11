@@ -196,9 +196,6 @@ export function PadPanel({
 
       <Waveform channelData={pad.channelData} />
 
-      <button className="tune-toggle" aria-pressed={centsMode} onClick={() => setCentsMode(!centsMode)}>
-        {centsMode ? "Cents" : "Semitones"}
-      </button>
       <div className="pad-panel__slider">
         <PitchSlider
           onAbove={(point) => {
@@ -217,8 +214,9 @@ export function PadPanel({
           onDragStart={onHoldStart}
           onDragEnd={onHoldEnd}
           onReset={() => onChange({ semis: 0, cents: 0 })}
+          onToggleMode={() => setCentsMode((m) => !m)}
           valueLabel={(cents) => formatTrim(pad.tune ? autoShift * 100 + cents : cents)}
-          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), use the Cents/Semitones button to switch mode (a tuner dial, 55 cents either side: past that it snaps to the next semitone). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
+          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), tap to switch between semitones and cents (a tuner dial, 55 cents either side: past that it snaps to the next semitone). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
         />
         {chords && above && (
           <>

@@ -550,7 +550,7 @@
 /* the pitch slider: a line with a mark for every semitone that bends into a tuner dial (cents mode) */
 .pitch-slider {
   position: relative;
-  height: calc(var(--cell) * 10);
+  height: calc(var(--cell) * 20);
   cursor: pointer;
   touch-action: none;
 }

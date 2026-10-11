@@ -49,9 +49,9 @@ export async function parseKoalaProject(file: File): Promise<ParsedKoalaProject>
     if (typeof sourcePath === "string") pathById.set(s.id, sourcePath);
   }
 
-  // Pad numbers are normalized to 0-based grid slots (some exports count from 1).
-  const allNumbers: number[] = (samplerJson.pads ?? []).map((p: any) => Number(p.pad)).filter(Number.isFinite);
-  const padBase = allNumbers.length && Math.min(...allNumbers) >= 1 ? 1 : 0;
+  // Koala numbers pads from 0 (docs/koala-mixer-reference.md). A project that merely has no pad 0 (a blank one, or one made of a few pads) is still 0-based:
+  // guessing 1-based from the lowest pad number put every written pad one slot off when the project was opened in Koala.
+  const padBase = 0;
 
   const pads: KoalaPadRef[] = (samplerJson.pads ?? [])
     .filter((p: any) => p.type === "sample" && typeof p.sampleId === "number")

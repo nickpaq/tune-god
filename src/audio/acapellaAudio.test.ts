@@ -11,8 +11,8 @@ describe("acapella mode from two audio files", () => {
     if ("problem" in made) throw new Error(made.problem);
     const zip = await JSZip.loadAsync(await made.file.arrayBuffer());
     const pads = JSON.parse(await zip.file("sampler/sampler.json")!.async("string")).pads;
-    // Koala numbers its pads from 1 when none is 0, so pads 49 and 50 are slots 48 and 49
-    expect(pads.map((p: any) => p.pad)).toEqual([49, 50]);
+    // Koala numbers its pads from 0
+    expect(pads.map((p: any) => p.pad)).toEqual([48, 49]);
     expect(pads.map((p: any) => p.label)).toEqual(["Night Drive", "Night Drive VOCALS"]);
     expect(zip.file("sampler/1.wav")).toBeTruthy();
     expect(zip.file("sampler/2.wav")).toBeTruthy();

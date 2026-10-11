@@ -16,12 +16,12 @@ const BEND_MS = 240;
 
 /** The drawing: 400 x 40 units, stretched to the slider's box. The line lies along y 32; bent, its middle rises SAG units and the hand swings from a pivot far below. */
 const W = 400;
-const H = 40;
+const H = 80;
 const X0 = 10;
 const X1 = 390;
-const BASE_Y = 32;
-const SAG = 24;
-const HAND = 17;
+const BASE_Y = 72;
+const SAG = 60;
+const HAND = 36;
 /** Half the angle the hand sweeps either side of centre, in radians (the dial's arc is that of a circle through the line's ends and its raised middle). */
 const radius = ((X1 - X0) / 2) ** 2 / (2 * SAG) + SAG / 2;
 const HALF_ANGLE = Math.asin((X1 - X0) / 2 / radius);
@@ -38,7 +38,7 @@ function onLine(u: number, k: number) {
 /**
  * The Tune screen's pitch slider (the pad's trim, in cents, +-12 semitones). Drag left or right to scrub: the speed slows smoothly to a tenth toward the
  * bottom of the screen (`scrubSpeed`), but in semitone mode the value always lands on whole semitones (with any cents offset the pad already has kept).
- * A tap picks the marker up anywhere on the track; a double tap puts the pitch back to the middle. In cents mode the line bends into a tuner dial
+ * A press anywhere on the track picks the marker up where it is (it never jumps to the finger); a tap swaps semitone and cents mode; a double tap puts the pitch back to the middle (leaving the mode as it was). In cents mode the line bends into a tuner dial
  * with a hand, and the slider covers 55 cents either side of the semitone it was on (past that it snaps to the next semitone). Dragged up, the value stays put and `onAbove` reports the finger.
  */
 export function PitchSlider({
@@ -46,6 +46,7 @@ export function PitchSlider({
   cents,
   onChange,
   onReset,
+  onToggleMode,
   onDragStart,
   onDragEnd,
   onAbove,
@@ -57,6 +58,8 @@ export function PitchSlider({
   cents: boolean;
   onChange: (value: number) => void;
   onReset: () => void;
+  /** A single tap swaps semitone and cents mode (a double tap swaps it back and resets). */
+  onToggleMode: () => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   onAbove?: (point: { x: number; y: number } | null) => void;
@@ -92,15 +95,11 @@ export function PitchSlider({
     if (disabled) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    const rect = e.currentTarget.getBoundingClientRect();
+    // A press never moves the marker: it picks it up where it is, and only a drag changes the value.
     const anchor = wholeSemitone(value);
-    // Grab the marker from the whole slider surface in either mode.
-    const u = clamp(((e.clientX - rect.left) / rect.width * W - X0) / (X1 - X0), 0, 1) * 2 - 1;
-    const picked = clamp(cents ? anchor + u * CENTS_RANGE : wholeSemitone(u * RANGE) + value - anchor, -RANGE, RANGE);
-    drag.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, t0: performance.now(), raw: picked, offset: value - anchor, anchor, moved: false };
+    drag.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, t0: performance.now(), raw: value, offset: value - anchor, anchor, moved: false };
     setDragging(true);
     onDragStart?.();
-    onChange(Math.round(picked * 10) / 10);
   };
 
   const move = (e: PointerEvent<HTMLDivElement>) => {
@@ -143,10 +142,11 @@ export function PitchSlider({
       if (now - tap.current.at < DOUBLE_MS) {
         // Second tap resets to the middle.
         tap.current.at = 0;
+        onToggleMode();
         onReset();
       } else {
         tap.current = { at: now };
-        // A single tap picks the marker position; the mode button switches modes.
+        onToggleMode();
       }
     }
     onDragEnd?.();

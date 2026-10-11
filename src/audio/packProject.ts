@@ -308,7 +308,7 @@ export async function acapellaProjectFromAudio(files: File[]): Promise<{ file: F
       const sampleId = n + 1;
       zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: decoded.sampleRate, channelData: decoded.channelData, bitDepth: 24 }).arrayBuffer());
       samples.push({ id: sampleId, metadata: { originalPath: file.name } });
-      pads.push({ pad: 49 + n, type: "sample", sampleId, label, vol: 1, pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
+      pads.push({ pad: 48 + n, type: "sample", sampleId, label, vol: 1, pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
     }
   } catch {
     return { problem: "One of the audio files could not be read." };
