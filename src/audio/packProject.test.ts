@@ -22,8 +22,8 @@ describe("original folder paths", () => {
     expect(planOneShots(bells.files).groups).toEqual([]);
     expect(planKit(bells.files).groups[0].category).toBe("perc");
   });
-  it("identifies 808s from the selected folder, never a filename", () => {
-    expect(planKit(findPackInFileList([picked("808/Piano.wav")]).files).groups[0].is808).toBe(true);
-    expect(planKit(findPackInFileList([picked("Bass/808.wav")]).files).groups[0].is808).toBeFalsy();
+  it("identifies 808s from the selected folder or filename within the bass family", () => {
+    expect(planKit(findPackInFileList([picked("808/Piano.wav")]).files, Math.random, { additionalBanks: 1 }).groups[0].is808).toBe(true);
+    expect(planKit(findPackInFileList([picked("Bass/808.wav")]).files, Math.random, { additionalBanks: 1 }).groups[0].is808).toBe(true);
   });
 });

@@ -3,6 +3,8 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { PitchSlider } from "./PitchSlider";
 import { ToneKnob } from "./ToneKnob";
 import { Waveform } from "./Waveform";
+import type { SampleClassification } from "../audio/sampleClassification";
+import type { PadPlayback } from "../audio/padSettings";
 import type { CategoryId } from "../audio/classify";
 import type { Detail } from "../audio/padLabels";
 import type { GhostKind } from "../audio/ghost";
@@ -39,6 +41,8 @@ export interface Pad {
   detectedMidi?: number | null;
   /** Guessed (or manually chosen) sound category, used for auto-colouring. */
   category?: CategoryId;
+  classification?: SampleClassification;
+  playback?: PadPlayback;
   /** Finer label for non-drum sounds (Piano, Riser, ...) from the file name; display only. */
   detail?: Detail;
   /** Spectral centroid in Hz, used to order sounds with no clear pitch. */

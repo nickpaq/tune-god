@@ -32,7 +32,7 @@ const api = {
     let pitch = api.detectMidi(mono, sampleRate);
     const category = categoryHint ?? categoryOfFile(fileName.replace(/\\/g, "/").split("/").slice(0, -1), fileName);
     // An 808 or bass glides down from its attack to the note it settles on, so its pitch is read from the second half of the sound only.
-    if (category === "bass") pitch = api.detectMidi(mono.subarray(Math.floor(mono.length / 2)), sampleRate) ?? pitch;
+    if ((category === "bass" || category === "bassLoop")) pitch = api.detectMidi(mono.subarray(Math.floor(mono.length / 2)), sampleRate) ?? pitch;
     // A key written in the file name wins over anything measured. A loop's "pitch" is the tonic of its key (as the relative minor), a whole note; another
     // pitched sound's is its root, and the measured pitch is kept when it already sits on that note (it carries the cents a name cannot).
     const named = keyFromName(fileName);

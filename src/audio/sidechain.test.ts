@@ -42,14 +42,14 @@ const exported = async (buses: Map<number, number>) => {
 };
 
 describe("the routing follows whichever sounds are on the pads at export", () => {
-  it("puts the kick on bus A and the bass on bus B, and moves them when the kit is swapped", async () => {
+  it("keeps kick and bass on bus 1 when the kit is swapped", async () => {
     const [a, b] = (await load()).pads.slice(0, 2).map((p) => p.sampleId);
     const first = await exported(new Map([[a, CATEGORY_BUS.kick], [b, CATEGORY_BUS.bass]]));
     const busOf = (j: any, id: number) => j.sampler.pads.find((p: any) => p.sampleId === id).bus;
-    expect([busOf(first, a), busOf(first, b)]).toEqual([0, 1]);
+    expect([busOf(first, a), busOf(first, b)]).toEqual([0, 0]);
     // the kick and bass swap places on the pads: the buses swap with them
     const second = await exported(new Map([[a, CATEGORY_BUS.bass], [b, CATEGORY_BUS.kick]]));
-    expect([busOf(second, a), busOf(second, b)]).toEqual([1, 0]);
+    expect([busOf(second, a), busOf(second, b)]).toEqual([0, 0]);
     // no sidechain is written for either order
     for (const j of [first, second]) expect(j.mixer.buses.some((b: any) => b.chain.some((fx: any) => fx?.name === "SIDECHAIN"))).toBe(false);
   });

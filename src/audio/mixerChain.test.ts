@@ -20,13 +20,13 @@ const exported = async (project: ParsedKoalaProject, options: Parameters<typeof 
 };
 
 describe("bus routing", () => {
-  it("gives the kick a bus of its own, puts every bass sound on the next one and the melodic loops on bus D", () => {
+  it("shares bus 1 for kick and bass, bus 3 for melodic and bus 4 for loops, vox and FX", () => {
     expect(CATEGORY_BUS.kick).toBe(0);
-    expect(BUS_NAMES[0]).toBe("Kick");
-    expect(Object.entries(CATEGORY_BUS).filter(([, bus]) => bus === 0).map(([c]) => c)).toEqual(["kick"]);
-    expect(CATEGORY_BUS.melodicLoop).toBe(3);
-    expect(CATEGORY_BUS.bass).toBe(1);
-    expect(BUS_NAMES[1]).toBe("Bass");
+    expect(BUS_NAMES[0]).toBe("Kick + Bass");
+    expect(Object.entries(CATEGORY_BUS).filter(([, bus]) => bus === 0).map(([c]) => c)).toEqual(["kick", "bass", "bassLoop"]);
+    expect(CATEGORY_BUS.melodicLoop).toBe(2);
+    expect(CATEGORY_BUS.bass).toBe(0);
+    expect(BUS_NAMES[1]).toBe("Drums");
   });
 });
 
@@ -116,8 +116,8 @@ describe("effect parameters", () => {
 describe("kick clipping, melodic EQ and per-pad EQ", () => {
   it("puts an EQ on the melodic bus only", async () => {
     const mixer = await exported(await load(), { busNames: BUS_NAMES, busEffects: true });
-    expect(mixer.buses[3].chain.filter((s: any) => s?.name === "EQ")).toHaveLength(1);
-    expect(mixer.buses.slice(0, 3).some((b: any) => b.chain.some((s: any) => s?.name === "EQ"))).toBe(false);
+    expect(mixer.buses[2].chain.filter((s: any) => s?.name === "EQ")).toHaveLength(1);
+    expect(mixer.buses.filter((_: any, index: number) => index !== 2).some((b: any) => b.chain.some((s: any) => s?.name === "EQ"))).toBe(false);
   });
 
   it("puts a clipper on the kick bus once, and none on the others", async () => {

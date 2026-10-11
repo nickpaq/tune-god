@@ -4,6 +4,7 @@
 import JSZip from "jszip";
 import { decodeNative } from "./decode";
 import { encodeWav } from "./wavEncode";
+import type { SampleClassification } from "./sampleClassification";
 import type { CategoryId } from "./classify";
 import { applyGainDb } from "./gain";
 import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
@@ -61,7 +62,7 @@ async function walk(entry: Entry, folders: string[], out: PackFile<PackSource>[]
   if (!AUDIO_EXTENSIONS.test(entry.name)) return;
   // Taking the File only gets a handle with its size; no bytes are read yet.
   const file = await fileOf(entry as FileSystemFileEntry);
-  out.push({ folders, sourcePath: [...folders, entry.name].join("/"), name: entry.name, size: file.size, source: async () => file });
+  out.push({ folders, sourcePath: [...folders, entry.name].join("/"), name: entry.name, size: file.size, lastModified: file.lastModified, source: async () => file });
 }
 
 /** The audio files under dropped entries. One dropped folder is the pack; its name is retained for classification and source paths; several are all folders of one pack. */
@@ -86,7 +87,7 @@ export function findPackInFileList(list: FileList | File[]): FoundPack {
     if (parts.length > 1) name = parts[0];
     const folders = parts.slice(1, -1);
     if (parts.some((p) => p.startsWith(".") || p === "__MACOSX") || !AUDIO_EXTENSIONS.test(file.name)) continue;
-    files.push({ folders, rootFolder: parts.length > 1 ? parts[0] : undefined, sourcePath: parts.join("/"), name: file.name, size: file.size, source: async () => file });
+    files.push({ folders, rootFolder: parts.length > 1 ? parts[0] : undefined, sourcePath: parts.join("/"), name: file.name, size: file.size, lastModified: file.lastModified, source: async () => file });
   }
   return { name, files };
 }
@@ -99,6 +100,7 @@ const volFromDb = (db: number) => 10 ** (db / 20);
 
 /** One sound written to the project. */
 export interface WrittenSound {
+  classification?: SampleClassification;
   /** Its pad number in the project (past the grid; the export renumbers it if it ends up on a pad). */
   pad: number;
   sampleId: number;
@@ -200,9 +202,12 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
   let nextId = Math.max(0, ...samples.map((x) => Number(x.id) || 0), ...pads.map((x) => Number(x.sampleId) || 0)) + 1;
   let nextPad = Math.max(HIDDEN_PAD_BASE - 1, ...pads.map((x) => Number(x.pad) - base)) + 1;
   const sounds: WrittenSound[] = [];
-  for (const [n, { file, group, number }] of taken.entries()) {
+  const numbering = new Map<string, number>();
+  for (const [n, { file, group }] of taken.entries()) {
     onProgress?.(`Levelling ${n + 1}/${taken.length}`);
     const { category, is808 } = groups[group];
+    const numberKey = `${category}:${!!is808}`;
+    const number = (numbering.get(numberKey) ?? 0) + 1; numbering.set(numberKey, number);
     const decoded = await decodeNative(await file.source());
     const channelData = applyGainDb(decoded.channelData, balance.gainDb[existing.length + n]);
     const frames = channelData[0].length;
@@ -212,16 +217,17 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
     const fileName = bankFileName(category, number, is808);
     project.zip.file(`sampler/${sampleId}.wav`, await encodeWav({ sampleRate: decoded.sampleRate, channelData, bitDepth: 24 }).arrayBuffer());
     const sourcePath = file.sourcePath ?? [...(file.rootFolder ? [file.rootFolder] : []), ...file.folders, file.sourceName ?? file.name].join("/");
-    samples.push({ id: sampleId, metadata: { originalPath: fileName, sourcePath } });
+    const libraryId = file.libraryId ?? `sample-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    samples.push({ id: sampleId, metadata: { originalPath: fileName, sourcePath, tunegodClassification: file.classification, tunegodLibraryId: libraryId } });
     pads.push({ pad: pad + base, type: "sample", sampleId, vol: volFromDb(knobDb), pan: 0.5, pitch: 0, start: 0, end: frames, zoomStart: 0, zoomEnd: frames });
     project.pads.push({ pad, sampleId, fileName });
-    const libraryId = file.libraryId ?? `sample-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     sounds.push({
       pad,
       sampleId,
       fileName,
       category,
-      is808: !!is808,
+      is808: !!is808 || ((category === "bass" || category === "bassLoop") && file.classification?.subtype === "808"),
+      classification: file.classification,
       knobDb,
       group,
       number,

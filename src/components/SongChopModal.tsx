@@ -137,7 +137,7 @@ export function SongChopModal({
   freeSlots: number;
   /** What the chop makes: a pattern per section (acapella mode) or a chop on the chopper (chopper mode). */
   unit?: "pattern" | "chop";
-  /** Chop by 8 and Chop by 16 are acapella mode's alone. */
+  /** Chop by 4 and Chop by 8 are acapella mode's alone. */
   acapella?: boolean;
   pitchForKey?: (key: SongKey | null) => number;
   onConfirm: (settings: ChopSettings, openMaker?: boolean) => void | Promise<void>;
@@ -312,7 +312,7 @@ export function SongChopModal({
     const there = marks.chops.find((f) => lineOf(f) === line);
     if (there !== undefined) return change({ ...marks, chops: marks.chops.filter((f) => f !== there) }, `Chop removed at ${formatTime(at / sampleRate)}`);
     haptic("snap");
-    // Outside chopper mode a section may not pass 16 bars: markers fill in every 16 bars from the nearest chop before this one when it is further back than that.
+    // Outside chopper mode a section may not pass 16 bars: markers fill in every 8 bars from the nearest chop before this one when it is further back than that.
     const before = lines.filter((n) => n < line).pop();
     const filler: number[] = [];
     if (before !== undefined && !fine) for (let n = before + MAX_SECTION_BARS * grid.beatsPerBar; n < line; n += MAX_SECTION_BARS * grid.beatsPerBar) filler.push(lineFrame(grid, n));
@@ -541,11 +541,11 @@ export function SongChopModal({
           </div>
           {acapella && (
             <div className="chop__row">
+              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(4)} title="Puts a chop marker every 4 bars across the whole song.">
+                Chop by 4
+              </button>
               <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(8)} title="Puts a chop marker every 8 bars across the whole song.">
                 Chop by 8
-              </button>
-              <button className="chop__btn chop__grow" disabled={!grid} onClick={() => chopEvery(16)} title="Puts a chop marker every 16 bars across the whole song.">
-                Chop by 16
               </button>
             </div>
           )}

@@ -135,6 +135,7 @@ export function PadAllocator({
             {focused && focused.occupied && selection.has(focused.index) ? `${padName(focused.index)}${focused.name ? ` · ${focused.name}` : ""}: This sample will be overwritten.` : "Tap a pad to choose it. Pads with a speaker already hold a sample."}
           </p>
 
+          {focused?.occupied && <button className="chop__btn" onClick={() => onPreview(focused.index)} aria-label={`Preview ${padName(focused.index)} without changing selection`}><Speaker /> Preview {padName(focused.index)}</button>}
           <div className="chop__row">
             <button className="chop__btn chop__grow" onClick={() => (haptic("light"), setSelection(selectUnused(pads)))}>
               Select All Unused Pads

@@ -1,5 +1,17 @@
 # KoalaTune notes for Claude sessions
 
+## Consolidated product specification (v1.14.0)
+
+These rules supersede older conflicting notes below. Implementation and validation details: `docs/consolidated-product-spec.md`.
+
+- Library selection reconnects files each session and restores metadata from IndexedDB, with no whole-library audio stored. Classify from the complete hierarchy, filenames, aliases and saved corrections, keeping confidence and review status. Bass loops, vocal loops, FX loops, risers and falls are separate Types. Detailed subtypes supply strict layout matching.
+- Bank A defaults to Crash / FX / FX / Noise Fall / Perc / Perc 2 / Perc / Sweep / Kick 2 / Snare 2 / Rim / Clap / Kick 1 / Snare 1 / Closed Hat / Open Hat 2. Users can edit, drag or tap to swap slots, select subtypes, and save templates. Generation uses the active template and honors locks.
+- Generate kit fills A and optionally 0, 1 or 2 additional banks; zero is the default. One gives B a hybrid layout; two give B instruments and C loops/extras. D is never automatically filled. Existing direct bank loaders remain available.
+- No automatic substitutions or duplicate sample identities. Report shortages, keep specific subtypes available before assigning general slots, and balance packs when selected. Supporting vocals/FX on B/C are intentional sounds, not unused drums.
+- Koala buses 1–4 (serialized 0–3): Kick/Bass, Drums, Melodic, Loops/Vox/FX. Bass one-shots AND bass loops default to choke 5. Hats 1, cymbals 2, drum loops 3, melodic loops 4, vocal loops 6. All loop Types default to One Shot off / Stretch on; one-shots default to One Shot on / Stretch off. Type defaults < user Type settings < saved per-pad overrides. Settings are keyed by original pad, not sampleId, so pads sharing audio can differ. Keep metadata and classify through export; only explicit pad overrides are persisted as overrides.
+- Acapella alone has Chop by 4 and Chop by 8. Synced mode retains waveform scrubbing, zoom, grid nudges and its explicit anchor. Tempo detection uses a repeated clear low-frequency accent to improve provisional bar-1 placement, falling back to its tracked beat for ambiguous material; a user anchor always wins. The destination selector provides separate speaker preview without changing selection.
+
+
 - **Terminology (the user's):** "chopper mode" means only the sub-mode called Chopper in the Chop a long sample menu. "Acapella mode" and "synced mode" mean the sub-modes of those names. Do not use "chopper" for the whole menu or for the other two modes. **Acapella mode's file picker must take a .koala project or two audio files (the song or instrumental and its acapella, same length)**: its input has no `accept` filter, because on iOS a filter listing audio beside .koala greys the project out (it broke twice); `loadAcapella` sorts the picked files by extension.
 - Koala mixer facts (buses, plugin names, parameter ranges, what is still unconfirmed): `docs/koala-mixer-reference.md`. Read it before touching `src/audio/mixerChain.ts` or `src/audio/routing.ts`.
 - Bus layout the export writes: A Kick, B Bass, C Drums, D Melodic (with vox and FX), Main for Other. The kick has a bus alone.

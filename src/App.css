@@ -2252,7 +2252,8 @@
   gap: 10px;
   padding: 16px;
   border: 1px solid var(--accent);
-  border-radius: 12px;
+  border-radius: 0;
+  overflow-y: auto;
   background: var(--panel, #292929);
   color: var(--text, #eee);
 }
@@ -2390,3 +2391,17 @@
   font: inherit;
   text-align: center;
 }
+
+.library-actions { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+.library-actions > * { min-width: 0; flex: 1; }
+.library-actions button, .library-actions select, .sample-library > input, .layout-grid button { border: 1px solid var(--accent); border-radius: 0; padding: 8px; background: #242426; color: #f0eee9; font: inherit; }
+.library-pack { display: flex; align-items: center; gap: 8px; padding: 6px 0; overflow-wrap: anywhere; }
+.library-packs { max-height: 180px; overflow-y: auto; }
+.library-pack__color { width: 16px; height: 24px; flex-shrink: 0; }
+.library-sample { padding: 8px 0; border-bottom: 1px solid #555; }
+.library-sample strong { display: block; overflow-wrap: anywhere; }
+.layout-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.layout-grid button { touch-action: none; min-height: 64px; overflow-wrap: anywhere; }
+.layout-grid button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+.sample-library select, .sample-library input { max-width: 100%; }

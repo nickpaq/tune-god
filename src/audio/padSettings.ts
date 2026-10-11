@@ -1,14 +1,6 @@
-// Koala's per-pad playback settings, chosen by sound category. The rules (every export, whatever else is switched on):
-// Mute (choke) groups, from the product spec: closed and open hat 1, cymbal 2, drum and perc loops 3, melodic loops 4, bass and 808 5, vox loops 6
-// (reserved: vox loops have no category yet). Kick, snare, clap, perc, melodic one-shots, vox and FX have none. Chops take group 7 or above.
-//   melodic loops   mute group 4, one-shot on, loop off, stretch on (Koala's modern mode), on bus D
-//   melodic sounds  no mute group, one-shot off, release at its maximum, stretch off
-//   drums           one-shot on, no mute group, loop off, stretch off (hats and cymbals keep their own mute groups); the snare's tone knob a touch under the middle
-//   drum and perc loops   mute group 3, stretch on in Koala's beats mode
-//   808 and bass    mute group 5, one-shot on, stretch off
-//   vox and FX      one-shot on, no mute group, stretch off
-// Stretch is on only for loops (and chops, which the chop modes write themselves); every one-shot is written with stretch off.
-// Categories not listed are left as they came.
+// Product defaults: hats 1, cymbals 2, drum loops 3, melodic loops 4, both bass Types 5, vocal loops 6.
+// Loops use One Shot off and Stretch on; one-shots use One Shot on and Stretch off. Chops keep their own settings.
+import { CATEGORY_BUS } from "./routing";
 import { isDrumCategory, type CategoryId } from "./classify";
 import { ACTIVE_MIX_PRESET, type PadEq } from "./mixPresets";
 
@@ -18,6 +10,8 @@ export type { PadEq };
 export const STRETCH_MODE = { modern: 1, retro: 2, beats: 3, repitch: 4, cyclic: 5 } as const;
 
 export interface PadPlayback {
+  /** Serialized Koala bus: 0–3, or -1 for Main. */
+  bus?: number;
   eq?: PadEq;
   chokeGroup?: number;
   oneShot?: boolean;
@@ -48,17 +42,20 @@ const PAD_EQ = ACTIVE_MIX_PRESET.padEq;
 const PAD_TONE = ACTIVE_MIX_PRESET.padTone;
 
 /** A melodic loop is written this way whatever the Organize switch says. */
-export const MELODIC_LOOP_PLAYBACK: PadPlayback = { chokeGroup: MELODIC_LOOP_MUTE_GROUP, oneShot: true, loop: false, stretch: "modern" };
+export const MELODIC_LOOP_PLAYBACK: PadPlayback = { chokeGroup: MELODIC_LOOP_MUTE_GROUP, oneShot: false, loop: false, stretch: "modern" };
 
 function basePlayback(category: CategoryId): PadPlayback | undefined {
   if (category === "melodicLoop") return MELODIC_LOOP_PLAYBACK;
-  if (category === "drumLoop" || category === "percLoop") return { chokeGroup: DRUM_LOOP_MUTE_GROUP, oneShot: true, loop: false, stretch: "beats" };
+  if (category === "drumLoop" || category === "percLoop") return { chokeGroup: DRUM_LOOP_MUTE_GROUP, oneShot: false, loop: false, stretch: "beats" };
   if (category === "closedHat" || category === "openHat") return { chokeGroup: HAT_MUTE_GROUP, oneShot: true, loop: false, stretch: "off" };
   if (category === "cymbal") return { chokeGroup: CYMBAL_MUTE_GROUP, oneShot: true, loop: false, stretch: "off" };
-  if (category === "vox" || category === "fx") return { chokeGroup: 0, oneShot: true, stretch: "off" }; // not drums, though the classifier groups vox with them
+  if (category === "vox" || category === "fx" || category === "riser" || category === "fall") return { chokeGroup: 0, oneShot: true, loop: false, stretch: "off" }; // not drums, though the classifier groups vox with them
   if (isDrumCategory(category)) return { chokeGroup: 0, oneShot: true, loop: false, stretch: "off" };
-  if (category === "bass") return { chokeGroup: BASS_MUTE_GROUP, oneShot: true, stretch: "off" };
-  if (category === "melodic") return { chokeGroup: 0, oneShot: false, release: MELODIC_RELEASE, stretch: "off" };
+  if (category === "bassLoop") return { chokeGroup: BASS_MUTE_GROUP, oneShot: false, loop: false, stretch: "modern" };
+  if (category === "voxLoop") return { chokeGroup: VOX_LOOP_MUTE_GROUP, oneShot: false, loop: false, stretch: "modern" };
+  if (category === "fxLoop") return { chokeGroup: 0, oneShot: false, loop: false, stretch: "modern" };
+  if (category === "bass") return { chokeGroup: BASS_MUTE_GROUP, oneShot: true, loop: false, stretch: "off" };
+  if (category === "melodic") return { chokeGroup: 0, oneShot: true, loop: false, release: MELODIC_RELEASE, stretch: "off" };
   return undefined;
 }
 
@@ -78,4 +75,12 @@ export function applyPadEq(pad: any, eq: PadEq): void {
   const base = { enabled: "true", lo: { type: "highpass", freq: 20, gain: -18, q: 1 }, mid: { type: "peaking", freq: 1000, gain: 0, q: 1 }, hi: { type: "highshelf", freq: 8000, gain: 0, q: 1 } };
   const cur = pad.eq ?? base;
   pad.eq = { ...base, ...cur, enabled: typeof cur.enabled === "boolean" ? true : "true", lo: { ...base.lo, ...cur.lo, freq: eq.highpassHz }, hi: { ...base.hi, ...cur.hi, ...(eq.highShelfDb !== undefined ? { gain: eq.highShelfDb } : {}) } };
+}
+
+/** Type defaults < configured Type settings < saved per-pad controls. Stretch key is a per-pad override. */
+export function resolvePlayback(category: CategoryId, typeOverrides?: PadPlayback, padOverrides?: PadPlayback, stretch?: boolean): PadPlayback {
+  const resolved: PadPlayback = { bus: CATEGORY_BUS[category], ...playbackFor(category), ...typeOverrides, ...padOverrides };
+  if (stretch === false) resolved.stretch = "off";
+  if (stretch === true && (!resolved.stretch || resolved.stretch === "off")) resolved.stretch = playbackFor(category)?.stretch === "beats" ? "beats" : "modern";
+  return resolved;
 }

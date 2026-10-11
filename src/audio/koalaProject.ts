@@ -3,6 +3,8 @@
 // pad's audio lives at sampler/{sampleId}.wav. We read/write that structure
 // directly from the zip bytes; the .koala extension is cosmetic (JSZip
 // doesn't care what the file is called), so no literal rename is needed.
+import type { SampleClassification } from "./sampleClassification";
+import type { PadPlayback } from "./padSettings";
 import JSZip from "jszip";
 
 export interface KoalaPadRef {
@@ -12,6 +14,9 @@ export interface KoalaPadRef {
   /** Friendly name for the UI, derived from the sample's original import path when available. */
   fileName: string;
   sourcePath?: string;
+  classification?: SampleClassification;
+  playback?: PadPlayback;
+  libraryId?: string;
   /** The label on the pad in Koala (what the pad shows), or "" when it has none. */
   label?: string;
 }
@@ -60,6 +65,9 @@ export async function parseKoalaProject(file: File): Promise<ParsedKoalaProject>
       sampleId: p.sampleId as number,
       fileName: nameById.get(p.sampleId) ?? `sample-${p.sampleId}.wav`,
       sourcePath: pathById.get(p.sampleId),
+      classification: p.tunegodClassification ?? samplerJson.samples?.find((s: any) => s.id === p.sampleId)?.metadata?.tunegodClassification,
+      playback: p.tunegodPlayback,
+      libraryId: samplerJson.samples?.find((s: any) => s.id === p.sampleId)?.metadata?.tunegodLibraryId,
       label: typeof p.label === "string" ? p.label.trim() : "",
     }))
     .sort((a: KoalaPadRef, b: KoalaPadRef) => a.pad - b.pad);

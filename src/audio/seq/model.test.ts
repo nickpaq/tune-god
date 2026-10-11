@@ -15,7 +15,7 @@ import {
   occurrences,
 } from "./model";
 describe("type locks", () => {
-  it("assigns exactly one of the three performance pages to all fifteen types", () => {
+  it("assigns exactly one of the three performance pages to all sound types", () => {
     const groups = {
       keys: CATEGORIES.filter((c) => performance(c.id) === "keys"),
       loop: CATEGORIES.filter((c) => performance(c.id) === "loop"),
@@ -26,8 +26,11 @@ describe("type locks", () => {
       "drumLoop",
       "percLoop",
       "melodicLoop",
+      "bassLoop",
+      "voxLoop",
+      "fxLoop",
     ]);
-    expect(groups.drums).toHaveLength(10);
+    expect(groups.drums).toHaveLength(12);
   });
   it("applies hats 5, bass 6, drum self choke and loop one shots", () => {
     expect(defaults("openHat").choke).toBe(5);

@@ -1,6 +1,6 @@
 // The four loaders, one for each bank of pads. A loader takes a folder the user points it at and fills only its own part of the grid:
 //
-//   Bank A  "Load Bank A: Drums"        a drum pack with subfolders; the sound type comes from the subfolder name, never the file name.
+//   Bank A  "Load Bank A: Drums"        a drum pack with subfolders; the sound type comes from hierarchy, filenames and corrections.
 //                                       Ten kicks, ten snares, five closed and five open hats, five of every other drum type.
 //   Bank B  "Load Bank B: Melodic Loops" a folder of sound files and nothing else; twelve of them at random go on the top three rows.
 //           "Fill Bank B: 808 & Bass"   a pack with 808 or bass subfolders; the bottom row holds two basses and two 808s.
@@ -9,10 +9,12 @@
 //
 // Every sound is named by its type and a number ("Kick 1", "Snare 2", "808 1"), not by its file name, and written to the project under that
 // name. Whatever a bank's pads do not hold stays in the hot-swap pool as a spare. Bass, melodic loops and one-shots are tuned by default.
-import { arrangeFingerDrumming, SUBSTITUTE_GROUP } from "./fingerDrumming";
+import { allocateKit, generationSlots, type AdditionalBanks, type KitShortage } from "./kitGeneration";
+import type { SampleClassification } from "./sampleClassification";
+import { layoutById } from "./fingerLayouts";
 import type { FingerLayout } from "./fingerLayouts";
 import { categoryLabel, is808Name, type CategoryId } from "./classify";
-import { categoryOfFile, fairPackOrder, shuffled, type PackFile } from "./samplePack";
+import { categoryOfFile, classifyFile, fairPackOrder, shuffled, type PackFile } from "./samplePack";
 
 export type BankLoad = "drums" | "loops" | "bass" | "oneShots" | "kit";
 
@@ -30,6 +32,8 @@ export const DRUM_QUOTA: Partial<Record<CategoryId, number>> = {
   perc: 5,
   vox: 5,
   fx: 5,
+  riser: 5,
+  fall: 5,
 };
 
 /** First pad of each bank-B and bank-C zone, and how many pads it has. */
@@ -83,6 +87,14 @@ const STEMS: Stem[] = [
   { category: "perc", label: "Perc", short: "Perc" },
   { category: "vox", label: "Vox", short: "Vox" },
   { category: "fx", label: "FX", short: "FX" },
+  { category: "riser", label: "Riser", short: "Riser" },
+  { category: "fall", label: "Fall", short: "Fall" },
+  { category: "fxLoop", label: "FX Loop", short: "FX loop" },
+  { category: "voxLoop", label: "Vocal Loop", short: "Vox loop" },
+  { category: "bassLoop", label: "Bass Loop", short: "Bass loop" },
+  { category: "drumLoop", label: "Drum Loop", short: "Drum loop" },
+  { category: "percLoop", label: "Perc Loop", short: "Perc loop" },
+  { category: "other", label: "Other", short: "Other" },
   { category: "bass", label: "808", short: "808", is808: true },
   { category: "bass", label: "Bass", short: "Bass" },
   { category: "melodicLoop", label: "Loop", short: "Loop" },
@@ -136,13 +148,14 @@ export interface BankPlan<T = unknown> {
 
 const hasSubfolders = (files: { folders: string[] }[]) => files.some((f) => f.folders.length > 0);
 
-/** Bank A: files are sorted by the name of the nearest subfolder that names a drum type, never by their own names. */
+/** Bank A: typed folders supply context and names refine generic folders and subtypes. */
 export function planDrums<T>(files: PackFile<T>[], random: () => number = Math.random): BankPlan<T> {
   const byType = new Map<CategoryId, PackFile<T>[]>();
   for (const file of files) {
     const category = categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
     if (!(category in DRUM_QUOTA)) continue;
-    byType.set(category, [...(byType.get(category) ?? []), file]);
+    const classification = file.classification ?? classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
+    byType.set(category, [...(byType.get(category) ?? []), { ...file, classification }]);
   }
   const groups = (Object.keys(DRUM_QUOTA) as CategoryId[])
     .filter((c) => byType.has(c))
@@ -179,38 +192,33 @@ export const planLoops = <T>(files: PackFile<T>[], random: () => number = Math.r
 export const planOneShots = <T>(files: PackFile<T>[], random: () => number = Math.random) => planFlat(files, "melodic", ONE_SHOT_PADS + ONE_SHOT_SPARES, random);
 
 /**
- * Classify every audio file in a kit by its nearest typed folder, using folders only. Unknown files remain usable as Other.
+ * Use resolved library classifications, or classify hierarchy and filenames. Only requested Types enter the plan.
  * Missing categories have no group, so the placement leaves their pads empty.
  */
-export function planKit<T>(files: PackFile<T>[], random: () => number = Math.random): BankPlan<T> {
-  if (!files.length) return { groups: [], problem: "No audio files were found in that kit folder." };
-  const buckets = new Map<string, { category: CategoryId; is808?: boolean; files: PackFile<T>[] }>();
+export interface KitOptions { additionalBanks?: AdditionalBanks; layout?: FingerLayout; balancePacks?: boolean }
+export function planKit<T>(files: PackFile<T>[], random: () => number = Math.random, options: KitOptions = {}): BankPlan<T> {
+  if (!files.length) return { groups: [], problem: "No audio files were found in that library." };
+  const slots = generationSlots(options.layout ?? layoutById(null), options.additionalBanks ?? 0);
+  const buckets = new Map<string, BankGroup<T>>();
+  const seen = new Set<string>();
   for (const file of files) {
-    const category = categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
-    const is808 = category === "bass" && [...(file.rootFolder ? [file.rootFolder] : []), ...file.folders].some(is808Name);
-    const key = `${category}:${is808 ? "808" : "plain"}`;
-    const bucket = buckets.get(key) ?? { category, is808, files: [] };
-    bucket.files.push(file);
-    buckets.set(key, bucket);
+    const classification = file.classification ?? classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
+    const category = classification.category;
+    if (!slots.some((slot) => slot.category === category)) continue;
+    const identity = file.libraryId ?? file.sourcePath ?? [...file.folders, file.name].join("/");
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    const subtype = classification.subtype ?? "";
+    const key = `${category}:${subtype}`;
+    const group = buckets.get(key) ?? { category, is808: (category === "bass" || category === "bassLoop") && subtype === "808" || undefined, candidates: [], want: slots.filter((slot) => slot.category === category && (!slot.subtype || slot.subtype === subtype)).length + 4 };
+    group.candidates.push({ ...file, classification }); buckets.set(key, group);
   }
-  const drumQuota = DRUM_QUOTA as Partial<Record<CategoryId, number>>;
-  const wanted = (category: CategoryId, is808?: boolean) => {
-    if (category === "bass") return (is808 ? BASS_808_PADS : BASS_PADS) + BASS_SPARES;
-    if (category === "melodicLoop") return LOOP_PADS + LOOP_SPARES;
-    if (category === "melodic") return ONE_SHOT_PADS + ONE_SHOT_SPARES;
-    return drumQuota[category] ?? 5;
-  };
-  const groups = [...buckets.values()].map(({ category, is808, files: candidates }) => ({
-    category,
-    ...(is808 ? { is808: true } : {}),
-    candidates: fairPackOrder(candidates, random),
-    want: wanted(category, is808),
-  }));
-  return { groups };
+  const groups = [...buckets.values()].map((group) => ({ ...group, candidates: options.balancePacks === false ? shuffled(group.candidates, random) : fairPackOrder(group.candidates, random) }));
+  return groups.length ? { groups } : { groups, problem: "No samples match the selected pad Types. Review classifications or edit the template." };
 }
 
-export const planBank = <T>(bank: BankLoad, files: PackFile<T>[], random: () => number = Math.random): BankPlan<T> =>
-  bank === "kit" ? planKit(files, random) : bank === "drums" ? planDrums(files, random) : bank === "bass" ? planBass(files, random) : bank === "loops" ? planLoops(files, random) : planOneShots(files, random);
+export const planBank = <T>(bank: BankLoad, files: PackFile<T>[], random: () => number = Math.random, options: KitOptions = {}): BankPlan<T> =>
+  bank === "kit" ? planKit(files, random, options) : bank === "drums" ? planDrums(files, random) : bank === "bass" ? planBass(files, random) : bank === "loops" ? planLoops(files, random) : planOneShots(files, random);
 
 /** A sound that was pulled, named and numbered. */
 export interface PlacedSound {
@@ -218,11 +226,14 @@ export interface PlacedSound {
   key: number;
   category: CategoryId;
   is808?: boolean;
+  classification?: SampleClassification;
+  identity?: string;
 }
 
 export interface BankPlacement {
   /** Sound key -> pad. */
   positions: Map<number, number>;
+  shortages?: KitShortage[];
   /** Silent "add Kick" pads for the layout's gaps (bank A only). */
   placeholders: { index: number; kind: "missing"; label: string }[];
   /** Ghost snare and soft kick slots, made from the kit's own sounds (bank A only). */
@@ -232,42 +243,14 @@ export interface BankPlacement {
 }
 
 /** Where the pulled sounds sit: bank A by the drum layout, the others in order (the loops first-come on the top rows, the bass row two basses then two 808s). */
-export function placeBank(bank: BankLoad, sounds: PlacedSound[], layout: FingerLayout): BankPlacement {
+export function placeBank(bank: BankLoad, sounds: PlacedSound[], layout: FingerLayout, options: { additionalBanks?: AdditionalBanks; locked?: ReadonlySet<number>; excluded?: ReadonlySet<string> } = {}): BankPlacement {
   const positions = new Map<number, number>();
   const out: BankPlacement = { positions, placeholders: [], ghosts: [], spares: [] };
-  if (bank === "kit") {
-    const used = new Set<number>();
-    const rank = (index: number) => (3 - Math.floor(index / 4)) * 4 + (index % 4);
-    for (const category of new Set(layout.slots.filter((slot) => !slot.ghostOf).map((slot) => slot.category))) {
-      const slots = layout.slots.map((slot, index) => ({ slot, index }))
-        .filter(({ slot }) => slot.category === category && !slot.ghostOf)
-        .sort((a, b) => rank(a.index) - rank(b.index));
-      const candidates = sounds.filter((sound) => sound.category === category);
-      slots.forEach(({ index }, n) => {
-        const sample = candidates[n];
-        if (!sample) return;
-        positions.set(sample.key, index);
-        used.add(sample.key);
-      });
-    }
-    // Pitched types have fixed bank ranges. Missing types leave holes; excess samples stay available as spares.
-    const tonalSlots = sounds.filter((sound) => !used.has(sound.key));
-    for (const category of ["melodicLoop", "bass", "melodic", "drumLoop", "percLoop", "other"] as CategoryId[]) {
-      const range = category === "melodicLoop" ? [16, 28] : category === "bass" ? [28, 32] : category === "melodic" ? [32, 48] : [16, 48];
-      const candidates = tonalSlots.filter((sound) => sound.category === category && !used.has(sound.key));
-      for (let index = range[0]; index < range[1] && candidates.length; index++) {
-        if ([...positions.values()].includes(index)) continue;
-        const sample = candidates.shift()!;
-        positions.set(sample.key, index);
-        used.add(sample.key);
-      }
-    }
-  } else if (bank === "drums") {
-    const arranged = arrangeFingerDrumming(sounds.map((s) => ({ key: s.key, category: s.category })), layout);
-    const { start, end } = BANK_ZONES.drums;
-    for (const [key, index] of arranged.positions) if (index >= start && index < end) positions.set(key, index);
-    out.placeholders = arranged.placeholders.filter((p) => p.index >= start && p.index < end && p.kind === "missing").map((p) => ({ index: p.index, kind: "missing", label: p.label }));
-    out.ghosts = arranged.ghosts.filter((g) => g.index >= start && g.index < end);
+  if (bank === "kit" || bank === "drums") {
+    const slots = generationSlots(layout, bank === "kit" ? options.additionalBanks ?? 0 : 0);
+    const allocated = allocateKit(sounds, slots, options.locked, options.excluded);
+    for (const [key, index] of allocated.positions) positions.set(key, index);
+    out.shortages = allocated.shortages;
   } else if (bank === "bass") {
     // Two ordinary basses then two 808s; a shortfall in one kind is made up from the other.
     const plain = sounds.filter((s) => !s.is808);
@@ -287,8 +270,8 @@ export function placeBank(bank: BankLoad, sounds: PlacedSound[], layout: FingerL
 }
 
 /**
- * Kit slots (bank A) that hold no sound, nothing or a silent "missing" placeholder, and which spare fills each: a spare of the slot's own
- * type, else one of the same family (any hat for a hat slot, a clap for a snare). Returns slot -> index into `spares`.
+ * Kit slots (bank A) that hold no sound or a silent placeholder take spares of their own Type only.
+ * Returns slot -> index into `spares`; automatic family substitutions are not allowed.
  */
 export function fillKitGaps(pads: Record<number, { placeholder?: unknown; ghost?: unknown } | undefined>, layout: FingerLayout, spares: { category?: CategoryId }[]): Map<number, number> {
   const out = new Map<number, number>();
@@ -301,11 +284,6 @@ export function fillKitGaps(pads: Record<number, { placeholder?: unknown; ghost?
   const gaps = layout.slots.map((slot, i) => ({ slot, i })).filter(({ slot, i }) => !slot.ghostOf && (!pads[i] || pads[i]!.placeholder));
   for (const { slot, i } of gaps) {
     const at = take((s) => s.category === slot.category);
-    if (at >= 0) out.set(i, at);
-  }
-  for (const { slot, i } of gaps) {
-    if (out.has(i)) continue;
-    const at = take((s) => SUBSTITUTE_GROUP[s.category!] !== undefined && SUBSTITUTE_GROUP[s.category!] === SUBSTITUTE_GROUP[slot.category]);
     if (at >= 0) out.set(i, at);
   }
   return out;
