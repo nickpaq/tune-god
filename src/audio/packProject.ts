@@ -291,12 +291,19 @@ const STEM_NAME = /vocal|acap|vox|stem/i;
  * VOCALS after it (what acapella mode looks for). The stem is the file whose name says so (vocals, acapella, vox, stem); returns a message instead
  * when the two files cannot be told apart or the audio cannot be read.
  */
-export async function acapellaProjectFromAudio(files: File[]): Promise<{ file: File } | { problem: string }> {
+/** Which of two picked audio files is the song and which the vocal stem: by the file names when exactly one says vocals / acapella / vox / stem, otherwise the first is the song. The user can swap them. */
+export function guessAcapellaRoles(files: File[]): { song: File; stem: File } {
+  const stems = files.filter((f) => STEM_NAME.test(f.name));
+  if (stems.length === 1) return { stem: stems[0], song: files.find((f) => f !== stems[0])! };
+  return { song: files[0], stem: files[1] };
+}
+
+export async function acapellaProjectFromAudio(files: File[], roles?: { song: File; stem: File }): Promise<{ file: File } | { problem: string }> {
   if (files.length !== 2) return { problem: "Acapella mode needs two audio files: the song and its vocal stem. Pick both together, or open a Koala project that already holds them." };
   const stems = files.filter((f) => STEM_NAME.test(f.name));
-  if (stems.length !== 1) return { problem: 'Could not tell which file is the vocal stem. Name it with "vocals" (or "acapella") and pick the song and the stem together.' };
-  const stem = stems[0];
-  const song = files.find((f) => f !== stem)!;
+  if (!roles && stems.length !== 1) return { problem: 'Could not tell which file is the vocal stem. Name it with "vocals" (or "acapella") and pick the song and the stem together.' };
+  const stem = roles ? roles.stem : stems[0];
+  const song = roles ? roles.song : files.find((f) => f !== stem)!;
   const zip = new JSZip();
   const samples: any[] = [];
   const pads: any[] = [];
