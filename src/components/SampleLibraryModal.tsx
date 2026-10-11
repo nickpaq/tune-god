@@ -15,10 +15,10 @@ export function SampleLibraryModal({
     }}>
       <section className="sample-library" role="dialog" aria-modal="true" aria-labelledby="sample-library-title">
         <header className="sample-library__header">
-          <h2 id="sample-library-title">On-device sample library</h2>
+          <h2 id="sample-library-title">Imported samples log</h2>
           <button onClick={onClose} aria-label="Close sample library">×</button>
         </header>
-        <p>Imported samples are logged here. Star a loaded sound in hot swap to keep its audio on this device and make it available for later kits.</p>
+        <p>Imported sample names are logged here (no audio is stored on this device). Star a sound in hot swap to mark it as a favourite.</p>
         <div className="sample-library__rows">
           {records.length === 0 ? <div className="sample-library__empty">No imported samples yet</div> : records.map((record) => (
             <div className="sample-library__row" key={record.id}>

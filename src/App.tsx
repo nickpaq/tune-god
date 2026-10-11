@@ -26,7 +26,7 @@ import {
   type BankLoad,
 } from "./audio/bankLoad";
 import { displayName, packTags } from "./audio/sampleName";
-import { packByteBudget, projectNameForFiles, type PackFile, type PackMemory } from "./audio/samplePack";
+import { packByteBudget, projectNameForFiles, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
 import {
@@ -170,7 +170,6 @@ import {
 import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { resetStoredType } from "./audio/seq/session";
-import { encodeWav } from "./audio/wavEncode";
 import { SeqScreen, type SeqPad } from "./components/seq/SeqScreen";
 import { useSafeArea } from "./components/useSafeArea";
 import { SIDECHAIN_HINT, sidechainStatus } from "./audio/sidechain";
@@ -529,42 +528,16 @@ function App() {
   /** What the drop zone says while a pack is being measured and levelled. */
   const [importStatus, setImportStatus] = useState("");
   const [sampleLibrary, setSampleLibrary] = useState<SampleLibraryRecord[]>([]);
-  const [favoritePads, setFavoritePads] = useState<Pad[]>([]);
   const [sampleLibraryOpen, setSampleLibraryOpen] = useState(false);
+  // The on-device log holds names only (never audio); loading it also clears any audio an older version kept for favorites.
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      const records = await loadSampleLibrary();
-      if (cancelled) return;
-      setSampleLibrary(records);
-      const favorites: Pad[] = [];
-      for (const [i, record] of records.entries()) {
-        if (!record.favorite || !record.audio || !record.sampleRate) continue;
-        try {
-          const decoded = await decodeNative(new File([record.audio], record.name, { type: "audio/wav" }));
-          favorites.push({
-            index: -1,
-            origIndex: -100000 - i,
-            libraryId: record.id,
-            favorite: true,
-            name: record.name,
-            sourcePath: record.sourcePath,
-            sampleId: -1,
-            sampleRate: record.sampleRate || decoded.sampleRate,
-            channelData: decoded.channelData,
-            category: record.category,
-            is808: record.is808,
-            tune: false,
-            semis: 0,
-            cents: 0,
-          });
-        } catch {
-          // A corrupt cached favorite is omitted; the imported log still remains visible.
-        }
-      }
-      if (!cancelled) setFavoritePads(favorites);
-    })();
-    return () => { cancelled = true; };
+    void loadSampleLibrary().then((records) => {
+      if (!cancelled) setSampleLibrary(records);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loadProject = useCallback(
@@ -2915,68 +2888,15 @@ function App() {
       return next;
     });
   };
+  /** The star in the hot-swap list: marks a sound as a favourite in this project (saved with its pad, starred sounds come first in the list). No audio is stored on the device. */
   const toggleFavorite = async (pad: Pad, favorite: boolean) => {
-    if (!pad.libraryId) return;
-    const old = sampleLibrary.find((r) => r.id === pad.libraryId);
-    const audio = favorite
-      ? await encodeWav({ sampleRate: pad.sampleRate, channelData: audioOf(pad), bitDepth: 24 })
-      : undefined;
-    if (!old) {
-      await recordImportedSamples([{
-        id: pad.libraryId,
-        name: pad.name,
-        sourcePath: pad.sourcePath,
-        pack: "(sample pack)",
-        category: pad.category ?? "other",
-        is808: pad.is808,
-        importedAt: Date.now(),
-        favorite: false,
-      }]);
+    const same = (p: Pad) => p.origIndex === pad.origIndex;
+    setPads((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, same(p) ? { ...p, favorite } : p])));
+    setHidden((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, same(p) ? { ...p, favorite } : p])));
+    if (pad.libraryId) {
+      await setSampleFavorite(pad.libraryId, favorite);
+      setSampleLibrary(await loadSampleLibrary());
     }
-    await setSampleFavorite(pad.libraryId, favorite, audio, pad.sampleRate);
-    setPads((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, p.libraryId === pad.libraryId ? { ...p, favorite } : p])));
-    setHidden((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, p.libraryId === pad.libraryId ? { ...p, favorite } : p])));
-    setFavoritePads((prev) => {
-      if (!favorite) return prev.filter((p) => p.libraryId !== pad.libraryId);
-      const exists = prev.some((p) => p.libraryId === pad.libraryId);
-      return exists ? prev.map((p) => p.libraryId === pad.libraryId ? { ...p, favorite: true } : p) : [...prev, { ...pad, index: -1, favorite: true }];
-    });
-    setSampleLibrary((prev) => {
-      const entry: SampleLibraryRecord = old ?? { id: pad.libraryId!, name: pad.name, sourcePath: pad.sourcePath, pack: "(sample pack)", category: pad.category ?? "other", is808: pad.is808, importedAt: Date.now(), favorite: false };
-      return [ { ...entry, favorite, audio: favorite ? audio : undefined, sampleRate: favorite ? pad.sampleRate : undefined }, ...prev.filter((r) => r.id !== pad.libraryId) ];
-    });
-  };
-  const insertFavorite = async (other: Pad, target: Pad) => {
-    const record = sampleLibrary.find((r) => r.id === other.libraryId);
-    if (!record?.audio) return void window.alert("This favorite has no stored audio. Favorite it again from a loaded sound.");
-    const opened = await ensureProject();
-    if (!opened) return;
-    const candidate: PackFile<() => Promise<File>> = {
-      folders: [record.pack, record.category], name: record.name, source: async () => new File([record.audio!], record.name, { type: "audio/wav" }), size: record.audio.size,
-      libraryId: record.id, favorite: true, sourceName: record.name, sourcePack: record.pack, sourcePath: record.sourcePath,
-    };
-    const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
-    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], {
-      existing: used.map((p) => ({ channelData: audioOf(p), sampleRate: p.sampleRate, category: p.category })),
-      byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
-      measure: (input) => getRenderWorker().measure(input),
-    });
-    if (!result) return void window.alert("There is not enough room in this project to add that favorite. Increase the project size limit or free space by removing samples.");
-    const written = result.sounds[0];
-    const ref = opened.project.pads.find((p) => p.pad === written.pad);
-    if (!ref) return;
-    const decoded = await decodeNative(await koalaPadToFile(opened.project, ref));
-    const incoming: Pad = { index: target.index, origIndex: written.pad, libraryId: written.libraryId, favorite: true, name: written.fileName, sourcePath: written.sourcePath, sampleId: written.sampleId, sampleRate: decoded.sampleRate, channelData: decoded.channelData, category: written.category, is808: written.is808 || undefined, tune: tuneDefault(false, false, written.category, undefined, tunedTarget), semis: 0, cents: 0 };
-    recordEdit();
-    projectFile.current = result.file;
-    void saveProjectFile(result.file);
-    setPads((prev) => ({ ...prev, [target.index]: incoming }));
-    if (isReal(target)) setHidden((prev) => ({ ...prev, [target.origIndex]: { ...target, index: -1 } }));
-    setAnalyzing((n) => n + 1);
-    nextAnalysisWorker().analyze(monoFromChannelData(incoming.channelData), incoming.sampleRate, incoming.name, false, incoming.category).then((analysis) => {
-      setPads((prev) => prev[incoming.index]?.origIndex === incoming.origIndex ? { ...prev, [incoming.index]: { ...prev[incoming.index], detectedMidi: analysis.midi, centroid: analysis.centroid } } : prev);
-      setAnalyzing((n) => Math.max(0, n - 1));
-    }).catch(() => setAnalyzing((n) => Math.max(0, n - 1)));
   };
   /** Pack tags the project's sounds share ("Rio - ..."), left out of the names in the swap list. */
   /** The hot-swap list for a pad: the sounds that can take its place. Used by the Swap screen and by the sequencer's Sounds page. */
@@ -3001,10 +2921,6 @@ function App() {
                 ? isKitCategory(p.category)
                 : p.category === slotCategory,
             ),
-            ...favoritePads.filter((p) =>
-              (isKitCategory(slotCategory) ? isKitCategory(p.category) : p.category === slotCategory) &&
-              ![...Object.values(pads), ...Object.values(hidden)].some((loaded) => loaded.libraryId === p.libraryId),
-            ),
             ...Object.values(pads).filter(
               (p) =>
                 isReal(p) &&
@@ -3020,12 +2936,11 @@ function App() {
             ? Number(!!a.is808 !== !!target.is808) -
               Number(!!b.is808 !== !!target.is808)
             : 0,
-        )}
+        ).sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite))}
         audioOf={audioOf}
         nameOf={(p) => displayName(p.name, tags)}
         onFavorite={toggleFavorite}
         onSwap={(other) => {
-          if (other.libraryId && other.origIndex <= -100000) return void insertFavorite(other, target);
           if (hidden[other.origIndex]) return swapInHidden(other, target);
           recordEdit();
           setPads((prev) =>
@@ -3355,12 +3270,9 @@ function App() {
             records={sampleLibrary}
             onClose={() => setSampleLibraryOpen(false)}
             onFavorite={(record) => {
-              const pad = [...Object.values(pads), ...Object.values(hidden), ...favoritePads].find((p) => p.libraryId === record.id);
+              const pad = [...Object.values(pads), ...Object.values(hidden)].find((p) => p.libraryId === record.id);
               if (pad) void toggleFavorite(pad, false);
-              else void setSampleFavorite(record.id, false).then(async () => {
-                setSampleLibrary(await loadSampleLibrary());
-                setFavoritePads((prev) => prev.filter((p) => p.libraryId !== record.id));
-              });
+              else void setSampleFavorite(record.id, false).then(async () => setSampleLibrary(await loadSampleLibrary()));
             }}
           />
         )}

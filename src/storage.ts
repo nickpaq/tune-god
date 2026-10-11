@@ -16,7 +16,7 @@ export interface SampleLibraryRecord {
   is808?: boolean;
   importedAt: number;
   favorite: boolean;
-  /** Audio is kept only for favorites, so imported logs do not duplicate all sample data on-device. */
+  /** Older versions kept a favorite's audio here; nothing is stored any more and `loadSampleLibrary` clears it. */
   audio?: Blob;
   sampleRate?: number;
 }
@@ -181,7 +181,16 @@ export async function loadSampleLibrary(): Promise<SampleLibraryRecord[]> {
     const db = await openDb();
     const records = await new Promise<SampleLibraryRecord[]>((resolve, reject) => {
       const req = db.transaction(SAMPLE_LIBRARY_STORE).objectStore(SAMPLE_LIBRARY_STORE).getAll();
-      req.onsuccess = () => resolve((req.result as SampleLibraryRecord[]).sort((a, b) => b.importedAt - a.importedAt));
+      req.onsuccess = () => {
+        const all = req.result as SampleLibraryRecord[];
+        // Sample audio is never kept on the device: drop what an older version stored for favorites.
+        const withAudio = all.filter((r) => r.audio);
+        if (withAudio.length) {
+          const store = db.transaction(SAMPLE_LIBRARY_STORE, "readwrite").objectStore(SAMPLE_LIBRARY_STORE);
+          for (const r of withAudio) store.put({ ...r, audio: undefined, sampleRate: undefined });
+        }
+        resolve(all.map((r) => (r.audio ? { ...r, audio: undefined, sampleRate: undefined } : r)).sort((a, b) => b.importedAt - a.importedAt));
+      };
       req.onerror = () => reject(req.error);
     });
     db.close();
@@ -191,8 +200,8 @@ export async function loadSampleLibrary(): Promise<SampleLibraryRecord[]> {
   }
 }
 
-/** Pin or unpin one sound; audio is retained only while it is a favorite. */
-export async function setSampleFavorite(id: string, favorite: boolean, audio?: Blob, sampleRate?: number): Promise<void> {
+/** Marks or unmarks one logged sound as a favourite. Only the flag is kept, never the audio. */
+export async function setSampleFavorite(id: string, favorite: boolean): Promise<void> {
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -201,15 +210,14 @@ export async function setSampleFavorite(id: string, favorite: boolean, audio?: B
       const req = store.get(id);
       req.onsuccess = () => {
         const old = req.result as SampleLibraryRecord | undefined;
-        if (!old) return;
-        store.put({ ...old, favorite, ...(favorite && audio ? { audio, sampleRate } : {}), ...(!favorite ? { audio: undefined, sampleRate: undefined } : {}) });
+        if (old) store.put({ ...old, favorite, audio: undefined, sampleRate: undefined });
       };
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
     db.close();
   } catch {
-    /* Favorites are best-effort if the device has no storage quota left. */
+    /* best-effort */
   }
 }
 

@@ -12,6 +12,11 @@ const StopGlyph = () => (
     <path d="M2 2h4v4H2z" />
   </svg>
 );
+const StarGlyph = ({ filled }: { filled: boolean }) => (
+  <svg viewBox="0 0 8 8" aria-hidden="true">
+    <path d="M4 .6l1 2.3 2.5.2-1.9 1.6.6 2.4L4 5.8 1.8 7.1l.6-2.4L.5 3.1 3 2.9z" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="0.7" strokeLinejoin="round" />
+  </svg>
+);
 const SwapGlyph = () => (
   <svg viewBox="0 0 8 8" aria-hidden="true">
     <path d="M1 3h5V1l2 2.5L6 6V4H1zM7 5H2v2L0 4.5 2 2" fill="none" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round" />
@@ -62,8 +67,10 @@ export function SwapList({
                 className={`swap-row__btn swap-row__favorite${pad.favorite ? " is-favorite" : ""}`}
                 onClick={() => onFavorite(pad, !pad.favorite)}
                 aria-label={`${pad.favorite ? "Remove" : "Add"} ${name} ${pad.favorite ? "from" : "to"} favorites`}
-                title={pad.favorite ? "Remove favorite" : "Keep on this device and add to hot swap"}
-              >{pad.favorite ? "★" : "☆"}</button>
+                title={pad.favorite ? "Remove favorite" : "Mark as a favorite: starred sounds come first in this list"}
+              >
+                <StarGlyph filled={!!pad.favorite} />
+              </button>
               <button
                 className={`swap-row__btn${preview.playing === pad.origIndex ? " swap-row__btn--on" : ""}`}
                 onClick={() => preview.toggle(pad.origIndex, audioOf(pad), pad.sampleRate)}

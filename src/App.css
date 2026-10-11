@@ -661,7 +661,6 @@
   height: calc(var(--cell) * 5);
   fill: currentColor;
 }
-.swap-row__favorite { font-size: calc(var(--cell) * 5); }
 .swap-row__favorite.is-favorite { color: var(--accent); }
 
 .swap-row__btn:active,
