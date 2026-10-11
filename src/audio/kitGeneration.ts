@@ -79,6 +79,12 @@ export interface KitShortage {
   subtype?: string;
 }
 
+/** FX one-shots share a parent Type; loops remain a separate Type. */
+export function sameKitType(a: CategoryId, b: CategoryId): boolean {
+  const fx = (category: CategoryId) => category === "fx" || category === "riser" || category === "fall";
+  return a === b || (fx(a) && fx(b));
+}
+
 /** Specific subtypes reserve their candidates before generic slots; each sample can be used only once. */
 export function allocateKit(
   sounds: KitSound[],
@@ -91,7 +97,7 @@ export function allocateKit(
   const occupied = new Set<number>(locked);
   for (const { slot, index } of slots
     .map((slot, index) => ({ slot, index }))
-    .sort((a, b) => Number(!!b.slot.subtype) - Number(!!a.slot.subtype))) {
+    .sort((a, b) => Number(!!b.slot.subtype || b.slot.category === "riser" || b.slot.category === "fall") - Number(!!a.slot.subtype || a.slot.category === "riser" || a.slot.category === "fall"))) {
     if (occupied.has(index)) continue;
     const candidate = sounds.find(
       (sound) =>
@@ -99,6 +105,17 @@ export function allocateKit(
         sound.category === slot.category &&
         (!slot.subtype || sound.classification?.subtype === slot.subtype),
     );
+    if (!candidate) continue;
+    used.add(candidate.identity ?? String(candidate.key));
+    occupied.add(index);
+    positions.set(candidate.key, index);
+  }
+  // Reserve exact matches first, then fill unmet requests from their parent Type.
+  for (const [index, slot] of slots.entries()) {
+    if (occupied.has(index)) continue;
+    const available = (sound: KitSound) => !used.has(sound.identity ?? String(sound.key));
+    const candidate = sounds.find((sound) => available(sound) && sound.category === slot.category)
+      ?? sounds.find((sound) => available(sound) && sameKitType(sound.category, slot.category));
     if (!candidate) continue;
     used.add(candidate.identity ?? String(candidate.key));
     occupied.add(index);

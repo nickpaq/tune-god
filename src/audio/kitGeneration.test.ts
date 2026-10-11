@@ -84,3 +84,29 @@ describe("custom kit generation", () => {
     expect(result.shortages.map((gap) => gap.index)).toEqual([2]);
   });
 });
+
+describe("parent Type fallback", () => {
+  it("fills missing FX subtypes without using loops or unrelated sounds", () => {
+    const sounds = [sample(0, "fx"), sample(1, "fx"), sample(2, "fxLoop"), sample(3, "kick")];
+    const result = allocateKit(sounds, [
+      { category: "fall", subtype: "noise-fall", label: "Noise Fall" },
+      { category: "riser", label: "Riser" },
+      { category: "fx", subtype: "sweep", label: "Sweep" },
+    ]);
+    expect([...result.positions.values()]).toEqual([0, 1]);
+    expect(result.shortages.map((gap) => gap.index)).toEqual([2]);
+    expect(sounds[0].classification.category).toBe("fx");
+  });
+  it("reserves an exact riser before a generic FX slot", () => {
+    const result = allocateKit([sample(0, "riser"), sample(1, "fx")], [
+      { category: "fx", label: "FX" }, { category: "riser", label: "Riser" },
+    ]);
+    expect(result.positions.get(0)).toBe(1);
+    expect(result.positions.get(1)).toBe(0);
+  });
+  it("fills an unavailable rim with a snare while preserving its classification", () => {
+    const sound = sample(0, "snare");
+    expect(allocateKit([sound], [{ category: "snare", subtype: "rimshot", label: "Rim" }]).shortages).toEqual([]);
+    expect(sound.classification.subtype).toBeUndefined();
+  });
+});

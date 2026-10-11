@@ -9,7 +9,7 @@
 //
 // Every sound is named by its type and a number ("Kick 1", "Snare 2", "808 1"), not by its file name, and written to the project under that
 // name. Whatever a bank's pads do not hold stays in the hot-swap pool as a spare. Bass, melodic loops and one-shots are tuned by default.
-import { allocateKit, generationSlots, type AdditionalBanks, type KitShortage } from "./kitGeneration";
+import { allocateKit, generationSlots, sameKitType, type AdditionalBanks, type KitShortage } from "./kitGeneration";
 import type { SampleClassification } from "./sampleClassification";
 import { layoutById } from "./fingerLayouts";
 import type { FingerLayout } from "./fingerLayouts";
@@ -204,13 +204,13 @@ export function planKit<T>(files: PackFile<T>[], random: () => number = Math.ran
   for (const file of files) {
     const classification = file.classification ?? classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
     const category = classification.category;
-    if (!slots.some((slot) => slot.category === category)) continue;
+    if (!slots.some((slot) => sameKitType(slot.category, category))) continue;
     const identity = file.libraryId ?? file.sourcePath ?? [...file.folders, file.name].join("/");
     if (seen.has(identity)) continue;
     seen.add(identity);
     const subtype = classification.subtype ?? "";
     const key = `${category}:${subtype}`;
-    const group = buckets.get(key) ?? { category, is808: (category === "bass" || category === "bassLoop") && subtype === "808" || undefined, candidates: [], want: slots.filter((slot) => slot.category === category && (!slot.subtype || slot.subtype === subtype)).length + 4 };
+    const group = buckets.get(key) ?? { category, is808: (category === "bass" || category === "bassLoop") && subtype === "808" || undefined, candidates: [], want: slots.filter((slot) => sameKitType(slot.category, category)).length + 4 };
     group.candidates.push({ ...file, classification }); buckets.set(key, group);
   }
   const groups = [...buckets.values()].map((group) => ({ ...group, candidates: options.balancePacks === false ? shuffled(group.candidates, random) : fairPackOrder(group.candidates, random) }));

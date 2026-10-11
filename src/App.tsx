@@ -95,6 +95,7 @@ import {
 } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { chooseShuffleSound } from "./audio/shufflePad";
+import { copyProjectPad } from "./audio/copyProjectPad";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import {
@@ -2306,7 +2307,30 @@ function App() {
     setHover("");
   };
 
-  /** Applies a drop: onto a pad or cell (move/swap), a bank button or "unused" (first free pad), or the trash. */
+  const copyingPad = useRef(false);
+  const copyToEmptyPad = async (from: number, to: number) => {
+    const source = latest.current.pads[from];
+    const destination = latest.current.pads[to];
+    const project = projectRef.current;
+    if (copyingPad.current || !project || !source || !isReal(source) || (destination && !destination.placeholder) || destination?.locked) return;
+    copyingPad.current = true;
+    try {
+      const result = await copyProjectPad(project, source.origIndex);
+      if (projectRef.current !== project || latest.current.pads[from] !== source || latest.current.pads[to] !== destination) return;
+      recordEdit();
+      projectRef.current = result.project;
+      projectFile.current = result.file;
+      void saveProjectFile(result.file);
+      const copy: Pad = { ...source, index: to, origIndex: result.ref.pad, sampleId: result.ref.sampleId, playback: source.playback ? structuredClone(source.playback) : undefined };
+      setPads((prev) => ({ ...prev, [to]: copy }));
+      setSelected(to);
+      setBank(Math.floor(to / PADS_PER_BANK));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not copy that sound.");
+    } finally { copyingPad.current = false; }
+  };
+
+  /** Dragging onto an empty pad copies; occupied pads swap. */
   const dropOn = (from: number, target: string) => {
     const [kind, rest] = target.split(":");
     const cur = latest.current.pads;
@@ -2315,6 +2339,10 @@ function App() {
     if (kind === "pad" || kind === "cell") dest = Number(rest);
     else if (kind === "bank") dest = emptyPadInBank(cur, Number(rest));
     else if (kind === "unused") dest = nextEmptyPad(cur, bank);
+    if (dest !== null && dest !== from && (!cur[dest] || cur[dest].placeholder) && cur[from] && isReal(cur[from])) {
+      void copyToEmptyPad(from, dest);
+      return;
+    }
     if (kind === "lock") {
       // The lock zone toggles the pad's lock; nothing moves.
       recordEdit();
