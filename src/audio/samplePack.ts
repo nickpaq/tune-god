@@ -138,3 +138,25 @@ export function shuffled<T>(items: readonly T[], random: () => number = Math.ran
   }
   return out;
 }
+
+/** The name a project gets from the folder its first bank load was made from, or null when the files give none. */
+export const LIBRARY_PROJECT_NAME = "TuneGod - All Kits";
+
+/**
+ * "TuneGod - All Kits" when the folder is a whole sample library, "TuneGod - {pack folder}" when it is one pack. The two are told apart by the first
+ * level of subfolders: a pack's are named for sounds (Kicks, Snares, Hats, Loops...), a library's are named for packs. A folder with no subfolders is a pack.
+ * With several folders dropped at once the first one names the project.
+ */
+export function projectNameForFiles(files: { folders: string[]; rootFolder?: string }[]): string | null {
+  if (!files.length) return null;
+  const root = files.find((f) => f.rootFolder)?.rootFolder;
+  const clean = (n: string) => `TuneGod - ${n.replace(/[\\/:*?"<>|]/g, " ").trim()}`;
+  if (root) {
+    const subs = new Set(files.map((f) => f.folders[0]).filter((n): n is string => !!n));
+    if (!subs.size) return clean(root);
+    const typed = [...subs].filter((n) => categoryOfFolder(n) !== null || /^(one ?shots?|shots?)$/i.test(n)).length;
+    return typed * 2 >= subs.size ? clean(root) : LIBRARY_PROJECT_NAME;
+  }
+  const first = files.find((f) => f.folders.length)?.folders[0];
+  return first ? clean(first) : null;
+}

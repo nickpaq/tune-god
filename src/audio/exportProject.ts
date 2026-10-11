@@ -138,7 +138,8 @@ export async function buildTunedKoala(
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
   const base = project.originalName.replace(/\.koala$/i, "");
-  return { blob, filename: `${base}_tuned.koala` };
+  // A project named from its sample folder ("TuneGod - All Kits") keeps that name as it is.
+  return { blob, filename: /^TuneGod - /.test(base) ? `${base}.koala` : `${base}_tuned.koala` };
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

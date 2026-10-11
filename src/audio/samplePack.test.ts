@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryOfFile, categoryOfFolder, fairPackOrder, packByteBudget } from "./samplePack";
+import { categoryOfFile, categoryOfFolder, fairPackOrder, packByteBudget, projectNameForFiles } from "./samplePack";
 
 describe("folder-only classification", () => {
   it("ignores misleading filenames in every folder", () => {
@@ -75,5 +75,19 @@ describe("project size limit", () => {
     expect(packByteBudget("auto")).toBe(512 * MB);
     expect(packByteBudget("low")).toBe(96 * MB);
     expect(packByteBudget("high")).toBe(1024 * MB);
+  });
+});
+
+describe("projectNameForFiles", () => {
+  const f = (rootFolder: string | undefined, ...folders: string[]) => ({ rootFolder, folders });
+  it("names a whole library", () => {
+    expect(projectNameForFiles([f("Samples", "Cool Pack", "Kicks"), f("Samples", "Other Pack", "Snares"), f("Samples", "Third Pack")])).toBe("TuneGod - All Kits");
+  });
+  it("names one pack after its folder", () => {
+    expect(projectNameForFiles([f("Cool Pack", "Kicks"), f("Cool Pack", "Snares"), f("Cool Pack", "Melodic Loops")])).toBe("TuneGod - Cool Pack");
+    expect(projectNameForFiles([f("Flat Pack")])).toBe("TuneGod - Flat Pack");
+  });
+  it("lets the first of several dropped folders name the project", () => {
+    expect(projectNameForFiles([f(undefined, "First Pack", "Kicks"), f(undefined, "Second Pack", "Kicks")])).toBe("TuneGod - First Pack");
   });
 });

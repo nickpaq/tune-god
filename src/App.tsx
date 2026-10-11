@@ -26,7 +26,7 @@ import {
   type BankLoad,
 } from "./audio/bankLoad";
 import { displayName, packTags } from "./audio/sampleName";
-import { packByteBudget, type PackFile, type PackMemory } from "./audio/samplePack";
+import { packByteBudget, projectNameForFiles, type PackFile, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
 import {
@@ -1064,8 +1064,15 @@ function App() {
         );
         return;
       }
-      projectFile.current = result.file;
-      void saveProjectFile(result.file);
+      // The first load into a new project names it: "TuneGod - All Kits" for a whole library, "TuneGod - {pack}" for one pack.
+      const named = started ? projectNameForFiles(found.files) : null;
+      const savedFile = named ? new File([result.file], `${named}.koala`, { type: result.file.type }) : result.file;
+      if (named) {
+        project.originalName = `${named}.koala`;
+        setProjectName(named);
+      }
+      projectFile.current = savedFile;
+      void saveProjectFile(savedFile);
       const placement = placeBank(
         bank,
         result.sounds.map((s) => ({
