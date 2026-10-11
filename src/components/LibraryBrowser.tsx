@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getAudioContext } from "../audio/decode";
 import { useSoundPreview } from "./useSoundPreview";
 import { useModalFocus } from "./useModalFocus";
-import { CATEGORIES, type CategoryId } from "../audio/classify";
+import { CATEGORIES, categoryLabel, type CategoryId } from "../audio/classify";
 import { libraryPacks, type LibraryProgress, type LibraryIndex } from "../audio/libraryIndex";
 import type { SampleClassification } from "../audio/sampleClassification";
 import { colorFor, type Palette } from "../audio/palettes";
@@ -33,7 +33,7 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
   const packs = useMemo(() => (index ? libraryPacks(index).map((pack) => {
     const counts = new Map<CategoryId, number>();
     for (const sample of pack.samples) counts.set(sample.classification.category, (counts.get(sample.classification.category) ?? 0) + 1);
-    return { ...pack, colors: [...counts].sort((a,b) => b[1] - a[1]).slice(0,4).map(([category]) => colorFor(palette, category)) };
+    return { ...pack, types: [...counts].sort((a,b) => b[1] - a[1]).map(([category]) => ({ category, label: categoryLabel(category), color: colorFor(palette, category) })) };
   }) : []), [index, palette]);
   const chosen = packs.filter((pack) => selected === null || selected.includes(pack.id)).map((pack) => pack.id);
   const chosenSet = new Set(chosen);
@@ -77,7 +77,7 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
         </> : <>
           <p>{connected ? "Check the packs you want in your kit." : "Reconnect your sample folder, then choose your packs."}</p>
           {error && <p role="alert">{error}</p>}
-          <div className="library-actions"><button onClick={onChoose} disabled={busy}>Reconnect files</button></div>
+          <div className="library-actions"><button className="menu__button" onClick={onChoose} disabled={busy}>Reconnect files</button></div>
           {busy && progress && <div className="library-progress" aria-busy="true">
             <p role="status" aria-live="polite">{progress.stage} · {progress.processed.toLocaleString()} / {progress.total.toLocaleString()} files</p>
             <progress aria-label="Library indexing progress" max={100} value={progress.percent} />
@@ -85,8 +85,10 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
           {index && <p className="library-summary" role="status">{index.name} · {packs.length.toLocaleString()} packs{progress?.percent === 100 ? ` · ${progress.stage}` : ""}</p>}
           <div className="library-packs" role="group" aria-label="Sample packs">
             {packs.map((pack) => <label key={pack.id} className="library-pack">
-              <input type="checkbox" disabled={busy} checked={chosenSet.has(pack.id)} onChange={(event) => setSelected(event.target.checked ? [...chosen, pack.id] : chosen.filter((id) => id !== pack.id))} />
-              <span style={{background: `linear-gradient(90deg, ${(pack.colors.length === 1 ? [pack.colors[0],pack.colors[0]] : pack.colors).join(", ")})`}} className="library-pack__color" />
+              <input type="checkbox" aria-label={pack.name} disabled={busy} checked={chosenSet.has(pack.id)} onChange={(event) => setSelected(event.target.checked ? [...chosen, pack.id] : chosen.filter((id) => id !== pack.id))} />
+              <span className="library-pack__types" role="img" aria-label={`Contains ${pack.types.map((type) => type.label).join(", ")}`} title={pack.types.map((type) => type.label).join(", ")}>
+                {pack.types.map((type) => <span key={type.category} className="library-pack__dot" style={{ backgroundColor: type.color }} aria-hidden="true" />)}
+              </span>
               <span>{pack.name}</span>
             </label>)}
             {!packs.length && !busy && <p>{index ? "No sample packs found in this folder." : "Your packs will appear here."}</p>}

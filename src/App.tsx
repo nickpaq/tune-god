@@ -94,6 +94,7 @@ import {
   removePad,
 } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
+import { chooseShuffleSound } from "./audio/shufflePad";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import {
@@ -192,7 +193,7 @@ import {
   DELETE_ICON,
   DRUM_ICON,
   FOLDER_ICON,
-  HOLD_ICON,
+  SHUFFLE_ICON,
   K_ICON,
   LOCK_ICON,
   UNLOCK_ICON,
@@ -2392,14 +2393,14 @@ function App() {
       : null;
   };
 
-  /** Ends one pointer's hold. The pad always stops, unless that pointer dragged it onto HOLD. */
+  /** End the pad preview, then apply the selected drag action. */
   finishPointer.current = (pointerId, cancelled) => {
     const d = drags.current.get(pointerId);
     if (!d) return;
     drags.current.delete(pointerId);
     liftPad(d.from);
     if (d.active && !cancelled) {
-      if (d.hover === "hold:") holdPad(d.from);
+      if (d.hover === "shuffle:") void shufflePad(d.from);
       else dropOn(d.from, d.hover);
     }
     endDrag(d);
@@ -2425,24 +2426,6 @@ function App() {
       document.removeEventListener("visibilitychange", hidden);
     };
   }, []);
-
-  /** Plays a pad's sample on a loop until any pad is pressed; tuning changes retune it live. */
-  const holdPad = (index: number) => {
-    const pad = pads[index];
-    if (!pad || pad.placeholder) return;
-    holdVoice.current?.release();
-    holdIndex.current = index;
-    holdVoice.current = startPad(
-      -2,
-      audioOf(pad),
-      pad.sampleRate,
-      shiftFor(pad, tunedTarget, a4, keyMajor),
-      null,
-      "loop",
-      undefined,
-      normalize ? pad.knobDb : undefined,
-    );
-  };
 
   /**
    * Pitch slider grabbed: the selected pad loops at its current tuning (bass lifted by octaves to sit near the tone) with a steady tone on its key,
@@ -3044,6 +3027,29 @@ function App() {
       setAnalyzing((n) => Math.max(0, n - 1));
     }).catch(() => setAnalyzing((n) => Math.max(0, n - 1)));
   };
+  /** Use the same candidate pool for the hot-swap list and the pad shuffle action. */
+  const hotSwapSounds = (target: Pad) => {
+    const slotCategory = (layout.on && target.index < 16 ? getLayout(layout.id).slots[target.index]?.category : undefined) || target.category;
+    const eligible = (pad: Pad) => isKitCategory(slotCategory) ? isKitCategory(pad.category) : pad.category === slotCategory;
+    const loadedIds = new Set([...Object.values(pads), ...Object.values(hidden)].map((pad) => pad.libraryId));
+    return [
+      ...Object.values(hidden).filter(eligible),
+      ...favoritePads.filter((pad) => eligible(pad) && !loadedIds.has(pad.libraryId)),
+      ...Object.values(pads).filter((pad) => isReal(pad) && isKitCategory(pad.category) && pad.index >= 16 && pad.index !== target.index && isKitCategory(slotCategory)),
+    ];
+  };
+  const shufflePad = async (index: number) => {
+    const target = latest.current.pads[index];
+    if (!target || !isReal(target)) return;
+    if (target.locked) return setNotice("Unlock this pad before shuffling it.");
+    const other = chooseShuffleSound(target, hotSwapSounds(target));
+    if (!other) return setNotice("No other sound of this Type is available in hot swap.");
+    try {
+      if (other.libraryId && other.origIndex <= -100000) await insertFavorite(other, target);
+      else if (hidden[other.origIndex]) swapInHidden(other, target);
+      else { recordEdit(); setPads((prev) => target.ghost ? fillGhostSlot(prev, target.index, other.index) : movePad(prev, target.index, other.index)); }
+    } catch { setNotice("Could not load that sound. Reconnect its sample folder or save it as a favorite again."); }
+  };
   /** Pack tags the project's sounds share ("Rio - ..."), left out of the names in the swap list. */
   /** The hot-swap list for a pad: the sounds that can take its place. Used by the Swap screen and by the sequencer's Sounds page. */
   const swapListFor = (target: Pad) => {
@@ -3060,26 +3066,7 @@ function App() {
             : `PAD ${(target.index % 16) + 1}`
         }
         candidates={sortForSlot(
-          [
-            // A pack's hidden spares: the same type as the slot, or for a drum slot any drum.
-            ...Object.values(hidden).filter((p) =>
-              isKitCategory(slotCategory)
-                ? isKitCategory(p.category)
-                : p.category === slotCategory,
-            ),
-            ...favoritePads.filter((p) =>
-              (isKitCategory(slotCategory) ? isKitCategory(p.category) : p.category === slotCategory) &&
-              ![...Object.values(pads), ...Object.values(hidden)].some((loaded) => loaded.libraryId === p.libraryId),
-            ),
-            ...Object.values(pads).filter(
-              (p) =>
-                isReal(p) &&
-                isKitCategory(p.category) &&
-                p.index >= 16 &&
-                p.index !== target.index &&
-                isKitCategory(slotCategory),
-            ),
-          ],
+          hotSwapSounds(target),
           slotCategory,
         ).sort((a, b) =>
           slotCategory === "bass"
@@ -3719,7 +3706,7 @@ function App() {
                 </section>
 
                 {drag && !expanded && (
-                  // The start screen's four choices, with other icons: dropping the pad on one does that (hold, delete, lock or unlock, chop).
+                  // Drag actions: shuffle, delete, lock/unlock or chop.
                   <section className="screen screen--drag" aria-hidden="true">
                     <div
                       className="oled"
@@ -3745,7 +3732,7 @@ function App() {
                         <div className="dropzone__choices">
                           {(
                             [
-                              { kind: "hold", word: "Hold", icon: HOLD_ICON },
+                              { kind: "shuffle", word: "Shuffle", icon: SHUFFLE_ICON },
                               {
                                 kind: "trash",
                                 word: "Delete",

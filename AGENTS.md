@@ -11,3 +11,6 @@ Before changing UI, capture screenshots of the affected screens. After changing 
 ## Required scrolling exceptions
 
 The app deliberately blocks page-level touch scrolling in `src/main.tsx` so the chassis stays fixed on screen. **Every scrollable UI region must have an explicit exception in that touchmove handler**, either directly or through an allowed scrollable ancestor. When adding or changing any list, menu, modal or panel, verify its exception, bounded height, overflow and `touch-action`. Test real touch swipes to reach the bottom; wheel scrolling and programmatic `scrollTop` alone do not verify the exception. Preserve the page-level scroll block outside these regions.
+
+
+**Show the user screenshots of the changed UI before finalizing the task.** Do not rely only on an internal visual inspection or a statement that screenshots were checked; provide the actual screenshots or visible image previews before the final summary.

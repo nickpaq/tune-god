@@ -2453,3 +2453,11 @@
 .sample-library--tools > .sample-library__rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
 .menu__library-tools[open] { display: flex; flex-direction: column; gap: 2cqw; }
 .menu__library-tools p { font-size: 3cqw; text-transform: none; }
+
+.library-pack__types { flex: none; width: 48px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.library-pack__dot { flex: none; display: block; width: 9px; height: 9px; border-radius: 50%; }
+
+/* The pack selector uses the same chassis and keycap treatment as the main menu. */
+.sample-library--packs { background: var(--chassis1); color: var(--ink); border-color: var(--edge); border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--edge), 0 1.5cqw 4cqw #0008; }
+.sample-library--packs .library-actions button,
+.sample-library--packs .sample-library__header button { border: 0; border-radius: 1.2cqw; background: var(--btn); color: var(--ink); box-shadow: 0 2px 0 var(--edge); }
