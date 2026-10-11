@@ -13,7 +13,7 @@ export function SampleLibraryModal({
     <div className="sample-library-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <section className="sample-library" role="dialog" aria-modal="true" aria-labelledby="sample-library-title">
+      <section className="sample-library sample-library--favorites" role="dialog" aria-modal="true" aria-labelledby="sample-library-title">
         <header className="sample-library__header">
           <h2 id="sample-library-title">On-device sample library</h2>
           <button onClick={onClose} aria-label="Close sample library">×</button>

@@ -2246,7 +2246,11 @@
 }
 .sample-library {
   width: min(540px, 100%);
-  max-height: min(80vh, 720px);
+  max-height: min(80dvh, 720px);
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2408,3 +2412,15 @@
 
 .library-progress { border: 1px solid currentColor; padding: 12px; margin: 12px 0; }
 .library-progress progress { display: block; width: 100%; height: 12px; accent-color: var(--accent); border-radius: 0; }
+
+/* Keep the favorites introduction visible and scroll only the bounded sample list. */
+.sample-library--favorites { overflow: hidden; }
+.sample-library--favorites > .sample-library__header,
+.sample-library--favorites > p { flex: none; }
+.sample-library--favorites > .sample-library__rows {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
