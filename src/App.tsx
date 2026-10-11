@@ -9,6 +9,7 @@ import { playbackFor, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import {
   acapellaProjectFromAudio,
+  guessAcapellaRoles,
   blankProject,
   entriesOfDrop,
   findPackInEntries,
@@ -137,6 +138,8 @@ import {
 } from "./audio/exportChopper";
 import { keyOffset } from "./audio/song/keyOffset";
 import { ScrubField } from "./components/ScrubField";
+import { PixelIcon } from "./components/PixelIcon";
+import { AcapellaFilesModal } from "./components/AcapellaFilesModal";
 import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
 import { packArrangement, type WorkspaceResult } from "./audio/song/sectionWorkspace";
 import { PatternMaker } from "./components/PatternMaker";
@@ -298,37 +301,6 @@ function tuneDefault(
   return target !== null && detectedMidi != null && isTunedCategory(category);
 }
 
-/** `scale` is how many screen cells one pixel of the art takes (2 for the small sort-key icons, 1 for the 20 x 20 start-screen icons). */
-function PixelIcon({ rows, scale = 2 }: { rows: string[]; scale?: number }) {
-  const cols = rows[0].length;
-  return (
-    <svg
-      className="pixel-icon"
-      viewBox={`0 0 ${cols} ${rows.length}`}
-      style={{
-        width: `calc(var(--cell) * ${cols * scale})`,
-        height: `calc(var(--cell) * ${rows.length * scale})`,
-      }}
-      shapeRendering="crispEdges"
-      aria-hidden="true"
-    >
-      {rows.flatMap((row, y) =>
-        [...row].map((ch, x) =>
-          ch === "#" ? (
-            <rect
-              key={`${x}-${y}`}
-              x={x}
-              y={y}
-              width="1"
-              height="1"
-              fill="currentColor"
-            />
-          ) : null,
-        ),
-      )}
-    </svg>
-  );
-}
 
 /** A menu switch: the same lit key as the ones under the piano, with its words (and a line of explanation) beside it. */
 function Switch({
@@ -523,6 +495,8 @@ function App() {
   const bassInput = useRef<HTMLInputElement>(null);
   const oneShotsInput = useRef<HTMLInputElement>(null);
   const acapellaInput = useRef<HTMLInputElement>(null);
+  /** The two audio files picked for acapella mode, waiting for the user to confirm which is the song and which the vocal. */
+  const [roleAsk, setRoleAsk] = useState<{ song: File; stem: File } | null>(null);
   /** The stem's pad settings from the acapella zip being chopped (not in the project), for the export. */
   const acapellaTemplate = useRef<SongTemplate | undefined>(undefined);
 
@@ -1352,16 +1326,30 @@ function App() {
       }
       return void (await loadChopperAudio(audio, mode));
     }
-    // Acapella mode: a Koala project, or the song and its vocal stem as two audio files (made into a project that holds them).
-    let file = picked.find(isKoalaFile);
-    if (!file) {
-      const made = await acapellaProjectFromAudio(picked);
-      if ("problem" in made) {
+    // Acapella mode: a Koala project, or the song and its vocal stem as two audio files (the user is shown both and can swap which is which).
+    const project = picked.find(isKoalaFile);
+    if (!project) {
+      if (picked.length !== 2) {
         pickedMode.current = null;
-        return void window.alert(made.problem);
+        return void window.alert("Acapella mode needs two audio files: the song and its vocal stem. Pick both together, or open a Koala project that already holds them.");
       }
-      file = made.file;
+      return void setRoleAsk(guessAcapellaRoles(picked));
     }
+    return void (await openAcapellaFile(project));
+  };
+
+  /** The two files were picked and the user has settled which is the song and which the vocal: make the project and open it. */
+  const finishAcapellaRoles = async (song: File, stem: File) => {
+    setRoleAsk(null);
+    const made = await acapellaProjectFromAudio([song, stem], { song, stem });
+    if ("problem" in made) {
+      pickedMode.current = null;
+      return void window.alert(made.problem);
+    }
+    await openAcapellaFile(made.file);
+  };
+
+  const openAcapellaFile = async (file: File) => {
     acapellaPending.current = pickedMode.current ?? "acapella";
     pickedMode.current = null;
     await loadProject(file, false, true);
@@ -3872,6 +3860,19 @@ function App() {
             onDelete={deletePad}
             onChop={openChop}
             onClose={() => setLongSamples([])}
+          />
+        )}
+
+        {roleAsk && (
+          <AcapellaFilesModal
+            song={roleAsk.song}
+            stem={roleAsk.stem}
+            onSwap={() => setRoleAsk({ song: roleAsk.stem, stem: roleAsk.song })}
+            onCancel={() => {
+              setRoleAsk(null);
+              pickedMode.current = null;
+            }}
+            onUse={() => void finishAcapellaRoles(roleAsk.song, roleAsk.stem)}
           />
         )}
 
