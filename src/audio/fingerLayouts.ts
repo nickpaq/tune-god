@@ -21,16 +21,10 @@ export interface FingerLayout {
 
 const slot = (category: CategoryId, label = categoryLabel(category), ghostOf?: "snare" | "kick"): LayoutSlot => ({ category, label, ghostOf });
 
-const KICK = slot("kick");
-const SNARE = slot("snare");
-const GHOST = slot("snare", "Ghost Snare", "snare");
-const SOFT = slot("kick", "Soft Kick", "kick");
 const CLAP = slot("clap");
 const CHAT = slot("closedHat");
-const OHAT = slot("openHat");
 const CYM = slot("cymbal");
 const FX = slot("fx");
-const VOX = slot("vox");
 const PERC = slot("perc");
 
 // Research: docs/finger-drumming-layouts.md. Kick, snare and both hats on the bottom row is the MPC default, and the only layout: Load Bank A: Drums
@@ -38,13 +32,13 @@ const PERC = slot("perc");
 export const FINGER_LAYOUTS: FingerLayout[] = [
   {
     id: "horizontal",
-    name: "Horizontal kit (MPC default)",
-    description: "Kick, snare and both hats along the bottom row; soft kick and ghost snare above them, then percussion, cymbals, vox and FX.",
+    name: "Custom kit (default)",
+    description: "Crash, FX and a noise fall on top; percussion and a sweep below; second kick, second snare, rim and clap; first kick, first snare and both hats along the bottom row.",
     slots: [
-      CYM, CYM, FX, VOX,
-      PERC, PERC, PERC, PERC,
-      SOFT, GHOST, CLAP, FX,
-      KICK, SNARE, CHAT, OHAT,
+      CYM, FX, FX, slot("fx", "Noise Fall"),
+      PERC, slot("perc", "Perc 2"), PERC, slot("fx", "Sweep"),
+      slot("kick", "Kick 2"), slot("snare", "Snare 2"), slot("snare", "Rim"), CLAP,
+      slot("kick", "Kick 1"), slot("snare", "Snare 1"), CHAT, slot("openHat", "Open Hat 2"),
     ],
   },
 ];

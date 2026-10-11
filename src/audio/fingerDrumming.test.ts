@@ -1,9 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { arrangeFingerDrumming, type ArrangeSound } from "./fingerDrumming";
-import { FINGER_LAYOUTS, layoutById } from "./fingerLayouts";
+import { FINGER_LAYOUTS, layoutById, type FingerLayout } from "./fingerLayouts";
 import { classifyByName, classifySample, type CategoryId } from "./classify";
 
 const horizontal = layoutById("horizontal");
+
+// The custom default has no ghost slots, so the ghost mechanism is tested on a layout that does.
+const ghostLayout: FingerLayout = {
+  ...horizontal,
+  id: "ghost-test",
+  slots: [
+    ...horizontal.slots.slice(0, 8),
+    { category: "kick", label: "Soft Kick", ghostOf: "kick" },
+    { category: "snare", label: "Ghost Snare", ghostOf: "snare" },
+    ...horizontal.slots.slice(10, 12),
+    { category: "kick", label: "Kick" },
+    { category: "snare", label: "Snare" },
+    ...horizontal.slots.slice(14),
+  ],
+};
 
 let next = 0;
 const sound = (category: CategoryId, extra: Partial<ArrangeSound> = {}): ArrangeSound => ({ key: next++, category, ...extra });
@@ -18,18 +33,19 @@ describe("arrangeFingerDrumming", () => {
     const closed = drum("closedHat");
     const open = drum("openHat");
     const a = arrangeFingerDrumming([open, closed, snare, kick], horizontal);
-    // Bottom row of "horizontal": kick, snare, closed hat, open hat.
+    // Bottom row of the custom kit: Kick 1, Snare 1, closed hat, Open Hat 2.
     expect([kick, snare, closed, open].map((s) => indexOf(a, s))).toEqual([12, 13, 14, 15]);
   });
 
   it("fills every slot a kit can't cover with a 'missing' placeholder", () => {
     const a = arrangeFingerDrumming([drum("kick")], horizontal);
     const missing = a.placeholders.filter((p) => p.kind === "missing");
-    // 16 slots, minus the kick and the soft kick that copies it.
-    expect(missing).toHaveLength(14);
+    // 16 slots, minus the one kick placed.
+    expect(missing).toHaveLength(15);
     expect(missing.every((p) => p.index < 16)).toBe(true);
-    expect(a.placeholders.find((p) => p.index === 13)?.label).toBe("add Snare");
+    expect(a.placeholders.find((p) => p.index === 13)?.label).toBe("add Snare 1");
     expect(a.placeholders.find((p) => p.index === 4)?.label).toBe("add Perc");
+    expect(a.placeholders.find((p) => p.index === 3)?.label).toBe("add Noise Fall");
   });
 
   it("uses a same-family drum when the exact type is absent, but never an unrelated one", () => {
@@ -37,9 +53,9 @@ describe("arrangeFingerDrumming", () => {
     const a = arrangeFingerDrumming([hat], horizontal);
     // Only one hat: it takes its own slot; the open hat slot stays missing rather than borrowing a kick.
     expect(indexOf(a, hat)).toBe(14);
-    expect(a.placeholders.find((p) => p.index === 15)?.label).toBe("add Open Hat");
+    expect(a.placeholders.find((p) => p.index === 15)?.label).toBe("add Open Hat 2");
 
-    // Horizontal has one closed hat slot, so a second closed hat stands in for the open one.
+    // The kit has one closed hat slot, so a second closed hat stands in for the open one.
     const second = drum("closedHat");
     const b = arrangeFingerDrumming([hat, second], horizontal);
     expect(indexOf(b, second)).toBe(15);
@@ -50,7 +66,7 @@ describe("arrangeFingerDrumming", () => {
     const low = sound("perc", { centroid: 200 });
     const mid = sound("perc", { centroid: 900 });
     const a = arrangeFingerDrumming([high, low, mid], horizontal);
-    // Horizontal's four perc slots are one row: low pitch at the left.
+    // The kit's three perc slots (5, 6 and 7) fill low pitch first.
     expect([low, mid, high].map((s) => indexOf(a, s))).toEqual([4, 5, 6]);
   });
 
@@ -73,22 +89,22 @@ describe("arrangeFingerDrumming", () => {
     const loLead = sound("melodic", { midi: 60 });
     const bass = sound("bass", { midi: 40 });
     const a = arrangeFingerDrumming([other, fx, vocal, hiLead, loLead, bass], horizontal);
-    const order = [bass, loLead, hiLead, other].map((s) => indexOf(a, s));
-    expect(order).toEqual([16, 17, 18, 19]);
+    const order = [bass, loLead, hiLead].map((s) => indexOf(a, s));
+    expect(order).toEqual([16, 17, 18]);
     // FX has slots in the layout, so it sits on bank A.
     expect(indexOf(a, fx)).toBeLessThan(16);
-    // Vox is a drum type, so it takes one of the layout's vox slots instead.
-    expect(indexOf(a, vocal)).toBeLessThan(16);
+    // The custom kit has no vox slot, so vox goes after the tonal sounds.
+    expect(indexOf(a, vocal)).toBeGreaterThanOrEqual(16);
   });
 
   it("backfills drums the layout had no slot for from the end of bank C, never bank D", () => {
     const pad = sound("melodic", { midi: 60 });
     const kit = [drum("kick"), drum("snare"), drum("closedHat")];
-    // The layout has four perc slots, so a fifth and sixth perc are left over.
+    // The layout has three perc slots, so the other three are left over.
     const toms = Array.from({ length: 6 }, () => drum("perc"));
     const a = arrangeFingerDrumming([...kit, ...toms, pad], horizontal);
     const extra = toms.map((s) => indexOf(a, s)!).filter((i) => i >= 16).sort((x, y) => x - y);
-    expect(extra).toEqual([46, 47]);
+    expect(extra).toEqual([45, 46, 47]);
     expect(indexOf(a, pad)).toBe(16);
   });
 
@@ -117,7 +133,7 @@ describe("ghost slots", () => {
   it("copies the kit's own snare and kick into the ghost snare and soft kick slots", () => {
     const kick = drum("kick");
     const snare = drum("snare");
-    const a = arrangeFingerDrumming([kick, snare], horizontal);
+    const a = arrangeFingerDrumming([kick, snare], ghostLayout);
     expect(a.ghosts).toEqual([
       { index: 8, kind: "softKick", sourceKey: kick.key },
       { index: 9, kind: "ghostSnare", sourceKey: snare.key },
@@ -127,7 +143,7 @@ describe("ghost slots", () => {
   });
 
   it("marks a ghost slot 'add <type>' when the kit has no sound to copy", () => {
-    const a = arrangeFingerDrumming([drum("kick")], horizontal);
+    const a = arrangeFingerDrumming([drum("kick")], ghostLayout);
     expect(a.ghosts.map((g) => g.kind)).toEqual(["softKick"]);
     expect(a.placeholders.find((p) => p.index === 9)?.label).toBe("add Snare");
   });

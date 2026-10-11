@@ -94,7 +94,7 @@ describe("kit folder import", () => {
     const plan = planKit([...many(["Kicks"], 3), ...many(["Claps"], 2), ...many(["Melodic Loops"], 2)]);
     const sounds = plan.groups.flatMap((group, groupIndex) => group.candidates.map((_, key) => ({ key: groupIndex * 10 + key, category: group.category, is808: group.is808 })));
     const placement = placeBank("kit", sounds, horizontal);
-    expect(placement.positions.size).toBe(4);
+    expect(placement.positions.size).toBe(5); // 2 kick slots, 1 clap slot, 2 loops on bank B
     expect(sounds.filter((sound) => sound.category === "melodicLoop").some((sound) => placement.positions.has(sound.key))).toBe(true);
     expect(placement.placeholders).toEqual([]);
     expect(placement.ghosts).toEqual([]);
@@ -156,12 +156,14 @@ describe("placing the sounds", () => {
     expect(p.spares.length).toBeGreaterThan(20);
     expect(p.placeholders.every((ph) => ph.index < 16 && ph.kind === "missing")).toBe(true);
     expect(p.placeholders.length).toBeGreaterThan(0); // no cymbals, perc or FX in this kit
-    expect(p.ghosts.length).toBe(2);
+    expect(p.ghosts).toEqual([]); // the custom kit has no ghost slots
     expect(BANK_ZONES.drums).toEqual({ start: 0, end: 16 });
   });
 
   it("fills kit gaps from spares of the same type, then the same family", () => {
-    const pads = { 12: undefined, 13: { placeholder: true } } as Record<number, { placeholder?: unknown } | undefined>;
+    const pads: Record<number, { placeholder?: unknown } | undefined> = Object.fromEntries(Array.from({ length: 16 }, (_, i) => [i, {}]));
+    pads[12] = undefined;
+    pads[13] = { placeholder: true };
     const filled = fillKitGaps(pads, horizontal, [{ category: "clap" }, { category: "kick" }, { category: "snare" }]);
     expect(filled.get(12)).toBe(1); // kick slot takes the kick
     expect(filled.get(13)).toBe(2); // snare slot takes the snare
