@@ -172,6 +172,8 @@
 .screen-wrap {
   flex: 1;
   min-height: var(--screen-min);
+  /* locked proportions: the screen never grows past this (278 px on the 402 px phone, the size the start-screen squares were approved at), whatever room the viewport leaves */
+  max-height: 69.2cqw;
   position: relative;
   display: flex;
 }
