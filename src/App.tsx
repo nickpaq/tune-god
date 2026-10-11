@@ -178,9 +178,9 @@ import {
   ACAPELLA_ICON,
   DELETE_ICON,
   DRUM_ICON,
+  FOLDER_ICON,
   HOLD_ICON,
   K_ICON,
-  KEYS_ICON,
   LOCK_ICON,
   UNLOCK_ICON,
 } from "./components/dropIcons";
@@ -3526,7 +3526,7 @@ function App() {
                                 input: projectInput,
                               },
                               {
-                                icon: DRUM_ICON,
+                                icon: FOLDER_ICON,
                                 label: "Kit",
                                 aria: "Load a kit folder (all sound types)",
                                 input: kitInput,
@@ -3536,12 +3536,6 @@ function App() {
                                 label: "Drums",
                                 aria: "Load Bank A: Drums",
                                 input: drumsInput,
-                              },
-                              {
-                                icon: KEYS_ICON,
-                                label: "Loops",
-                                aria: "Load Bank B: Melodic Loops",
-                                input: loopsInput,
                               },
                               {
                                 icon: ACAPELLA_ICON,
