@@ -112,3 +112,11 @@ it("indexes large libraries in responsive metadata batches and restores unchange
   const next = await refreshLibraryAsync("Library", files, first.index);
   expect(next.reused).toBe(1500);
 });
+
+
+it("leaves unknown snare subtypes blank without requiring confirmation", () => {
+  const classification = classifyFile(["Library", "Pack", "Snares"], "snare_001.wav");
+  expect(classification.category).toBe("snare");
+  expect(classification.subtype).toBeUndefined();
+  expect(classification.needsReview).toBe(false);
+});

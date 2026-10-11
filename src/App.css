@@ -2437,3 +2437,19 @@
 @container (max-height: 240px) {
   .pad-panel .pitch-slider { height: calc(var(--cell) * 15); }
 }
+
+/* Pack selection owns the scrolling area; controls stay visible above and below it. */
+.sample-library--packs { height: min(80dvh, 720px); overflow: hidden; }
+.sample-library--packs > * { flex: none; }
+.sample-library--packs > .library-packs { flex: 1 1 0; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.sample-library--packs .library-pack { min-height: 48px; border-top: 1px solid #ffffff24; padding: 10px 0; }
+.library-pack input { flex: none; width: 20px; height: 20px; accent-color: var(--accent); }
+.library-summary { overflow-wrap: anywhere; }
+.library-generate { display: flex; flex-direction: column; gap: 8px; }
+.library-generate button { min-height: 44px; }
+.sample-library--packs .library-actions button { min-height: 44px; }
+.sample-library--tools { overflow: hidden; }
+.sample-library--tools > :not(.sample-library__rows) { flex: none; }
+.sample-library--tools > .sample-library__rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+.menu__library-tools[open] { display: flex; flex-direction: column; gap: 2cqw; }
+.menu__library-tools p { font-size: 3cqw; text-transform: none; }

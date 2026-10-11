@@ -497,7 +497,6 @@ function App() {
   const [addPackStatus, setAddPackStatus] = useState("");
   const projectInput = useRef<HTMLInputElement>(null);
   /** The folder pickers of the four loaders (and the acapella file picker). They live outside the menu: closing the menu unmounts it. */
-  const kitInput = useRef<HTMLInputElement>(null);
   const drumsInput = useRef<HTMLInputElement>(null);
   const loopsInput = useRef<HTMLInputElement>(null);
   const bassInput = useRef<HTMLInputElement>(null);
@@ -517,7 +516,10 @@ function App() {
   const [libraryIndex, setLibraryIndex] = useState<LibraryIndex | null>(null);
   const libraryFiles = useRef<FoundPack | null>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
+  const refreshOnReconnect = useRef(false);
+  const [libraryToolsOpen, setLibraryToolsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
   const [indexBusy, setIndexBusy] = useState(false);
   const [indexProgress, setIndexProgress] = useState<LibraryProgress | null>(null);
   const [kitReport, setKitReport] = useState<{ filled: number; requested: number; shortages: string[] } | null>(null);
@@ -540,6 +542,7 @@ function App() {
   const connectLibrary = async (input: FoundPack | File[], force = false) => {
     if (indexBusy) return;
     setIndexBusy(true);
+    setLibraryError("");
     setLibraryOpen(true);
     setIndexProgress({ stage: "Reading file names and folder paths", processed: 0, total: Array.isArray(input) ? input.length : input.files.length, percent: 0 });
     try {
@@ -551,9 +554,10 @@ function App() {
       saveState({ libraryIndexId: refreshed.index.id });
       setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
       if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
-      setIndexProgress({ stage: "Index ready", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
+      setIndexProgress({ stage: force ? "Refresh complete" : "Files connected", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
     } catch (error) {
       setIndexProgress(null);
+      setLibraryError("Could not reconnect this folder. Choose your packs folder again.");
       setNotice(error instanceof Error ? error.message : "Could not index this folder.");
     } finally { setIndexBusy(false); }
   };
@@ -1106,9 +1110,12 @@ function App() {
       });
       if (token !== loadToken.current) return;
       if (!result) {
-        window.alert(
-          `No sound in that folder could be loaded: they were too long (over ${MAX_LOAD_SECONDS} s), too big for the project size limit, or unreadable.`,
-        );
+        if (bank === "kit") {
+          libraryFiles.current = null;
+          setLibraryError("No samples could be loaded. Reconnect your packs folder and try again.");
+          setLibraryToolsOpen(false);
+          setLibraryOpen(true);
+        } else window.alert(`No sound in that folder could be loaded: they were too long (over ${MAX_LOAD_SECONDS} s), too big for the project size limit, or unreadable.`);
         return;
       }
       // The first load into a new project names it: "TuneGod - All Kits" for a whole library, "TuneGod - {pack}" for one pack.
@@ -1262,7 +1269,12 @@ function App() {
       syncHistory();
     } catch (err) {
       console.error(err);
-      window.alert("That folder could not be loaded.");
+      if (bank === "kit") {
+        libraryFiles.current = null;
+        setLibraryError("Could not load the kit. Reconnect your packs folder and try again.");
+        setLibraryToolsOpen(false);
+        setLibraryOpen(true);
+      } else window.alert("That folder could not be loaded.");
     } finally {
       setAddPackStatus("");
       setImportStatus("");
@@ -3134,20 +3146,7 @@ function App() {
         {/* Outside the menu: closing the menu unmounts it, and an input that is gone never reports the folder that was picked. */}
         <input ref={libraryInput} type="file" hidden
           // @ts-expect-error browser directory picker
-          webkitdirectory="" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void connectLibrary(files); }} />
-        <input
-          ref={kitInput}
-          type="file"
-          hidden
-          // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
-          webkitdirectory=""
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            e.target.value = "";
-            if (files.length)
-              void connectLibrary(files);
-          }}
-        />
+          webkitdirectory="" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) { const force = refreshOnReconnect.current; refreshOnReconnect.current = false; void connectLibrary(files, force); } }} />
         <input
           ref={drumsInput}
           type="file"
@@ -3253,6 +3252,11 @@ function App() {
               Clear project
             </button>
             <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryOpen(true); }}>Library · select packs & generate</button>
+            <details className="menu__library-tools"><summary>Library tools</summary>
+              <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect & refresh files</button>
+              <p>Reselect the folder to include added or removed samples.</p>
+              <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryToolsOpen(true); }}>Edit sample Types</button>
+            </details>
             <label className="menu__a4">Additional banks to fill<select aria-label="Additional banks to fill" value={additionalBanks} onChange={(event) => setAdditionalBanks(Number(event.target.value) as AdditionalBanks)}><option value={0}>0 · A only (16 / 64)</option><option value={1}>1 · A + hybrid B (32 / 64)</option><option value={2}>2 · A + instruments B + loops C (48 / 64)</option></select></label>
             <Switch label="Balance across packs" on={balancePacks} onChange={setBalancePacks}/>
             <button className="menu__button" onClick={() => { setMenuOpen(false); setLayoutEditorOpen(true); }}>Edit Bank A layout</button>
@@ -3297,13 +3301,14 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose one kit folder. Every audio file is sorted by its type folder or filename into banks A–C; categories the folder does not contain stay blank."
+              title="Choose sample packs and generate a kit. Reconnect your packs folder if its files are unavailable."
               onClick={() => {
-                kitInput.current?.click();
+                setLibraryToolsOpen(false);
+                setLibraryOpen(true);
                 setMenuOpen(false);
               }}
             >
-              {addPackStatus || "Load Kit Folder: All Types"}
+              {addPackStatus || "Generate kit · choose packs"}
             </button>
             <button
               className="menu__button"
@@ -3413,7 +3418,7 @@ function App() {
         )}
 
         {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
-        {libraryOpen && <LibraryBrowser progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus || analyzing > 0} palette={palette} onChoose={() => libraryInput.current?.click()} onRefresh={() => { if (libraryFiles.current) void connectLibrary(libraryFiles.current, true); }} onCorrect={correctLibrarySample} onClose={() => setLibraryOpen(false)} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
+        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus || analyzing > 0} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
         {layoutEditorOpen && <LayoutEditor layout={activeLayout} templates={templates} onClose={() => setLayoutEditorOpen(false)} onSelect={(template) => setActiveLayout(template)} onSave={(template) => { setTemplates((prev) => [...prev.filter((old) => old.id !== template.id), template]); setActiveLayout(template); saveState({ layoutId: template.id }); }} onApply={(template) => { const applied = template.id === "horizontal" ? { ...template, id: "custom:active" } : template; setActiveLayout(applied); setTemplates((prev) => [...prev.filter((old) => old.id !== applied.id), applied]); setLayout((prev) => ({ ...prev, id: applied.id })); setLayoutEditorOpen(false); setNotice("Layout ready for the next kit generation."); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
@@ -3600,7 +3605,7 @@ function App() {
                                 icon: FOLDER_ICON,
                                 label: "Kit",
                                 aria: "Load a kit folder (all sound types)",
-                                input: kitInput,
+                                input: libraryInput,
                               },
                               {
                                 icon: ACAPELLA_ICON,
@@ -3615,7 +3620,9 @@ function App() {
                                 className="dropzone__btn"
                                 aria-label={choice.aria}
                                 onClick={() =>
-                                  choice.input
+                                  choice.label === "Kit"
+                                    ? setLibraryOpen(true)
+                                    : choice.input
                                     ? choice.input.current?.click()
                                     : askChopMode()
                                 }

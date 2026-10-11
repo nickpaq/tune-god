@@ -47,3 +47,6 @@ Library indexing reads file names, paths, sizes and modification times without d
 
 
 Favorites now contain only sounds whose audio is explicitly saved on device. Loading the list deletes legacy non-favorite import records; imports no longer recreate those records. Removing a favorite deletes its cached entry. Tune includes a pixel star below the reference tone volume knob, using the same favorite storage and limits as hot swap. Hot-swap rows have larger touch targets and wider button spacing. Browser validation covers deleting 239 legacy records, saving/restoring/removing a Tune favorite, and the updated row dimensions.
+
+
+The primary library workflow is now only reconnect files → check pack names → Generate kit. Pack names occupy a bounded scrolling list, and generation stays visible below it. Completed progress bars and per-sample editing no longer occupy the pack selector. Optional Type editing and refresh live under Library tools in the main menu; no subtype confirmation is required. Refresh explicitly asks for the folder again, so new and removed files are rediscovered rather than reclassifying the previous in-memory list. Completion feedback is shown in the selector. Both the Kit start-screen button and the menu kit action open this selector; disconnected libraries prompt reconnection and disable generation until files are available.
