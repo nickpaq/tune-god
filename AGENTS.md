@@ -14,3 +14,7 @@ The app deliberately blocks page-level touch scrolling in `src/main.tsx` so the 
 
 
 **Show the user screenshots of the changed UI before finalizing the task.** Do not rely only on an internal visual inspection or a statement that screenshots were checked; provide the actual screenshots or visible image previews before the final summary.
+
+## Drum pads and margins
+
+Use **drum pads** for the 16 musical trigger squares and **margins** for empty space around the grid. The user's green-pad screenshot is the size/spacing reference: keep the smaller square drum pads (maximum 21cqw, about 84px at 402px chassis width), and make the bottom outer margin equal to the left and right outer margins within the usable app area. Do not confuse CSS padding with musical pads. Verify bank switching and opening/closing the library cannot change drum-pad geometry. Include the installed iPhone's 812px usable page, 62px top safe inset, and corrected zero bottom inset when checking the 402×874 physical screen; browser-only screenshots miss this layout case.
