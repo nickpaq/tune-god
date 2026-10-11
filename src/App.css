@@ -237,7 +237,7 @@
   flex: none;
   display: flex;
   justify-content: space-between;
-  height: max(40px, calc(var(--cell) * 14));
+  height: calc(var(--cell) * 10);
   padding: 0 var(--cell);
   background: var(--oled);
   color: #000;
@@ -647,7 +647,7 @@
 .swap-row__btn {
   flex: none;
   width: calc(var(--cell) * 12);
-  height: calc(var(--cell) * 10);
+  height: max(40px, calc(var(--cell) * 14));
   box-sizing: border-box;
   padding: 0;
   display: grid;
@@ -2425,7 +2425,15 @@
   touch-action: pan-y;
 }
 
-.pad-panel__tone-controls { flex: none; margin-left: auto; display: flex; flex-direction: column; align-items: center; }
-.tone-favorite { display: grid; place-items: center; width: calc(var(--cell) * 19); height: calc(var(--cell) * 14); border: 0; border-radius: 0; background: transparent; color: var(--oled); opacity: .45; padding: 0; }
+.pad-panel__tone-controls { position: relative; flex: none; margin-left: auto; width: calc(var(--cell) * 19); }
+.tone-favorite { position: absolute; top: 100%; right: 0; display: grid; place-items: center; width: calc(var(--cell) * 19); height: calc(var(--cell) * 14); border: 0; border-radius: 0; background: transparent; color: var(--oled); opacity: .45; padding: 0; }
 .tone-favorite.is-favorite { color: var(--accent); opacity: 1; }
 .tone-favorite:focus-visible { outline: var(--cell) solid var(--oled); }
+
+/* The favorite sits in the spare right-hand space below the knob, without consuming slider height. */
+.pad-panel > .name-line { width: calc(100% - var(--cell) * 20); }
+.pad-panel__tempo { padding-right: calc(var(--cell) * 20); }
+
+@container (max-height: 240px) {
+  .pad-panel .pitch-slider { height: calc(var(--cell) * 15); }
+}
