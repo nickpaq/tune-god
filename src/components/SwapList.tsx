@@ -67,7 +67,7 @@ export function SwapList({
                 className={`swap-row__btn swap-row__favorite${pad.favorite ? " is-favorite" : ""}`}
                 onClick={() => onFavorite(pad, !pad.favorite)}
                 aria-label={`${pad.favorite ? "Remove" : "Add"} ${name} ${pad.favorite ? "from" : "to"} favorites`}
-                title={pad.favorite ? "Remove favorite" : "Mark as a favorite: starred sounds come first in this list"}
+                title={pad.favorite ? "Remove favorite" : "Favorite: keeps this one sound on this device and puts it first in hot swap"}
               >
                 <StarGlyph filled={!!pad.favorite} />
               </button>
