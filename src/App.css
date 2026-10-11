@@ -41,11 +41,15 @@
 }
 
 .lower {
+  --pad-w: min(21cqw, calc((100cqw - 8.2cqw - 3 * 1.5cqw) / 4));
+  --pad-h: min(var(--pad-w), calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - var(--screen-min) - var(--deck-min) - 3cqw - 4.5cqw - 5.6cqw) / 4));
+  --pad-grid-width: calc(4 * var(--pad-h) + 3 * 1.5cqw);
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 2cqw;
-  padding: 0 4.1cqw calc(max(var(--u), var(--safe-bottom)) + 3cqw);
+  /* Center the compact grid; its bottom outer margin matches its actual side margins. */
+  padding: 0 4.1cqw calc(2.6cqw + (91.8cqw - var(--pad-grid-width)) / 2);
   box-shadow: inset 0 1px 0 var(--seam-l);
 }
 
@@ -629,8 +633,8 @@
 .swap-row {
   display: flex;
   align-items: center;
-  gap: var(--cell);
-  height: calc(var(--cell) * 12);
+  gap: calc(var(--cell) * 3);
+  min-height: max(48px, calc(var(--cell) * 18));
   padding-left: var(--cell);
   scroll-snap-align: start;
 }
@@ -646,8 +650,8 @@
 /* OLED buttons: an outlined box, in inverse video while pressed or playing */
 .swap-row__btn {
   flex: none;
-  width: calc(var(--cell) * 12);
-  height: calc(var(--cell) * 10);
+  width: max(40px, calc(var(--cell) * 14));
+  height: max(40px, calc(var(--cell) * 14));
   box-sizing: border-box;
   padding: 0;
   display: grid;
@@ -718,7 +722,7 @@
 
 .type-key__lamp {
   position: absolute;
-  left: 1.8cqw;
+  right: 1.8cqw;
   top: 1.8cqw;
   width: 3.6cqw;
   height: 1cqw;
@@ -896,13 +900,11 @@
 }
 
 .pads {
-  /* Always square pads. Full size is the width of a column; on a short phone the squares shrink together, the grid stays centred
-     (the columns spread to the edges) and the screen and piano give way first (--screen-min, --deck-min), so nothing overlaps. */
-  --pad-w: calc((100cqw - 8.2cqw - 3 * 1.5cqw) / 4);
-  --pad-h: min(var(--pad-w), calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - var(--screen-min) - var(--deck-min) - 3cqw - 4.5cqw - (6cqw + max(var(--u), var(--safe-bottom)))) / 4));
+  /* Both axes use the same square size and gap. Never spread columns across spare width. */
+  width: var(--pad-grid-width);
+  margin-inline: auto;
   display: grid;
   grid-template-columns: repeat(4, var(--pad-h));
-  justify-content: space-between;
   grid-auto-rows: var(--pad-h);
   gap: 1.5cqw;
 }
@@ -2246,13 +2248,18 @@
 }
 .sample-library {
   width: min(540px, 100%);
-  max-height: min(80vh, 720px);
+  max-height: min(80dvh, 720px);
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 16px;
   border: 1px solid var(--accent);
-  border-radius: 12px;
+  border-radius: 0;
+  overflow-y: auto;
   background: var(--panel, #292929);
   color: var(--text, #eee);
 }
@@ -2390,3 +2397,70 @@
   font: inherit;
   text-align: center;
 }
+
+.library-actions { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+.library-actions > * { min-width: 0; flex: 1; }
+.library-actions button, .library-actions select, .sample-library > input, .layout-grid button { border: 1px solid var(--accent); border-radius: 0; padding: 8px; background: #242426; color: #f0eee9; font: inherit; }
+.library-pack { display: flex; align-items: center; gap: 8px; padding: 6px 0; overflow-wrap: anywhere; }
+.library-packs { max-height: 180px; overflow-y: auto; }
+.library-pack__color { width: 16px; height: 24px; flex-shrink: 0; }
+.library-sample { padding: 8px 0; border-bottom: 1px solid #555; }
+.library-sample strong { display: block; overflow-wrap: anywhere; }
+.layout-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.layout-grid button { touch-action: none; min-height: 64px; overflow-wrap: anywhere; }
+.layout-grid button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+.sample-library select, .sample-library input { max-width: 100%; }
+
+.library-progress { border: 1px solid currentColor; padding: 12px; margin: 12px 0; }
+.library-progress progress { display: block; width: 100%; height: 12px; accent-color: var(--accent); border-radius: 0; }
+
+/* Keep the favorites introduction visible and scroll only the bounded sample list. */
+.sample-library--favorites { overflow: hidden; }
+.sample-library--favorites > .sample-library__header,
+.sample-library--favorites > p { flex: none; }
+.sample-library--favorites > .sample-library__rows {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.pad-panel__tone-controls { position: relative; flex: none; margin-left: auto; width: calc(var(--cell) * 19); }
+.tone-favorite { position: absolute; top: 100%; right: 0; display: grid; place-items: center; width: calc(var(--cell) * 19); height: calc(var(--cell) * 14); border: 0; border-radius: 0; background: transparent; color: var(--oled); opacity: .45; padding: 0; }
+.tone-favorite.is-favorite { color: var(--accent); opacity: 1; }
+.tone-favorite:focus-visible { outline: var(--cell) solid var(--oled); }
+
+/* The favorite sits in the spare right-hand space below the knob, without consuming slider height. */
+.pad-panel > .name-line { width: calc(100% - var(--cell) * 20); }
+.pad-panel__tempo { padding-right: calc(var(--cell) * 20); }
+
+@container (max-height: 240px) {
+  .pad-panel .pitch-slider { height: calc(var(--cell) * 15); }
+}
+
+/* Pack selection owns the scrolling area; controls stay visible above and below it. */
+.sample-library-backdrop--packs { padding: 0; }
+.sample-library--packs { height: 100dvh; max-height: 100dvh; box-sizing: border-box; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); padding-left: max(16px, var(--safe-left)); padding-right: max(16px, var(--safe-right)); overflow: hidden; }
+.sample-library--packs > * { flex: none; }
+.sample-library--packs > .library-packs { flex: 1 1 0; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.sample-library--packs .library-pack { min-height: 48px; border-top: 1px solid #ffffff24; padding: 10px 0; }
+.library-pack input { flex: none; width: 20px; height: 20px; accent-color: var(--accent); }
+.library-summary { overflow-wrap: anywhere; }
+.library-generate { display: flex; flex-direction: column; gap: 8px; }
+.library-generate button { min-height: 44px; }
+.sample-library--packs .library-actions button { min-height: 44px; }
+.sample-library--tools { overflow: hidden; }
+.sample-library--tools > :not(.sample-library__rows) { flex: none; }
+.sample-library--tools > .sample-library__rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+.menu__library-tools[open] { display: flex; flex-direction: column; gap: 2cqw; }
+.menu__library-tools p { font-size: 3cqw; text-transform: none; }
+
+.library-pack__types { flex: none; width: 48px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.library-pack__dot { flex: none; display: block; width: 9px; height: 9px; border-radius: 50%; }
+
+/* The pack selector uses the same chassis and keycap treatment as the main menu. */
+.sample-library--packs { background: var(--chassis1); color: var(--ink); border-color: var(--edge); border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--edge), 0 1.5cqw 4cqw #0008; }
+.sample-library--packs .library-actions button,
+.sample-library--packs .sample-library__header button { border: 0; border-radius: 1.2cqw; background: var(--btn); color: var(--ink); box-shadow: 0 2px 0 var(--edge); }

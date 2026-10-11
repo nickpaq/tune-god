@@ -11,12 +11,12 @@ import { InstallGate } from './components/InstallGate.tsx'
 import { inStatusBar, needsInstallGate } from './installGate.ts'
 
 // Belt and braces for iOS Safari, which can still scroll, rubber-band or pinch-zoom a page that is
-// `overflow: hidden`: cancel page-level touch moves and pinch gestures. The palette list, hot-swap list and chop editor are the
-// only places that legitimately scroll; everything else (pads, sliders, keys) uses pointer events.
+// `overflow: hidden`: cancel page-level touch moves and pinch gestures outside scrollable panels.
+// Pads, sliders and keys continue to use pointer events.
 document.addEventListener(
   "touchmove",
   (e) => {
-    if (!(e.target as Element | null)?.closest?.(".palette-modal__list, .swap-list__rows, .chop__scroll")) e.preventDefault();
+    if (!(e.target as Element | null)?.closest?.(".palette-modal__list, .swap-list__rows, .chop__scroll, .menu, .sample-library")) e.preventDefault();
   },
   { passive: false },
 );

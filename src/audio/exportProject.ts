@@ -57,12 +57,15 @@ export async function buildTunedKoala(
     pans,
     colors,
     playback,
+    padPlayback,
+    classifications,
+    padOverrides,
     ghosts,
     song,
     chopper,
     bpm,
     stretch,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number> } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; padPlayback?: Map<number, PadPlayback>; classifications?: Map<number, unknown>; padOverrides?: Map<number, PadPlayback | null>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number> } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -74,8 +77,17 @@ export async function buildTunedKoala(
     if (vol !== undefined) pad.vol = vol;
     const bus = buses?.get(pad.sampleId);
     if (bus !== undefined) pad.bus = bus;
-    const play = playback?.get(pad.sampleId);
+    const play = padPlayback?.get(Number(pad.pad) - project.padBase) ?? playback?.get(pad.sampleId);
+    const classification = classifications?.get(Number(pad.pad) - project.padBase);
+    if (classification) pad.tunegodClassification = classification;
     if (play) {
+      if (play.bus !== undefined) pad.bus = play.bus;
+      const originalPad = Number(pad.pad) - project.padBase;
+      if (padOverrides?.has(originalPad)) {
+        const override = padOverrides.get(originalPad);
+        if (override) pad.tunegodPlayback = override;
+        else delete pad.tunegodPlayback;
+      }
       if (play.chokeGroup !== undefined) pad.chokeGroup = play.chokeGroup;
       // Koala writes some booleans as strings; keep whichever style the pad already uses.
       if (play.oneShot !== undefined) pad.oneshot = typeof pad.oneshot === "boolean" ? play.oneShot : String(play.oneShot);
@@ -182,7 +194,7 @@ async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]
     if (!kick.chain.some((fx: MixerSlot) => fx?.name === "CLIPPER")) appendAfterExisting(kick.chain, [kickClipper()]);
   }
   if (setup.melodicEq) {
-    const melodic = (mixer.buses[3] ??= emptyStrip(BUS_NAMES[3]));
+    const melodic = (mixer.buses[2] ??= emptyStrip(BUS_NAMES[2]));
     melodic.chain = Array.isArray(melodic.chain) ? melodic.chain : [null, null, null, null, null];
     if (!melodic.chain.some((fx: MixerSlot) => fx?.name === "EQ")) appendAfterExisting(melodic.chain, [melodicEq()]);
   }

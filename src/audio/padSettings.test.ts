@@ -18,11 +18,11 @@ describe("per-pad EQ by sound type", () => {
 });
 
 describe("playback rules by sound type", () => {
-  it("melodic loops: mute group 4, one-shot on, loop off, modern stretch", () =>
-    expect(playbackFor("melodicLoop")).toMatchObject({ chokeGroup: 4, oneShot: true, loop: false, stretch: "modern" }));
+  it("melodic loops: mute group 4, one-shot off, loop off, modern stretch", () =>
+    expect(playbackFor("melodicLoop")).toMatchObject({ chokeGroup: 4, oneShot: false, loop: false, stretch: "modern" }));
 
-  it("melodic one-shots: no mute group, one-shot off, release at the maximum, stretch off", () =>
-    expect(playbackFor("melodic")).toMatchObject({ chokeGroup: 0, oneShot: false, release: 1, stretch: "off" }));
+  it("melodic one-shots: no mute group, one-shot on, release at the maximum, stretch off", () =>
+    expect(playbackFor("melodic")).toMatchObject({ chokeGroup: 0, oneShot: true, release: 1, stretch: "off" }));
 
   it("drums: one-shot on, no mute group, loop and stretch off; the hats keep their mute group", () => {
     for (const c of ["kick", "snare", "clap", "perc"] as const) expect(playbackFor(c), c).toMatchObject({ chokeGroup: 0, oneShot: true, loop: false, stretch: "off" });

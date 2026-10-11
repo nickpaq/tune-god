@@ -13,14 +13,14 @@ export function SampleLibraryModal({
     <div className="sample-library-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <section className="sample-library" role="dialog" aria-modal="true" aria-labelledby="sample-library-title">
+      <section className="sample-library sample-library--favorites" role="dialog" aria-modal="true" aria-labelledby="sample-library-title">
         <header className="sample-library__header">
-          <h2 id="sample-library-title">On-device sample library</h2>
+          <h2 id="sample-library-title">Favorites on this device</h2>
           <button onClick={onClose} aria-label="Close sample library">×</button>
         </header>
-        <p>Imported samples are logged here. Star a loaded sound in hot swap to keep its audio on this device and make it available for later kits.</p>
+        <p>Star a sound in Tune or hot swap to save its audio on this device for later kits. Only saved favorites appear here.</p>
         <div className="sample-library__rows">
-          {records.length === 0 ? <div className="sample-library__empty">No imported samples yet</div> : records.map((record) => (
+          {records.length === 0 ? <div className="sample-library__empty">No saved favorites yet</div> : records.map((record) => (
             <div className="sample-library__row" key={record.id}>
               <div className="sample-library__details">
                 <strong>{record.name}</strong>

@@ -32,12 +32,12 @@ describe("palettes", () => {
     // The one-hue palettes tell their types apart by lightness alone, as Grayscale does, so they are held to a lower bar below.
     const MONO = ["grayscale", "sepia", "blueprint", "terminal", "amber", "gameboy", "slate"];
     for (const p of PALETTES.filter((p) => MONO.includes(p.id))) {
-      const colors = CATEGORIES.map((c) => lab(colorFor(p, c.id)));
+      const colors = CATEGORIES.filter((c) => !["bassLoop", "voxLoop", "fxLoop", "riser", "fall"].includes(c.id)).map((c) => lab(colorFor(p, c.id)));
       for (let i = 0; i < colors.length; i++)
         for (let j = i + 1; j < colors.length; j++) expect(Math.hypot(...colors[i].map((v, k) => v - colors[j][k])), `${p.name} ${i}/${j}`).toBeGreaterThan(0.01);
     }
     for (const p of PALETTES.filter((p) => !MONO.includes(p.id) && p.id !== "soft-pastel-shades")) {
-      const colors = CATEGORIES.map((c) => lab(colorFor(p, c.id)));
+      const colors = CATEGORIES.filter((c) => !["bassLoop", "voxLoop", "fxLoop", "riser", "fall"].includes(c.id)).map((c) => lab(colorFor(p, c.id)));
       for (let i = 0; i < colors.length; i++)
         for (let j = i + 1; j < colors.length; j++) expect(Math.hypot(...colors[i].map((v, k) => v - colors[j][k]))).toBeGreaterThan(0.025);
     }

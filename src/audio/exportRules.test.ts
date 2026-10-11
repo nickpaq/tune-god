@@ -62,7 +62,7 @@ describe("pad rules and stretch", () => {
     expect(snare.chokeGroup).toBe(0);
     expect(snare.tone).toBeLessThan(0);
     expect(String(snare.stretching)).toBe("false");
-    expect(String(melodic.oneshot)).toBe("false");
+    expect(String(melodic.oneshot)).toBe("true");
     expect(melodic.release).toBe(1);
     expect(melodic.chokeGroup).toBe(0);
   });
@@ -80,7 +80,7 @@ describe("pad rules and stretch", () => {
     expect(loop.stretch).toBe(STRETCH_MODE.modern);
     expect(loop.stretchLength).toBe(16);
     expect(loop.chokeGroup).toBe(4);
-    expect(String(loop.oneshot)).toBe("true");
+    expect(String(loop.oneshot)).toBe("false");
     expect(String(loop.looping)).toBe("false");
     expect(String(drums.stretching)).toBe("true");
     expect(drums.stretch).toBe(STRETCH_MODE.beats);

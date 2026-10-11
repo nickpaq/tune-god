@@ -1,5 +1,9 @@
 // Remembers the app between visits: small settings in localStorage, the project file itself
 // in IndexedDB (it's too big for localStorage). Every read/write is best-effort.
+import type { LibraryIndex } from "./audio/libraryIndex";
+import type { FingerLayout } from "./audio/fingerLayouts";
+import type { PadPlayback } from "./audio/padSettings";
+import type { SampleClassification } from "./audio/sampleClassification";
 import type { CategoryId } from "./audio/classify";
 
 const STATE_KEY = "tune-god:state";
@@ -26,6 +30,7 @@ export interface SampleLibraryRecord {
 }
 
 export interface SavedPad {
+  label?: string;
   tune: boolean;
   tuneLocked?: boolean;
   /** A key set for this pad alone ("Tune one"). */
@@ -33,6 +38,8 @@ export interface SavedPad {
   semis: number;
   cents: number;
   category?: CategoryId;
+  classification?: SampleClassification;
+  playback?: PadPlayback;
   /** A bass sound that is an 808 (see Pad.is808). */
   is808?: boolean;
   libraryId?: string;
@@ -90,6 +97,11 @@ export interface SavedState {
   bpm?: number;
   pads?: Record<number, SavedPad>;
   /** Finger-drumming layout chosen in the menu (kept across projects). */
+  libraryIndexId?: string;
+  additionalBanks?: 0 | 1 | 2;
+  balancePacks?: boolean;
+  customTemplates?: FingerLayout[];
+  typeSettings?: Partial<Record<CategoryId, PadPlayback>>;
   layoutId?: string;
   /** This project is currently arranged with that layout. */
   layoutOn?: boolean;
@@ -152,8 +164,9 @@ export function saveChopMarks(songKey: string, marks: SavedChopMarks): void {
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains("library-index")) req.result.createObjectStore("library-index", { keyPath: "id" });
       if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
       if (!req.result.objectStoreNames.contains(SAMPLE_LIBRARY_STORE)) req.result.createObjectStore(SAMPLE_LIBRARY_STORE, { keyPath: "id" });
     };
@@ -162,7 +175,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-/** Records the sounds actually imported (not every file found in a selected folder). */
+/** Persist saved favorites; importing a pack must not create audio-less device records. */
 export async function recordImportedSamples(records: SampleLibraryRecord[]): Promise<void> {
   if (!records.length) return;
   try {
@@ -170,7 +183,14 @@ export async function recordImportedSamples(records: SampleLibraryRecord[]): Pro
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(SAMPLE_LIBRARY_STORE, "readwrite");
       const store = tx.objectStore(SAMPLE_LIBRARY_STORE);
-      for (const record of records) store.put(record);
+      for (const record of records) {
+        const req = store.get(record.id);
+        req.onsuccess = () => {
+          const old = req.result as SampleLibraryRecord | undefined;
+          if (old?.favorite) store.put({ ...record, favorite: true, audio: record.audio ?? old.audio, sampleRate: record.sampleRate ?? old.sampleRate });
+          else if (record.favorite && record.audio) store.put(record);
+        };
+      }
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -180,12 +200,22 @@ export async function recordImportedSamples(records: SampleLibraryRecord[]): Pro
   }
 }
 
+/** Remove legacy non-favorite import logs and expose only favorites with locally stored audio. */
 export async function loadSampleLibrary(): Promise<SampleLibraryRecord[]> {
   try {
     const db = await openDb();
     const records = await new Promise<SampleLibraryRecord[]>((resolve, reject) => {
-      const req = db.transaction(SAMPLE_LIBRARY_STORE).objectStore(SAMPLE_LIBRARY_STORE).getAll();
-      req.onsuccess = () => resolve((req.result as SampleLibraryRecord[]).sort((a, b) => b.importedAt - a.importedAt));
+      const tx = db.transaction(SAMPLE_LIBRARY_STORE, "readwrite");
+      const store = tx.objectStore(SAMPLE_LIBRARY_STORE);
+      const req = store.getAll();
+      let favorites: SampleLibraryRecord[] = [];
+      req.onsuccess = () => {
+        const all = req.result as SampleLibraryRecord[];
+        for (const record of all) if (!record.favorite) store.delete(record.id);
+        favorites = all.filter((record) => record.favorite && record.audio).sort((a, b) => b.importedAt - a.importedAt);
+      };
+      tx.oncomplete = () => resolve(favorites);
+      tx.onerror = () => reject(tx.error);
       req.onerror = () => reject(req.error);
     });
     db.close();
@@ -206,7 +236,8 @@ export async function setSampleFavorite(id: string, favorite: boolean, audio?: B
       req.onsuccess = () => {
         const old = req.result as SampleLibraryRecord | undefined;
         if (!old) return;
-        store.put({ ...old, favorite, ...(favorite && audio ? { audio, sampleRate } : {}), ...(!favorite ? { audio: undefined, sampleRate: undefined } : {}) });
+        if (!favorite) store.delete(id);
+        else store.put({ ...old, favorite, ...(audio ? { audio, sampleRate } : {}) });
       };
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
@@ -260,4 +291,30 @@ export async function clearProjectFile(): Promise<void> {
   } catch {
     /* ignore */
   }
+}
+
+/** Metadata only: no whole-library audio or file handles are persisted. */
+export async function saveLibraryIndex(index: LibraryIndex): Promise<boolean> {
+  try {
+    const db = await openDb();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction("library-index", "readwrite");
+        tx.objectStore("library-index").put(index);
+        tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+      });
+      return true;
+    } finally { db.close(); }
+  } catch { return false; }
+}
+export async function loadLibraryIndex(id: string): Promise<LibraryIndex | null> {
+  try {
+    const db = await openDb();
+    try {
+      return await new Promise<LibraryIndex | null>((resolve, reject) => {
+        const req = db.transaction("library-index").objectStore("library-index").get(id);
+        req.onsuccess = () => resolve(req.result ?? null); req.onerror = () => reject(req.error);
+      });
+    } finally { db.close(); }
+  } catch { return null; }
 }

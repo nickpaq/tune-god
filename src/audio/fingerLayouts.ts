@@ -5,6 +5,7 @@ import { categoryLabel, type CategoryId } from "./classify";
 export interface LayoutSlot {
   /** The drum category this slot wants. */
   category: CategoryId;
+  subtype?: string;
   /** Set on a ghost snare or soft kick slot: the category of the real sound this slot holds a quieter copy of. */
   ghostOf?: "snare" | "kick";
   /** What the preview and any "missing" pad call this slot, e.g. "Perc". */
@@ -35,9 +36,9 @@ export const FINGER_LAYOUTS: FingerLayout[] = [
     name: "Custom kit (default)",
     description: "Crash, FX and a noise fall on top; percussion and a sweep below; second kick, second snare, rim and clap; first kick, first snare and both hats along the bottom row.",
     slots: [
-      CYM, FX, FX, slot("fx", "Noise Fall"),
-      PERC, slot("perc", "Perc 2"), PERC, slot("fx", "Sweep"),
-      slot("kick", "Kick 2"), slot("snare", "Snare 2"), slot("snare", "Rim"), CLAP,
+      { ...CYM, label: "Crash", subtype: "crash" }, FX, FX, { ...slot("fall", "Noise Fall"), subtype: "noise fall" },
+      PERC, slot("perc", "Perc 2"), PERC, { ...slot("fx", "Sweep"), subtype: "sweep" },
+      slot("kick", "Kick 2"), slot("snare", "Snare 2"), { ...slot("snare", "Rim"), subtype: "rimshot" }, CLAP,
       slot("kick", "Kick 1"), slot("snare", "Snare 1"), CHAT, slot("openHat", "Open Hat 2"),
     ],
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectMusicTempo } from "./musicTempo";
+import { detectMusicTempo, downbeatFromAccents } from "./musicTempo";
 
 const RATE = 44100;
 function groove(bpm: number): Float32Array {
@@ -26,5 +26,18 @@ describe("Music Tempo worker adapter", () => {
   }
   it("fails on silence instead of reporting a usable grid", () => {
     expect(() => detectMusicTempo(new Float32Array(RATE * 4))).toThrow();
+  });
+});
+
+describe("downbeat accent alignment", () => {
+  it("uses a repeated clear accent rather than assuming the first tracked beat is bar 1", () => {
+    const beats = Array.from({ length: 16 }, (_, i) => i * 0.5);
+    const audio = new Float32Array(RATE * 8);
+    beats.forEach((beat, i) => { for (let frame = 0; frame < RATE * 0.05; frame++) audio[Math.round(beat * RATE) + frame] = (i % 4 === 2 ? 1 : 0.2) * Math.sin(frame * 2 * Math.PI * 80 / RATE); });
+    expect(downbeatFromAccents(audio, beats)).toBe(1);
+  });
+  it("keeps ambiguous or short beat tracks at their original phase", () => {
+    expect(downbeatFromAccents(groove(120), Array.from({ length: 16 }, (_, i) => i * 0.5))).toBe(0);
+    expect(downbeatFromAccents(new Float32Array(100), [0.01, 0.02])).toBe(0.01);
   });
 });

@@ -19,6 +19,7 @@ const SYMBOLS: Record<CategoryId, string> = {
   drumLoop: `${LOOP}<ellipse cx="12" cy="10.6" rx="3.8" ry="1.5"/><path d="M8.2 10.6v3.8c0 1 1.7 1.6 3.8 1.6s3.8-.6 3.8-1.6v-3.8"/>`,
   percLoop: `${LOOP}<g transform="translate(12 12) scale(.5) rotate(-30) translate(-12 -12)" stroke-width="4">${SHAKER}</g>`,
   melodicLoop: `${LOOP}<rect x="7.2" y="9" width="9.6" height="6.4" rx="1.2"/><path d="M10.4 12v3.4M13.6 12v3.4"/>`,
+  bassLoop: LOOP, voxLoop: LOOP, fxLoop: LOOP, riser: '<path d="M3 20L21 4M15 4h6v6"/>', fall: '<path d="M3 4L21 20M15 20h6v-6"/>',
   other: '<circle cx="12" cy="12" r="9"/><path d="M8 12h.01M12 12h.01M16 12h.01" stroke-width="3"/>',
 };
 

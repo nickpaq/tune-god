@@ -1,7 +1,8 @@
 // Reading a sample pack folder: the audio files in it (see packProject.ts), the sound type a folder name implies, and the
 // memory budget a project may use. What each bank takes from a folder is in bankLoad.ts. All of this works on file names
 // and sizes only; no audio is read until a file has been picked.
-import type { CategoryId } from "./classify";
+import { classifyByName, hatOpenness, type CategoryId } from "./classify";
+import { isLoopCategory, subtypeOf, type SampleClassification } from "./sampleClassification";
 
 const MB = 1024 * 1024;
 /** Total file size of the sounds a project may hold: the default limit. Decoded audio takes about three times this in memory. */
@@ -24,6 +25,8 @@ export const maxFileBytesFor = (byteBudget: number) => Math.round(byteBudget / 6
 /** One audio file found in the pack: where it sits (folder names, outermost first) and how big it is. */
 export interface PackFile<T = unknown> {
   folders: string[];
+  lastModified?: number;
+  classification?: SampleClassification;
   /** Selected root, retained separately so flat bank loaders can still reject subfolders. */
   rootFolder?: string;
   name: string;
@@ -42,6 +45,7 @@ export interface PackFile<T = unknown> {
 
 /** Top-level pack identity inside a selected folder; type folders themselves are not treated as separate packs. */
 export function sourcePackOf<T>(file: PackFile<T>): string {
+  if (file.sourcePack) return file.sourcePack;
   const typedAt = file.folders.findIndex((folder) => categoryOfFolder(folder) !== null || /^(one ?shots?|shots?)$/i.test(folder));
   const parent = typedAt >= 0 ? file.folders.slice(0, typedAt) : file.folders.slice(0, 1);
   return parent.join("/") || "(selected folder)";
@@ -75,6 +79,11 @@ export const AUDIO_EXTENSIONS = /\.(wav|wave|aif|aiff|flac|mp3|ogg|m4a)$/i;
 const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["drumLoop", /\b(drum ?loops?|beat ?loops?|breaks?|breakbeats?|amens?|top ?loops?|drum ?breaks?)\b/],
   ["percLoop", /\b(perc(ussion)? ?loops?|shaker ?loops?)\b/],
+  ["bassLoop", /\b(bass|808|sub) ?loops?\b/],
+  ["voxLoop", /\b(vocal|vox|voice) ?loops?\b/],
+  ["fxLoop", /\b(fx|effects?) ?loops?\b/],
+  ["riser", /\b(risers?|uplifters?)\b/],
+  ["fall", /\b(falls?|downlifters?)\b/],
   ["melodicLoop", /\b(melod(y|ic|ies) ?loops?|synth ?loops?|chord ?loops?|music ?loops?|bass ?loops?|guitar ?loops?|piano ?loops?|keys? ?loops?|arps?)\b/],
   ["kick", /\b(kicks?|kiks?|bd|bass ?drums?)\b/],
   ["clap", /\b(claps?|handclaps?)\b/],
@@ -113,20 +122,44 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
     if (!isLoop) return id;
     // A "loops" folder holds loops of its type.
     if (id === "perc" || id === "percLoop") return "percLoop";
-    if (id === "bass" || id === "melodic" || id === "melodicLoop") return "melodicLoop";
+    if (id !== "hat" && isLoopCategory(id)) return id;
+    if (id === "bass") return "bassLoop";
+    if (id === "vox") return "voxLoop";
+    if (id === "fx" || id === "riser" || id === "fall") return "fxLoop";
+    if (id === "melodic") return "melodicLoop";
     return "drumLoop";
   }
   // A bare Loops folder defaults to drum loops.
-  return isLoop ? "drumLoop" : null;
+  return null;
 }
 
-/** The nearest typed folder is the only classification input. Unknown folders stay Other. */
-export function categoryOfFile(folders: string[], _fileName: string): CategoryId {
+/** Folder hierarchy supplies the family; specific names refine mixed hats and generic folders. */
+export function classifyFile(folders: string[], fileName: string, correction?: SampleClassification): SampleClassification {
+  if (correction) return { ...correction, confidence: 1, needsReview: false, evidence: "correction" };
+  const byName = classifyByName(fileName);
+  const loop = [...folders, fileName].some((word) => /\bloops?\b/i.test(tidy(word)));
+  let category: CategoryId | null = null;
+  let evidence: SampleClassification["evidence"] = "unknown";
   for (let i = folders.length - 1; i >= 0; i--) {
-    const category = categoryOfFolder(folders[i]);
-    if (category) return category === "hat" ? "closedHat" : category;
+    const found = categoryOfFolder(folders[i]);
+    if (!found || found === "other") continue;
+    category = found === "hat" ? (byName === "openHat" || byName === "closedHat" ? byName : hatOpenness(tidy([...folders.slice(i + 1), fileName].join(" "))) ?? "closedHat") : found;
+    evidence = "folder";
+    break;
   }
-  return "other";
+  // Specific FX names refine a general FX family; a typed drum folder still wins over misleading names.
+  if (category === "fx" && (byName === "fall" || byName === "riser")) category = byName;
+  if (!category && byName) { category = byName === "hat" ? "closedHat" : byName; evidence = "filename"; }
+  if (category && loop && !isLoopCategory(category)) {
+    category = category === "bass" ? "bassLoop" : category === "melodic" ? "melodicLoop" : category === "vox" ? "voxLoop" : ["fx", "riser", "fall"].includes(category) ? "fxLoop" : category === "perc" ? "percLoop" : "drumLoop";
+  }
+  const path = [...folders, fileName].join("/");
+  const confidence = category ? evidence === "folder" ? 0.9 : 0.8 : 0;
+  return { category: category ?? "other", subtype: subtypeOf(category ?? "other", path), confidence, needsReview: !category || confidence < 0.8, evidence };
+}
+
+export function categoryOfFile(folders: string[], fileName: string): CategoryId {
+  return classifyFile(folders, fileName).category;
 }
 
 /** Fisher-Yates shuffle into a new array. `random` is injectable so tests are repeatable. */

@@ -19,6 +19,7 @@ const LEGEND: Record<CategoryId, string> = {
   melodicLoop: "M loop",
   bass: "Bass",
   fx: "FX",
+  bassLoop: "B loop", voxLoop: "V loop", fxLoop: "FX loop", riser: "Riser", fall: "Fall",
   other: "Other",
 };
 

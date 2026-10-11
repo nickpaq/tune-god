@@ -11,7 +11,7 @@ export const round2 = (x: number): number => Math.round(x * 100) / 100;
 
 /** Semitones an 808 or bass is rendered by at export so that it sits on its nearest note (0 for any other sound or one with no pitch found). */
 export function snapSemitones(pad: Pick<Pad, "category" | "detectedMidi">): number {
-  if (pad.category !== "bass" || pad.detectedMidi == null) return 0;
+  if ((pad.category !== "bass" && pad.category !== "bassLoop") || pad.detectedMidi == null) return 0;
   return round2(Math.round(pad.detectedMidi) - pad.detectedMidi);
 }
 

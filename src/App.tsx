@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { playbackFor, type PadPlayback } from "./audio/padSettings";
+import { resolvePlayback, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import {
   acapellaProjectFromAudio,
@@ -14,6 +14,7 @@ import {
   entriesOfDrop,
   findPackInEntries,
   findPackInFileList,
+  findPackInFileListAsync,
   writeBankSounds,
   type FoundPack,
 } from "./audio/packProject";
@@ -93,6 +94,8 @@ import {
   removePad,
 } from "./audio/padMoves";
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
+import { chooseShuffleSound } from "./audio/shufflePad";
+import { copyProjectPad } from "./audio/copyProjectPad";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import {
@@ -102,11 +105,18 @@ import {
   type ExtraDrums,
 } from "./audio/extraDrums";
 import { SwapList } from "./components/SwapList";
+import { LibraryBrowser } from "./components/LibraryBrowser";
+import { PlaybackEditor } from "./components/PlaybackEditor";
+import { LayoutEditor } from "./components/LayoutEditor";
+import { correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
+import { type SampleClassification } from "./audio/sampleClassification";
+import { matchingTemplateLabel, type AdditionalBanks } from "./audio/kitGeneration";
+import { loadLibraryIndex, saveLibraryIndex } from "./storage";
 import { SampleLibraryModal } from "./components/SampleLibraryModal";
 import { TypeKeys } from "./components/TypeKeys";
 import { Waveform } from "./components/Waveform";
 import { LongSamplesModal } from "./components/LongSamplesModal";
-import { layoutById } from "./audio/fingerLayouts";
+import { layoutById, type FingerLayout } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { makeSectionPads } from "./audio/songPads";
@@ -184,7 +194,7 @@ import {
   DELETE_ICON,
   DRUM_ICON,
   FOLDER_ICON,
-  HOLD_ICON,
+  SHUFFLE_ICON,
   K_ICON,
   LOCK_ICON,
   UNLOCK_ICON,
@@ -410,7 +420,7 @@ function App() {
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({
     on: false,
-    id: layoutById(saved.layoutId).id,
+    id: saved.layoutId ?? layoutById(null).id,
     pre: {},
   });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
@@ -489,7 +499,6 @@ function App() {
   const [addPackStatus, setAddPackStatus] = useState("");
   const projectInput = useRef<HTMLInputElement>(null);
   /** The folder pickers of the four loaders (and the acapella file picker). They live outside the menu: closing the menu unmounts it. */
-  const kitInput = useRef<HTMLInputElement>(null);
   const drumsInput = useRef<HTMLInputElement>(null);
   const loopsInput = useRef<HTMLInputElement>(null);
   const bassInput = useRef<HTMLInputElement>(null);
@@ -506,6 +515,61 @@ function App() {
   const [importStatus, setImportStatus] = useState("");
   const [sampleLibrary, setSampleLibrary] = useState<SampleLibraryRecord[]>([]);
   const [favoritePads, setFavoritePads] = useState<Pad[]>([]);
+  const [libraryIndex, setLibraryIndex] = useState<LibraryIndex | null>(null);
+  const libraryFiles = useRef<FoundPack | null>(null);
+  const libraryInput = useRef<HTMLInputElement>(null);
+  const refreshOnReconnect = useRef(false);
+  const [libraryToolsOpen, setLibraryToolsOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
+  const [indexBusy, setIndexBusy] = useState(false);
+  const [indexProgress, setIndexProgress] = useState<LibraryProgress | null>(null);
+  const [kitReport, setKitReport] = useState<{ filled: number; requested: number; shortages: string[] } | null>(null);
+  const [indexReused, setIndexReused] = useState(0);
+  const [additionalBanks, setAdditionalBanks] = useState<AdditionalBanks>(saved.additionalBanks ?? 0);
+  const [typeSettings, setTypeSettings] = useState<Partial<Record<CategoryId, PadPlayback>>>(saved.typeSettings ?? {});
+  const [playbackEditorOpen, setPlaybackEditorOpen] = useState(false);
+  const [balancePacks, setBalancePacks] = useState(saved.balancePacks ?? true);
+  const [templates, setTemplates] = useState<FingerLayout[]>(saved.customTemplates ?? []);
+  const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
+  const [activeLayout, setActiveLayout] = useState<FingerLayout>(() => saved.customTemplates?.find((t) => t.id === saved.layoutId) ?? layoutById(saved.layoutId));
+  const getLayout = (id: string | null | undefined) => id === activeLayout.id ? activeLayout : templates.find((t) => t.id === id) ?? layoutById(id);
+  useEffect(() => { saveState({ additionalBanks, balancePacks, customTemplates: templates, typeSettings }); }, [additionalBanks, balancePacks, templates, typeSettings]);
+  useEffect(() => {
+    if (!saved.libraryIndexId) return;
+    let cancelled = false;
+    void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); setLibraryOpen(true); } });
+    return () => { cancelled = true; };
+  }, [saved.libraryIndexId]);
+  const connectLibrary = async (input: FoundPack | File[], force = false) => {
+    if (indexBusy) return;
+    setIndexBusy(true);
+    setLibraryError("");
+    setLibraryOpen(true);
+    setIndexProgress({ stage: "Reading file names and folder paths", processed: 0, total: Array.isArray(input) ? input.length : input.files.length, percent: 0 });
+    try {
+      const found = Array.isArray(input) ? await findPackInFileListAsync(input, (processed, total) => setIndexProgress({ stage: "Reading file names and folder paths", processed, total, percent: total ? 15 * processed / total : 0 })) : input;
+      const previous = libraryIndex?.name === found.name ? libraryIndex : await loadLibraryIndex(`library:${found.name}`);
+      const refreshed = await refreshLibraryAsync(found.name, found.files, previous, force, setIndexProgress);
+      libraryFiles.current = { name: found.name, files: refreshed.files };
+      setLibraryIndex(refreshed.index); setIndexReused(refreshed.reused);
+      saveState({ libraryIndexId: refreshed.index.id });
+      setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
+      if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
+      setIndexProgress({ stage: force ? "Refresh complete" : "Files connected", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
+    } catch (error) {
+      setIndexProgress(null);
+      setLibraryError("Could not reconnect this folder. Choose your packs folder again.");
+      setNotice(error instanceof Error ? error.message : "Could not index this folder.");
+    } finally { setIndexBusy(false); }
+  };
+  const correctLibrarySample = (id: string, classification: SampleClassification) => {
+    if (!libraryIndex) return;
+    const next = correctSample(libraryIndex, id, classification);
+    setLibraryIndex(next);
+    if (libraryFiles.current) libraryFiles.current.files = libraryFiles.current.files.map((file) => file.libraryId === id ? { ...file, classification: next.samples.find((sample) => sample.id === id)!.classification } : file);
+    void saveLibraryIndex(next).then((ok) => { if (!ok) setNotice("Correction could not be saved on this device."); });
+  };
   const [sampleLibraryOpen, setSampleLibraryOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -535,7 +599,7 @@ function App() {
             cents: 0,
           });
         } catch {
-          // A corrupt cached favorite is omitted; the imported log still remains visible.
+          // A corrupt cached favorite is omitted from playable hot-swap candidates.
         }
       }
       if (!cancelled) setFavoritePads(favorites);
@@ -564,7 +628,7 @@ function App() {
         );
         setLayout((l) => ({
           on: layoutOn,
-          id: layoutById(layoutOn ? saved.layoutId : l.id).id,
+          id: layoutOn ? saved.layoutId ?? l.id : l.id,
           pre: layoutOn ? (saved.layoutPre ?? {}) : {},
         }));
         setHidden({});
@@ -634,7 +698,9 @@ function App() {
             channelData: decoded.channelData,
             knobDb: restore ? restorePads.current[ref.pad]?.knobDb : undefined,
             is808: restore ? restorePads.current[ref.pad]?.is808 : undefined,
-            libraryId: restore ? restorePads.current[ref.pad]?.libraryId : undefined,
+            libraryId: (restore ? restorePads.current[ref.pad]?.libraryId : undefined) ?? ref.libraryId,
+            classification: ref.classification,
+            playback: ref.playback,
             favorite: restore ? restorePads.current[ref.pad]?.favorite : undefined,
             trimmedFrom: range?.start,
             tune: false,
@@ -656,7 +722,7 @@ function App() {
               pad.sampleRate,
               pad.sourcePath ?? ref.fileName,
               false,
-              categoryHints.current[ref.pad] ?? (restore ? restorePads.current[ref.pad]?.category : undefined),
+              categoryHints.current[ref.pad] ?? ref.classification?.category ?? (restore ? restorePads.current[ref.pad]?.category : undefined),
             )
             .catch(() => ({
               midi: null,
@@ -698,6 +764,9 @@ function App() {
                         stretch: remembered.stretch,
                         locked: remembered.locked,
                         category: cat,
+                        label: remembered.label ?? ref.label,
+                        classification: remembered.classification ?? ref.classification,
+                        playback: remembered.playback ?? ref.playback,
                       }
                     : { category }),
                   // A sound reopened from a previous visit keeps exactly the Tune state it was left with; only a new sound is decided by analysis.
@@ -825,6 +894,9 @@ function App() {
         semis: p.semis,
         cents: p.cents,
         category: p.category,
+        label: p.label,
+        classification: p.classification,
+        playback: p.playback,
         knobDb: p.knobDb,
         is808: p.is808,
         libraryId: p.libraryId,
@@ -842,6 +914,9 @@ function App() {
         semis: p.semis,
         cents: p.cents,
         category: p.category,
+        label: p.label,
+        classification: p.classification,
+        playback: p.playback,
         knobDb: p.knobDb,
         is808: p.is808,
         libraryId: p.libraryId,
@@ -971,7 +1046,7 @@ function App() {
     setAddPackStatus("Reading…");
     try {
       const found = await find();
-      const plan = planBank(bank, found.files);
+      const plan = planBank(bank, found.files, Math.random, { layout: activeLayout, additionalBanks, balancePacks });
       if (plan.problem) {
         window.alert(plan.problem);
         return;
@@ -984,7 +1059,7 @@ function App() {
       const { project, started } = opened;
       const token = loadToken.current;
       const cur = latest.current;
-      const lay = layoutById(layout.id);
+      const lay = activeLayout;
       // What this load replaces: the real sounds on its pads, and the spares of its kind in the hot-swap pool.
       // A locked pad keeps its sound: it is not replaced, and what the pack brings for its place goes to the hot-swap options instead.
       const lockedSlots = new Set(
@@ -1018,7 +1093,9 @@ function App() {
               replaced.reduce((n, p) => n + bytesOf(p), 0),
           ),
       );
-      const result = await writeBankSounds(project, plan.groups, {
+      const excludedIds = new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : []));
+      const groups = plan.groups.map((group) => ({ ...group, candidates: group.candidates.filter((file) => !file.libraryId || !excludedIds.has(file.libraryId)) }));
+      const result = await writeBankSounds(project, groups, {
         existing: kept.map((p) => ({
           channelData: p.channelData,
           sampleRate: p.sampleRate,
@@ -1035,9 +1112,12 @@ function App() {
       });
       if (token !== loadToken.current) return;
       if (!result) {
-        window.alert(
-          `No sound in that folder could be loaded: they were too long (over ${MAX_LOAD_SECONDS} s), too big for the project size limit, or unreadable.`,
-        );
+        if (bank === "kit") {
+          libraryFiles.current = null;
+          setLibraryError("No samples could be loaded. Reconnect your packs folder and try again.");
+          setLibraryToolsOpen(false);
+          setLibraryOpen(true);
+        } else window.alert(`No sound in that folder could be loaded: they were too long (over ${MAX_LOAD_SECONDS} s), too big for the project size limit, or unreadable.`);
         return;
       }
       // The first load into a new project names it: "TuneGod - All Kits" for a whole library, "TuneGod - {pack}" for one pack.
@@ -1055,8 +1135,11 @@ function App() {
           key: s.pad,
           category: s.category,
           is808: s.is808,
+          classification: s.classification,
+          identity: s.libraryId,
         })),
         lay,
+        { additionalBanks, locked: lockedSlots, excluded: new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : [])) },
       );
       const fresh: Pad[] = [];
       for (const sound of result.sounds) {
@@ -1073,6 +1156,7 @@ function App() {
             : (placement.positions.get(sound.pad) ?? -1),
           origIndex: sound.pad,
           name: sound.fileName,
+          label: (bank === "kit" || bank === "drums") && (placement.positions.get(sound.pad) ?? 64) < 16 ? matchingTemplateLabel(lay.slots[placement.positions.get(sound.pad)!], sound) : undefined,
           sourcePath: sound.sourcePath,
           sampleId: sound.sampleId,
           sampleRate: decoded.sampleRate,
@@ -1082,24 +1166,15 @@ function App() {
           libraryId: sound.libraryId,
           favorite: sound.favorite,
           category: sound.category,
+          classification: sound.classification,
           tune: false,
           semis: 0,
           cents: 0,
         });
       }
+      if (bank === "kit" || bank === "drums") setKitReport({ filled: placement.positions.size + [...lockedSlots].filter((index) => index < (bank === "kit" ? (additionalBanks + 1) * 16 : 16)).length, requested: bank === "kit" ? (additionalBanks + 1) * 16 : 16, shortages: placement.shortages?.map((gap) => `${String.fromCharCode(65 + Math.floor(gap.index / 16))}${gap.index % 16 + 1} · ${gap.label}`) ?? [] });
       const onPads = fresh.filter((p) => p.index >= 0);
       const spares = fresh.filter((p) => p.index < 0);
-      const importedAt = Date.now();
-      await recordImportedSamples(result.sounds.filter((s) => !s.favorite).map((sound) => ({
-        id: sound.libraryId,
-        name: sound.sourceName,
-        pack: sound.sourcePack,
-        sourcePath: sound.sourcePath,
-        category: sound.category,
-        is808: sound.is808,
-        importedAt,
-        favorite: false,
-      })));
       setSampleLibrary(await loadSampleLibrary());
       setPads((prev) => {
         const next: Record<number, Pad> = {};
@@ -1133,7 +1208,9 @@ function App() {
       setSelected(null);
       setBank(BANK_SHOWN[bank]);
       setAnalyzing((n) => n + fresh.length);
-      if (result.skipped > 0)
+      if (placement.shortages?.length) {
+        setNotice(`Missing ${placement.shortages.length} requested pads: ${placement.shortages.map((gap) => `${String.fromCharCode(65 + Math.floor(gap.index / 16))}${gap.index % 16 + 1} ${gap.label}`).join(", ")}. No substitute sounds used.${result.skipped ? ` ${result.skipped} files skipped.` : ""}`);
+      } else if (result.skipped > 0)
         setNotice(
           `${result.skipped} file${result.skipped === 1 ? "" : "s"} skipped: too long, too big for the project size limit or unreadable`,
         );
@@ -1142,7 +1219,7 @@ function App() {
           .analyze(
             monoFromChannelData(pad.channelData),
             pad.sampleRate,
-            pad.name,
+            pad.sourcePath ?? pad.name,
             pad.category === "melodicLoop",
             pad.category,
           )
@@ -1163,7 +1240,7 @@ function App() {
               centroid,
               bpm: bpm ?? undefined,
               keyFromName: named,
-              stretch: p.category === "melodicLoop" && bpm ? true : p.stretch,
+              stretch: p.stretch,
               tune: tuneDefault(
                 p.tuneLocked,
                 p.tune,
@@ -1194,7 +1271,12 @@ function App() {
       syncHistory();
     } catch (err) {
       console.error(err);
-      window.alert("That folder could not be loaded.");
+      if (bank === "kit") {
+        libraryFiles.current = null;
+        setLibraryError("Could not load the kit. Reconnect your packs folder and try again.");
+        setLibraryToolsOpen(false);
+        setLibraryOpen(true);
+      } else window.alert("That folder could not be loaded.");
     } finally {
       setAddPackStatus("");
       setImportStatus("");
@@ -1473,6 +1555,7 @@ function App() {
 
   /** Changes a sound's type in place. Tune follows the new type unless the user set it by hand. The pad stays where it is: only the loaders place sounds. */
   const classifyPad = (pad: Pad, category: CategoryId) => {
+    if (pad.libraryId && libraryIndex?.samples.some((sample) => sample.id === pad.libraryId)) correctLibrarySample(pad.libraryId, { category, confidence: 1, needsReview: false, evidence: "correction" });
     if (pad.category === category) return;
     resetStoredType(
       projectFile.current
@@ -1487,9 +1570,11 @@ function App() {
     patchPad(
       pad.index,
       pad.tuneLocked
-        ? { category }
+        ? { category, label: undefined, classification: { category, confidence: 1, needsReview: false, evidence: "correction" } }
         : {
             category,
+            label: undefined,
+            classification: { category, confidence: 1, needsReview: false, evidence: "correction" },
             tune: tuneDefault(
               false,
               false,
@@ -2222,7 +2307,30 @@ function App() {
     setHover("");
   };
 
-  /** Applies a drop: onto a pad or cell (move/swap), a bank button or "unused" (first free pad), or the trash. */
+  const copyingPad = useRef(false);
+  const copyToEmptyPad = async (from: number, to: number) => {
+    const source = latest.current.pads[from];
+    const destination = latest.current.pads[to];
+    const project = projectRef.current;
+    if (copyingPad.current || !project || !source || !isReal(source) || (destination && !destination.placeholder) || destination?.locked) return;
+    copyingPad.current = true;
+    try {
+      const result = await copyProjectPad(project, source.origIndex);
+      if (projectRef.current !== project || latest.current.pads[from] !== source || latest.current.pads[to] !== destination) return;
+      recordEdit();
+      projectRef.current = result.project;
+      projectFile.current = result.file;
+      void saveProjectFile(result.file);
+      const copy: Pad = { ...source, index: to, origIndex: result.ref.pad, sampleId: result.ref.sampleId, playback: source.playback ? structuredClone(source.playback) : undefined };
+      setPads((prev) => ({ ...prev, [to]: copy }));
+      setSelected(to);
+      setBank(Math.floor(to / PADS_PER_BANK));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not copy that sound.");
+    } finally { copyingPad.current = false; }
+  };
+
+  /** Dragging onto an empty pad copies; occupied pads swap. */
   const dropOn = (from: number, target: string) => {
     const [kind, rest] = target.split(":");
     const cur = latest.current.pads;
@@ -2231,6 +2339,10 @@ function App() {
     if (kind === "pad" || kind === "cell") dest = Number(rest);
     else if (kind === "bank") dest = emptyPadInBank(cur, Number(rest));
     else if (kind === "unused") dest = nextEmptyPad(cur, bank);
+    if (dest !== null && dest !== from && (!cur[dest] || cur[dest].placeholder) && cur[from] && isReal(cur[from])) {
+      void copyToEmptyPad(from, dest);
+      return;
+    }
     if (kind === "lock") {
       // The lock zone toggles the pad's lock; nothing moves.
       recordEdit();
@@ -2309,14 +2421,14 @@ function App() {
       : null;
   };
 
-  /** Ends one pointer's hold. The pad always stops, unless that pointer dragged it onto HOLD. */
+  /** End the pad preview, then apply the selected drag action. */
   finishPointer.current = (pointerId, cancelled) => {
     const d = drags.current.get(pointerId);
     if (!d) return;
     drags.current.delete(pointerId);
     liftPad(d.from);
     if (d.active && !cancelled) {
-      if (d.hover === "hold:") holdPad(d.from);
+      if (d.hover === "shuffle:") void shufflePad(d.from);
       else dropOn(d.from, d.hover);
     }
     endDrag(d);
@@ -2342,24 +2454,6 @@ function App() {
       document.removeEventListener("visibilitychange", hidden);
     };
   }, []);
-
-  /** Plays a pad's sample on a loop until any pad is pressed; tuning changes retune it live. */
-  const holdPad = (index: number) => {
-    const pad = pads[index];
-    if (!pad || pad.placeholder) return;
-    holdVoice.current?.release();
-    holdIndex.current = index;
-    holdVoice.current = startPad(
-      -2,
-      audioOf(pad),
-      pad.sampleRate,
-      shiftFor(pad, tunedTarget, a4, keyMajor),
-      null,
-      "loop",
-      undefined,
-      normalize ? pad.knobDb : undefined,
-    );
-  };
 
   /**
    * Pitch slider grabbed: the selected pad loops at its current tuning (bass lifted by octaves to sit near the tone) with a steady tone on its key,
@@ -2661,21 +2755,15 @@ function App() {
         Object.values(pads).filter((p) => p.section),
       );
       const chopperPad = Object.values(pads).find((p) => p.chopper);
-      const buses = new Map<number, number>();
-      for (const p of allPads) {
-        // Melodic loops (bus D) and bass and 808s (bus B) are always routed; the rest follow the buses only with Organize.
-        if (routeBuses || p.category === "melodicLoop" || p.category === "bass")
-          buses.set(p.sampleId, CATEGORY_BUS[p.category ?? "other"]);
-      }
-      const playback = new Map<number, PadPlayback>();
+      const padPlayback = new Map<number, PadPlayback>();
+      const classifications = new Map<number, unknown>();
+      const padOverrides = new Map<number, PadPlayback | null>();
       for (const p of allPads) {
         // The playback rules by sound type are written on every export; only the per-pad EQ is Organize's.
-        const settings = p.category ? playbackFor(p.category) : undefined;
-        if (settings)
-          playback.set(
-            p.sampleId,
-            autoPlayback ? settings : { ...settings, eq: undefined },
-          );
+        const settings = p.category ? resolvePlayback(p.category, typeSettings[p.category], p.playback, p.stretch) : undefined;
+        padOverrides.set(p.origIndex, p.playback || p.stretch !== undefined ? { ...p.playback, ...(p.stretch !== undefined ? { stretch: p.stretch ? settings?.stretch : "off" as const } : {}) } : null);
+        if (p.classification) classifications.set(p.origIndex, { ...p.classification, category: p.category });
+        if (settings) padPlayback.set(p.origIndex, autoPlayback ? settings : { ...settings, eq: undefined });
       }
       // The pads the loaders made (Kick 1, Snare 2, Loop 3...) are written with the colour and label they show in the app; a sound from a project that was
       // opened keeps the colour and label it already had.
@@ -2685,11 +2773,8 @@ function App() {
       const beatsPerBar = await beatsPerBarOfProject();
       for (const p of allPads) {
         const seconds = p.channelData[0].length / p.sampleRate;
-        if (
-          p.category === "melodicLoop" ||
-          p.category === "drumLoop" ||
-          p.category === "percLoop"
-        ) {
+        const settings = padPlayback.get(p.origIndex);
+        if (settings?.stretch && settings.stretch !== "off") {
           const beats = p.bpm
             ? seconds * (p.bpm / 60)
             : seconds * (projectBpm / 60);
@@ -2715,15 +2800,16 @@ function App() {
         stretch,
         vols,
         pitches,
-        buses,
-        busNames: routeBuses ? BUS_NAMES : undefined,
+        busNames: BUS_NAMES,
         busEffects: routeBuses,
         masterChain,
         masterStyle,
         arrangement,
         pans,
         colors,
-        playback,
+        padPlayback,
+        classifications,
+        padOverrides,
         ghosts: ghostExports,
         song: songExport,
         chopper: chopperPad ? chopperExportOf(chopperPad) : undefined,
@@ -2766,10 +2852,16 @@ function App() {
     // A key read from the file name is a sure one: the pad is a slightly darker shade. A key that was only detected leaves the normal shade.
     return p.keyFromName ? darker(base) : base;
   };
-  /** The words on a pad: its own category, keyword or ghost name. A layout slot never relabels a sound. */
+  /** Generated Bank A sounds keep their template labels; other sounds show their numbered Type or detail. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
   const sectionLabel = (p: Pad): string =>
     `${p.section!.synced ? "Chop" : CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
+  // Validate saved labels too, so projects generated before this fix display correctly.
+  const templateLabelOf = (p: Pad): string | undefined => {
+    if (!p.libraryId || !p.label) return undefined;
+    const slot = getLayout(layout.id).slots.find((slot) => slot.label === p.label);
+    return slot && p.category ? matchingTemplateLabel(slot, { category: p.category, classification: p.classification }) : p.label;
+  };
   const labelOf = (p: Pad): string =>
     p.placeholder
       ? p.placeholder.label
@@ -2779,7 +2871,7 @@ function App() {
           ? "Chopper"
           : p.section
             ? sectionLabel(p)
-            : (numberedLabel(p)?.label ?? padLabel(p));
+            : (templateLabelOf(p) ?? numberedLabel(p)?.label ?? padLabel(p));
   const colorOfPad = (p: Pad) =>
     p.placeholder ? placeholderColor(p) : autoColorOf(p);
   const hasProject =
@@ -2870,6 +2962,7 @@ function App() {
         onRelative={setRefRelative}
         toneVolume={toneVolume}
         onToneVolume={changeToneVolume}
+        onFavorite={() => toggleFavorite(selectedPad, !selectedPad.favorite)}
         toneOn={toneOn}
         projectBpm={projectBpm}
         onTrim={moveTrim}
@@ -2906,7 +2999,9 @@ function App() {
     });
   };
   const toggleFavorite = async (pad: Pad, favorite: boolean) => {
-    if (!pad.libraryId) return;
+    const sourcePad = pad;
+    pad = { ...pad, libraryId: pad.libraryId ?? `favorite:${crypto.randomUUID()}` };
+    const matches = (candidate: Pad) => candidate.libraryId === pad.libraryId || (!sourcePad.libraryId && candidate.origIndex === sourcePad.origIndex);
     const old = sampleLibrary.find((r) => r.id === pad.libraryId);
     const audio = favorite
       ? await encodeWav({ sampleRate: pad.sampleRate, channelData: audioOf(pad), bitDepth: 24 })
@@ -2918,30 +3013,21 @@ function App() {
       if (kept.length >= MAX_FAVORITES || bytes > MAX_FAVORITE_BYTES)
         return void window.alert(`Favorites keep their audio on this device, so they are limited to ${MAX_FAVORITES} sounds or ${MAX_FAVORITE_BYTES / 1024 / 1024} MB. Remove a favorite first.`);
     }
-    if (!old) {
+    if (!old && favorite) {
       await recordImportedSamples([{
-        id: pad.libraryId,
-        name: pad.name,
-        sourcePath: pad.sourcePath,
-        pack: "(sample pack)",
-        category: pad.category ?? "other",
-        is808: pad.is808,
-        importedAt: Date.now(),
-        favorite: false,
+        id: pad.libraryId!, name: pad.name, sourcePath: pad.sourcePath,
+        pack: libraryIndex?.samples.find((sample) => sample.id === pad.libraryId)?.pack ?? pad.sourcePath?.split("/").slice(0, -1).join("/") ?? "(favorite)", category: pad.category ?? "other", is808: pad.is808,
+        importedAt: Date.now(), favorite: true, audio, sampleRate: pad.sampleRate,
       }]);
-    }
-    await setSampleFavorite(pad.libraryId, favorite, audio, pad.sampleRate);
-    setPads((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, p.libraryId === pad.libraryId ? { ...p, favorite } : p])));
-    setHidden((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, p.libraryId === pad.libraryId ? { ...p, favorite } : p])));
+    } else await setSampleFavorite(pad.libraryId!, favorite, audio, pad.sampleRate);
+    setPads((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, matches(p) ? { ...p, libraryId: pad.libraryId, favorite } : p])));
+    setHidden((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, matches(p) ? { ...p, libraryId: pad.libraryId, favorite } : p])));
     setFavoritePads((prev) => {
       if (!favorite) return prev.filter((p) => p.libraryId !== pad.libraryId);
       const exists = prev.some((p) => p.libraryId === pad.libraryId);
       return exists ? prev.map((p) => p.libraryId === pad.libraryId ? { ...p, favorite: true } : p) : [...prev, { ...pad, index: -1, favorite: true }];
     });
-    setSampleLibrary((prev) => {
-      const entry: SampleLibraryRecord = old ?? { id: pad.libraryId!, name: pad.name, sourcePath: pad.sourcePath, pack: "(sample pack)", category: pad.category ?? "other", is808: pad.is808, importedAt: Date.now(), favorite: false };
-      return [ { ...entry, favorite, audio: favorite ? audio : undefined, sampleRate: favorite ? pad.sampleRate : undefined }, ...prev.filter((r) => r.id !== pad.libraryId) ];
-    });
+    setSampleLibrary(await loadSampleLibrary());
   };
   const insertFavorite = async (other: Pad, target: Pad) => {
     const record = sampleLibrary.find((r) => r.id === other.libraryId);
@@ -2975,13 +3061,36 @@ function App() {
       setAnalyzing((n) => Math.max(0, n - 1));
     }).catch(() => setAnalyzing((n) => Math.max(0, n - 1)));
   };
+  /** Use the same candidate pool for the hot-swap list and the pad shuffle action. */
+  const hotSwapSounds = (target: Pad) => {
+    const slotCategory = (layout.on && target.index < 16 ? getLayout(layout.id).slots[target.index]?.category : undefined) || target.category;
+    const eligible = (pad: Pad) => isKitCategory(slotCategory) ? isKitCategory(pad.category) : pad.category === slotCategory;
+    const loadedIds = new Set([...Object.values(pads), ...Object.values(hidden)].map((pad) => pad.libraryId));
+    return [
+      ...Object.values(hidden).filter(eligible),
+      ...favoritePads.filter((pad) => eligible(pad) && !loadedIds.has(pad.libraryId)),
+      ...Object.values(pads).filter((pad) => isReal(pad) && isKitCategory(pad.category) && pad.index >= 16 && pad.index !== target.index && isKitCategory(slotCategory)),
+    ];
+  };
+  const shufflePad = async (index: number) => {
+    const target = latest.current.pads[index];
+    if (!target || !isReal(target)) return;
+    if (target.locked) return setNotice("Unlock this pad before shuffling it.");
+    const other = chooseShuffleSound(target, hotSwapSounds(target));
+    if (!other) return setNotice("No other sound of this Type is available in hot swap.");
+    try {
+      if (other.libraryId && other.origIndex <= -100000) await insertFavorite(other, target);
+      else if (hidden[other.origIndex]) swapInHidden(other, target);
+      else { recordEdit(); setPads((prev) => target.ghost ? fillGhostSlot(prev, target.index, other.index) : movePad(prev, target.index, other.index)); }
+    } catch { setNotice("Could not load that sound. Reconnect its sample folder or save it as a favorite again."); }
+  };
   /** Pack tags the project's sounds share ("Rio - ..."), left out of the names in the swap list. */
   /** The hot-swap list for a pad: the sounds that can take its place. Used by the Swap screen and by the sequencer's Sounds page. */
   const swapListFor = (target: Pad) => {
     /** The type the target's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */
     const slotCategory =
       (layout.on && target.index < 16
-        ? layoutById(layout.id).slots[target.index]?.category
+        ? getLayout(layout.id).slots[target.index]?.category
         : undefined) || target.category;
     return (
       <SwapList
@@ -2991,26 +3100,7 @@ function App() {
             : `PAD ${(target.index % 16) + 1}`
         }
         candidates={sortForSlot(
-          [
-            // A pack's hidden spares: the same type as the slot, or for a drum slot any drum.
-            ...Object.values(hidden).filter((p) =>
-              isKitCategory(slotCategory)
-                ? isKitCategory(p.category)
-                : p.category === slotCategory,
-            ),
-            ...favoritePads.filter((p) =>
-              (isKitCategory(slotCategory) ? isKitCategory(p.category) : p.category === slotCategory) &&
-              ![...Object.values(pads), ...Object.values(hidden)].some((loaded) => loaded.libraryId === p.libraryId),
-            ),
-            ...Object.values(pads).filter(
-              (p) =>
-                isReal(p) &&
-                isKitCategory(p.category) &&
-                p.index >= 16 &&
-                p.index !== target.index &&
-                isKitCategory(slotCategory),
-            ),
-          ],
+          hotSwapSounds(target),
           slotCategory,
         ).sort((a, b) =>
           slotCategory === "bass"
@@ -3045,7 +3135,7 @@ function App() {
     if (pad.chopper) return "Chopper";
     if (pad.placeholder || pad.ghost) return labelOf(pad);
     return isReal(pad) && pad.category
-      ? (numberedLabel(pad)?.caption ??
+      ? (templateLabelOf(pad) ?? numberedLabel(pad)?.caption ??
           CATEGORIES[categoryIndex(pad.category)].short)
       : "";
   };
@@ -3075,19 +3165,9 @@ function App() {
     >
       <div className="phone">
         {/* Outside the menu: closing the menu unmounts it, and an input that is gone never reports the folder that was picked. */}
-        <input
-          ref={kitInput}
-          type="file"
-          hidden
-          // @ts-expect-error webkitdirectory is not in React's input typings, but Safari and Chrome both support it
-          webkitdirectory=""
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            e.target.value = "";
-            if (files.length)
-              void loadBank("kit", () => findPackInFileList(files));
-          }}
-        />
+        <input ref={libraryInput} type="file" hidden
+          // @ts-expect-error browser directory picker
+          webkitdirectory="" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) { const force = refreshOnReconnect.current; refreshOnReconnect.current = false; void connectLibrary(files, force); } }} />
         <input
           ref={drumsInput}
           type="file"
@@ -3192,8 +3272,18 @@ function App() {
             >
               Clear project
             </button>
+            <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryOpen(true); }}>Library · select packs & generate</button>
+            <details className="menu__library-tools"><summary>Library tools</summary>
+              <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect & refresh files</button>
+              <p>Reselect the folder to include added or removed samples.</p>
+              <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryToolsOpen(true); }}>Edit sample Types</button>
+            </details>
+            <label className="menu__a4">Additional banks to fill<select aria-label="Additional banks to fill" value={additionalBanks} onChange={(event) => setAdditionalBanks(Number(event.target.value) as AdditionalBanks)}><option value={0}>0 · A only (16 / 64)</option><option value={1}>1 · A + hybrid B (32 / 64)</option><option value={2}>2 · A + instruments B + loops C (48 / 64)</option></select></label>
+            <Switch label="Balance across packs" on={balancePacks} onChange={setBalancePacks}/>
+            <button className="menu__button" onClick={() => { setMenuOpen(false); setLayoutEditorOpen(true); }}>Edit Bank A layout</button>
+            <button className="menu__button" onClick={() => { setMenuOpen(false); setPlaybackEditorOpen(true); }}>Koala Type & pad settings</button>
             <button className="menu__button" onClick={() => setSampleLibraryOpen(true)}>
-              Sample library ({sampleLibrary.length})
+              Favorites on device ({sampleLibrary.length})
             </button>
             <Switch
               label="Organize"
@@ -3232,13 +3322,14 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose one kit folder. Every audio file is sorted by its type folder or filename into banks A–C; categories the folder does not contain stay blank."
+              title="Choose sample packs and generate a kit. Reconnect your packs folder if its files are unavailable."
               onClick={() => {
-                kitInput.current?.click();
+                setLibraryToolsOpen(false);
+                setLibraryOpen(true);
                 setMenuOpen(false);
               }}
             >
-              {addPackStatus || "Load Kit Folder: All Types"}
+              {addPackStatus || "Generate kit · choose packs"}
             </button>
             <button
               className="menu__button"
@@ -3347,6 +3438,9 @@ function App() {
           </div>
         )}
 
+        {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
+        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus || analyzing > 0} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
+        {layoutEditorOpen && <LayoutEditor layout={activeLayout} templates={templates} onClose={() => setLayoutEditorOpen(false)} onSelect={(template) => setActiveLayout(template)} onSave={(template) => { setTemplates((prev) => [...prev.filter((old) => old.id !== template.id), template]); setActiveLayout(template); saveState({ layoutId: template.id }); }} onApply={(template) => { const applied = template.id === "horizontal" ? { ...template, id: "custom:active" } : template; setActiveLayout(applied); setTemplates((prev) => [...prev.filter((old) => old.id !== applied.id), applied]); setLayout((prev) => ({ ...prev, id: applied.id })); setLayoutEditorOpen(false); setNotice("Layout ready for the next kit generation."); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
             records={sampleLibrary}
@@ -3532,7 +3626,7 @@ function App() {
                                 icon: FOLDER_ICON,
                                 label: "Kit",
                                 aria: "Load a kit folder (all sound types)",
-                                input: kitInput,
+                                input: libraryInput,
                               },
                               {
                                 icon: ACAPELLA_ICON,
@@ -3547,7 +3641,9 @@ function App() {
                                 className="dropzone__btn"
                                 aria-label={choice.aria}
                                 onClick={() =>
-                                  choice.input
+                                  choice.label === "Kit"
+                                    ? setLibraryOpen(true)
+                                    : choice.input
                                     ? choice.input.current?.click()
                                     : askChopMode()
                                 }
@@ -3644,7 +3740,7 @@ function App() {
                 </section>
 
                 {drag && !expanded && (
-                  // The start screen's four choices, with other icons: dropping the pad on one does that (hold, delete, lock or unlock, chop).
+                  // Drag actions: shuffle, delete, lock/unlock or chop.
                   <section className="screen screen--drag" aria-hidden="true">
                     <div
                       className="oled"
@@ -3670,7 +3766,7 @@ function App() {
                         <div className="dropzone__choices">
                           {(
                             [
-                              { kind: "hold", word: "Hold", icon: HOLD_ICON },
+                              { kind: "shuffle", word: "Shuffle", icon: SHUFFLE_ICON },
                               {
                                 kind: "trash",
                                 word: "Delete",

@@ -1,0 +1,195 @@
+import { classifyFile, categoryOfFolder, type PackFile } from "./samplePack";
+import type { SampleClassification } from "./sampleClassification";
+import { NOTE_NAMES } from "./theory";
+import { bpmFromName, keyFromName } from "./pitch/nameKey";
+
+export interface IndexedSample {
+  id: string;
+  path: string;
+  folders: string[];
+  name: string;
+  size: number;
+  lastModified?: number;
+  pack: string;
+  classification: SampleClassification;
+  correction?: SampleClassification;
+  bpm?: number;
+  key?: string;
+}
+export interface LibraryIndex {
+  id: string;
+  name: string;
+  updatedAt: number;
+  samples: IndexedSample[];
+}
+export interface LibraryPack {
+  id: string;
+  name: string;
+  samples: IndexedSample[];
+}
+
+const structural =
+  /^(samples?|sounds?|audio|wav|wavs|one[ _-]?shots?|shots?|hits?|drums?|loops?|packs?|kits?|dry|wet|processed|stems?)$/i;
+
+/** Typed subtrees belong to the nearest named pack; organization paths remain part of its identity. */
+export function packPath<T>(file: PackFile<T>): string {
+  const folders = file.folders;
+  const typed = folders.findIndex(
+    (folder) => categoryOfFolder(folder) !== null,
+  );
+  const before = typed >= 0 ? folders.slice(0, typed) : folders;
+  const end = before.findLastIndex((folder) => !structural.test(folder));
+  return end >= 0
+    ? before.slice(0, end + 1).join("/")
+    : (file.rootFolder ?? "Selected pack");
+}
+const sourcePath = <T>(file: PackFile<T>) =>
+  file.sourcePath ??
+  [
+    ...(file.rootFolder ? [file.rootFolder] : []),
+    ...file.folders,
+    file.name,
+  ].join("/");
+
+export interface LibraryProgress {
+  stage: string;
+  processed: number;
+  total: number;
+  percent: number;
+}
+const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/** Rebind files without reading audio. Unchanged metadata retains its classification; refresh reruns rules, keeping corrections. */
+function* refreshSteps<T>(
+  name: string,
+  files: PackFile<T>[],
+  previous?: LibraryIndex | null,
+  force = false,
+): Generator<LibraryProgress, { index: LibraryIndex; files: PackFile<T>[]; reused: number }> {
+  const id = `library:${name}`;
+  const old = new Map<string, IndexedSample>();
+  const savedSamples = previous?.id === id ? previous.samples : [];
+  yield { stage: "Restoring saved index", processed: 0, total: savedSamples.length, percent: 15 };
+  for (let i = 0; i < savedSamples.length; i++) {
+    old.set(savedSamples[i].path, savedSamples[i]);
+    if ((i + 1) % 500 === 0) yield { stage: "Restoring saved index", processed: i + 1, total: savedSamples.length, percent: 15 + 5 * (i + 1) / savedSamples.length };
+  }
+  const established = new Set<string>();
+  yield { stage: "Identifying sample packs", processed: 0, total: files.length, percent: 20 };
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (file.folders.some((folder) => categoryOfFolder(folder) !== null)) established.add(packPath(file));
+    if ((i + 1) % 500 === 0) yield { stage: "Identifying sample packs", processed: i + 1, total: files.length, percent: 20 + 20 * (i + 1) / files.length };
+  }
+  const packFor = (file: PackFile<T>) => {
+    for (let length = file.folders.length; length > 0; length--) {
+      const parent = file.folders.slice(0, length).join("/");
+      if (established.has(parent)) return parent;
+    }
+    return packPath(file);
+  };
+  let reused = 0;
+  const seen = new Set<string>();
+  const rebound: PackFile<T>[] = [];
+  const samples: IndexedSample[] = [];
+  yield { stage: "Classifying samples and matching saved records", processed: 0, total: files.length, percent: 40 };
+  for (const [i, file] of files.entries()) {
+    if (i > 0 && i % 250 === 0) yield { stage: "Classifying samples and matching saved records", processed: i, total: files.length, percent: 40 + 50 * i / files.length };
+    const path = sourcePath(file);
+    if (seen.has(path)) continue;
+    seen.add(path);
+    const saved = old.get(path);
+    const unchanged =
+      saved &&
+      saved.size === file.size &&
+      saved.lastModified === file.lastModified;
+    const classification =
+      saved?.correction ??
+      (unchanged && !force
+        ? saved.classification
+        : classifyFile(
+            [...(file.rootFolder ? [file.rootFolder] : []), ...file.folders],
+            file.name,
+          ));
+    if (unchanged && !force) reused++;
+    const key = keyFromName(file.name);
+    const sample: IndexedSample = {
+      id: `${id}:${path}`,
+      path,
+      folders: file.folders,
+      name: file.name,
+      size: file.size,
+      lastModified: file.lastModified,
+      pack: packFor(file),
+      classification,
+      correction: saved?.correction,
+      bpm: bpmFromName(file.name) ?? undefined,
+      key: key
+        ? `${NOTE_NAMES[key.pc]}${key.minor ? " minor" : " major"}`
+        : undefined,
+    };
+    samples.push(sample);
+    rebound.push({
+      ...file,
+      libraryId: sample.id,
+      classification,
+      sourcePack: sample.pack,
+      sourcePath: path,
+    });
+  }
+  return {
+    index: { id, name, updatedAt: Date.now(), samples },
+    files: rebound,
+    reused,
+  };
+}
+/** Synchronous entry point retained for callers and deterministic tests. */
+export function refreshLibrary<T>(name: string, files: PackFile<T>[], previous?: LibraryIndex | null, force = false) {
+  const steps = refreshSteps(name, files, previous, force);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+/** Metadata only: yield between batches so progress can paint and input stays responsive. */
+export async function refreshLibraryAsync<T>(name: string, files: PackFile<T>[], previous?: LibraryIndex | null, force = false, onProgress?: (progress: LibraryProgress) => void) {
+  const steps = refreshSteps(name, files, previous, force);
+  let step = steps.next();
+  while (!step.done) {
+    onProgress?.(step.value);
+    await yieldToBrowser();
+    step = steps.next();
+  }
+  return step.value;
+}
+
+export function libraryPacks(index: LibraryIndex): LibraryPack[] {
+  const packs = new Map<string, IndexedSample[]>();
+  for (const sample of index.samples) {
+    const row = packs.get(sample.pack) ?? [];
+    row.push(sample);
+    packs.set(sample.pack, row);
+  }
+  return [...packs]
+    .map(([id, samples]) => ({ id, name: id, samples }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+export function correctSample(
+  index: LibraryIndex,
+  id: string,
+  classification: SampleClassification,
+): LibraryIndex {
+  const correction = {
+    ...classification,
+    confidence: 1,
+    needsReview: false,
+    evidence: "correction" as const,
+  };
+  return {
+    ...index,
+    samples: index.samples.map((sample) =>
+      sample.id === id
+        ? { ...sample, classification: correction, correction }
+        : sample,
+    ),
+  };
+}

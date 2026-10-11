@@ -116,7 +116,9 @@ const apart = (a: string, b: string) => {
   const y = labOf(b);
   return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
 };
-const ALL_CATEGORIES = Object.keys(CATEGORY_TONE) as CategoryId[];
+/** Extended Types keep their family tone; original palette separation rules stay intact. */
+const FAMILY_COLOR: Partial<Record<CategoryId, CategoryId>> = { bassLoop: "bass", voxLoop: "vox", fxLoop: "fx", riser: "fx", fall: "fx" };
+const ALL_CATEGORIES = (Object.keys(CATEGORY_TONE) as CategoryId[]).filter((category) => !FAMILY_COLOR[category]);
 
 /** Whether a palette keeps every type apart from every other (0.034) and snares, cymbals and perc well apart (0.15, 0.15 and 0.11). */
 export function keepsRules(p: Palette): boolean {
@@ -325,6 +327,7 @@ const ORGAN: Record<CategoryId, string> = {
   melodicLoop: "#C88BA2",
   bass: "#57517A",
   fx: "#9A7390",
+  bassLoop: "#57517A", voxLoop: "#F0A66E", fxLoop: "#9A7390", riser: "#9A7390", fall: "#9A7390",
   other: "#44444E",
 };
 
@@ -365,6 +368,7 @@ export function darker(hex: string, steps = 1): string {
 
 /** A category's pad colour: its tone's base colour, shaded so related sounds (snare and clap) read as family. */
 export function colorFor(palette: Palette, category: CategoryId): string {
+  category = FAMILY_COLOR[category] ?? category;
   if (palette.categories) return palette.categories[category];
   return shade(toneColor(palette, CATEGORY_TONE[category]), SHADE[category] ?? 0);
 }
