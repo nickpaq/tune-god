@@ -646,7 +646,7 @@
 /* OLED buttons: an outlined box, in inverse video while pressed or playing */
 .swap-row__btn {
   flex: none;
-  width: calc(var(--cell) * 12);
+  width: max(40px, calc(var(--cell) * 14));
   height: max(40px, calc(var(--cell) * 14));
   box-sizing: border-box;
   padding: 0;
