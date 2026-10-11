@@ -3158,7 +3158,7 @@ function App() {
           <div className="menu">
             <label className="menu__a4">
               Project BPM
-              <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.1} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
+              <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.02} wholePerPx={1 / 14} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
             </label>
             <button
               className="menu__button menu__button--primary"
