@@ -170,3 +170,16 @@ describe("placing the sounds", () => {
     expect(filled.get(13)).toBe(2); // snare slot takes the snare
   });
 });
+
+describe("loop exclusion from one-shot pools", () => {
+  it("excludes short named bass loops and saved loop classifications", () => {
+    const loop = { ...file(["Bass"], "bass.wav"), classification: { category: "bassLoop" as const, confidence: 1, needsReview: false, evidence: "correction" as const } };
+    const plan = planBass([file(["Bass"], "bass_loop.wav"), loop, file(["Bass"], "bass_hit.wav")]);
+    expect(plan.groups.flatMap((g) => g.candidates).map((f) => f.name)).toEqual(["bass_hit.wav"]);
+  });
+  it("excludes named melodic loops and saved loop classifications", () => {
+    const loop = { ...file([], "piano.wav"), classification: { category: "melodicLoop" as const, confidence: 1, needsReview: false, evidence: "correction" as const } };
+    const plan = planOneShots([file([], "piano_loop.wav"), loop, file([], "piano_hit.wav")]);
+    expect(plan.groups.flatMap((g) => g.candidates).map((f) => f.name)).toEqual(["piano_hit.wav"]);
+  });
+});

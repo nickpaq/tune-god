@@ -8,15 +8,14 @@ const MB = 1024 * 1024;
 /** Total file size of the sounds a project may hold: the default limit. Decoded audio takes about three times this in memory. */
 export const PROJECT_BYTE_BUDGET = 512 * MB;
 const LOW_BYTE_BUDGET = 96 * MB;
-const HIGH_BYTE_BUDGET = 1024 * MB;
 
 /** The menu's choice of the project size limit. */
 export type PackMemory = "low" | "auto" | "high";
 
-/** How many bytes of sound files a project may hold: 512 MB unless the menu says Low (96 MB) or High (1 GB). */
+/** How many bytes of sound files a project may hold: 512 MB maximum; Low uses 96 MB, and legacy High settings are capped. */
 export function packByteBudget(setting: PackMemory): number {
   if (setting === "low") return LOW_BYTE_BUDGET;
-  return setting === "high" ? HIGH_BYTE_BUDGET : PROJECT_BYTE_BUDGET;
+  return PROJECT_BYTE_BUDGET;
 }
 
 /** The biggest single file a budget allows: no one sample may swallow more than a sixth of it. */

@@ -70,10 +70,10 @@ describe("balanced kit selection", () => {
 
 describe("project size limit", () => {
   const MB = 1024 * 1024;
-  it("defaults to 512 MB on every device, with Low and High either side", () => {
+  it("caps every setting at 512 MB, including saved legacy High settings", () => {
     expect(packByteBudget("auto")).toBe(512 * MB);
     expect(packByteBudget("low")).toBe(96 * MB);
-    expect(packByteBudget("high")).toBe(1024 * MB);
+    expect(packByteBudget("high")).toBe(512 * MB);
   });
 });
 

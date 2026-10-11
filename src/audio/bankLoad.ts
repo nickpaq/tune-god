@@ -166,7 +166,7 @@ export function planDrums<T>(files: PackFile<T>[], random: () => number = Math.r
 
 /** Bank B's bottom row: files in subfolders named 808 or bass. */
 export function planBass<T>(files: PackFile<T>[], random: () => number = Math.random): BankPlan<T> {
-  const bass = files.filter((f) => categoryOfFile([...(f.rootFolder ? [f.rootFolder] : []), ...f.folders], f.name) === "bass");
+  const bass = files.filter((f) => (f.classification?.category ?? categoryOfFile([...(f.rootFolder ? [f.rootFolder] : []), ...f.folders], f.name)) === "bass");
   const eights = bass.filter((f) => [...(f.rootFolder ? [f.rootFolder] : []), ...f.folders].some(is808Name));
   const plain = bass.filter((f) => !eights.includes(f));
   const groups: BankGroup<T>[] = [];
@@ -180,7 +180,7 @@ export function planBass<T>(files: PackFile<T>[], random: () => number = Math.ra
 function planFlat<T>(files: PackFile<T>[], category: CategoryId, want: number, random: () => number): BankPlan<T> {
   if (hasSubfolders(files)) return { groups: [], problem: "That folder has subfolders. Choose a folder that holds only sound files, with nothing inside it but the sounds themselves." };
   if (!files.length) return { groups: [], problem: "No audio files (wav, aiff, flac, mp3, ogg or m4a) were found in that folder." };
-  const candidates = files.filter((file) => categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name) === category);
+  const candidates = files.filter((file) => (file.classification?.category ?? categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name)) === category);
   if (!candidates.length) return { groups: [], problem: `No ${category === "melodicLoop" ? "melodic loops" : "melodic one shots"} were identified by folder name. Choose a folder named for its sound type.` };
   return { groups: [{ category, candidates: shuffled(candidates, random), want }] };
 }

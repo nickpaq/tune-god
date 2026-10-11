@@ -10,7 +10,7 @@ import { applyGainDb } from "./gain";
 import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { bankFileName, type BankGroup } from "./bankLoad";
-import { AUDIO_EXTENSIONS, maxFileBytesFor, sourcePackOf, type PackFile } from "./samplePack";
+import { AUDIO_EXTENSIONS, classifyFile, maxFileBytesFor, sourcePackOf, type PackFile } from "./samplePack";
 
 /** A dropped file the pack can read later. */
 export type PackSource = () => Promise<File>;
@@ -160,6 +160,13 @@ export interface WriteOptions {
   onProgress?: (text: string) => void;
 }
 
+/** Conservative one-shot tails; loops have their own slots and duration budget. */
+export const ONE_SHOT_MAX_SECONDS = { bass: 5, melodic: 6 } as const;
+export function acceptsOneShotDuration(category: CategoryId, seconds: number): boolean {
+  const limit = category === "bass" ? ONE_SHOT_MAX_SECONDS.bass : category === "melodic" ? ONE_SHOT_MAX_SECONDS.melodic : undefined;
+  return Number.isFinite(seconds) && seconds > 0 && (limit === undefined || seconds <= limit);
+}
+
 /** Most files tried per sound wanted, so a folder full of over-long files does not get decoded end to end. */
 const TRIES_PER_SOUND = 8;
 
@@ -194,10 +201,17 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
         skipped++;
         continue;
       }
+      if (group.category === "bass" || group.category === "melodic") {
+        const inferred = classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
+        if (file.classification?.category === "bassLoop" || file.classification?.category === "melodicLoop" || inferred.category === "bassLoop" || inferred.category === "melodicLoop") {
+          skipped++;
+          continue;
+        }
+      }
       onProgress?.(`Measuring ${taken.length + 1}`);
       try {
         const decoded = await decodeNative(await file.source());
-        if (maxSeconds !== undefined && decoded.channelData[0].length / decoded.sampleRate > maxSeconds) {
+        if (!acceptsOneShotDuration(group.category, decoded.channelData[0].length / decoded.sampleRate) || (maxSeconds !== undefined && decoded.channelData[0].length / decoded.sampleRate > maxSeconds)) {
           skipped++;
           continue;
         }

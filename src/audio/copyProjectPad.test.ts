@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import JSZip from "jszip";
 import { copyProjectPad } from "./copyProjectPad";
 import type { ParsedKoalaProject } from "./koalaProject";
@@ -15,7 +15,11 @@ const fixture = (): ParsedKoalaProject => {
 describe("copyProjectPad", () => {
   it("preserves the original while giving the copy independent export identities and the same audio/settings", async () => {
     const original = fixture();
+    const serializeOriginal = vi.spyOn(original.zip, "generateAsync");
     const copied = await copyProjectPad(original, 4);
+    expect(serializeOriginal).not.toHaveBeenCalled();
+    expect(copied.project.zip.files).not.toBe(original.zip.files);
+    expect(copied.project.zip.file("sequence.json")).toBe(original.zip.file("sequence.json"));
     expect(copied.ref).toEqual({ pad: 5, sampleId: 8, fileName: "bass.wav" });
     expect(original.pads).toHaveLength(1);
     expect(original.samplerJson.pads).toHaveLength(1);

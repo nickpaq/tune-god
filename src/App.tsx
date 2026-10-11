@@ -28,7 +28,7 @@ import {
   type BankLoad,
 } from "./audio/bankLoad";
 import { displayName, packTags } from "./audio/sampleName";
-import { packByteBudget, projectNameForFiles, type PackFile, type PackMemory } from "./audio/samplePack";
+import { packByteBudget, PROJECT_BYTE_BUDGET, projectNameForFiles, type PackFile, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative, monoFromChannelData } from "./audio/decode";
 import {
@@ -404,7 +404,7 @@ function App() {
   );
   const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
   const [packMemory, setPackMemory] = useState<PackMemory>(
-    saved.packMemory ?? "auto",
+    saved.packMemory === "low" ? "low" : "auto",
   );
   /** Set while the export is waiting for the answer about drums the layout has no slot for. */
   const [extraPrompt, setExtraPrompt] = useState(false);
@@ -440,8 +440,8 @@ function App() {
     [palette],
   );
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
-  const [a4, setA4] = useState(clampA4Reference(saved.a4 ?? 440));
-  const [, setA4Text] = useState(String(clampA4Reference(saved.a4 ?? 440)));
+  const [a4, setA4] = useState(Math.round(clampA4Reference(saved.a4 ?? 440)));
+  const [, setA4Text] = useState(String(Math.round(clampA4Reference(saved.a4 ?? 440))));
   /** Ghost under the finger while a pad is being dragged, and the drop target under it ("kind:index"). */
   const [drag, setDrag] = useState<{
     from: number;
@@ -609,6 +609,10 @@ function App() {
 
   const loadProject = useCallback(
     async (file: File, restore = false, ignoreLong = false) => {
+      if (file.size > PROJECT_BYTE_BUDGET) {
+        setNotice("This project exceeds the 512 MB limit. Open a smaller project or generate a smaller kit.");
+        return;
+      }
       const token = ++loadToken.current;
       setLoading(true);
       try {
@@ -1117,7 +1121,7 @@ function App() {
           setLibraryError("No samples could be loaded. Reconnect your packs folder and try again.");
           setLibraryToolsOpen(false);
           setLibraryOpen(true);
-        } else window.alert(`No sound in that folder could be loaded: they were too long (over ${MAX_LOAD_SECONDS} s), too big for the project size limit, or unreadable.`);
+        } else window.alert(`No sound in that folder could be loaded: they were too long (bass/808 one-shots: 5 s; melodic one-shots: 6 s; loops: ${MAX_LOAD_SECONDS} s), marked as loops for a one-shot slot, too big for the project size limit, or unreadable.`);
         return;
       }
       // The first load into a new project names it: "TuneGod - All Kits" for a whole library, "TuneGod - {pack}" for one pack.
@@ -2313,6 +2317,11 @@ function App() {
     const destination = latest.current.pads[to];
     const project = projectRef.current;
     if (copyingPad.current || !project || !source || !isReal(source) || (destination && !destination.placeholder) || destination?.locked) return;
+    const extraBytes = source.channelData.reduce((sum, channel) => sum + channel.length * 3, 0) + 44;
+    if ((projectFile.current?.size ?? 0) + extraBytes > PROJECT_BYTE_BUDGET) {
+      setNotice("Copying this pad would exceed the 512 MB project limit. Remove a sample first.");
+      return;
+    }
     copyingPad.current = true;
     try {
       const result = await copyProjectPad(project, source.origIndex);
@@ -3410,14 +3419,11 @@ function App() {
                 <option value="auto">
                   Default ({Math.round(packByteBudget("auto") / 1048576)} MB)
                 </option>
-                <option value="high">
-                  High ({Math.round(packByteBudget("high") / 1048576)} MB)
-                </option>
               </select>
             </label>
             <label className="menu__a4">
               A4 reference (Hz)
-              <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v * 10) / 10)} onDoubleTap={() => setA4(440)} />
+              <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v))} onDoubleTap={() => setA4(440)} />
             </label>
             {a4 !== 440 && (
               <button
@@ -3439,7 +3445,7 @@ function App() {
         )}
 
         {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
-        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus || analyzing > 0} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
+        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
         {layoutEditorOpen && <LayoutEditor layout={activeLayout} templates={templates} onClose={() => setLayoutEditorOpen(false)} onSelect={(template) => setActiveLayout(template)} onSave={(template) => { setTemplates((prev) => [...prev.filter((old) => old.id !== template.id), template]); setActiveLayout(template); saveState({ layoutId: template.id }); }} onApply={(template) => { const applied = template.id === "horizontal" ? { ...template, id: "custom:active" } : template; setActiveLayout(applied); setTemplates((prev) => [...prev.filter((old) => old.id !== applied.id), applied]); setLayout((prev) => ({ ...prev, id: applied.id })); setLayoutEditorOpen(false); setNotice("Layout ready for the next kit generation."); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
