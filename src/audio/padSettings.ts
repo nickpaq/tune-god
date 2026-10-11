@@ -1,9 +1,13 @@
 // Koala's per-pad playback settings, chosen by sound category. The rules (every export, whatever else is switched on):
+// Mute (choke) groups, from the product spec: closed and open hat 1, cymbal 2, drum and perc loops 3, melodic loops 4, bass and 808 5, vox loops 6
+// (reserved: vox loops have no category yet). Kick, snare, clap, perc, melodic one-shots, vox and FX have none. Chops take group 7 or above.
 //   melodic loops   mute group 4, one-shot on, loop off, stretch on (Koala's modern mode), on bus D
 //   melodic sounds  no mute group, one-shot off, release at its maximum, stretch off
-//   drums           one-shot on, no mute group, loop off, stretch off (the hats keep their own mute group); the snare's tone knob a touch under the middle
-//   drum and perc loops   stretch on in Koala's beats mode
-//   808 and bass    one-shot on
+//   drums           one-shot on, no mute group, loop off, stretch off (hats and cymbals keep their own mute groups); the snare's tone knob a touch under the middle
+//   drum and perc loops   mute group 3, stretch on in Koala's beats mode
+//   808 and bass    mute group 5, one-shot on, stretch off
+//   vox and FX      one-shot on, no mute group, stretch off
+// Stretch is on only for loops (and chops, which the chop modes write themselves); every one-shot is written with stretch off.
 // Categories not listed are left as they came.
 import { isDrumCategory, type CategoryId } from "./classify";
 import { ACTIVE_MIX_PRESET, type PadEq } from "./mixPresets";
@@ -27,9 +31,15 @@ export interface PadPlayback {
   stretch?: "off" | keyof typeof STRETCH_MODE;
 }
 
-export const HAT_MUTE_GROUP = 5;
-export const BASS_MUTE_GROUP = 6;
+export const HAT_MUTE_GROUP = 1;
+export const CYMBAL_MUTE_GROUP = 2;
+export const DRUM_LOOP_MUTE_GROUP = 3;
 export const MELODIC_LOOP_MUTE_GROUP = 4;
+export const BASS_MUTE_GROUP = 5;
+/** Reserved for vox loops, which the classifier has no category for yet. */
+export const VOX_LOOP_MUTE_GROUP = 6;
+/** The first mute group the chops may use: 1 to 6 belong to the sound types. */
+export const FIRST_FREE_MUTE_GROUP = 7;
 /** Release knob at its maximum. */
 export const MELODIC_RELEASE = 1;
 
@@ -42,11 +52,12 @@ export const MELODIC_LOOP_PLAYBACK: PadPlayback = { chokeGroup: MELODIC_LOOP_MUT
 
 function basePlayback(category: CategoryId): PadPlayback | undefined {
   if (category === "melodicLoop") return MELODIC_LOOP_PLAYBACK;
-  if (category === "drumLoop" || category === "percLoop") return { oneShot: true, loop: false, stretch: "beats" };
+  if (category === "drumLoop" || category === "percLoop") return { chokeGroup: DRUM_LOOP_MUTE_GROUP, oneShot: true, loop: false, stretch: "beats" };
   if (category === "closedHat" || category === "openHat") return { chokeGroup: HAT_MUTE_GROUP, oneShot: true, loop: false, stretch: "off" };
-  if (category === "vox") return { oneShot: true }; // not a drum, though the classifier groups it with them: it keeps what it always had
+  if (category === "cymbal") return { chokeGroup: CYMBAL_MUTE_GROUP, oneShot: true, loop: false, stretch: "off" };
+  if (category === "vox" || category === "fx") return { chokeGroup: 0, oneShot: true, stretch: "off" }; // not drums, though the classifier groups vox with them
   if (isDrumCategory(category)) return { chokeGroup: 0, oneShot: true, loop: false, stretch: "off" };
-  if (category === "bass") return { chokeGroup: BASS_MUTE_GROUP, oneShot: true };
+  if (category === "bass") return { chokeGroup: BASS_MUTE_GROUP, oneShot: true, stretch: "off" };
   if (category === "melodic") return { chokeGroup: 0, oneShot: false, release: MELODIC_RELEASE, stretch: "off" };
   return undefined;
 }

@@ -12,7 +12,7 @@ describe("per-pad EQ by sound type", () => {
   });
 
   it("warms the hats and cymbals with a small high-shelf cut and keeps the hat mute group", () => {
-    expect(playbackFor("closedHat")).toMatchObject({ chokeGroup: 5, oneShot: true, eq: { highShelfDb: -2 } });
+    expect(playbackFor("closedHat")).toMatchObject({ chokeGroup: 1, oneShot: true, eq: { highShelfDb: -2 } });
     expect(playbackFor("cymbal")?.eq?.highShelfDb).toBe(-2);
   });
 });
@@ -25,8 +25,9 @@ describe("playback rules by sound type", () => {
     expect(playbackFor("melodic")).toMatchObject({ chokeGroup: 0, oneShot: false, release: 1, stretch: "off" }));
 
   it("drums: one-shot on, no mute group, loop and stretch off; the hats keep their mute group", () => {
-    for (const c of ["kick", "snare", "clap", "cymbal", "perc"] as const) expect(playbackFor(c), c).toMatchObject({ chokeGroup: 0, oneShot: true, loop: false, stretch: "off" });
-    for (const c of ["closedHat", "openHat"] as const) expect(playbackFor(c), c).toMatchObject({ chokeGroup: 5, oneShot: true, loop: false, stretch: "off" });
+    for (const c of ["kick", "snare", "clap", "perc"] as const) expect(playbackFor(c), c).toMatchObject({ chokeGroup: 0, oneShot: true, loop: false, stretch: "off" });
+    for (const c of ["closedHat", "openHat"] as const) expect(playbackFor(c), c).toMatchObject({ chokeGroup: 1, oneShot: true, loop: false, stretch: "off" });
+    expect(playbackFor("cymbal")).toMatchObject({ chokeGroup: 2, oneShot: true, loop: false, stretch: "off" });
   });
 
   it("the snare's tone is a little under the middle and no other drum has one", () => {
@@ -40,5 +41,13 @@ describe("playback rules by sound type", () => {
     expect(STRETCH_MODE.beats).not.toBe(STRETCH_MODE.modern);
   });
 
-  it("808 and bass: one-shot on, mute group 6", () => expect(playbackFor("bass")).toMatchObject({ oneShot: true, chokeGroup: 6 }));
+  it("808 and bass: one-shot on, mute group 5, stretch off", () => expect(playbackFor("bass")).toMatchObject({ oneShot: true, chokeGroup: 5, stretch: "off" }));
+
+  it("drum and perc loops: mute group 3, beats stretch", () => {
+    for (const c of ["drumLoop", "percLoop"] as const) expect(playbackFor(c), c).toMatchObject({ chokeGroup: 3, stretch: "beats" });
+  });
+
+  it("vox and FX: one-shot on, no mute group, stretch off", () => {
+    for (const c of ["vox", "fx"] as const) expect(playbackFor(c), c).toMatchObject({ chokeGroup: 0, oneShot: true, stretch: "off" });
+  });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateChopExport } from "./chopValidation";
 import { STRETCH_MODE } from "./padSettings";
 
-const chopPad = (index: number, extra: object = {}) => ({ pad: index, sampleId: 100 + index, stretching: true, stretch: STRETCH_MODE.modern, pitch: 2, chokeGroup: 5, oneshot: true, ...extra });
+const chopPad = (index: number, extra: object = {}) => ({ pad: index, sampleId: 100 + index, stretching: true, stretch: STRETCH_MODE.modern, pitch: 2, chokeGroup: 7, oneshot: true, ...extra });
 const note = (num: number) => ({ num });
 const seq = (...notes: number[][]) => ({ sequences: [...notes.map((n) => ({ noteSequence: { pattern: { notes: n.map(note) } } })), { noteSequence: { pattern: { notes: null } } }] });
 const base = { padBase: 0, destinations: [1, 2], padsBefore: [{ pad: 7, sampleId: 7 }], sequencesBefore: [{ noteSequence: { pattern: { notes: null } } }, { noteSequence: { pattern: { notes: null } } }, { noteSequence: { pattern: { notes: null } } }], zipHas: () => true };

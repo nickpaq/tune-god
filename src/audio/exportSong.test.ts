@@ -194,13 +194,13 @@ describe("the mute group of the section pads", () => {
     expect(sectionMuteGroup({ chokeGroup: 3 }, [{ chokeGroup: 3 }, { chokeGroup: 5 }])).toBe(3);
   });
 
-  it("takes group 5 when the song's pad has none and no pad uses 5", () => {
+  it("takes group 7 when the song's pad has none and no pad uses 7", () => {
     expect(sectionMuteGroup({ chokeGroup: 0 }, [{ chokeGroup: 4 }, { chokeGroup: 0 }])).toBe(SECTION_MUTE_GROUP);
-    expect(SECTION_MUTE_GROUP).toBe(5);
+    expect(SECTION_MUTE_GROUP).toBe(7);
   });
 
-  it("takes the first free group instead when 5 is already used (the hats)", () => {
-    expect(sectionMuteGroup({}, [{ chokeGroup: 1 }, { chokeGroup: 5 }])).toBe(2);
+  it("takes the next free group instead when 7 is already used", () => {
+    expect(sectionMuteGroup({}, [{ chokeGroup: 1 }, { chokeGroup: 7 }])).toBe(8);
   });
 });
 

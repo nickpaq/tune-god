@@ -2683,7 +2683,7 @@ function App() {
       // The pads the loaders made (Kick 1, Snare 2, Loop 3...) are written with the colour and label they show in the app; a sound from a project that was
       // opened keeps the colour and label it already had.
       // Loops are written stretched, as long (in beats) as they are at their own tempo; Koala then plays them at the project's tempo. A loop whose name
-      // states no tempo is stretched to its length at the project tempo, rounded to whole bars. A sound of another type is stretched when its key is on.
+      // states no tempo is stretched to its length at the project tempo, rounded to whole bars. One-shots are never stretched.
       const stretch = new Map<number, number>();
       const beatsPerBar = await beatsPerBarOfProject();
       for (const p of allPads) {
@@ -2702,11 +2702,7 @@ function App() {
               ? Math.max(1, Math.round(beats))
               : Math.round(beats / beatsPerBar) * beatsPerBar,
           );
-        } else if (p.stretch && p.bpm)
-          stretch.set(
-            p.sampleId,
-            Math.max(1, Math.round(seconds * (p.bpm / 60))),
-          );
+        }
       }
       const colors = new Map<number, { color: string; label: string }>();
       for (const p of allPads) {
