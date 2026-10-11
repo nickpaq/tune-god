@@ -41,12 +41,15 @@
 }
 
 .lower {
+  --pad-w: min(21cqw, calc((100cqw - 8.2cqw - 3 * 1.5cqw) / 4));
+  --pad-h: min(var(--pad-w), calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - var(--screen-min) - var(--deck-min) - 3cqw - 4.5cqw - 5.6cqw) / 4));
+  --pad-grid-width: calc(4 * var(--pad-h) + 3 * 1.5cqw);
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 2cqw;
-  /* The drum-pad well adds 1.5cqw below the grid: together these match its 4.1cqw side margins. */
-  padding: 0 4.1cqw 2.6cqw;
+  /* Center the compact grid; its bottom outer margin matches its actual side margins. */
+  padding: 0 4.1cqw calc(2.6cqw + (91.8cqw - var(--pad-grid-width)) / 2);
   box-shadow: inset 0 1px 0 var(--seam-l);
 }
 
@@ -897,14 +900,11 @@
 }
 
 .pads {
-  /* Always square pads. Full size is the width of a column; on a short phone the squares shrink together, the grid stays centred
-     (the columns spread to the edges) and the screen and piano give way first (--screen-min, --deck-min), so nothing overlaps. */
-  /* Keep the approved smaller squares even when an installed iPhone reports no bottom safe inset. */
-  --pad-w: min(21cqw, calc((100cqw - 8.2cqw - 3 * 1.5cqw) / 4));
-  --pad-h: min(var(--pad-w), calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - var(--screen-min) - var(--deck-min) - 3cqw - 4.5cqw - 5.6cqw) / 4));
+  /* Both axes use the same square size and gap. Never spread columns across spare width. */
+  width: var(--pad-grid-width);
+  margin-inline: auto;
   display: grid;
   grid-template-columns: repeat(4, var(--pad-h));
-  justify-content: space-between;
   grid-auto-rows: var(--pad-h);
   gap: 1.5cqw;
 }
