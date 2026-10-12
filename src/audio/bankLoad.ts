@@ -101,6 +101,17 @@ const stemOf = (category: CategoryId, is808?: boolean): Stem => STEMS.find((s) =
 /** The name a loaded sound is written under: "Kick 1.wav". It is what the project, the swap list and the pad's label are made from. */
 export const bankFileName = (category: CategoryId, number: number, is808?: boolean): string => `${stemOf(category, is808).label} ${number}.wav`;
 
+/** Compact Koala pad labels describe the Type, without preset or file numbering. */
+export function exportPadLabel(category: CategoryId, is808 = false): string {
+  const labels: Record<CategoryId, string> = {
+    kick: "Kick", snare: "Snare", clap: "Clap", closedHat: "HH Closed", openHat: "HH Open",
+    cymbal: "Cymbal", perc: "Perc", vox: "Vox", fx: "FX", bass: "Bass", melodic: "M Oneshot",
+    melodicLoop: "M Loop", drumLoop: "D Loop", percLoop: "P Loop", bassLoop: "B Loop",
+    voxLoop: "V Loop", fxLoop: "FX Loop", other: "Other",
+  };
+  return category === "bass" && is808 ? "808" : labels[category];
+}
+
 export interface NumberedName {
   category: CategoryId;
   is808?: boolean;

@@ -25,7 +25,7 @@ import {
   BANK_ZONES,
   bankTakes,
   MAX_LOAD_SECONDS,
-  numberedLabel,
+  exportPadLabel,
   placeBank,
   planBank,
   padOnlyGroups,
@@ -2786,39 +2786,19 @@ function App() {
         if (p.classification) classifications.set(p.origIndex, { ...p.classification, category: p.category });
         if (settings) padPlayback.set(p.origIndex, autoPlayback ? settings : { ...settings, eq: undefined });
       }
-      // The pads the loaders made (Kick 1, Snare 2, Loop 3...) are written with the colour and label they show in the app; a sound from a project that was
-      // opened keeps the colour and label it already had.
-      // Loops are written stretched, as long (in beats) as they are at their own tempo; Koala then plays them at the project's tempo. A loop whose name
-      // states no tempo is stretched to its length at the project tempo, rounded to whole bars. One-shots are never stretched.
-      const stretch = new Map<number, number>();
-      const beatsPerBar = await beatsPerBarOfProject();
-      for (const p of allPads) {
-        const seconds = p.channelData[0].length / p.sampleRate;
-        const settings = padPlayback.get(p.origIndex);
-        if (settings?.stretch && settings.stretch !== "off") {
-          const beats = p.bpm
-            ? seconds * (p.bpm / 60)
-            : seconds * (projectBpm / 60);
-          stretch.set(
-            p.sampleId,
-            p.bpm || beats < beatsPerBar
-              ? Math.max(1, Math.round(beats))
-              : Math.round(beats / beatsPerBar) * beatsPerBar,
-          );
-        }
-      }
+      // Sounds export compact Type labels without file or preset numbering.
+      // Ordinary loops use Koala’s automatic length detection; chop exports write their exact lengths.
       const colors = new Map<number, { color: string; label: string }>();
       for (const p of allPads) {
         // The label is what the pad's caption says in the app, without its number.
-        if (p.category && numberedLabel(p))
+        if (p.category)
           colors.set(p.sampleId, {
             color: autoColorOf(p),
-            label: captionOf(p) || labelOf(p),
+            label: exportPadLabel(p.category, p.is808),
           });
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, {
         bpm: projectBpm,
-        stretch,
         vols,
         pitches,
         busNames: BUS_NAMES,
@@ -2877,12 +2857,6 @@ function App() {
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
   const sectionLabel = (p: Pad): string =>
     `${p.section!.synced ? "Chop" : CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
-  // Validate saved labels too, so projects generated before this fix display correctly.
-  const templateLabelOf = (p: Pad): string | undefined => {
-    if (!p.libraryId || !p.label) return undefined;
-    const slot = layoutById(null).slots.find((slot) => slot.label === p.label);
-    return slot && p.category ? matchingTemplateLabel(slot, { category: p.category, classification: p.classification }) : p.label;
-  };
   const labelOf = (p: Pad): string =>
     p.placeholder
       ? p.placeholder.label
@@ -2892,7 +2866,7 @@ function App() {
           ? "Chopper"
           : p.section
             ? sectionLabel(p)
-            : (templateLabelOf(p) ?? numberedLabel(p)?.label ?? padLabel(p));
+            : (p.category ? exportPadLabel(p.category, p.is808) : padLabel(p));
   const colorOfPad = (p: Pad) =>
     p.placeholder ? placeholderColor(p) : autoColorOf(p);
   const hasProject =
@@ -3259,8 +3233,7 @@ function App() {
     if (pad.chopper) return "Chopper";
     if (pad.placeholder || pad.ghost) return labelOf(pad);
     return isReal(pad) && pad.category
-      ? (templateLabelOf(pad) ?? numberedLabel(pad)?.caption ??
-          CATEGORIES[categoryIndex(pad.category)].short)
+      ? exportPadLabel(pad.category, pad.is808)
       : "";
   };
   /** The sound type a pad's symbol shows: real sounds and ghosts have one, silent placeholders none. */

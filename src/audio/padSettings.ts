@@ -21,7 +21,7 @@ export interface PadPlayback {
   release?: number;
   /** Koala's tone knob, a tilt EQ with 0 in the middle. */
   tone?: number;
-  /** Stretch off, or on in one of Koala's modes. A stretched pad also needs its length in beats (the export's `stretch` map). */
+  /** Stretch off, or on in one of Koala's modes. Ordinary loops leave length detection to Koala; only chop exports set an explicit beat length. */
   stretch?: "off" | keyof typeof STRETCH_MODE;
 }
 

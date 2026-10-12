@@ -56,3 +56,7 @@ Tune omits the floating pitch label and BPM/Stretch row; Shift remains visible a
 
 
 Hot-swap spares default off: new kit imports retain only the 48 requested pad sounds, excluding locked-slot quotas. Connected-library alternatives are indexed as metadata; dragging a pad to Shuffle loads and swaps one same-Type alternative on demand. The optional browser can also preview or select individual sounds; search and 50-row pages bound rendered rows. Favorites decode on demand too. Type corrections keep the corrected sound and load one replacement of the original Type directly from connected files whenever connected. The menu groups secondary controls and highlights Build another kit, which clears A–D and opens pack selection. Replace kit · keep bank D remains a separate library-tools action. Cents tuning preserves total pitch at semitone boundaries and wraps the hand to the opposite side of the dial.
+
+Ordinary loop exports enable the appropriate stretch mode and omit `stretchLength`, clearing any previous guessed length. Koala determines their bars. Explicit lengths are reserved for acapella and synced chop exports.
+
+Generated Koala pad labels use compact Types without numbers: M Loop, D Loop, P Loop, B Loop, V Loop, FX Loop, HH Closed, HH Open, M Oneshot, and ordinary drum Type names. The bass Type retains 808 where appropriate.

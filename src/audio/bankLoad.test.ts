@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bankFileName, BANK_ZONES, numberedLabel, parseBankName, placeBank, padOnlyGroups, planBank, planBass, planDrums, planKit, planLoops, planOneShots, type PlacedSound } from "./bankLoad";
+import { bankFileName, exportPadLabel, BANK_ZONES, numberedLabel, parseBankName, placeBank, padOnlyGroups, planBank, planBass, planDrums, planKit, planLoops, planOneShots, type PlacedSound } from "./bankLoad";
 import { FINGER_LAYOUTS } from "./fingerLayouts";
 import type { PackFile } from "./samplePack";
 
@@ -206,4 +206,16 @@ it("does not load spare sounds for locked loop slots or unused drum Types", () =
   expect([...placement.positions.values()]).not.toContain(20);
   expect(placement.spares).toEqual([]);
   expect(padOnlyGroups("drums", planDrums([file(["Vocals"], "vox.wav")]).groups, new Set())).toEqual([]);
+});
+
+
+it("exports compact Type labels without pad numbering", () => {
+  expect(exportPadLabel("melodicLoop")).toBe("M Loop");
+  expect(exportPadLabel("drumLoop")).toBe("D Loop");
+  expect(exportPadLabel("closedHat")).toBe("HH Closed");
+  expect(exportPadLabel("openHat")).toBe("HH Open");
+  expect(exportPadLabel("kick")).toBe("Kick");
+  expect(exportPadLabel("melodic")).toBe("M Oneshot");
+  expect(exportPadLabel("percLoop")).toBe("P Loop");
+  expect(exportPadLabel("bass", true)).toBe("808");
 });
