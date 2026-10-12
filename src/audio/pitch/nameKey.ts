@@ -22,19 +22,21 @@ const tokensOf = (fileName: string) =>
     .filter(Boolean);
 
 // Capital letters only: "am", "e" and "dm" are words and typos, and packs write note names as capitals.
-const KEY_TOKEN = /^([A-G])([#b♯♭]?)(m|min|minor|maj|major)?$/;
+const KEY_TOKEN = /^([A-G])([#b♯♭]?)(m|min|minor|maj|major|Major|Minor|Maj|Min|M)?$/;
 
 export function keyFromName(fileName: string): NameKey | null {
   const tokens = tokensOf(fileName);
   for (let i = 0; i < tokens.length; i++) {
     const match = KEY_TOKEN.exec(tokens[i]);
     if (!match) continue;
-    const [, letter, accidental, quality] = match;
+    const [, letter, accidental, attachedQuality] = match;
+    const nextQuality = /^(m|min|minor|maj|major)$/i.test(tokens[i + 1] ?? "") ? tokens[i + 1].toLowerCase() : undefined;
+    const quality = attachedQuality ?? nextQuality;
     const keyword = /^key$/i.test(tokens[i - 1] ?? "") || /^key$/i.test(tokens[i + 1] ?? "");
     if (!quality && !accidental && !keyword) continue;
     const accidentalShift = accidental === "#" || accidental === "♯" ? 1 : accidental === "b" || accidental === "♭" ? -1 : 0;
     const pc = (NOTE_PC[letter] + accidentalShift + 12) % 12;
-    const minor = quality === "m" || quality === "min" || quality === "minor";
+    const minor = quality === "m" || quality?.toLowerCase() === "min" || quality?.toLowerCase() === "minor";
     return { pc, minor, minorPc: minor ? pc : (pc + 9) % 12 };
   }
   return null;

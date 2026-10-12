@@ -158,9 +158,9 @@ const hasSubfolders = (files: { folders: string[] }[]) => files.some((f) => f.fo
 export function planDrums<T>(files: PackFile<T>[], random: () => number = Math.random): BankPlan<T> {
   const byType = new Map<CategoryId, PackFile<T>[]>();
   for (const file of files) {
-    const category = categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
+    const category = categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name, undefined, file.duration);
     if (!(category in DRUM_QUOTA)) continue;
-    const classification = file.classification ?? classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
+    const classification = file.classification ?? classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name, undefined, file.duration);
     const bucket = byType.get(category) ?? [];
     bucket.push({ ...file, classification });
     byType.set(category, bucket);
@@ -188,7 +188,7 @@ export function planBass<T>(files: PackFile<T>[], random: () => number = Math.ra
 function planFlat<T>(files: PackFile<T>[], category: CategoryId, want: number, random: () => number): BankPlan<T> {
   if (hasSubfolders(files)) return { groups: [], problem: "That folder has subfolders. Choose a folder that holds only sound files, with nothing inside it but the sounds themselves." };
   if (!files.length) return { groups: [], problem: "No audio files (wav, aiff, flac, mp3, ogg or m4a) were found in that folder." };
-  const candidates = files.filter((file) => (file.classification?.category ?? categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name)) === category);
+  const candidates = files.filter((file) => (file.classification?.category ?? categoryOfFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name, undefined, file.duration)) === category);
   if (!candidates.length) return { groups: [], problem: `No ${category === "melodicLoop" ? "melodic loops" : "melodic one shots"} were identified by folder name. Choose a folder named for its sound type.` };
   return { groups: [{ category, candidates: shuffled(candidates, random), want }] };
 }
@@ -210,7 +210,7 @@ export function planKit<T>(files: PackFile<T>[], random: () => number = Math.ran
   const buckets = new Map<CategoryId, BankGroup<T>>();
   const seen = new Set<string>();
   for (const file of files) {
-    const classification = file.classification ?? classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
+    const classification = file.classification ?? classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name, undefined, file.duration);
     const category = classification.category;
     if (!slots.some((slot) => slot.category === category)) continue;
     const identity = file.libraryId ?? file.sourcePath ?? [...file.folders, file.name].join("/");

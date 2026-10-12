@@ -203,7 +203,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
         return false;
       }
       if (group.category === "bass" || group.category === "melodic") {
-        const inferred = classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
+        const inferred = classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name, undefined, file.duration);
         if (file.classification?.category === "bassLoop" || file.classification?.category === "melodicLoop" || inferred.category === "bassLoop" || inferred.category === "melodicLoop") {
           skipped++;
           return false;
@@ -251,7 +251,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
     const id = file.libraryId ?? file.sourcePath ?? file.name;
     if (chosen.has(id)) continue;
     fallbackTries++;
-    const classification = file.classification ?? classifyFile([file.rootFolder ?? "", ...file.folders], file.name);
+    const classification = file.classification ?? classifyFile([file.rootFolder ?? "", ...file.folders], file.name, undefined, file.duration);
     let group = groups.findIndex(group => group.category === classification.category && !group.is808);
     if (group < 0) { group = groups.length; groups.push({ category: classification.category, candidates: [], want: 0 }); }
     if (await take({ ...file, classification }, group)) chosen.add(id);

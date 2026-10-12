@@ -1,3 +1,5 @@
+import { keyFromName } from "./pitch/nameKey";
+
 // Guesses what kind of sound a sample is (kick, snare, bass, ...) so pads can be auto-coloured.
 // Filename keywords win when present; otherwise a few cheap acoustic features (length, decay,
 // spectral balance, whether a pitch was found) drive simple rules. No ML model or library.
@@ -197,6 +199,22 @@ export function classifyByName(fileName: string): CategoryId | "hat" | null {
   return null;
 }
 
+/** Explicit non-melodic families always outrank inferred keyed loops. */
+export function isProtectedCategory(category: CategoryId | "hat" | null): boolean {
+  return category !== null && !["bass", "bassLoop", "melodic", "melodicLoop", "other"].includes(category);
+}
+
+/** Ambient alone is a style hint; named effects such as ambient noise still remain FX. */
+export function explicitCategoryByName(fileName: string): CategoryId | "hat" | null {
+  return classifyByName(fileName.replace(/(^|[\s_\-.()[\]])ambient(?=$|[\s_\-.()[\]])/gi, "$1"));
+}
+
+/** Filename evidence plus stored duration; never reads or decodes audio. */
+export function isAutomaticMelodicLoop(fileName: string, duration: number | undefined): boolean {
+  return duration !== undefined && Number.isFinite(duration) && duration > 5 &&
+    !/bass/i.test(fileName) && keyFromName(fileName) !== null;
+}
+
 /** In-place radix-2 FFT of `re`/`im` (length must be a power of two). */
 export function fft(re: Float64Array, im: Float64Array): void {
   const n = re.length;
@@ -333,6 +351,7 @@ export function classifySample(
   detectedMidi: number | null | undefined,
 ): CategoryId {
   const byName = classifyByName(fileName);
+  if (!isProtectedCategory(explicitCategoryByName(fileName)) && isAutomaticMelodicLoop(fileName, mono.length / sampleRate)) return "melodicLoop";
   if (byName && byName !== "hat") return byName;
 
   const f = extractFeatures(mono, sampleRate);
