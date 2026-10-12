@@ -3,32 +3,31 @@ import { allocateKit, generationSlots, matchingTemplateLabel } from "./kitGenera
 import { layoutById } from "./fingerLayouts";
 import type { CategoryId } from "./classify";
 const layout = layoutById(null);
-const sample = (key: number, category: CategoryId, subtype?: string) => ({
+const sample = (key: number, category: CategoryId) => ({
   key,
   category,
   identity: `file:${key}`,
   classification: {
     category,
-    subtype,
     confidence: 1,
     needsReview: false,
     evidence: "folder" as const,
   },
 });
-describe("custom kit generation", () => {
+describe("fixed MPC kit generation", () => {
   it("uses the exact Bank A assignments", () => {
     expect(layout.slots.map((s) => s.label)).toEqual([
-      "Crash",
+      "Cymbal",
       "FX",
       "FX",
-      "Noise Fall",
+      "FX",
       "Perc",
       "Perc 2",
       "Perc",
-      "Sweep",
+      "FX",
       "Kick 2",
       "Snare 2",
-      "Rim",
+      "Snare 3",
       "Clap",
       "Kick 1",
       "Snare 1",
@@ -36,11 +35,11 @@ describe("custom kit generation", () => {
       "Open Hat 2",
     ]);
   });
-  for (const additional of [0, 1, 2] as const)
-    it(`fills exactly ${16 * (additional + 1)} requested pads for ${additional} extra banks, never D`, () => {
-      const slots = generationSlots(layout, additional);
+  it("fills all 48 A–C pads and never D", () => {
+      const slots = generationSlots();
+      expect(slots).toHaveLength(48);
       const sounds = slots.map((slot, i) =>
-        sample(i, slot.category, slot.subtype),
+        sample(i, slot.category),
       );
       const allocation = allocateKit(sounds, slots);
       expect(allocation.positions.size).toBe(slots.length);
@@ -50,19 +49,19 @@ describe("custom kit generation", () => {
         allocation.positions.size,
       );
     });
-  it("reserves rare subtypes before generic slots and clearly reports shortages without substitutions", () => {
+  it("fills repeated Type slots in order and reports shortages without unrelated substitutions", () => {
     const slots = [
       { category: "snare" as const, label: "Snare" },
-      { category: "snare" as const, subtype: "rimshot", label: "Rim" },
+      { category: "snare" as const, label: "Snare 3" },
       { category: "perc" as const, label: "Perc" },
     ];
     const result = allocateKit(
-      [sample(0, "snare", "rimshot"), sample(1, "clap")],
+      [sample(0, "snare"), sample(1, "clap")],
       slots,
     );
-    expect(result.positions.get(0)).toBe(1);
+    expect(result.positions.get(0)).toBe(0);
     expect(result.positions.has(1)).toBe(false);
-    expect(result.shortages.map((gap) => gap.index)).toEqual([0, 2]);
+    expect(result.shortages.map((gap) => gap.index)).toEqual([1, 2]);
   });
   it("respects locks and excludes duplicate identities even across keys", () => {
     const slots = Array.from({ length: 3 }, () => ({
@@ -85,40 +84,24 @@ describe("custom kit generation", () => {
   });
 });
 
-describe("parent Type fallback", () => {
-  it("fills missing FX subtypes without using loops or unrelated sounds", () => {
-    const sounds = [sample(0, "fx"), sample(1, "fx"), sample(2, "fxLoop"), sample(3, "kick")];
-    const result = allocateKit(sounds, [
-      { category: "fall", subtype: "noise-fall", label: "Noise Fall" },
-      { category: "riser", label: "Riser" },
-      { category: "fx", subtype: "sweep", label: "Sweep" },
+describe("Type-only preset", () => {
+  it("uses mixed, organized sound families on both B and C", () => {
+    const slots = generationSlots();
+    for (const bank of [slots.slice(16, 32), slots.slice(32, 48)]) {
+      for (const type of ["bass", "melodic", "vox", "fx", "melodicLoop", "drumLoop"]) expect(bank.some(slot => slot.category === type)).toBe(true);
+      expect(bank.slice(12).some(slot => slot.category === "bass")).toBe(true);
+    }
+    expect(layoutById("old-custom-template")).toBe(layout);
+  });
+  it("does not substitute loops or unrelated drums for FX", () => {
+    const result = allocateKit([sample(0, "fx"), sample(1, "fxLoop"), sample(2, "kick")], [
+      { category: "fx", label: "FX" }, { category: "fx", label: "FX" },
     ]);
-    expect([...result.positions.values()]).toEqual([0, 1]);
-    expect(result.shortages.map((gap) => gap.index)).toEqual([2]);
-    expect(sounds[0].classification.category).toBe("fx");
+    expect([...result.positions]).toEqual([[0, 0]]);
+    expect(result.shortages.map((gap) => gap.index)).toEqual([1]);
   });
-  it("reserves an exact riser before a generic FX slot", () => {
-    const result = allocateKit([sample(0, "riser"), sample(1, "fx")], [
-      { category: "fx", label: "FX" }, { category: "riser", label: "Riser" },
-    ]);
-    expect(result.positions.get(0)).toBe(1);
-    expect(result.positions.get(1)).toBe(0);
-  });
-  it("fills an unavailable rim with a snare while preserving its classification", () => {
-    const sound = sample(0, "snare");
-    expect(allocateKit([sound], [{ category: "snare", subtype: "rimshot", label: "Rim" }]).shortages).toEqual([]);
-    expect(sound.classification.subtype).toBeUndefined();
-  });
-});
-
-describe("resolved template labels", () => {
-  it("drops subtype labels for a parent Type fallback", () => {
-    expect(matchingTemplateLabel({ category: "fall", subtype: "noise-fall", label: "Noise Fall" }, sample(0, "fx"))).toBeUndefined();
-    expect(matchingTemplateLabel({ category: "fx", subtype: "sweep", label: "Sweep" }, sample(0, "fx"))).toBeUndefined();
-    expect(matchingTemplateLabel({ category: "snare", subtype: "rimshot", label: "Rim" }, sample(0, "snare"))).toBeUndefined();
-  });
-  it("retains labels for exact matches and repeated generic slots", () => {
-    expect(matchingTemplateLabel({ category: "fall", subtype: "noise-fall", label: "Noise Fall" }, sample(0, "fall", "noise-fall"))).toBe("Noise Fall");
+  it("retains matching Type labels only", () => {
     expect(matchingTemplateLabel({ category: "kick", label: "Kick 2" }, sample(0, "kick"))).toBe("Kick 2");
+    expect(matchingTemplateLabel({ category: "kick", label: "Kick 2" }, sample(0, "snare"))).toBeUndefined();
   });
 });

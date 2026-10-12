@@ -28,7 +28,7 @@ describe("classifying from folder names", () => {
     expect(categoryOfFolder("Toms")).toBe("perc");
     expect(categoryOfFolder("Crashes")).toBe("cymbal");
     expect(categoryOfFolder("Vocal Chops")).toBe("vox");
-    expect(categoryOfFolder("Risers and FX")).toBe("riser");
+    expect(categoryOfFolder("Risers and FX")).toBe("fx");
     expect(categoryOfFolder("Synth Leads")).toBe("melodic");
     expect(categoryOfFolder("Perc Loops")).toBe("percLoop");
     expect(categoryOfFolder("Drum Loops")).toBe("drumLoop");

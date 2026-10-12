@@ -1,7 +1,9 @@
+import { normalizeClassification } from "./audio/sampleClassification";
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -30,7 +32,7 @@ import {
 import { displayName, packTags } from "./audio/sampleName";
 import { packByteBudget, PROJECT_BYTE_BUDGET, projectNameForFiles, type PackFile, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
-import { decodeNative, monoFromChannelData } from "./audio/decode";
+import { decodeNative } from "./audio/decode";
 import {
   parseKoalaProject,
   koalaPadToFile,
@@ -69,6 +71,7 @@ import { balancedSpread } from "./audio/spread";
 import {
   CATEGORIES,
   categoryIndex,
+  categoryLabel,
   is808Name,
   isKitCategory,
   isTunedCategory,
@@ -107,16 +110,15 @@ import {
 import { SwapList } from "./components/SwapList";
 import { LibraryBrowser } from "./components/LibraryBrowser";
 import { PlaybackEditor } from "./components/PlaybackEditor";
-import { LayoutEditor } from "./components/LayoutEditor";
 import { correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
 import { type SampleClassification } from "./audio/sampleClassification";
-import { matchingTemplateLabel, type AdditionalBanks } from "./audio/kitGeneration";
+import { matchingTemplateLabel } from "./audio/kitGeneration";
 import { loadLibraryIndex, saveLibraryIndex } from "./storage";
 import { SampleLibraryModal } from "./components/SampleLibraryModal";
 import { TypeKeys } from "./components/TypeKeys";
 import { Waveform } from "./components/Waveform";
 import { LongSamplesModal } from "./components/LongSamplesModal";
-import { layoutById, type FingerLayout } from "./audio/fingerLayouts";
+import { layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { makeSectionPads } from "./audio/songPads";
@@ -182,7 +184,7 @@ import {
   trimCents,
   bassLiftSemitones,
 } from "./audio/theory";
-import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
+import { analyzeAudio, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { resetStoredType } from "./audio/seq/session";
 import { encodeWav } from "./audio/wavEncode";
@@ -351,7 +353,16 @@ function App() {
   useOledCell();
   useSafeArea();
   // Read once: what the previous visit left behind.
-  const saved = useRef(loadState()).current;
+  const [saved] = useState(() => {
+    const state = loadState();
+    for (const pad of Object.values(state.pads ?? {})) {
+      if (!pad.classification) continue;
+      const classification = normalizeClassification(pad.classification);
+      if (pad.libraryId && ("subtype" in pad.classification || classification.category !== pad.classification.category)) pad.label = categoryLabel(classification.category);
+      pad.classification = classification;
+    }
+    return state;
+  });
   const [pads, setPads] = useState<Record<number, Pad>>({});
   /** A sample pack's spare sounds (by original slot): not on any pad, offered in the hot-swap menu, and left out of the export. */
   const [hidden, setHidden] = useState<Record<number, Pad>>({});
@@ -420,7 +431,7 @@ function App() {
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({
     on: false,
-    id: saved.layoutId ?? layoutById(null).id,
+    id: layoutById(null).id,
     pre: {},
   });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
@@ -449,6 +460,13 @@ function App() {
     y: number;
   } | null>(null);
   const [hover, setHover] = useState("");
+  const dragGhost = useRef<HTMLDivElement>(null);
+  const dragPosition = useRef<{ from: number; x: number; y: number } | null>(null);
+  const paintDrag = () => {
+    const position = dragPosition.current;
+    if (position && dragGhost.current) dragGhost.current.style.transform = `translate3d(${position.x}px, ${position.y}px, 0) translate(-50%, -50%)`;
+  };
+  useLayoutEffect(paintDrag, [drag]);
   /** The all-pads view that opens when a drag dwells over the bank buttons. */
   const [expanded, setExpanded] = useState(false);
   /** One record per finger/pointer holding a pad, so a second touch never disturbs the first. */
@@ -526,15 +544,10 @@ function App() {
   const [indexProgress, setIndexProgress] = useState<LibraryProgress | null>(null);
   const [kitReport, setKitReport] = useState<{ filled: number; requested: number; shortages: string[] } | null>(null);
   const [indexReused, setIndexReused] = useState(0);
-  const [additionalBanks, setAdditionalBanks] = useState<AdditionalBanks>(saved.additionalBanks ?? 0);
   const [typeSettings, setTypeSettings] = useState<Partial<Record<CategoryId, PadPlayback>>>(saved.typeSettings ?? {});
   const [playbackEditorOpen, setPlaybackEditorOpen] = useState(false);
   const [balancePacks, setBalancePacks] = useState(saved.balancePacks ?? true);
-  const [templates, setTemplates] = useState<FingerLayout[]>(saved.customTemplates ?? []);
-  const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
-  const [activeLayout, setActiveLayout] = useState<FingerLayout>(() => saved.customTemplates?.find((t) => t.id === saved.layoutId) ?? layoutById(saved.layoutId));
-  const getLayout = (id: string | null | undefined) => id === activeLayout.id ? activeLayout : templates.find((t) => t.id === id) ?? layoutById(id);
-  useEffect(() => { saveState({ additionalBanks, balancePacks, customTemplates: templates, typeSettings }); }, [additionalBanks, balancePacks, templates, typeSettings]);
+  useEffect(() => { saveState({ balancePacks, typeSettings }); }, [balancePacks, typeSettings]);
   useEffect(() => {
     if (!saved.libraryIndexId) return;
     let cancelled = false;
@@ -632,7 +645,7 @@ function App() {
         );
         setLayout((l) => ({
           on: layoutOn,
-          id: layoutOn ? saved.layoutId ?? l.id : l.id,
+          id: l.id,
           pre: layoutOn ? (saved.layoutPre ?? {}) : {},
         }));
         setHidden({});
@@ -720,9 +733,8 @@ function App() {
           )
             tooLong.push(ref.pad);
           // Analysis runs on a worker while the next pad decodes.
-          nextAnalysisWorker()
-            .analyze(
-              monoFromChannelData(pad.channelData),
+          analyzeAudio(
+              pad.channelData,
               pad.sampleRate,
               pad.sourcePath ?? ref.fileName,
               false,
@@ -769,7 +781,7 @@ function App() {
                         locked: remembered.locked,
                         category: cat,
                         label: remembered.label ?? ref.label,
-                        classification: remembered.classification ?? ref.classification,
+                        classification: remembered.classification ? normalizeClassification(remembered.classification) : ref.classification,
                         playback: remembered.playback ?? ref.playback,
                       }
                     : { category }),
@@ -1050,7 +1062,7 @@ function App() {
     setAddPackStatus("Reading…");
     try {
       const found = await find();
-      const plan = planBank(bank, found.files, Math.random, { layout: activeLayout, additionalBanks, balancePacks });
+      const plan = planBank(bank, found.files, Math.random, { balancePacks });
       if (plan.problem) {
         window.alert(plan.problem);
         return;
@@ -1063,7 +1075,7 @@ function App() {
       const { project, started } = opened;
       const token = loadToken.current;
       const cur = latest.current;
-      const lay = activeLayout;
+      const lay = layoutById(null);
       // What this load replaces: the real sounds on its pads, and the spares of its kind in the hot-swap pool.
       // A locked pad keeps its sound: it is not replaced, and what the pack brings for its place goes to the hot-swap options instead.
       const lockedSlots = new Set(
@@ -1106,10 +1118,7 @@ function App() {
           category: p.category,
         })),
         byteBudget: budget,
-        maxSeconds:
-          bank === "loops" || bank === "oneShots"
-            ? MAX_LOAD_SECONDS
-            : undefined,
+        maxSeconds: MAX_LOAD_SECONDS,
         replace: replaced.map((p) => p.origIndex),
         measure: (input) => getRenderWorker().measure(input),
         onProgress: setAddPackStatus,
@@ -1143,7 +1152,7 @@ function App() {
           identity: s.libraryId,
         })),
         lay,
-        { additionalBanks, locked: lockedSlots, excluded: new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : [])) },
+        { locked: lockedSlots, excluded: new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : [])) },
       );
       const fresh: Pad[] = [];
       for (const sound of result.sounds) {
@@ -1176,7 +1185,7 @@ function App() {
           cents: 0,
         });
       }
-      if (bank === "kit" || bank === "drums") setKitReport({ filled: placement.positions.size + [...lockedSlots].filter((index) => index < (bank === "kit" ? (additionalBanks + 1) * 16 : 16)).length, requested: bank === "kit" ? (additionalBanks + 1) * 16 : 16, shortages: placement.shortages?.map((gap) => `${String.fromCharCode(65 + Math.floor(gap.index / 16))}${gap.index % 16 + 1} · ${gap.label}`) ?? [] });
+      if (bank === "kit" || bank === "drums") setKitReport({ filled: placement.positions.size + [...lockedSlots].filter((index) => index < (bank === "kit" ? 48 : 16)).length, requested: bank === "kit" ? 48 : 16, shortages: placement.shortages?.map((gap) => `${String.fromCharCode(65 + Math.floor(gap.index / 16))}${gap.index % 16 + 1} · ${gap.label}`) ?? [] });
       const onPads = fresh.filter((p) => p.index >= 0);
       const spares = fresh.filter((p) => p.index < 0);
       setSampleLibrary(await loadSampleLibrary());
@@ -1219,9 +1228,8 @@ function App() {
           `${result.skipped} file${result.skipped === 1 ? "" : "s"} skipped: too long, too big for the project size limit or unreadable`,
         );
       for (const pad of fresh) {
-        nextAnalysisWorker()
-          .analyze(
-            monoFromChannelData(pad.channelData),
+        analyzeAudio(
+            pad.channelData,
             pad.sampleRate,
             pad.sourcePath ?? pad.name,
             pad.category === "melodicLoop",
@@ -1553,6 +1561,8 @@ function App() {
   };
 
   const patchPad = (index: number, patch: Partial<Pad>) => {
+    const current = latest.current.pads[index];
+    if (!current || Object.entries(patch).every(([key, value]) => current[key as keyof Pad] === value)) return;
     recordEdit("semis" in patch || "cents" in patch ? `${index}:trim` : "");
     setPads((prev) => ({ ...prev, [index]: { ...prev[index], ...patch } }));
   };
@@ -2305,6 +2315,7 @@ function App() {
   };
 
   const endDrag = (d?: { timer: number | null }) => {
+    dragPosition.current = null;
     if (d?.timer) clearTimeout(d.timer);
     setDrag(null);
     setExpanded(false);
@@ -2419,7 +2430,10 @@ function App() {
         return;
       d.active = true; // the sound keeps playing through the drag; the release at the end of the hold stops it
     }
-    setDrag({ from: d.from, x: e.clientX, y: e.clientY });
+    const newDrag = dragPosition.current?.from !== d.from;
+    dragPosition.current = { from: d.from, x: e.clientX, y: e.clientY };
+    if (newDrag) setDrag(dragPosition.current);
+    else paintDrag();
     const target = targetAt(e.clientX, e.clientY);
     if (target === d.hover) return;
     d.hover = target;
@@ -2868,7 +2882,7 @@ function App() {
   // Validate saved labels too, so projects generated before this fix display correctly.
   const templateLabelOf = (p: Pad): string | undefined => {
     if (!p.libraryId || !p.label) return undefined;
-    const slot = getLayout(layout.id).slots.find((slot) => slot.label === p.label);
+    const slot = layoutById(null).slots.find((slot) => slot.label === p.label);
     return slot && p.category ? matchingTemplateLabel(slot, { category: p.category, classification: p.classification }) : p.label;
   };
   const labelOf = (p: Pad): string =>
@@ -2927,11 +2941,11 @@ function App() {
     const pc = pad.tune ? (pad.keyPc ?? keyPc) : null;
     return pc === null ? "--" : NOTE_NAMES[pc];
   };
-  const tags = packTags(
+  const tags = useMemo(() => packTags(
     [...Object.values(pads).filter(isReal), ...Object.values(hidden)].map(
       (p) => p.name,
     ),
-  );
+  ), [pads, hidden]);
   const padName = (pad: Pad) =>
     `${BANKS[Math.floor(pad.index / 16)]}${(pad.index % 16) + 1}`;
   const panel = selectedPad &&
@@ -3065,14 +3079,14 @@ function App() {
     setPads((prev) => ({ ...prev, [target.index]: incoming }));
     if (isReal(target)) setHidden((prev) => ({ ...prev, [target.origIndex]: { ...target, index: -1 } }));
     setAnalyzing((n) => n + 1);
-    nextAnalysisWorker().analyze(monoFromChannelData(incoming.channelData), incoming.sampleRate, incoming.name, false, incoming.category).then((analysis) => {
+    analyzeAudio(incoming.channelData, incoming.sampleRate, incoming.name, false, incoming.category).then((analysis) => {
       setPads((prev) => prev[incoming.index]?.origIndex === incoming.origIndex ? { ...prev, [incoming.index]: { ...prev[incoming.index], detectedMidi: analysis.midi, centroid: analysis.centroid } } : prev);
       setAnalyzing((n) => Math.max(0, n - 1));
     }).catch(() => setAnalyzing((n) => Math.max(0, n - 1)));
   };
   /** Use the same candidate pool for the hot-swap list and the pad shuffle action. */
   const hotSwapSounds = (target: Pad) => {
-    const slotCategory = (layout.on && target.index < 16 ? getLayout(layout.id).slots[target.index]?.category : undefined) || target.category;
+    const slotCategory = (layout.on && target.index < 16 ? layoutById(null).slots[target.index]?.category : undefined) || target.category;
     const eligible = (pad: Pad) => isKitCategory(slotCategory) ? isKitCategory(pad.category) : pad.category === slotCategory;
     const loadedIds = new Set([...Object.values(pads), ...Object.values(hidden)].map((pad) => pad.libraryId));
     return [
@@ -3099,7 +3113,7 @@ function App() {
     /** The type the target's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */
     const slotCategory =
       (layout.on && target.index < 16
-        ? getLayout(layout.id).slots[target.index]?.category
+        ? layoutById(null).slots[target.index]?.category
         : undefined) || target.category;
     return (
       <SwapList
@@ -3133,7 +3147,7 @@ function App() {
       />
     );
   };
-  const swapList = selectedPad && swapListFor(selectedPad);
+  const swapList = shownMode === "swap" && selectedPad && swapListFor(selectedPad);
 
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
   /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
@@ -3287,9 +3301,7 @@ function App() {
               <p>Reselect the folder to include added or removed samples.</p>
               <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryToolsOpen(true); }}>Edit sample Types</button>
             </details>
-            <label className="menu__a4">Additional banks to fill<select aria-label="Additional banks to fill" value={additionalBanks} onChange={(event) => setAdditionalBanks(Number(event.target.value) as AdditionalBanks)}><option value={0}>0 · A only (16 / 64)</option><option value={1}>1 · A + hybrid B (32 / 64)</option><option value={2}>2 · A + instruments B + loops C (48 / 64)</option></select></label>
             <Switch label="Balance across packs" on={balancePacks} onChange={setBalancePacks}/>
-            <button className="menu__button" onClick={() => { setMenuOpen(false); setLayoutEditorOpen(true); }}>Edit Bank A layout</button>
             <button className="menu__button" onClick={() => { setMenuOpen(false); setPlaybackEditorOpen(true); }}>Koala Type & pad settings</button>
             <button className="menu__button" onClick={() => setSampleLibraryOpen(true)}>
               Favorites on device ({sampleLibrary.length})
@@ -3446,7 +3458,6 @@ function App() {
 
         {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
         {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
-        {layoutEditorOpen && <LayoutEditor layout={activeLayout} templates={templates} onClose={() => setLayoutEditorOpen(false)} onSelect={(template) => setActiveLayout(template)} onSave={(template) => { setTemplates((prev) => [...prev.filter((old) => old.id !== template.id), template]); setActiveLayout(template); saveState({ layoutId: template.id }); }} onApply={(template) => { const applied = template.id === "horizontal" ? { ...template, id: "custom:active" } : template; setActiveLayout(applied); setTemplates((prev) => [...prev.filter((old) => old.id !== applied.id), applied]); setLayout((prev) => ({ ...prev, id: applied.id })); setLayoutEditorOpen(false); setNotice("Layout ready for the next kit generation."); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
             records={sampleLibrary}
@@ -4098,10 +4109,11 @@ function App() {
       </div>
       {drag && pads[drag.from] && (
         <div
+          ref={dragGhost}
           className="drag-ghost"
           style={{
-            left: drag.x,
-            top: drag.y,
+            left: 0,
+            top: 0,
             background: colorOfPad(pads[drag.from]),
           }}
         />

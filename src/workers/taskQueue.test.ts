@@ -1,0 +1,20 @@
+import { expect, it, vi } from 'vitest';
+import { taskQueue } from './taskQueue';
+it('does not start or allocate queued work until a slot is free, including after rejection', async () => {
+  const run = taskQueue(2);
+  let finish!: () => void;
+  let fail!: (error: Error) => void;
+  const started: number[] = [];
+  const a = run(() => { started.push(1); return new Promise<void>((resolve) => { finish = resolve; }); });
+  const b = run(() => { started.push(2); return new Promise<void>((_, reject) => { fail = reject; }); });
+  const rejection = expect(b).rejects.toThrow('bad audio');
+  const c = run(async () => { started.push(3); return 3; });
+  const d = run(async () => { started.push(4); return 4; });
+  await vi.waitFor(() => expect(started).toEqual([1, 2]));
+  fail(new Error('bad audio'));
+  await rejection;
+  expect(await c).toBe(3);
+  expect(await d).toBe(4);
+  finish(); await a;
+  expect(started).toEqual([1, 2, 3, 4]);
+});

@@ -1,4 +1,6 @@
 import * as Comlink from "comlink";
+import { monoFromChannelData } from "../audio/decode";
+import { taskQueue } from "./taskQueue";
 import type { AnalysisWorkerApi } from "./analysis.worker";
 import type { RenderWorkerApi } from "./render.worker";
 
@@ -22,4 +24,16 @@ let renderWorker: Comlink.Remote<RenderWorkerApi> | null = null;
 export function getRenderWorker(): Comlink.Remote<RenderWorkerApi> {
   renderWorker ??= Comlink.wrap<RenderWorkerApi>(new Worker(new URL("./render.worker.ts", import.meta.url), { type: "module" }));
   return renderWorker;
+}
+
+const queueAnalysis = taskQueue(POOL_SIZE);
+/** Keep queued jobs as references to existing audio; transfer only a running job's own mono copy. */
+export function analyzeAudio(
+  channelData: Float32Array[],
+  ...args: [sampleRate: number, fileName: string, isLoop?: boolean, categoryHint?: Parameters<AnalysisWorkerApi["analyze"]>[4]]
+): Promise<ReturnType<AnalysisWorkerApi["analyze"]>> {
+  return queueAnalysis(() => {
+    const mono = channelData.length === 1 ? channelData[0].slice() : monoFromChannelData(channelData);
+    return nextAnalysisWorker().analyze(Comlink.transfer(mono, [mono.buffer]), ...args);
+  });
 }

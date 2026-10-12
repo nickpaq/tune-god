@@ -5,7 +5,7 @@ import JSZip from "jszip";
 import { decodeNative } from "./decode";
 import { encodeWav } from "./wavEncode";
 import type { SampleClassification } from "./sampleClassification";
-import type { CategoryId } from "./classify";
+import { is808Name, type CategoryId } from "./classify";
 import { applyGainDb } from "./gain";
 import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
 import type { ParsedKoalaProject } from "./koalaProject";
@@ -215,8 +215,14 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
           skipped++;
           continue;
         }
+        // Compressed source sizes do not bound the WAV/audio memory retained by the project.
+        const retainedBytes = 44 + decoded.channelData.reduce((sum, channel) => sum + channel.length * 3, 0);
+        if (retainedBytes > maxFileBytes || bytes + retainedBytes > byteBudget) {
+          skipped++;
+          continue;
+        }
         stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: group.category }));
-        bytes += file.size;
+        bytes += retainedBytes;
         taken.push({ file, group: g, number: ++got });
       } catch (err) {
         console.error(err);
@@ -260,7 +266,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
       sampleId,
       fileName,
       category,
-      is808: !!is808 || ((category === "bass" || category === "bassLoop") && file.classification?.subtype === "808"),
+      is808: !!is808 || ((category === "bass" || category === "bassLoop") && [file.sourcePath ?? "", file.rootFolder ?? "", ...file.folders, file.name].some(is808Name)),
       classification: file.classification,
       knobDb,
       group,

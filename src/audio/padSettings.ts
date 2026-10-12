@@ -49,7 +49,7 @@ function basePlayback(category: CategoryId): PadPlayback | undefined {
   if (category === "drumLoop" || category === "percLoop") return { chokeGroup: DRUM_LOOP_MUTE_GROUP, oneShot: false, loop: false, stretch: "beats" };
   if (category === "closedHat" || category === "openHat") return { chokeGroup: HAT_MUTE_GROUP, oneShot: true, loop: false, stretch: "off" };
   if (category === "cymbal") return { chokeGroup: CYMBAL_MUTE_GROUP, oneShot: true, loop: false, stretch: "off" };
-  if (category === "vox" || category === "fx" || category === "riser" || category === "fall") return { chokeGroup: 0, oneShot: true, loop: false, stretch: "off" }; // not drums, though the classifier groups vox with them
+  if (category === "vox" || category === "fx") return { chokeGroup: 0, oneShot: true, loop: false, stretch: "off" }; // not drums, though the classifier groups vox with them
   if (isDrumCategory(category)) return { chokeGroup: 0, oneShot: true, loop: false, stretch: "off" };
   if (category === "bassLoop") return { chokeGroup: BASS_MUTE_GROUP, oneShot: false, loop: false, stretch: "modern" };
   if (category === "voxLoop") return { chokeGroup: VOX_LOOP_MUTE_GROUP, oneShot: false, loop: false, stretch: "modern" };

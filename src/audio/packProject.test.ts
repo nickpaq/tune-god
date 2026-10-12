@@ -25,9 +25,9 @@ describe("original folder paths", () => {
     expect(planOneShots(bells.files).groups).toEqual([]);
     expect(planKit(bells.files).groups[0].category).toBe("perc");
   });
-  it("identifies 808s from the selected folder or filename within the bass family", () => {
-    expect(planKit(findPackInFileList([picked("808/Piano.wav")]).files, Math.random, { additionalBanks: 1 }).groups[0].is808).toBe(true);
-    expect(planKit(findPackInFileList([picked("Bass/808.wav")]).files, Math.random, { additionalBanks: 1 }).groups[0].is808).toBe(true);
+  it("keeps 808 folders and filenames in the shared bass Type quota", () => {
+    expect(planKit(findPackInFileList([picked("808/Piano.wav")]).files, Math.random).groups[0].category).toBe("bass");
+    expect(planKit(findPackInFileList([picked("Bass/808.wav")]).files, Math.random).groups[0].category).toBe("bass");
   });
 });
 
@@ -63,4 +63,12 @@ describe("one-shot import safety", () => {
     expect(JSON.parse(await written.file("sampler/sampler.json")!.async("string")).pads).toHaveLength(1);
     expect(result?.sounds[0].category).toBe("bass");
   });
+});
+
+it("rejects decoded audio over budget even when its source file advertises a tiny compressed size", async () => {
+  const project: ParsedKoalaProject = { zip: new JSZip(), samplerJson: { pads: [], samples: [] }, originalName: "test.koala", padBase: 0, pads: [] };
+  const blob = encodeWav({ sampleRate: 1000, channelData: [new Float32Array(10000)], bitDepth: 24 });
+  const result = await writeBankSounds(project, [{ category: "fx", want: 1, candidates: [{ name: "fx.wav", folders: ["FX"], size: 100, source: async () => new File([blob], "fx.wav") }] }], { existing: [], byteBudget: 10000 });
+  expect(result).toBeNull();
+  expect(project.pads).toHaveLength(0);
 });
