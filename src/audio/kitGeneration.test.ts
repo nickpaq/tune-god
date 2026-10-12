@@ -49,7 +49,7 @@ describe("fixed MPC kit generation", () => {
         allocation.positions.size,
       );
     });
-  it("fills repeated Type slots in order and reports shortages without unrelated substitutions", () => {
+  it("matches Types first, then fills gaps with available Types", () => {
     const slots = [
       { category: "snare" as const, label: "Snare" },
       { category: "snare" as const, label: "Snare 3" },
@@ -60,10 +60,10 @@ describe("fixed MPC kit generation", () => {
       slots,
     );
     expect(result.positions.get(0)).toBe(0);
-    expect(result.positions.has(1)).toBe(false);
-    expect(result.shortages.map((gap) => gap.index)).toEqual([1, 2]);
+    expect(result.positions.get(1)).toBe(1);
+    expect(result.shortages.map((gap) => gap.index)).toEqual([2]);
   });
-  it("respects locks and excludes duplicate identities even across keys", () => {
+  it("preserves locked slots while filling gaps with available sounds", () => {
     const slots = Array.from({ length: 3 }, () => ({
       category: "fx" as const,
       label: "FX",
@@ -79,8 +79,9 @@ describe("fixed MPC kit generation", () => {
       new Set(["file:2"]),
     );
     expect(result.positions.get(0)).toBe(1);
-    expect(result.positions.size).toBe(1);
-    expect(result.shortages.map((gap) => gap.index)).toEqual([2]);
+    expect(result.positions.size).toBe(2);
+    expect([...result.positions.values()]).not.toContain(0);
+    expect(result.shortages).toEqual([]);
   });
 });
 
@@ -93,12 +94,13 @@ describe("Type-only preset", () => {
     }
     expect(layoutById("old-custom-template")).toBe(layout);
   });
-  it("does not substitute loops or unrelated drums for FX", () => {
+  it("fills missing FX with another available Type without relabeling it", () => {
     const result = allocateKit([sample(0, "fx"), sample(1, "fxLoop"), sample(2, "kick")], [
       { category: "fx", label: "FX" }, { category: "fx", label: "FX" },
-    ]);
-    expect([...result.positions]).toEqual([[0, 0]]);
-    expect(result.shortages.map((gap) => gap.index)).toEqual([1]);
+    ], new Set(), new Set(), () => 0);
+    expect([...result.positions]).toEqual([[0, 0], [1, 1]]);
+    expect(result.shortages).toEqual([]);
+    expect(matchingTemplateLabel({ category: "fx", label: "FX" }, sample(1, "fxLoop"))).toBeUndefined();
   });
   it("retains matching Type labels only", () => {
     expect(matchingTemplateLabel({ category: "kick", label: "Kick 2" }, sample(0, "kick"))).toBe("Kick 2");

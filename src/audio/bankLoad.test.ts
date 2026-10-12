@@ -90,22 +90,15 @@ describe("kit folder import", () => {
     ]);
   });
 
-  it("only fills the matching slots and leaves types without files blank", () => {
-    const plan = planKit([...many(["Kicks"], 3), ...many(["Claps"], 2), ...many(["Melodic Loops"], 2)], () => 0.5);
-    const sounds = plan.groups.flatMap((group, groupIndex) => group.candidates.map((_, key) => ({ key: groupIndex * 10 + key, category: group.category, is808: group.is808 })));
+  it("matches requested Types first and uses remaining sounds for gaps", () => {
+    const sounds = [{key:0,category:"kick" as const},{key:1,category:"kick" as const},{key:2,category:"kick" as const},{key:3,category:"clap" as const}];
     const placement = placeBank("kit", sounds, horizontal);
-    expect(placement.positions.size).toBe(5); // 2 kick slots, 1 clap slot, 2 loops on bank B
-    expect(sounds.filter((sound) => sound.category === "melodicLoop").some((sound) => placement.positions.has(sound.key))).toBe(true);
-    expect(placement.placeholders).toEqual([]);
+    expect(placement.positions.size).toBe(4);
+    expect(placement.positions.get(0)).toBe(8);
+    expect(placement.positions.get(1)).toBe(12);
+    expect(placement.positions.get(3)).toBe(11);
+    expect(placement.positions.get(2)).toBe(0);
     expect(placement.ghosts).toEqual([]);
-    const mapped = sounds.filter((sound) => placement.positions.has(sound.key));
-    expect(mapped.every((sound) => {
-      const position = placement.positions.get(sound.key)!;
-      if (position < 16) return horizontal.slots[position]?.category === sound.category;
-      if (sound.category === "melodicLoop") return position >= 16 && position < 32;
-      return false;
-    })).toBe(true);
-    expect([...placement.positions.values()].some((position) => position < 16 && horizontal.slots[position]?.category === "snare")).toBe(false);
   });
 });
 
@@ -150,13 +143,14 @@ describe("placing the sounds", () => {
     expect(p.spares).toHaveLength(4);
   });
 
-  it("fills the kit layout on bank A only, with the leftover drums as spares and reported shortages for gaps", () => {
+  it("fills all Bank A slots with available drums and retains remaining spares", () => {
     const kit = [...sounds("kick", 10), ...sounds("snare", 10, false, 100), ...sounds("closedHat", 5, false, 200), ...sounds("openHat", 5, false, 300)];
     const p = placeBank("drums", kit, horizontal);
     expect([...p.positions.values()].every((i) => i < 16)).toBe(true);
-    expect(p.spares.length).toBeGreaterThan(20);
+    expect(p.positions.size).toBe(16);
+    expect(p.spares).toHaveLength(14);
     expect(p.placeholders.every((ph) => ph.index < 16 && ph.kind === "missing")).toBe(true);
-    expect(p.shortages!.length).toBeGreaterThan(0); // no cymbals, perc or FX in this kit
+    expect(p.shortages).toEqual([]);
     expect(p.ghosts).toEqual([]); // the custom kit has no ghost slots
     expect(BANK_ZONES.drums).toEqual({ start: 0, end: 16 });
   });
@@ -194,7 +188,8 @@ it("fills the former Rim slot from ordinary snares with one shared spare quota",
   expect(plan.groups[0].want).toBe(7);
   const selected = plan.groups[0].candidates.slice(0, plan.groups[0].want).map((_, key) => ({ key, category: "snare" as const }));
   const placement = placeBank("kit", selected, horizontal);
-  expect([...placement.positions.values()]).toEqual([9, 10, 13]);
+  expect([...placement.positions.values()].slice(0, 3)).toEqual([9, 10, 13]);
+  expect(placement.positions.size).toBe(7);
 });
 
 it("loads only 48 pad sounds by default, with optional shared hot-swap spares", () => {

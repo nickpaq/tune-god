@@ -38,12 +38,13 @@ export function matchingTemplateLabel(slot: LayoutSlot | undefined, sound: Pick<
     ? slot.label : undefined;
 }
 
-/** Allocate by main Type; each sample can be used only once. */
+/** Match main Types first, then fill unmet slots randomly from available sounds. */
 export function allocateKit(
   sounds: KitSound[],
   slots: LayoutSlot[],
   locked: ReadonlySet<number> = new Set(),
   excluded: ReadonlySet<string> = new Set(),
+  random: () => number = Math.random,
 ): { positions: Map<number, number>; shortages: KitShortage[] } {
   const positions = new Map<number, number>();
   const used = new Set<string>(excluded);
@@ -59,6 +60,14 @@ export function allocateKit(
     used.add(candidate.identity ?? String(candidate.key));
     occupied.add(index);
     positions.set(candidate.key, index);
+  }
+  const remaining = sounds.filter(sound => !positions.has(sound.key));
+  for (const [index] of slots.entries()) {
+    if (occupied.has(index) || !remaining.length) continue;
+    const at = Math.min(remaining.length - 1, Math.floor(random() * remaining.length));
+    const [sound] = remaining.splice(at, 1);
+    occupied.add(index);
+    positions.set(sound.key, index);
   }
   const shortages = slots.flatMap((slot, index) =>
     occupied.has(index)

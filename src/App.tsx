@@ -32,7 +32,7 @@ import {
   type BankLoad,
 } from "./audio/bankLoad";
 import { displayName, packTags } from "./audio/sampleName";
-import { packByteBudget, PROJECT_BYTE_BUDGET, projectNameForFiles, type PackFile, type PackMemory } from "./audio/samplePack";
+import { packByteBudget, PROJECT_BYTE_BUDGET, projectNameForFiles, shuffled, type PackFile, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
 import { decodeNative } from "./audio/decode";
 import {
@@ -1055,7 +1055,7 @@ function App() {
     try {
       const found = await find();
       const plan = planBank(bank, found.files, Math.random, { balancePacks, loadHotSwapSpares });
-      if (plan.problem) {
+      if (plan.problem && !((bank === "kit" || bank === "drums") && found.files.length)) {
         window.alert(plan.problem);
         return;
       }
@@ -1112,6 +1112,8 @@ function App() {
         byteBudget: budget,
         maxSeconds: MAX_LOAD_SECONDS,
         replace: replaced.map((p) => p.origIndex),
+        fillTo: bank === "kit" || bank === "drums" ? zone.end - zone.start - lockedSlots.size : undefined,
+        fallbackCandidates: bank === "kit" || bank === "drums" ? shuffled(found.files) : undefined,
         measure: (input) => getRenderWorker().measure(input),
         onProgress: setAddPackStatus,
       });
@@ -1147,9 +1149,11 @@ function App() {
         { locked: lockedSlots, excluded: new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : [])) },
       );
       const fresh: Pad[] = [];
+      const decodedSamples = new Map<number, Awaited<ReturnType<typeof decodeNative>>>();
       for (const sound of result.sounds) {
         const ref = project.pads.find((p) => p.pad === sound.pad)!;
-        const decoded = await decodeNative(await koalaPadToFile(project, ref));
+        const decoded = decodedSamples.get(sound.sampleId) ?? await decodeNative(await koalaPadToFile(project, ref));
+        decodedSamples.set(sound.sampleId, decoded);
         if (token !== loadToken.current) return;
         categoryHints.current = {
           ...categoryHints.current,
@@ -1213,14 +1217,9 @@ function App() {
       setSelected(null);
       setBank(BANK_SHOWN[bank]);
       setAnalyzing((n) => n + fresh.length);
-      if (placement.shortages?.length) {
-        setNotice(`Missing ${placement.shortages.length} requested pads: ${placement.shortages.map((gap) => `${String.fromCharCode(65 + Math.floor(gap.index / 16))}${gap.index % 16 + 1} ${gap.label}`).join(", ")}. No substitute sounds used.${result.skipped ? ` ${result.skipped} files skipped.` : ""}`);
-      } else if (result.skipped > 0)
-        setNotice(
-          `${result.skipped} file${result.skipped === 1 ? "" : "s"} skipped: too long, too big for the project size limit or unreadable`,
-        );
+      const analyses = new Map<number, ReturnType<typeof analyzeAudio>>();
       for (const pad of fresh) {
-        analyzeAudio(
+        const analysis = analyses.get(pad.sampleId) ?? analyzeAudio(
             pad.channelData,
             pad.sampleRate,
             pad.sourcePath ?? pad.name,
@@ -1234,8 +1233,9 @@ function App() {
             centroid: undefined,
             bpm: null,
             named: false,
-          }))
-          .then(({ midi: detectedMidi, detail, centroid, bpm, named }) => {
+          }));
+        analyses.set(pad.sampleId, analysis);
+        analysis.then(({ midi: detectedMidi, detail, centroid, bpm, named }) => {
             if (token !== loadToken.current) return;
             const analysed = (p: Pad): Pad => ({
               ...p,
@@ -1569,7 +1569,9 @@ function App() {
       ...pad, category, label: undefined, classification,
       tune: pad.tuneLocked ? pad.tune : tuneDefault(false, false, category, pad.detectedMidi, tunedTarget),
     };
-    const next = replaceCorrectedPad(latest.current.pads, latest.current.hidden, corrected, pad.category ?? "other");
+    const connected = !!libraryFiles.current;
+    const next = replaceCorrectedPad(latest.current.pads, connected ? {} : latest.current.hidden, corrected, pad.category ?? "other");
+    if (connected) next.hidden = { ...latest.current.hidden, ...next.hidden };
     if (next.replacement) next.pads[pad.index] = {
       ...next.replacement,
       tune: tuneDefault(next.replacement.tuneLocked, next.replacement.tune, next.replacement.category, next.replacement.detectedMidi, tunedTarget),
@@ -3003,8 +3005,8 @@ function App() {
     );
   /** The type the selected pad's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */
   /** Swaps a hidden spare onto the selected pad; the sound it replaces goes back into the hot-swap menu, so the swap can be undone by swapping again. */
-  const swapInHidden = (other: Pad, target: Pad) => {
-    recordEdit();
+  const swapInHidden = (other: Pad, target: Pad, remember = true) => {
+    if (remember) recordEdit();
     const incoming: Pad = {
       ...other,
       index: target.index,
@@ -3036,7 +3038,7 @@ function App() {
     return decoded;
   };
 
-  const insertLibrarySound = async (other: Pad, target: Pad, correction = false) => {
+  const insertLibrarySound = async (other: Pad, target: Pad, correction = false, alternatives?: PackFile<() => Promise<File>>[]) => {
     if (addPackStatus || loading) return false;
     const project = projectRef.current;
     const file = libraryFiles.current?.files.find(file => file.libraryId === other.libraryId);
@@ -3045,7 +3047,7 @@ function App() {
     setAddPackStatus("Loading sound…");
     try {
       const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
-      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: [file], want: 1 }], {
+      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], {
         existing: used.map(pad => ({ channelData: audioOf(pad), sampleRate: pad.sampleRate, category: pad.category })),
         byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)), maxSeconds: MAX_LOAD_SECONDS,
         measure: input => getRenderWorker().measure(input),
@@ -3075,13 +3077,27 @@ function App() {
     } finally { if (token === loadToken.current) setAddPackStatus(""); }
   };
 
+  const connectedCandidates = (category: CategoryId, target: Pad) => {
+    const active = new Set(Object.values(latest.current.pads).filter(pad => pad.index !== target.index).map(pad => pad.libraryId));
+    const locked = new Set([...Object.values(latest.current.pads), ...Object.values(latest.current.hidden)].filter(pad => pad.locked).map(pad => pad.libraryId));
+    const eligible = libraryFiles.current?.files.filter(file => file.classification?.category === category && file.libraryId !== target.libraryId && !locked.has(file.libraryId)) ?? [];
+    const unused = eligible.filter(file => !active.has(file.libraryId));
+    return shuffled(unused.length ? unused : eligible);
+  };
+
+  const loadConnectedReplacement = async (target: Pad, intended: CategoryId, correction = false) => {
+    const candidates = connectedCandidates(intended, target);
+    if (!candidates.length) return false;
+    const first = candidates[0];
+    const cached = Object.values(latest.current.hidden).find(pad => pad.libraryId === first.libraryId && pad.category === intended && !pad.locked);
+    if (cached) { swapInHidden(cached, target, !correction); return true; }
+    return insertLibrarySound({ ...target, category: intended, libraryId: first.libraryId }, target, correction, candidates);
+  };
+
   const loadCorrectedReplacement = async (gap: Pad, intended: CategoryId) => {
-    const used = new Set([...Object.values(latest.current.pads), ...Object.values(latest.current.hidden)].map(pad => pad.libraryId));
-    const candidate = libraryFiles.current?.files.find(file => file.classification?.category === intended && !used.has(file.libraryId));
     try {
-      if (!candidate || !await insertLibrarySound({ ...gap, category: intended, libraryId: candidate.libraryId }, gap, true)) {
-        setNotice(`Correction kept in hot swap. No ${categoryLabel(intended)} is available; reconnect the library or choose another sound.`);
-      } else setNotice(`Correction kept in hot swap. Loaded another ${categoryLabel(intended)} from the library.`);
+      if (!await loadConnectedReplacement(gap, intended, true)) setNotice(`No other ${categoryLabel(intended)} in the connected library.`);
+      else setNotice("Type saved · replacement loaded");
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not load a replacement from the library."); }
   };
 
@@ -3173,6 +3189,12 @@ function App() {
     const target = latest.current.pads[index];
     if (!target || !isReal(target)) return;
     if (target.locked) return setNotice("Unlock this pad before shuffling it.");
+    if (libraryFiles.current) {
+      try {
+        if (!await loadConnectedReplacement(target, target.category ?? "other")) setNotice(`No other ${categoryLabel(target.category ?? "other")} in the connected library.`);
+      } catch { setNotice("Could not load that sound from the connected library."); }
+      return;
+    }
     const other = chooseShuffleSound(target, hotSwapSounds(target));
     if (!other) return setNotice("No other sound of this Type is available in hot swap.");
     try {
@@ -3385,7 +3407,7 @@ function App() {
               Favorites on device ({sampleLibrary.length})
             </button>
             <details className="menu__library-tools menu__section"><summary>Kit & memory</summary>
-              <Switch label="Load hot-swap spares" hint="Off by default. Load only pad sounds; library alternatives load when you preview or choose them." on={loadHotSwapSpares} onChange={setLoadHotSwapSpares}/>
+              <Switch label="Load hot-swap spares" hint="Off: no extra sounds are preloaded. Drag a pad to Shuffle to load another of the same Type from your connected library." on={loadHotSwapSpares} onChange={setLoadHotSwapSpares}/>
             <Switch label="Balance across packs" on={balancePacks} onChange={setBalancePacks}/>
             <label className="menu__a4">
               Project size limit

@@ -72,3 +72,22 @@ it("rejects decoded audio over budget even when its source file advertises a tin
   expect(result).toBeNull();
   expect(project.pads).toHaveLength(0);
 });
+
+
+it("fills a sparse kit with actual available Types and shares audio rather than encoding duplicates", async () => {
+  const project: ParsedKoalaProject = { zip: new JSZip(), samplerJson: { pads: [], samples: [] }, originalName: "test.koala", padBase: 0, pads: [] };
+  const blob = encodeWav({ sampleRate: 1000, channelData: [new Float32Array(1000)], bitDepth: 24 });
+  const result = await writeBankSounds(project, [], { existing: [], byteBudget: 1000000, fillTo: 48, random: () => 0, fallbackCandidates: [
+    { name: "broken.wav", folders: ["Kicks"], size: 4, source: async () => new File(["oops"], "broken.wav") },
+    { name: "kick.wav", folders: ["Kicks"], size: blob.size, source: async () => new File([blob], "kick.wav") },
+  ] });
+  expect(result?.sounds).toHaveLength(48);
+  expect(result?.skipped).toBe(1);
+  expect(result?.sounds.every(sound => sound.category === "kick")).toBe(true);
+  expect(new Set(result?.sounds.map(sound => sound.pad)).size).toBe(48);
+  expect(new Set(result?.sounds.map(sound => sound.sampleId)).size).toBe(1);
+  const written = await JSZip.loadAsync(await result!.file.arrayBuffer());
+  const json = JSON.parse(await written.file("sampler/sampler.json")!.async("string"));
+  expect(json.pads).toHaveLength(48);
+  expect(json.samples).toHaveLength(1);
+});
