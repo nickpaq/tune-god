@@ -12,12 +12,12 @@ function formatDuration(seconds: number): string {
  * Acapella mode, after two audio files are picked: the same list as the chopper's sample selector (play button, name, length), with a Song / Vocal
  * button on each row. Pressing it on one file makes the other the opposite, so the two are always one song and one vocal.
  */
-export function AcapellaFilesModal({ song, stem, onSwap, onCancel, onUse }: { song: File; stem: File; onSwap: () => void; onCancel: () => void; onUse: () => void }) {
+export function AcapellaFilesModal({ song, stem, onSwap, onCancel, onUse, audio }: { audio?: Map<File, DecodedAudio>; song: File; stem: File; onSwap: () => void; onCancel: () => void; onUse: () => void }) {
   const preview = useSoundPreview();
   // The rows stay where they are when the roles swap: only the buttons change.
   const order = useRef([song, stem]).current;
-  const decoded = useRef(new Map<File, DecodedAudio>());
-  const [lengths, setLengths] = useState<Map<File, number>>(new Map());
+  const decoded = useRef(audio ?? new Map<File, DecodedAudio>());
+  const [lengths, setLengths] = useState<Map<File, number>>(() => new Map([...decoded.current].map(([file, audio]) => [file, audio.channelData[0].length / audio.sampleRate])));
   useEffect(() => () => preview.stop(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Decode both once, for the length and for playing.

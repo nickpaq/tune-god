@@ -6,7 +6,7 @@ const ACAPELLA_POINTS = [
   "As many chops as the pads you pick, one pad each",
   "Overwrites only the pads you choose",
   "Leaves the project's BPM alone",
-  "Needs a song and its VOCALS stem in the project",
+  "Uses a song/vocal pair in the project, or two external audio files",
 ];
 
 const SYNCED_POINTS = [

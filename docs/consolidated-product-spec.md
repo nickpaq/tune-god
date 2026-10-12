@@ -60,3 +60,5 @@ Hot-swap spares default off: new kit imports retain only the 48 requested pad so
 Ordinary loop exports enable the appropriate stretch mode and omit `stretchLength`, clearing any previous guessed length. Koala determines their bars. Explicit lengths are reserved for acapella and synced chop exports.
 
 Generated Koala pad labels use compact Types without numbers: M Loop, D Loop, P Loop, B Loop, V Loop, FX Loop, HH Closed, HH Open, M Oneshot, and ordinary drum Type names. The bass Type retains 808 where appropriate.
+
+Acapella mode tries project song/vocal detection first. Without a valid pair, prompt for two external audio files (no mixed audio/.koala accept filter). Keep the current project and load sources only into the chop session. Preview and explicit swappable roles precede chopping; clear vocal filenames take priority, otherwise gain-independent onset strength suggests the full song only when distinct. Validate matching duration; do not infer timing alignment from transients.

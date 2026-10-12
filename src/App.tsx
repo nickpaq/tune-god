@@ -1,3 +1,4 @@
+import { suggestedSongIndex } from "./audio/acapellaRoles";
 import { replaceCorrectedPad } from "./audio/correctPadType";
 import { normalizeClassification } from "./audio/sampleClassification";
 import {
@@ -11,7 +12,6 @@ import {
 import { resolvePlayback, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import {
-  acapellaProjectFromAudio,
   guessAcapellaRoles,
   blankProject,
   entriesOfDrop,
@@ -528,6 +528,8 @@ function App() {
   const oneShotsInput = useRef<HTMLInputElement>(null);
   const acapellaInput = useRef<HTMLInputElement>(null);
   /** The two audio files picked for acapella mode, waiting for the user to confirm which is the song and which the vocal. */
+  const [pairNeeded, setPairNeeded] = useState(false);
+  const externalAudio = useRef(new Map<File, Awaited<ReturnType<typeof decodeNative>>>());
   const [roleAsk, setRoleAsk] = useState<{ song: File; stem: File } | null>(null);
   /** The stem's pad settings from the acapella zip being chopped (not in the project), for the export. */
   const acapellaTemplate = useRef<SongTemplate | undefined>(undefined);
@@ -1326,7 +1328,7 @@ function App() {
       ...Object.values(cur.pads).filter(isReal),
       ...Object.values(cur.hidden),
     ]);
-    if (!check.ok) return void window.alert(check.message);
+    if (!check.ok) return void setPairNeeded(true);
     await launchAcapella(check.song, check.vocals);
   };
 
@@ -1419,7 +1421,20 @@ function App() {
         pickedMode.current = null;
         return void window.alert("Acapella mode needs two audio files: the song and its vocal stem. Pick both together, or open a Koala project that already holds them.");
       }
-      return void setRoleAsk(guessAcapellaRoles(picked));
+      setAddPackStatus("Reading song and vocal…");
+      try {
+        const audio = await Promise.all(picked.map(file => decodeNative(file)));
+        externalAudio.current = new Map(picked.map((file, i) => [file, audio[i]]));
+        const named = guessAcapellaRoles(picked);
+        const index = suggestedSongIndex(audio as [typeof audio[0], typeof audio[0]]);
+        // An explicit vocal filename is stronger evidence than an acoustic guess.
+        const vocalNamed = /vocals?|acapella|a[ _-]?cappella|vox|stem/i;
+        const namesDecide = picked.filter(file => vocalNamed.test(file.name)).length === 1;
+        setPairNeeded(false);
+        setRoleAsk(!namesDecide && index !== null ? { song: picked[index], stem: picked[1-index] } : named);
+      } catch { window.alert("One of the audio files could not be read."); }
+      finally { setAddPackStatus(""); }
+      return;
     }
     return void (await openAcapellaFile(project));
   };
@@ -1427,12 +1442,23 @@ function App() {
   /** The two files were picked and the user has settled which is the song and which the vocal: make the project and open it. */
   const finishAcapellaRoles = async (song: File, stem: File) => {
     setRoleAsk(null);
-    const made = await acapellaProjectFromAudio([song, stem], { song, stem });
-    if ("problem" in made) {
+    try {
+      const audio = await Promise.all([song, stem].map(file => externalAudio.current.get(file) ?? decodeNative(file)));
+      if (Math.abs(audio[0].channelData[0].length / audio[0].sampleRate - audio[1].channelData[0].length / audio[1].sampleRate) > 0.03) {
+        setRoleAsk({ song, stem });
+        return void window.alert("The song and vocal must have the same duration and start together. Export both from the same stem split without trimming.");
+      }
+      const opened = await ensureProject();
+      if (!opened) return;
+      const ids = [...opened.project.pads.map(p => p.sampleId), ...(opened.project.samplerJson.samples ?? []).map((s: any) => Number(s.id))];
+      const firstId = Math.max(0, ...ids) + 1;
+      const source = (file: File, i: number): Pad => ({ index: -1, origIndex: CHOPPER_ORIG_INDEX - i, sampleId: firstId + i,
+        name: file.name, sampleRate: audio[i].sampleRate, channelData: audio[i].channelData,
+        category: i === 0 ? "melodic" : "vox", tune: false, semis: 0, cents: 0 });
+      await launchAcapella(source(song, 0), source(stem, 1));
       pickedMode.current = null;
-      return void window.alert(made.problem);
-    }
-    await openAcapellaFile(made.file);
+    } catch { window.alert("One of the audio files could not be read."); }
+    finally { externalAudio.current.clear(); }
   };
 
   const openAcapellaFile = async (file: File) => {
@@ -1471,7 +1497,7 @@ function App() {
       [...onPads, ...Object.values(cur.hidden)],
     );
     if (!found.ok) {
-      window.alert(found.message);
+      setPairNeeded(true);
       return;
     }
     await launchAcapella(found.song, found.vocals);
@@ -1608,7 +1634,7 @@ function App() {
   const openChop = async (pad: Pad) => {
     const check = checkStems(pad, Object.values(pads).filter(isReal));
     if (!check.ok) {
-      window.alert(check.message);
+      setPairNeeded(true);
       return;
     }
     await launchAcapella(check.song, check.vocals);
@@ -4057,12 +4083,26 @@ function App() {
           />
         )}
 
+        {pairNeeded && (
+          <div className="palette-backdrop" onClick={() => setPairNeeded(false)}>
+            <div className="palette-modal" role="dialog" aria-label="Select song and vocal" onClick={e => e.stopPropagation()}>
+              <div className="palette-modal__head"><strong>Song and vocal</strong><button aria-label="Close" onClick={() => setPairNeeded(false)}>✕</button></div>
+              <div className="palette-modal__key">No matching song and vocal pair was found. Select the full song and its isolated vocal from your stem split. Both files must start together and have the same duration.</div>
+              <button className="menu__button" onClick={() => {
+                pickedMode.current = "acapella";
+                if (acapellaInput.current) { acapellaInput.current.removeAttribute("accept"); acapellaInput.current.multiple = true; acapellaInput.current.click(); }
+              }}>Select two audio files</button>
+            </div>
+          </div>
+        )}
         {roleAsk && (
           <AcapellaFilesModal
+            audio={externalAudio.current}
             song={roleAsk.song}
             stem={roleAsk.stem}
             onSwap={() => setRoleAsk({ song: roleAsk.stem, stem: roleAsk.song })}
             onCancel={() => {
+              externalAudio.current.clear();
               setRoleAsk(null);
               pickedMode.current = null;
             }}

@@ -56,3 +56,5 @@ These rules supersede older conflicting notes below. Implementation and validati
 - Project import size is capped at 512 MB, including legacy High preferences; Low remains 96 MB. Background pitch analysis must not disable sample-library reconnect or pack selection. Pad copying shares immutable ZIP entries through a new entry map instead of serializing/reloading the original archive.
 
 Generated Koala pad labels use compact Types without numbers: M Loop, D Loop, P Loop, B Loop, V Loop, FX Loop, HH Closed, HH Open, M Oneshot, and ordinary drum Type names. The bass Type retains 808 where appropriate.
+
+Acapella mode tries project song/vocal detection first. Without a valid pair, prompt for two external audio files (no mixed audio/.koala accept filter). Keep the current project and load sources only into the chop session. Preview and explicit swappable roles precede chopping; clear vocal filenames take priority, otherwise gain-independent onset strength suggests the full song only when distinct. Validate matching duration; do not infer timing alignment from transients.
