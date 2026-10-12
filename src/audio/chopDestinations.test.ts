@@ -8,7 +8,7 @@ import {
   overwriteMessage,
   overwrites,
   padName,
-  selectAll,
+  rangeFrom,
   selectUnused,
   summarize,
   tapPreviews,
@@ -38,7 +38,7 @@ describe("chop destinations", () => {
     expect(summarize(pads, s)).toEqual({ selected: 60, total: 64, empty: 60, overwrite: 0 });
   });
   it("selects all pads except locked ones and counts the overwrites from the real pads", () => {
-    const s = selectAll(pads);
+    const s = rangeFrom(pads, 0, 64);
     expect(s.size).toBe(63);
     expect(summarize(pads, s)).toEqual({ selected: 63, total: 64, empty: 60, overwrite: 3 });
   });
@@ -72,5 +72,15 @@ describe("chop destinations", () => {
     expect(text).toContain("3 existing samples");
     expect(text).toContain("Bank A: A1 (s0), A3 (s2)");
     expect(text).toContain("Bank D: D16 (s63)");
+  });
+});
+
+describe("rangeFrom", () => {
+  const pads = Array.from({ length: 64 }, (_, index) => ({ index, occupied: false, locked: index === 22 }));
+  it("fills the tapped pad and the ones after it, one per chop, skipping locked pads", () => {
+    expect([...rangeFrom(pads, 20, 4)]).toEqual([20, 21, 23, 24]);
+  });
+  it("stops at the end of bank D", () => {
+    expect(rangeFrom(pads, 62, 5).size).toBe(2);
   });
 });
