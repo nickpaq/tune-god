@@ -115,7 +115,8 @@ export function PadPanel({
   chords,
   relative,
   onRelative,
-  projectBpm,
+  playbackPosition,
+  playbackKey,
   onTrim,
   onHoldStart,
   onHoldEnd,
@@ -139,8 +140,8 @@ export function PadPanel({
   /** The reference is the relative key's chord (picked with the squares shown while the slider is dragged up). */
   relative: boolean;
   onRelative: (relative: boolean) => void;
-  /** The project tempo: what a stretched loop goes to. */
-  projectBpm: number;
+  playbackPosition: () => number | null;
+  playbackKey: number;
   /** The pitch slider moved: the pad's pitch trim, in cents. */
   onTrim: (cents: number) => void;
   /** The slider was grabbed: the pad loops with a tone on the key, until it is let go. */
@@ -157,7 +158,6 @@ export function PadPanel({
   const trim = Math.max(-TRIM_RANGE_CENTS, Math.min(TRIM_RANGE_CENTS, trimCents(pad.semis, pad.cents)));
   const total = autoShift + trim / 100;
   const isLoop = chords !== null;
-  const isLoopSound = pad.category === "melodicLoop" || pad.category === "drumLoop";
   /** The two squares (minor left, major right) are shown while the slider is dragged up. */
   const [savingFavorite, setSavingFavorite] = useState(false);
   const [above, setAbove] = useState(false);
@@ -199,22 +199,7 @@ export function PadPanel({
         </div>
       </div>
       <NameLine name={name} fileName={pad.sourcePath ?? pad.name} />
-      {(pad.bpm || isLoopSound) && (
-        <div className="pad-panel__toggles pad-panel__tempo">
-          <span aria-label="Tempo of the sound">{pad.bpm ? (pad.stretch ? `${pad.bpm}>${projectBpm}` : pad.bpm) : "--"} BPM</span>
-          <button
-            className={`tune-toggle${pad.stretch ? " tune-toggle--on" : ""}`}
-            disabled={!pad.bpm}
-            onClick={() => onChange({ stretch: !pad.stretch })}
-            aria-pressed={!!pad.stretch}
-            title="Stretch the loop from its own tempo (from its file name) to the project tempo, without changing its pitch. Needs a tempo in the file name."
-          >
-            Stretch
-          </button>
-        </div>
-      )}
-
-      <Waveform channelData={pad.channelData} />
+      <Waveform channelData={pad.channelData} playbackPosition={playbackPosition} playbackKey={playbackKey} />
 
       <div className="pad-panel__slider">
         <PitchSlider
@@ -235,8 +220,7 @@ export function PadPanel({
           onDragEnd={onHoldEnd}
           onReset={() => onChange({ semis: 0, cents: 0 })}
           onToggleMode={() => setCentsMode((m) => !m)}
-          valueLabel={(cents) => formatTrim(pad.tune ? autoShift * 100 + cents : cents)}
-          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), tap to switch between semitones and cents (a tuner dial, 55 cents either side: past that it snaps to the next semitone). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
+          title="Pitch of the sound: slide left or right to repitch it by whole semitones (slower the lower your finger is), tap to switch between semitones and cents (a tuner dial, 55 cents either side: crossing a semitone midpoint wraps the hand to the opposite side without resetting the pitch). Drag up: a melodic loop is played against its relative key (a minor key's relative major, a major key's relative minor); any other sound stops on the offsets a pitch detector gets wrong by (fifths and octaves). The sound and the reference play only while you hold. Double-tap to reset to the middle."
         />
         {chords && above && (
           <>

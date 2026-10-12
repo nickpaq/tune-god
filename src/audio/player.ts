@@ -113,6 +113,7 @@ export interface PadHandle {
   setToneVolume: (volume: number) => void;
   /** Where the sound is now, in seconds from the start of the audio (the start offset plus the time it has played). */
   position: () => number;
+  isPlaying: () => boolean;
 }
 
 interface ActivePad {
@@ -121,6 +122,12 @@ interface ActivePad {
 }
 
 const activePads = new Map<number, ActivePad>();
+
+/** Stop every outstanding audition, including one-shots already released by the pointer. */
+export function stopAllPads(): void {
+  for (const voice of activePads.values()) voice.stop(0, CUT_FADE);
+  activePads.clear();
+}
 
 /** Frames quieter than this (relative to the sample's peak) are silence or tail, not the sound itself. */
 const GATE_DB = -40;
@@ -215,12 +222,22 @@ export function startPad(
   source.start(0, startSeconds);
 
   let stopped = false;
+  let ended = false;
+  let lastPositionAt = startedAt;
+  let position = startSeconds;
+  const readPosition = () => {
+    const now = ctx.currentTime;
+    position += (now - lastPositionAt) * source.playbackRate.value;
+    lastPositionAt = now;
+    return position;
+  };
   const finish = () => {
     gain.disconnect();
     osc?.stop();
     if (activePads.get(pad) === voice) activePads.delete(pad);
   };
   source.onended = () => {
+    ended = true;
     // A sample ending on its own leaves only the tone (if any), which keeps sounding until release.
     if (!osc) finish();
     onEnd?.();
@@ -258,9 +275,12 @@ export function startPad(
       if (mode !== "oneshot") voice.stop(RELEASE_HOLD, RELEASE_FADE);
     },
     cut: () => voice.stop(0, CUT_FADE),
-    position: () => startSeconds + (ctx.currentTime - startedAt) * source.playbackRate.value,
-    setShift: (semitones) =>
-      source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005),
+    position: readPosition,
+    isPlaying: () => !stopped && !ended && activePads.get(pad) === voice,
+    setShift: (semitones) => {
+      readPosition();
+      source.playbackRate.setTargetAtTime(semitonesToRatio(semitones), ctx.currentTime, 0.005);
+    },
     setTone: (pitchClass, kind) => osc?.retune(pitchClass, kind),
     setToneVolume: (volume) => toneVol?.gain.setTargetAtTime(volume, ctx.currentTime, 0.01),
   };

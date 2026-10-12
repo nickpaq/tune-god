@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bankFileName, BANK_ZONES, numberedLabel, parseBankName, placeBank, planBank, planBass, planDrums, planKit, planLoops, planOneShots, type PlacedSound } from "./bankLoad";
+import { bankFileName, BANK_ZONES, numberedLabel, parseBankName, placeBank, padOnlyGroups, planBank, planBass, planDrums, planKit, planLoops, planOneShots, type PlacedSound } from "./bankLoad";
 import { FINGER_LAYOUTS } from "./fingerLayouts";
 import type { PackFile } from "./samplePack";
 
@@ -182,17 +182,33 @@ it("bounds kit decoding by Type instead of multiplying the quota by every subtyp
     ...file(["Percussion"], `hit-${subtype}-${i}.wav`),
     classification: { category: "perc" as const, subtype: `detail-${subtype}`, confidence: 1, needsReview: false, evidence: "folder" as const },
   }))).flat();
-  const plan = planKit(files, () => 0.5);
+  const plan = planKit(files, () => 0.5, { loadHotSwapSpares: true });
   expect(plan.groups).toHaveLength(1);
   expect(plan.groups[0].want).toBe(7); // Three requested pads + four shared spares.
 });
 
 it("fills the former Rim slot from ordinary snares with one shared spare quota", () => {
   const files = Array.from({ length: 100 }, (_, i) => file(["Snares"], `snare-${i}.wav`));
-  const plan = planKit(files, () => 0.5);
+  const plan = planKit(files, () => 0.5, { loadHotSwapSpares: true });
   expect(plan.groups).toHaveLength(1);
   expect(plan.groups[0].want).toBe(7);
   const selected = plan.groups[0].candidates.slice(0, plan.groups[0].want).map((_, key) => ({ key, category: "snare" as const }));
   const placement = placeBank("kit", selected, horizontal);
   expect([...placement.positions.values()]).toEqual([9, 10, 13]);
+});
+
+it("loads only 48 pad sounds by default, with optional shared hot-swap spares", () => {
+  const files = Array.from({ length: 100 }, (_, i) => file(["Snares"], `snare-${i}.wav`));
+  expect(planKit(files).groups[0].want).toBe(3);
+  expect(planKit(files, Math.random, { loadHotSwapSpares: true }).groups[0].want).toBe(7);
+  expect(padOnlyGroups("kit", planKit(files).groups, new Set([9, 10]))[0].want).toBe(1);
+});
+it("does not load spare sounds for locked loop slots or unused drum Types", () => {
+  expect(padOnlyGroups("loops", planLoops(many([], 40).map(f => ({ ...f, rootFolder: "Melodic Loops" }))).groups, new Set([16, 20]))[0].want).toBe(10);
+  const placement = placeBank("loops", Array.from({ length: 10 }, (_, key) => ({ key, category: "melodicLoop" as const })), horizontal, { locked: new Set([16, 20]) });
+  expect(placement.positions.size).toBe(10);
+  expect([...placement.positions.values()]).not.toContain(16);
+  expect([...placement.positions.values()]).not.toContain(20);
+  expect(placement.spares).toEqual([]);
+  expect(padOnlyGroups("drums", planDrums([file(["Vocals"], "vox.wav")]).groups, new Set())).toEqual([]);
 });

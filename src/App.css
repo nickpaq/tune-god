@@ -469,6 +469,9 @@
   color: var(--oled);
 }
 
+.waveform__canvas { display: block; width: 100%; height: 100%; }
+.waveform__playhead { position: absolute; top: 0; bottom: 0; width: 1px; background: #ff9b62; box-shadow: 0 0 2px #000; pointer-events: none; }
+
 .pad-panel__slider {
   flex: none;
 }
@@ -1149,6 +1152,8 @@
   text-transform: uppercase;
   /* never wider than the chassis: the longest label used to push the menu off the left edge */
   max-width: calc(100% - 8.2cqw);
+  width: calc(100% - 8.2cqw);
+  box-sizing: border-box;
 }
 
 /* Rows keep their own height; when there are too many the menu scrolls instead of squashing them. */
@@ -2464,3 +2469,9 @@
 .sample-library--packs { background: var(--chassis1); color: var(--ink); border-color: var(--edge); border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--edge), 0 1.5cqw 4cqw #0008; }
 .sample-library--packs .library-actions button,
 .sample-library--packs .sample-library__header button { border: 0; border-radius: 1.2cqw; background: var(--btn); color: var(--ink); box-shadow: 0 2px 0 var(--edge); }
+
+.menu__button--build { background: #377b71; color: #fff; font-weight: 700; padding-block: 2.4cqw; }
+.menu__section > summary { cursor: pointer; padding: 1.6cqw 3cqw; border-radius: 1.2cqw; background: var(--btn); box-shadow: 0 2px 0 var(--edge); }
+
+.swap-list__search { flex: none; min-width: 0; width: 100%; box-sizing: border-box; font: inherit; font-size: calc(var(--cell) * 6); background: transparent; color: var(--oled); border: 0; border-bottom: 1px solid var(--track); border-radius: 0; padding: var(--cell); }
+.swap-list__foot { display: flex; align-items: center; justify-content: space-between; font-size: calc(var(--cell) * 6); }

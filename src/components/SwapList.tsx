@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getAudioContext } from "../audio/decode";
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
 
@@ -31,6 +32,9 @@ export function SwapList({
   slotLabel,
   candidates,
   audioOf,
+  readAudio,
+  busy = false,
+  onError,
   nameOf,
   onSwap,
   onFavorite,
@@ -39,33 +43,69 @@ export function SwapList({
   slotLabel: string;
   candidates: Pad[];
   audioOf: (pad: Pad) => Float32Array[];
+  readAudio?: (pad: Pad) => Promise<{ channelData: Float32Array[]; sampleRate: number }>;
+  busy?: boolean;
+  onError?: (message: string) => void;
   /** How a sound is named in the list. */
   nameOf: (pad: Pad) => string;
   onSwap: (pad: Pad) => void;
-  onFavorite: (pad: Pad, favorite: boolean) => void;
+  onFavorite: (pad: Pad, favorite: boolean) => void | Promise<void>;
 }) {
   const preview = useSoundPreview();
   const rows = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const request = useRef(0);
+  const filtered = useMemo(() => candidates.filter(pad => `${pad.name} ${pad.sourcePath ?? ""}`.toLowerCase().includes(query.toLowerCase())), [candidates, query]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 50));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visible = filtered.slice(currentPage * 50, (currentPage + 1) * 50);
+  const audition = async (pad: Pad) => {
+    if (loading || busy) return;
+    const token = ++request.current;
+    if (preview.playing === pad.origIndex) return preview.stop();
+    void getAudioContext().resume();
+    preview.stop();
+    setLoading(true);
+    try {
+      const audio = readAudio ? await readAudio(pad) : { channelData: audioOf(pad), sampleRate: pad.sampleRate };
+      if (token === request.current) preview.toggle(pad.origIndex, audio.channelData, audio.sampleRate);
+    } catch (error) { if (token === request.current) onError?.(error instanceof Error ? error.message : "Could not preview this sound."); }
+    finally { if (token === request.current) setLoading(false); }
+  };
   // A different pad starts its list from the top, and stops any sound still playing.
   useEffect(() => {
     if (rows.current) rows.current.scrollTop = 0;
     preview.stop();
+    request.current++;
+    setLoading(false);
+    setQuery("");
+    setPage(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotLabel]);
+  useEffect(() => () => { request.current++; }, []);
   return (
     <div className="swap-list">
+      <input className="swap-list__search" aria-label="Search hot-swap sounds" placeholder="Search sounds" value={query} onChange={event => { setQuery(event.target.value); setPage(0); if (rows.current) rows.current.scrollTop = 0; }} />
       <div className="swap-list__rows" ref={rows}>
-        {candidates.length === 0 && <div className="swap-list__empty">No other sounds to swap in</div>}
-        {candidates.map((pad) => {
+        {filtered.length === 0 && <div className="swap-list__empty">No other sounds to swap in</div>}
+        {visible.map((pad) => {
           const name = nameOf(pad);
           return (
           <div key={pad.libraryId ?? pad.origIndex} className="swap-row">
-              <span className="swap-row__name" title={pad.name}>
+              <span className="swap-row__name" title={pad.sourcePath ?? pad.name}>
                 {name}
               </span>
               <button
                 className={`swap-row__btn swap-row__favorite${pad.favorite ? " is-favorite" : ""}`}
-                onClick={() => onFavorite(pad, !pad.favorite)}
+                disabled={loading || busy}
+                onClick={async () => {
+                  setLoading(true);
+                  try { await onFavorite(pad, !pad.favorite); }
+                  catch (error) { onError?.(error instanceof Error ? error.message : "Could not save this favorite."); }
+                  finally { setLoading(false); }
+                }}
                 aria-label={`${pad.favorite ? "Remove" : "Add"} ${name} ${pad.favorite ? "from" : "to"} favorites`}
                 title={pad.favorite ? "Remove favorite" : "Favorite: keeps this one sound on this device and puts it first in hot swap"}
               >
@@ -73,14 +113,17 @@ export function SwapList({
               </button>
               <button
                 className={`swap-row__btn${preview.playing === pad.origIndex ? " swap-row__btn--on" : ""}`}
-                onClick={() => preview.toggle(pad.origIndex, audioOf(pad), pad.sampleRate)}
+                disabled={loading || busy}
+                onClick={() => void audition(pad)}
                 aria-label={`${preview.playing === pad.origIndex ? "Stop" : "Play"} ${name}`}
               >
                 {preview.playing === pad.origIndex ? <StopGlyph /> : <PlayGlyph />}
               </button>
               <button
                 className="swap-row__btn"
+                disabled={loading || busy}
                 onClick={() => {
+                  request.current++;
                   preview.stop();
                   onSwap(pad);
                 }}
@@ -92,7 +135,11 @@ export function SwapList({
           );
         })}
       </div>
-      {candidates.length > 0 && <div className="swap-list__foot">{candidates.length} sounds</div>}
+      <div className="swap-list__foot">
+        <button className="swap-row__btn" aria-label="Previous hot-swap page" disabled={currentPage === 0 || loading || busy} onClick={() => { setPage(currentPage - 1); if (rows.current) rows.current.scrollTop = 0; }}>‹</button>
+        <span>{loading || busy ? "Loading…" : `${filtered.length} sounds · ${currentPage + 1}/${pageCount}`}</span>
+        <button className="swap-row__btn" aria-label="Next hot-swap page" disabled={currentPage + 1 === pageCount || loading || busy} onClick={() => { setPage(currentPage + 1); if (rows.current) rows.current.scrollTop = 0; }}>›</button>
+      </div>
     </div>
   );
 }

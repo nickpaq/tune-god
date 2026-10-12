@@ -24,7 +24,7 @@ Generation replaces unlocked A–C pads. Locked pads and their sample identities
 
 Defaults follow the supplied mapping. Product buses 1–4 serialize to Koala's `bus` values 0–3: Kick/Bass, Drums, Melodic, Loops/Vox/FX. Both bass Types default to choke group 5. Hats use 1, cymbals 2, drum/percussion loops 3, melodic loops 4, vocal loops 6. One-shots default to One Shot on and Stretch off; loops default to One Shot off and Stretch on (Beats for drum/percussion, Modern otherwise). Koala loop mode stays off.
 
-**Koala Type & pad settings** configures bus, one-shot, choke and stretch. Resolution is Type defaults, then configured Type settings, then explicit saved pad overrides; the pad's Stretch key is an explicit override. Settings are keyed by original pad number so pads sharing audio can differ. Choke 0 allows layering. Bass choke 5 is a configurable default, not a forced override of the user's settings.
+**Koala Type & pad settings** configures bus, one-shot, choke and stretch. Resolution is Type defaults, then configured Type settings, then explicit saved pad overrides; saved per-pad stretch is an explicit override. Settings are keyed by original pad number so pads sharing audio can differ. Choke 0 allows layering. Bass choke 5 is a configurable default, not a forced override of the user's settings.
 
 The writer retains the original archive's metadata and unknown JSON fields, writes numeric `bus` and `chokeGroup`, preserves boolean/string representation for `oneshot`, `looping` and `stretching`, writes the measured Koala `stretch` mode and `stretchLength` in beats, and records resolved classification. Only explicit pad overrides are stored as overrides, allowing future Type settings to keep working. Generated Bank A labels show the preset's Type assignments. Existing normalization, mix presets, tuning, and fresh-parse-per-export behavior remain in place; the melodic bus EQ follows the new melodic bus index.
 
@@ -50,3 +50,9 @@ Pad dragging offers Shuffle instead of Hold. Shuffle uses the existing hot-swap 
 
 
 Performance: pad SVGs are memoized, drag position updates directly without rendering the whole app per pixel, unchanged tuning detents do not create edits, and OLED sizing reacts to geometry changes. Saved state is read once on mount. Preset selection shares candidate quotas by Type, decoded WAV bytes count against the project budget, all kit samples have a 30-second limit, and queued analysis jobs allocate mono copies only when a worker slot is available.
+
+
+Tune omits the floating pitch label and BPM/Stretch row; Shift remains visible above the waveform, which displays a playback line. A manual Type correction persists the library correction, retains the corrected sound in hot swap, and replaces its slot with an unused spare of the original intended Type. Locked pads are corrected in place; unavailable replacements leave a labeled gap rather than substituting another Type.
+
+
+Hot-swap spares default off: new kit imports retain only the 48 requested pad sounds, excluding locked-slot quotas. Connected-library alternatives are metadata until previewed or selected; search and 50-row pages bound rendered rows. Favorites decode on demand too. Type corrections keep the corrected sound and load one replacement of the original Type from connected files if no spare is already loaded. The menu groups secondary controls and highlights Build another kit, which clears A–D and opens pack selection. Replace kit · keep bank D remains a separate library-tools action. Cents tuning preserves total pitch at semitone boundaries and wraps the hand to the opposite side of the dial.

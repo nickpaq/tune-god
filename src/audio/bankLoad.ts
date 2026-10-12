@@ -192,7 +192,7 @@ export const planOneShots = <T>(files: PackFile<T>[], random: () => number = Mat
  * Use resolved library classifications, or classify hierarchy and filenames. Only requested Types enter the plan.
  * Missing categories have no group, so the placement leaves their pads empty.
  */
-export interface KitOptions { balancePacks?: boolean }
+export interface KitOptions { balancePacks?: boolean; loadHotSwapSpares?: boolean }
 export function planKit<T>(files: PackFile<T>[], random: () => number = Math.random, options: KitOptions = {}): BankPlan<T> {
   if (!files.length) return { groups: [], problem: "No audio files were found in that library." };
   const slots = generationSlots();
@@ -205,7 +205,7 @@ export function planKit<T>(files: PackFile<T>[], random: () => number = Math.ran
     const identity = file.libraryId ?? file.sourcePath ?? [...file.folders, file.name].join("/");
     if (seen.has(identity)) continue;
     seen.add(identity);
-    const group = buckets.get(category) ?? { category, candidates: [], want: slots.filter((slot) => slot.category === category).length + 4 };
+    const group = buckets.get(category) ?? { category, candidates: [], want: slots.filter((slot) => slot.category === category).length + (options.loadHotSwapSpares ? 4 : 0) };
     group.candidates.push({ ...file, classification }); buckets.set(category, group);
   }
   const groups = [...buckets.values()].map((group) => ({
@@ -217,6 +217,18 @@ export function planKit<T>(files: PackFile<T>[], random: () => number = Math.ran
 
 export const planBank = <T>(bank: BankLoad, files: PackFile<T>[], random: () => number = Math.random, options: KitOptions = {}): BankPlan<T> =>
   bank === "kit" ? planKit(files, random, options) : bank === "drums" ? planDrums(files, random) : bank === "bass" ? planBass(files, random) : bank === "loops" ? planLoops(files, random) : planOneShots(files, random);
+
+/** Pad-only imports have no spare quota, including sounds for locked or unused slots. */
+export function padOnlyGroups<T>(bank: BankLoad, groups: BankGroup<T>[], locked: ReadonlySet<number>): BankGroup<T>[] {
+  const slots = bank === "kit" ? generationSlots() : bank === "drums" ? generationSlots().slice(0, 16) : null;
+  if (slots) return groups.map(group => ({ ...group, want: slots.filter((slot, index) => !locked.has(index) && slot.category === group.category).length })).filter(group => group.want > 0);
+  const zone = BANK_ZONES[bank];
+  const available = Array.from({ length: zone.end - zone.start }, (_, i) => zone.start + i).filter(index => !locked.has(index));
+  if (bank !== "bass") return groups.map(group => ({ ...group, want: available.length })).filter(group => group.want > 0);
+  const requested = groups.map(group => available.filter(index => (index >= BASS_START + BASS_PADS) === !!group.is808).length);
+  const shortages = requested.map((want, i) => Math.max(0, want - groups[i].candidates.length));
+  return groups.map((group, i) => ({ ...group, want: requested[i] + (groups.length === 1 ? available.length - requested[i] : shortages[1 - i]) })).filter(group => group.want > 0);
+}
 
 /** A sound that was pulled, named and numbered. */
 export interface PlacedSound {
@@ -254,6 +266,7 @@ export function placeBank(bank: BankLoad, sounds: PlacedSound[], layout: FingerL
     const plain = sounds.filter((s) => !s.is808);
     const eights = sounds.filter((s) => s.is808);
     for (let n = 0; n < BASS_PADS + BASS_808_PADS; n++) {
+      if (options.locked?.has(BASS_START + n)) continue;
       const own = n < BASS_PADS ? plain : eights;
       const other = n < BASS_PADS ? eights : plain;
       const pick = own.shift() ?? other.shift();
@@ -261,7 +274,8 @@ export function placeBank(bank: BankLoad, sounds: PlacedSound[], layout: FingerL
     }
   } else {
     const { start, end } = BANK_ZONES[bank];
-    sounds.slice(0, end - start).forEach((s, n) => positions.set(s.key, start + n));
+    const slots = Array.from({ length: end - start }, (_, n) => start + n).filter(index => !options.locked?.has(index));
+    sounds.slice(0, slots.length).forEach((s, n) => positions.set(s.key, slots[n]));
   }
   out.spares = sounds.filter((s) => !positions.has(s.key)).map((s) => s.key);
   return out;

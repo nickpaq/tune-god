@@ -98,6 +98,7 @@ export interface SavedState {
   /** Finger-drumming layout chosen in the menu (kept across projects). */
   libraryIndexId?: string;
   balancePacks?: boolean;
+  loadHotSwapSpares?: boolean;
   typeSettings?: Partial<Record<CategoryId, PadPlayback>>;
   layoutId?: string;
   /** This project is currently arranged with that layout. */
