@@ -1,3 +1,4 @@
+import { openDebug, recordDebug } from "./diagnostics";
 import {
   useCallback,
   useEffect,
@@ -373,6 +374,7 @@ function App() {
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [normalizing, setNormalizing] = useState(false);
+  useEffect(() => { recordDebug("App state", `loading=${loading} analyzing=${analyzing} exporting=${exporting} normalizing=${normalizing} pads=${Object.keys(pads).length} bank=${bank + 1}`, "info"); }, [loading, analyzing, exporting, normalizing, Object.keys(pads).length, bank]);
   /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
   const [exportProgress, setExportProgress] = useState("");
   /**
@@ -558,6 +560,7 @@ function App() {
       if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
       setIndexProgress({ stage: force ? "Refresh complete" : "Files connected", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
     } catch (error) {
+      recordDebug("App operation", error);
       setIndexProgress(null);
       setLibraryError("Could not reconnect this folder. Choose your packs folder again.");
       setNotice(error instanceof Error ? error.message : "Could not index this folder.");
@@ -598,7 +601,7 @@ function App() {
             semis: 0,
             cents: 0,
           });
-        } catch {
+        } catch (error) { recordDebug("App operation", error);
           // A corrupt cached favorite is omitted from playable hot-swap candidates.
         }
       }
@@ -1367,7 +1370,7 @@ function App() {
     let audio: Awaited<ReturnType<typeof decodeNative>>;
     try {
       audio = await decodeNative(file);
-    } catch {
+    } catch (error) { recordDebug("App operation", error);
       return void window.alert("That audio file could not be read.");
     }
     if (
@@ -2335,6 +2338,7 @@ function App() {
       setSelected(to);
       setBank(Math.floor(to / PADS_PER_BANK));
     } catch (error) {
+      recordDebug("App operation", error);
       setNotice(error instanceof Error ? error.message : "Could not copy that sound.");
     } finally { copyingPad.current = false; }
   };
@@ -2394,7 +2398,7 @@ function App() {
     e.preventDefault();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
+    } catch (error) { recordDebug("App operation", error);
       /* the window listeners below still see the release */
     }
     drags.current.set(e.pointerId, {
@@ -3091,7 +3095,7 @@ function App() {
       if (other.libraryId && other.origIndex <= -100000) await insertFavorite(other, target);
       else if (hidden[other.origIndex]) swapInHidden(other, target);
       else { recordEdit(); setPads((prev) => target.ghost ? fillGhostSlot(prev, target.index, other.index) : movePad(prev, target.index, other.index)); }
-    } catch { setNotice("Could not load that sound. Reconnect its sample folder or save it as a favorite again."); }
+    } catch (error) { recordDebug("App operation", error); setNotice("Could not load that sound. Reconnect its sample folder or save it as a favorite again."); }
   };
   /** Pack tags the project's sounds share ("Rio - ..."), left out of the names in the swap list. */
   /** The hot-swap list for a pad: the sounds that can take its place. Used by the Swap screen and by the sequencer's Sounds page. */
@@ -3436,6 +3440,7 @@ function App() {
                 Reset to A440
               </button>
             )}
+            <button className="menu__button" onClick={() => { setMenuOpen(false); openDebug(); }}>Debug info · copy error report</button>
             <div className="menu__version">
               tunegod v{__APP_VERSION__} · {__APP_BUILD__}
               <br />

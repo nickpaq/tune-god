@@ -1,3 +1,4 @@
+import { watchWorker } from "../diagnostics";
 import * as Comlink from "comlink";
 import type { AnalysisWorkerApi } from "./analysis.worker";
 import type { RenderWorkerApi } from "./render.worker";
@@ -11,7 +12,7 @@ let next = 0;
 export function nextAnalysisWorker(): Comlink.Remote<AnalysisWorkerApi> {
   if (!pool) {
     pool = Array.from({ length: POOL_SIZE }, () =>
-      Comlink.wrap<AnalysisWorkerApi>(new Worker(new URL("./analysis.worker.ts", import.meta.url), { type: "module" })),
+      Comlink.wrap<AnalysisWorkerApi>(watchWorker(new Worker(new URL("./analysis.worker.ts", import.meta.url), { type: "module" }), "Analysis")),
     );
   }
   return pool[next++ % pool.length];
@@ -20,6 +21,6 @@ export function nextAnalysisWorker(): Comlink.Remote<AnalysisWorkerApi> {
 let renderWorker: Comlink.Remote<RenderWorkerApi> | null = null;
 
 export function getRenderWorker(): Comlink.Remote<RenderWorkerApi> {
-  renderWorker ??= Comlink.wrap<RenderWorkerApi>(new Worker(new URL("./render.worker.ts", import.meta.url), { type: "module" }));
+  renderWorker ??= Comlink.wrap<RenderWorkerApi>(watchWorker(new Worker(new URL("./render.worker.ts", import.meta.url), { type: "module" }), "Render"));
   return renderWorker;
 }

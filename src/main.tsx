@@ -1,3 +1,5 @@
+import { installDiagnostics } from './diagnostics'
+import { AppErrorBoundary, DebugTools } from './components/DebugTools'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource/barlow-semi-condensed/500.css'
@@ -10,13 +12,15 @@ import App from './App.tsx'
 import { InstallGate } from './components/InstallGate.tsx'
 import { inStatusBar, needsInstallGate } from './installGate.ts'
 
+installDiagnostics();
+
 // Belt and braces for iOS Safari, which can still scroll, rubber-band or pinch-zoom a page that is
 // `overflow: hidden`: cancel page-level touch moves and pinch gestures outside scrollable panels.
 // Pads, sliders and keys continue to use pointer events.
 document.addEventListener(
   "touchmove",
   (e) => {
-    if (!(e.target as Element | null)?.closest?.(".palette-modal__list, .swap-list__rows, .chop__scroll, .menu, .sample-library")) e.preventDefault();
+    if (!(e.target as Element | null)?.closest?.(".palette-modal__list, .swap-list__rows, .chop__scroll, .menu, .sample-library, .debug-report")) e.preventDefault();
   },
   { passive: false },
 );
@@ -26,11 +30,12 @@ for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <DebugTools />
     {needsInstallGate() ? (
       <InstallGate />
     ) : (
       <>
-        <App />
+        <AppErrorBoundary><App /></AppErrorBoundary>
         {inStatusBar() && <img className="status-mark" src="/logo-mark-outline.png" alt="" aria-hidden="true" />}
       </>
     )}

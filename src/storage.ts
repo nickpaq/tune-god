@@ -1,3 +1,4 @@
+import { recordDebug } from "./diagnostics";
 // Remembers the app between visits: small settings in localStorage, the project file itself
 // in IndexedDB (it's too big for localStorage). Every read/write is best-effort.
 import type { LibraryIndex } from "./audio/libraryIndex";
@@ -116,7 +117,7 @@ export interface SavedState {
 export function loadState(): SavedState {
   try {
     return JSON.parse(localStorage.getItem(STATE_KEY) ?? "{}") as SavedState;
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     return {};
   }
 }
@@ -125,7 +126,7 @@ export function loadState(): SavedState {
 export function saveState(patch: SavedState): void {
   try {
     localStorage.setItem(STATE_KEY, JSON.stringify({ ...loadState(), ...patch }));
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     /* storage unavailable or full: the app just won't remember */
   }
 }
@@ -149,7 +150,7 @@ export function loadChopMarks(songKey: string): SavedChopMarks | null {
     if (!raw || !numbers(raw.chops) || !numbers(raw.downbeats) || !(raw.oneOne === null || Number.isFinite(raw.oneOne)) || !(raw.tempoScale > 0)) return null;
     if (raw.gridOffsetFrames !== undefined && !Number.isFinite(raw.gridOffsetFrames)) return null;
     return raw as SavedChopMarks;
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     return null;
   }
 }
@@ -157,7 +158,7 @@ export function loadChopMarks(songKey: string): SavedChopMarks | null {
 export function saveChopMarks(songKey: string, marks: SavedChopMarks): void {
   try {
     localStorage.setItem(CHOP_KEY + songKey, JSON.stringify(marks));
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     /* storage unavailable or full: the markers just won't be remembered */
   }
 }
@@ -195,7 +196,7 @@ export async function recordImportedSamples(records: SampleLibraryRecord[]): Pro
       tx.onerror = () => reject(tx.error);
     });
     db.close();
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     /* Device storage may be unavailable or full; the project import remains usable. */
   }
 }
@@ -220,7 +221,7 @@ export async function loadSampleLibrary(): Promise<SampleLibraryRecord[]> {
     });
     db.close();
     return records;
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     return [];
   }
 }
@@ -243,7 +244,7 @@ export async function setSampleFavorite(id: string, favorite: boolean, audio?: B
       tx.onerror = () => reject(tx.error);
     });
     db.close();
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     /* Favorites are best-effort if the device has no storage quota left. */
   }
 }
@@ -258,7 +259,7 @@ export async function saveProjectFile(file: File): Promise<void> {
       tx.onerror = () => reject(tx.error);
     });
     db.close();
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     /* ignore */
   }
 }
@@ -273,7 +274,7 @@ export async function loadProjectFile(): Promise<File | null> {
     });
     db.close();
     return file;
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     return null;
   }
 }
@@ -288,7 +289,7 @@ export async function clearProjectFile(): Promise<void> {
       tx.onerror = () => reject(tx.error);
     });
     db.close();
-  } catch {
+  } catch (error) { recordDebug("Device storage", error);
     /* ignore */
   }
 }
@@ -305,7 +306,7 @@ export async function saveLibraryIndex(index: LibraryIndex): Promise<boolean> {
       });
       return true;
     } finally { db.close(); }
-  } catch { return false; }
+  } catch (error) { recordDebug("Device storage", error); return false; }
 }
 export async function loadLibraryIndex(id: string): Promise<LibraryIndex | null> {
   try {
@@ -316,5 +317,5 @@ export async function loadLibraryIndex(id: string): Promise<LibraryIndex | null>
         req.onsuccess = () => resolve(req.result ?? null); req.onerror = () => reject(req.error);
       });
     } finally { db.close(); }
-  } catch { return null; }
+  } catch (error) { recordDebug("Device storage", error); return null; }
 }
