@@ -116,3 +116,36 @@ describe("levelling is optional", () => {
     expect(on.peak).toBeGreaterThan(0.8);
   });
 });
+
+describe("sounds the user picks themselves", () => {
+  const project = (): ParsedKoalaProject => ({ zip: new JSZip(), samplerJson: { pads: [], samples: [] }, originalName: "test.koala", padBase: 0, pads: [] });
+  const long = (name: string, folders: string[]) => {
+    const data = Float32Array.from({ length: 6000 }, (_, i) => Math.sin(i) * 0.3);
+    const blob = encodeWav({ sampleRate: 1000, channelData: [data], bitDepth: 24 });
+    return { name, folders, size: blob.size, source: async () => new File([blob], name) };
+  };
+
+  it("says why an automatic load refused a long bass, and accepts it when the user picked it", async () => {
+    const reasons: string[] = [];
+    const refused = await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("808 long.wav", ["Pack", "bass"])] }], { existing: [], byteBudget: 1000000, onSkip: (reason) => reasons.push(reason) });
+    expect(refused).toBeNull();
+    expect(reasons[0]).toContain("6.0 s long, over the 5 s limit");
+    const accepted = await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("808 long.wav", ["Pack", "bass"])] }], { existing: [], byteBudget: 1000000, explicit: true, maxSeconds: 30 });
+    expect(accepted?.sounds).toHaveLength(1);
+  });
+
+  it("accepts a picked sound whose pack name says loop, and reports the loop name for an automatic load", async () => {
+    const reasons: string[] = [];
+    const auto = await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("Bass hit.wav", ["Loop Kit", "bass"])] }], { existing: [], byteBudget: 1000000, onSkip: (reason) => reasons.push(reason) });
+    expect(auto).toBeNull();
+    expect(reasons[0]).toContain("says loop");
+    expect(await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("Bass hit.wav", ["Loop Kit", "bass"])] }], { existing: [], byteBudget: 1000000, explicit: true })).not.toBeNull();
+  });
+
+  it("names the size limit when a sound is too big for the room left", async () => {
+    const reasons: string[] = [];
+    const result = await writeBankSounds(project(), [{ category: "perc", want: 1, candidates: [long("big.wav", ["Perc"])] }], { existing: [], byteBudget: 6000, onSkip: (reason) => reasons.push(reason) });
+    expect(result).toBeNull();
+    expect(reasons[0]).toContain("most one sound may take");
+  });
+});

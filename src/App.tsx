@@ -3061,7 +3061,7 @@ function App() {
     return decoded;
   };
 
-  const insertLibrarySound = async (other: Pad, target: Pad, correction = false, alternatives?: PackFile<() => Promise<File>>[]) => {
+  const insertLibrarySound = async (other: Pad, target: Pad, correction = false, alternatives?: PackFile<() => Promise<File>>[], explicit = false) => {
     if (addPackStatus || loading) return false;
     const project = projectRef.current;
     const file = libraryFiles.current?.files.find(file => file.libraryId === other.libraryId);
@@ -3070,12 +3070,13 @@ function App() {
     setAddPackStatus("Loading sound…");
     try {
       const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
-      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], { levelling: organize,
+      const reasons: string[] = [];
+      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], { levelling: organize, explicit, onSkip: (reason) => reasons.push(reason),
         existing: used.map(pad => ({ channelData: audioOf(pad), sampleRate: pad.sampleRate, category: pad.category })),
         byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)), maxSeconds: MAX_LOAD_SECONDS,
         measure: input => getRenderWorker().measure(input),
       });
-      if (!result) throw new Error("This sound is too long, unreadable, or exceeds the project memory limit.");
+      if (!result) throw new Error(reasons.length ? `That sound could not be loaded: ${reasons[0]}.` : "That sound could not be loaded.");
       const written = result.sounds[0];
       const ref = project.pads.find(pad => pad.pad === written.pad)!;
       const decoded = await decodeNative(await koalaPadToFile(project, ref));
@@ -3180,12 +3181,13 @@ function App() {
       libraryId: record.id, favorite: true, sourceName: record.name, sourcePack: record.pack, sourcePath: record.sourcePath,
     };
     const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
-    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], { levelling: organize,
+    const reasons: string[] = [];
+    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], { levelling: organize, explicit: true, maxSeconds: MAX_LOAD_SECONDS, onSkip: (reason) => reasons.push(reason),
       existing: used.map((p) => ({ channelData: audioOf(p), sampleRate: p.sampleRate, category: p.category })),
       byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
       measure: (input) => getRenderWorker().measure(input),
     });
-    if (!result) return void window.alert("There is not enough room in this project to add that favorite. Increase the project size limit or free space by removing samples.");
+    if (!result) return void window.alert(reasons.length ? `That favorite could not be added: ${reasons[0]}.${packMemory === "low" ? " The project size limit is set to Low; Default allows far more." : ""}` : "That favorite could not be added.");
     const written = result.sounds[0];
     const ref = opened.project.pads.find((p) => p.pad === written.pad);
     if (!ref) return;
@@ -3274,7 +3276,7 @@ function App() {
         nameOf={(p) => displayName(p.name, tags)}
         onFavorite={toggleFavorite}
         onSwap={(other) => {
-          if (other.origIndex <= -200000) return void insertLibrarySound(other, target).catch(error => setNotice(error instanceof Error ? error.message : "Could not load this library sound."));
+          if (other.origIndex <= -200000) return void insertLibrarySound(other, target, false, undefined, true).catch(error => setNotice(error instanceof Error ? error.message : "Could not load this library sound."));
           if (other.libraryId && other.origIndex <= -100000) return void insertFavorite(other, target);
           if (hidden[other.origIndex]) return swapInHidden(other, target);
           recordEdit();

@@ -161,6 +161,10 @@ export interface WriteOptions {
   fillTo?: number;
   fallbackCandidates?: PackFile<PackSource>[];
   random?: () => number;
+  /** Called with the reason each sound was skipped, so the caller can say why nothing was added. */
+  onSkip?: (reason: string, name: string) => void;
+  /** The user picked this sound themselves (a swap or a favorite): the automatic one-shot length cap and the loop-name check do not apply to it. */
+  explicit?: boolean;
   /** Level the new sounds (peak-normalize the file and set the pad's volume knob). Off, they are written as they came in. Default on. */
   levelling?: boolean;
 }
@@ -182,7 +186,7 @@ const TRIES_PER_SOUND = 8;
  * not touched. Returns null when nothing could be taken.
  */
 export async function writeBankSounds(project: ParsedKoalaProject, groups: BankGroup<PackSource>[], options: WriteOptions): Promise<WriteResult | null> {
-  const { measure = async (input: BalanceInput) => balanceStats(input), onProgress, existing, byteBudget, maxSeconds, replace, levelling = true } = options;
+  const { measure = async (input: BalanceInput) => balanceStats(input), onProgress, existing, byteBudget, maxSeconds, replace, levelling = true, onSkip, explicit = false } = options;
   const maxFileBytes = maxFileBytesFor(Math.max(byteBudget, 1));
   groups = [...groups];
   const random = options.random ?? Math.random;
@@ -200,28 +204,37 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
   let bytes = 0;
   const take = async (file: PackFile<PackSource>, g: number): Promise<boolean> => {
     const group = groups[g];
-      if (file.size <= 0 || file.size > maxFileBytes || bytes + file.size > byteBudget) {
-        skipped++;
-        return false;
-      }
-      if (group.category === "bass" || group.category === "melodic") {
+      const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
+      if (file.size <= 0) { skipped++; onSkip?.("the file is empty", file.name); return false; }
+      if (file.size > maxFileBytes) { skipped++; onSkip?.(`the file is ${mb(file.size)} and the most one sound may take is ${mb(maxFileBytes)} (a sixth of the room left under the project size limit)`, file.name); return false; }
+      if (bytes + file.size > byteBudget) { skipped++; onSkip?.(`only ${mb(Math.max(0, byteBudget - bytes))} is left under the project size limit`, file.name); return false; }
+      if (!explicit && (group.category === "bass" || group.category === "melodic")) {
         const inferred = classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name, undefined, file.duration);
         if (file.classification?.category === "bassLoop" || file.classification?.category === "melodicLoop" || inferred.category === "bassLoop" || inferred.category === "melodicLoop") {
           skipped++;
+          onSkip?.("its folder or file name says loop, so it cannot fill a one-shot slot", file.name);
           return false;
         }
       }
       onProgress?.(`Measuring ${taken.length + 1}`);
       try {
         const decoded = await decodeNative(await file.source());
-        if (!acceptsOneShotDuration(group.category, decoded.channelData[0].length / decoded.sampleRate) || (maxSeconds !== undefined && decoded.channelData[0].length / decoded.sampleRate > maxSeconds)) {
+        const seconds = decoded.channelData[0].length / decoded.sampleRate;
+        if (!explicit && !acceptsOneShotDuration(group.category, seconds)) {
           skipped++;
+          onSkip?.(`it is ${seconds.toFixed(1)} s long, over the ${group.category === "bass" ? ONE_SHOT_MAX_SECONDS.bass : ONE_SHOT_MAX_SECONDS.melodic} s limit for one-shot sounds of this Type`, file.name);
+          return false;
+        }
+        if (maxSeconds !== undefined && seconds > maxSeconds) {
+          skipped++;
+          onSkip?.(`it is ${seconds.toFixed(1)} s long and sounds over ${maxSeconds} s are not loaded`, file.name);
           return false;
         }
         // Compressed source sizes do not bound the WAV/audio memory retained by the project.
         const retainedBytes = 44 + decoded.channelData.reduce((sum, channel) => sum + channel.length * 3, 0);
         if (retainedBytes > maxFileBytes || bytes + retainedBytes > byteBudget) {
           skipped++;
+          onSkip?.(`its audio takes ${mb(retainedBytes)} in the project, over the ${mb(Math.min(maxFileBytes, Math.max(0, byteBudget - bytes)))} one sound may take under the project size limit`, file.name);
           return false;
         }
         if (levelling) stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: group.category }));
@@ -231,6 +244,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
       } catch (err) {
         console.error(err);
         skipped++;
+        onSkip?.("the audio could not be read", file.name);
       }
     return false;
   };
