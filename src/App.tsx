@@ -2785,7 +2785,9 @@ function App() {
         ? balanceFromStats(stats, FILE_CEILING_DB)
         : { gainDb: rendered.map(() => 0), knobDb: rendered.map(() => 0) };
       rendered.forEach((r, i) => {
-        vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
+        // Organize off: no mix level is written, and a volume a loader set while Organize was on goes back to 0 dB.
+        if (organize) vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
+        else if (r.pad.knobDb !== undefined) vols.set(r.pad.sampleId, 1);
         tuned.push({
           sampleId: r.pad.sampleId,
           sampleRate: r.pad.sampleRate,
@@ -2827,7 +2829,8 @@ function App() {
         const settings = p.category ? resolvePlayback(p.category, typeSettings[p.category], p.playback, p.stretch) : undefined;
         padOverrides.set(p.origIndex, p.playback || p.stretch !== undefined ? { ...p.playback, ...(p.stretch !== undefined ? { stretch: p.stretch ? settings?.stretch : "off" as const } : {}) } : null);
         if (p.classification) classifications.set(p.origIndex, { ...p.classification, category: p.category });
-        if (settings) padPlayback.set(p.origIndex, autoPlayback ? settings : { ...settings, eq: undefined });
+        // Bus routing and the per-pad EQ are part of the mix: with Organize off the pad keeps the bus and EQ it came with.
+        if (settings) padPlayback.set(p.origIndex, autoPlayback ? settings : { ...settings, eq: undefined, bus: undefined });
       }
       // Sounds export compact Type labels without file or preset numbering.
       // Ordinary loops use Koala’s automatic length detection; chop exports write their exact lengths.
@@ -2842,7 +2845,7 @@ function App() {
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, {
         bpm: projectBpm,
-        vols: organize ? vols : undefined,
+        vols,
         pitches,
         busNames: organize ? BUS_NAMES : undefined,
         busEffects: routeBuses,
