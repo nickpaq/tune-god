@@ -420,7 +420,8 @@ function App() {
   const [seqOpen, setSeqOpen] = useState(false);
   const seqBeatsPerBar = 4;
   const [masterStyle, setMasterStyle] = useState<MasterStyle>(
-    saved.masterStyle ?? "loud",
+    // Dynamic by default; a style saved before that default changed is ignored once.
+    saved.masterStyleDefaultedDynamic ? (saved.masterStyle ?? "dynamic") : "dynamic",
   );
   const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
   const [packMemory, setPackMemory] = useState<PackMemory>(
@@ -892,6 +893,7 @@ function App() {
     saveState({
       organizeOn: organize,
       organizeDefaultedOff: true,
+      masterStyleDefaultedDynamic: true,
       sidechainOn,
       masterStyle,
       padSymbols,
