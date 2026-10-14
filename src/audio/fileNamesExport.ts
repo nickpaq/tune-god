@@ -18,10 +18,10 @@ export function fileNamesExport(index: LibraryIndex, scope: FileNamesScope = "al
   return ["Type\tHow\tPath", ...rows].join("\n") + "\n";
 }
 
-interface TreeNode { folders: Map<string, TreeNode>; files: string[]; count: number }
+interface TreeNode { folders: Map<string, TreeNode>; files: { name: string; type: string }[]; count: number }
 
 /**
- * The library as an indented text tree: every folder and subfolder by name, with the audio files inside it. The index holds audio files only (wav, wave, aif,
+ * The library as an indented text tree: every folder and subfolder by name, with the audio files inside it, each followed by its Type in brackets. The index holds audio files only (wav, wave, aif,
  * aiff, flac, mp3, ogg, m4a), so .asd, images, MIDI and the like never appear. Each folder line carries the number of audio files under it.
  */
 export function fileTreeExport(index: LibraryIndex): string {
@@ -36,7 +36,7 @@ export function fileTreeExport(index: LibraryIndex): string {
       next.count++;
       node = next;
     }
-    node.files.push(parts[parts.length - 1]);
+    node.files.push({ name: parts[parts.length - 1], type: categoryLabel(sample.classification.category) });
   }
   const compare = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
   const lines: string[] = [];
@@ -47,7 +47,7 @@ export function fileTreeExport(index: LibraryIndex): string {
       lines.push(`${pad}${name}/  (${child.count.toLocaleString("en-US")})`);
       walk(child, depth + 1);
     }
-    for (const file of [...node.files].sort(compare)) lines.push(`${pad}${file}`);
+    for (const file of [...node.files].sort((a, b) => compare(a.name, b.name))) lines.push(`${pad}${file.name}  [${file.type}]`);
   };
   walk(root, 0);
   return lines.join("\n") + "\n";

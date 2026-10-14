@@ -40,12 +40,12 @@ describe("file tree export", () => {
       "  Pack A/  (2)",
       "    Loops/  (1)",
       "      Sub/  (1)",
-      "        Loop.flac",
-      "    Intro.mp3",
+      "        Loop.flac  [Bass Loop]",
+      "    Intro.mp3  [Other]",
       "  Pack B/  (2)",
       "    Kicks/  (2)",
-      "      Kick 2.wav",
-      "      Kick 10.wav",
+      "      Kick 2.wav  [Kick]",
+      "      Kick 10.wav  [Kick]",
       "",
     ].join("\n"));
   });
