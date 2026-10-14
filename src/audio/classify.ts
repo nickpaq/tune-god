@@ -140,7 +140,7 @@ const NAME_RULES: [CategoryId | "hat", RegExp][] = [
   ["perc", /\b(tom|toms|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro)\b/],
   ["bass", /\b(808|bass|sub|reese)\b/],
   ["melodic", MELODIC_NAME],
-  ["perc", /\b(perc|percussion|drum)\b/],
+  ["perc", /\b(perc|percussion|percussive|drum)\b/],
 ];
 
 /** The loop category a sound becomes when its name says "loop": drums become drum loops, perc perc loops, bass and melodic melodic loops. */

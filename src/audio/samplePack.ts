@@ -79,7 +79,7 @@ export const AUDIO_EXTENSIONS = /\.(wav|wave|aif|aiff|flac|mp3|ogg|m4a)$/i;
 // Order matters: the first match wins.
 const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["drumLoop", /\b(drum ?loops?|beat ?loops?|breaks?|breakbeats?|amens?|top ?loops?|drum ?breaks?)\b/],
-  ["percLoop", /\b(perc(ussion)? ?loops?|shaker ?loops?)\b/],
+  ["percLoop", /\b(perc(ussion|ussive)? ?loops?|shaker ?loops?)\b/],
   ["bassLoop", /\b(bass|808|sub) ?loops?\b/],
   ["voxLoop", /\b(vocal|vox|voice) ?loops?\b/],
   ["fxLoop", /\b(fx|effects?) ?loops?\b/],
@@ -95,7 +95,7 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["fx", /\b(fx|sfx|effects?|falls?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|booms?|zaps?|lasers?|sirens?|reverses?|reversed|scratch(es)?|vinyl|crackles?|stingers?|stings?|rumbles?|bursts?|explosions?|sci ?fi)\b/],
   // Percussion folders take precedence over melodic keywords.
   ["perc", /\b(toms?|congas?|bongos?|tamb(ourines?)?|cowbells?|bells?|chimes?|glock(enspiel)?s?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
-  ["perc", /\b(perc|percs|percussions?)\b/],
+  ["perc", /\b(perc|percs|percussions?|percussive)\b/],
   ["bass", /\b(808s?|bass(es)?|subs?|reese)\b/],
   ["melodic", /\b(pianos?|keys?|keyboards?|bells?|plucks?|guitars?|harps?|mallets?|marimbas?|kalimbas?|rhodes|epianos?|stabs?|vibraphones?|glock(enspiel)?s?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|organs?|brass|horns?|flutes?|melod(y|ic|ies)|instruments?|tonal|pitched)\b/],
   ["other", /\b(other|misc|miscellaneous|uncategorized)\b/],
@@ -133,7 +133,7 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
 }
 
 /** Bumped whenever the classification rules change, so saved library indexes reclassify unchanged files once instead of keeping stale results. */
-export const CLASSIFIER_VERSION = 2;
+export const CLASSIFIER_VERSION = 3;
 
 /** A folder named exactly 808 or 808s ("808's" too): everything inside is an 808, whatever its length, loop wording or root note. */
 export function is808Folder(folder: string): boolean {

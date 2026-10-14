@@ -106,3 +106,11 @@ describe("808 folders", () => {
     expect(classifyFile(["Pack", "808 Loops"], "Am.wav").category).toBe("bassLoop");
   });
 });
+
+describe("percussive folders", () => {
+  it("sort percussive loops as perc loops and percussive one-shots as perc", () => {
+    expect(classifyFile(["Kit", "Percussive Loops"], "Mutant Loop.wav").category).toBe("percLoop");
+    expect(classifyFile(["Kit", "Percussive Loops"], "Bed Sqeak 1.wav").category).toBe("percLoop");
+    expect(classifyFile(["Kit", "Percussive"], "Hit.wav").category).toBe("perc");
+  });
+});
