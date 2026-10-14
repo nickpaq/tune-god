@@ -131,3 +131,7 @@ The icon is the tunegod headphone face (the art is in `public/pwa-512.png`; `pub
 - `THIRD_PARTY_NOTICES.md` still describes an earlier version of the app (Rubber Band, essentia.js); it needs a review against the current dependencies.
 
 Generate kit uses one MPC-style preset: drums on A, organized mixes of bass, melodic sounds, vocals, FX and loops on B and C, with D reserved for chops and acapellas. Subtype and template controls are removed.
+
+### In-app diagnostics
+
+Open **Menu → Debug info · copy error report** after a failure. Copy the report or download `tune-god-debug.json` to share it. It includes recent errors, operation progress, audio state, browser/PWA details and the build version. The last 80 events stay locally across app restarts; **Clear log** removes them. Logging still works in memory if device storage is unavailable. No audio or project contents are collected or sent, though error messages may contain file names. A React crash screen keeps the report accessible before reloading. Browser process termination or a full device crash cannot provide a JavaScript stack; the saved preceding events may help diagnose it.
