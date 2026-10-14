@@ -6,14 +6,16 @@ describe("per-pad EQ by sound type", () => {
     expect(playbackFor("kick")?.eq).toBeUndefined();
     expect(playbackFor("bass")?.eq).toBeUndefined();
     expect(playbackFor("closedHat")?.eq?.highpassHz).toBe(300);
-    for (const c of ["snare", "clap", "closedHat", "openHat", "cymbal", "perc", "vox", "fx", "melodic", "melodicLoop", "percLoop"] as const) {
+    for (const c of ["snare", "clap", "closedHat", "openHat", "cymbal", "perc", "vox", "fx", "percLoop"] as const) {
       expect(playbackFor(c)?.eq?.highpassHz, c).toBeGreaterThanOrEqual(20);
     }
   });
 
-  it("warms the hats and cymbals with a small high-shelf cut and keeps the hat mute group", () => {
-    expect(playbackFor("closedHat")).toMatchObject({ chokeGroup: 1, oneShot: true, eq: { highShelfDb: -2 } });
-    expect(playbackFor("cymbal")?.eq?.highShelfDb).toBe(-2);
+  it("keeps the hat mute group and leaves the top end's warmth to the master shelf instead of cutting it twice", () => {
+    expect(playbackFor("closedHat")).toMatchObject({ chokeGroup: 1, oneShot: true });
+    expect(playbackFor("closedHat")?.eq?.highShelfDb).toBeUndefined();
+    expect(playbackFor("cymbal")?.eq?.highShelfDb).toBeUndefined();
+    expect(playbackFor("melodic")?.eq).toBeUndefined();
   });
 });
 

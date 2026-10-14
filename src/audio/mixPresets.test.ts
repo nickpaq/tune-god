@@ -10,6 +10,17 @@ describe.each(Object.values(MIX_PRESETS))("mix preset $name", (preset) => {
     for (const id of ["closedHat", "openHat", "cymbal"] as const) expect(t[id], id).toBeLessThan(t.snare);
   });
 
+  it("follows trap and hip-hop standards: kick leads, 808 just under, snare and clap next, hats and FX held back by no more than 12 dB", () => {
+    const t = preset.loudness.targetLufs;
+    expect(t.bass).toBeLessThan(t.kick);
+    expect(t.kick - t.bass).toBeLessThanOrEqual(2);
+    expect(t.snare).toBeGreaterThan(t.vox);
+    expect(t.clap).toBeGreaterThan(t.vox);
+    expect(t.vox).toBeGreaterThan(t.melodic);
+    expect(t.melodic).toBeGreaterThan(t.closedHat);
+    for (const id of Object.keys(t) as (keyof typeof t)[]) expect(t.kick - t[id], id).toBeLessThanOrEqual(12);
+  });
+
   it("keeps pad EQ highpasses and shelf gains inside Koala's EQ ranges", () => {
     for (const [type, eq] of Object.entries(preset.padEq)) {
       expect(eq.highpassHz, type).toBeGreaterThanOrEqual(20);

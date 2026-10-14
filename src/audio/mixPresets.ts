@@ -84,45 +84,48 @@ export const MASTER_STYLES: { id: MasterStyle; name: string }[] = [
   { id: "loud", name: "Loud (squashed, about -9 LUFS)" },
 ];
 
+/** Where the kick sits after its knob, in LUFS: the reference every other type is measured from (the knob only turns down). */
+const KICK_LUFS = -13;
+/** Each sound type's level in dB under the kick (see HEAVY_WARM_HIP_HOP.loudness). */
+const DB_UNDER_KICK: Record<CategoryId, number> = {
+  kick: 0,
+  bass: 1, bassLoop: 1,
+  snare: 3, clap: 4,
+  vox: 5, voxLoop: 6,
+  melodic: 7, melodicLoop: 8, drumLoop: 7, other: 8,
+  openHat: 9, perc: 9, cymbal: 10, closedHat: 10,
+  percLoop: 11, fx: 11, fxLoop: 12,
+};
+const TARGET_LUFS = Object.fromEntries(Object.entries(DB_UNDER_KICK).map(([type, under]) => [type, KICK_LUFS - under])) as Record<CategoryId, number>;
+
 /** Heavy and warm hip-hop and trap: the kick and 808 lead, the top end is tucked back, the master is pushed and glued. */
 export const HEAVY_WARM_HIP_HOP: MixPreset = {
   id: "heavy-warm-hip-hop",
   name: "Heavy and warm hip-hop",
   loudness: {
-    // Hip-hop, loud and warm. Measured on the 200 ms window of a peak-normalized file, so these are the levels after the knob. The kick leads;
-    // the 808 sits just under it; hats and cymbals are held well back so the top end stays smooth, not harsh.
-    targetLufs: {
-      kick: -13,
-      bass: -15,
-      snare: -19,
-      clap: -21,
-      closedHat: -29,
-      openHat: -27,
-      cymbal: -27,
-      perc: -23,
-      melodic: -21,
-      vox: -19,
-      fx: -27,
-      drumLoop: -22,
-      percLoop: -27,
-      melodicLoop: -22,
-  bassLoop: -15, voxLoop: -19, fxLoop: -27,
-      other: -22,
-    },
+    // Trap and hip-hop balance, written as dB under the kick so the whole mix moves with one number. Measured on the 200 ms window of a peak-normalized
+    // file, so these are the levels after the knob (the knob only ever turns a sound down; a file already under its target stays at 0 dB).
+    //   0 dB          kick: the reference. The 808 and bass loops sit 1 dB under it (more sustained energy, the sub leads without burying the kick).
+    //   -3 to -4 dB   snare and clap: cracking on top of the kick, as loud as they are in a trap mix; rims are snares.
+    //   -5 to -6 dB   vocals and vocal loops: chops that sit on top of the melody.
+    //   -7 to -8 dB   melodic one-shots and loops, drum loops and "other": the bed under the drums.
+    //   -9 to -10 dB  perc, hats and cymbals: present and crisp, not harsh (the master shelf and the per-pad highpass keep them smooth).
+    //   -11 to -12 dB perc loops and FX.
+    targetLufs: TARGET_LUFS,
   },
   padTone: { snare: -0.1 }, // slightly under the middle: a touch darker
   sectionEq: { highpassHz: 150 }, // above the bass and 808 fundamentals, below the voice
   padEq: {
-    closedHat: { highpassHz: 300, highShelfDb: -2 }, // highpass: clear of the 808; shelf: warmer
-    openHat: { highpassHz: 300, highShelfDb: -2 },
-    cymbal: { highpassHz: 250, highShelfDb: -2 },
+    // Highpasses only: the warmth on the top end is the master chain's 8 kHz shelf, so a second shelf here would cut the same band twice.
+    closedHat: { highpassHz: 300 }, // clear of the 808
+    openHat: { highpassHz: 300 },
+    cymbal: { highpassHz: 250 },
     perc: { highpassHz: 200 },
     clap: { highpassHz: 200 },
     snare: { highpassHz: 120 },
     vox: { highpassHz: 120 },
     fx: { highpassHz: 200 },
-    melodic: { highpassHz: 80 },
-    melodicLoop: { highpassHz: 80 },
+    // melodic and melodicLoop are not listed: the Melodic bus EQ already shelves their low end (-6 dB below 150 Hz), so a pad highpass would cut it twice
     percLoop: { highpassHz: 150 },
     // kick, bass and drumLoop are not listed on purpose: they carry the low end
   },

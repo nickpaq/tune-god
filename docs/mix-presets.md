@@ -11,14 +11,14 @@ All the numbers that decide how an export sounds are in one object, `HEAVY_WARM_
 
 ## 1. Loudness (`loudness`)
 
-Applied at export, and when Normalize now is on. Every file is peak-normalized to the -1 dBFS ceiling, and nothing is ever turned down in the audio: the mix is each pad's Koala volume knob.
+Applied when Organize is on (when sounds are loaded and at export). With Organize off nothing here is applied. Every file is peak-normalized to the -1 dBFS ceiling, and nothing is ever turned down in the audio: the mix is each pad's Koala volume knob.
 
 | Field | What it does | Range | Move it to |
 | --- | --- | --- | --- |
 | `targetLufs` | Where each sound type sits after the knob, as the loudest-200 ms loudness (K-weighted LUFS) of the normalized file at its knob level | negative LUFS | Lower = that type sits further back. Hats and cymbals down for warm, up for bright and crisp. The knob can only turn down, so a file already under its target stays at 0 dB |
 | `padTone` | Koala's tone knob (a tilt EQ, 0 = the middle) by type | about -1 to 1 | The snare is at -0.1: a touch darker |
 
-Current targets: kick -13, bass and 808 -15, snare -19, clap -21, closed hat -29, open hat and cymbal -27, perc -23, melodic -21, vox -19, FX -27, drum loop -22, perc loop -27, melodic loop -22, other -22. The kick leads, the hats and cymbals are held well back. These are estimates taken from the earlier calibration renders (docs/koala-mixer-reference.md, round 3c); correct them from a render. `scripts/simulateBalance.ts` shows each pad's output level for any targets before you export: `npx tsx scripts/simulateBalance.ts closedHat=-30 kick=-12`.
+Current targets (the trap and hip-hop balance), written in the preset as dB under the kick (`DB_UNDER_KICK`, with the kick at `KICK_LUFS` -13): kick 0 (-13), bass and 808 -1 (-14), snare -3 (-16), clap -4 (-17), vox -5 (-18), vox loop -6 (-19), melodic and drum loop -7 (-20), melodic loop and other -8 (-21), open hat and perc -9 (-22), closed hat and cymbal -10 (-23), perc loop and FX -11 (-24), FX loop -12 (-25). The kick and 808 lead, the snare and clap crack on top of them, the vocals sit above the melody bed, and hats, cymbals and FX are present but never more than 12 dB back (`mixPresets.test.ts` holds that). Move `KICK_LUFS` to move the whole mix; change one type's number in `DB_UNDER_KICK` to move that type. These are estimates; correct them from a render. `scripts/simulateBalance.ts` shows each pad's output level for any targets before you export: `npx tsx scripts/simulateBalance.ts closedHat=-30 kick=-12`.
 
 Not in the preset: `FILE_CEILING_DB` in `loudness.ts` (the -1 dBFS peak ceiling of every file, not a genre choice).
 
@@ -31,7 +31,7 @@ Written under Settings by sound type. Koala's per-pad EQ has a low band that is 
 | `highpassHz` | Highpass on that sound type | 20 to 20000 Hz | Higher thins the pad and clears the low end for kick and bass. Kick and bass are not listed so they are left alone |
 | `highShelfDb` | Gain of the 8 kHz high shelf | -18 to +18 dB | Negative is warmer and darker, positive brighter. Leave out to keep the pad's own |
 
-Current: hats 300 Hz, cymbal 250, perc, clap and FX 200, perc loop 150, snare and vox 120, melodic and melodic loop 80. Hats and cymbals -2 dB shelf.
+Current: hats 300 Hz, cymbal 250, perc, clap and FX 200, perc loop 150, snare and vox 120. Highpasses only: the melodic pads carry no pad EQ (the Melodic bus EQ already shelves their low end) and the hats and cymbals carry no shelf (the master shelf warms the top), so no band is cut twice.
 
 ## 3. Buses (`buses`)
 
