@@ -395,8 +395,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(0);
   const [exporting, setExporting] = useState(false);
-  const [normalizing, setNormalizing] = useState(false);
-  useEffect(() => { recordDebug("App state", `loading=${loading} analyzing=${analyzing} exporting=${exporting} normalizing=${normalizing} pads=${Object.keys(pads).length} bank=${bank + 1}`, "info"); }, [loading, analyzing, exporting, normalizing, Object.keys(pads).length, bank]);
+  useEffect(() => { recordDebug("App state", `loading=${loading} analyzing=${analyzing} exporting=${exporting} pads=${Object.keys(pads).length} bank=${bank + 1}`, "info"); }, [loading, analyzing, exporting, Object.keys(pads).length, bank]);
   /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
   const [exportProgress, setExportProgress] = useState("");
   /**
@@ -404,7 +403,8 @@ function App() {
    * It never touches where a pad sits, what it says or what colour it is: the loaders (Load Bank A to D) place, label and colour every sound they bring in.
    */
   const [organize, setOrganize] = useState(
-    saved.organizeOn ?? !!(saved.mix || saved.masterChainOn),
+    // Off by default; a value saved before this default changed is ignored once.
+    saved.organizeDefaultedOff ? (saved.organizeOn ?? false) : false,
   );
   const normalize = organize;
   const spread = organize;
@@ -415,10 +415,6 @@ function App() {
   const [sidechainOn, setSidechainOn] = useState(saved.sidechainOn ?? true);
   /** A short message over the screen ("Sounds organized..."). */
   const [notice, setNotice] = useState("");
-  /** Pre-rendered normalized audio per pad (by original slot, so it follows a moved pad); only used for playback while Normalize is on. */
-  const [normalizedData, setNormalizedData] = useState<
-    Record<number, Float32Array[]>
-  >({});
   const [menuOpen, setMenuOpen] = useState(false);
   /** Temporarily disabled: live-input performance needs a later sequencer port. Keep the screen code for that work. */
   const [seqOpen, setSeqOpen] = useState(false);
@@ -688,7 +684,6 @@ function App() {
           pre: layoutOn ? (saved.layoutPre ?? {}) : {},
         }));
         setHidden({});
-        setNormalizedData({});
         setLongSamples([]);
         if (!restore) {
           setSelected(null);
@@ -896,6 +891,7 @@ function App() {
   useEffect(() => {
     saveState({
       organizeOn: organize,
+      organizeDefaultedOff: true,
       sidechainOn,
       masterStyle,
       padSymbols,
@@ -1032,7 +1028,6 @@ function App() {
     setPads({});
     setHidden({});
     setLayout((l) => ({ ...l, on: false, pre: {} }));
-    setNormalizedData({});
     setLongSamples([]);
     setSelected(null);
     setKeyPc(null);
@@ -1263,8 +1258,6 @@ function App() {
       }));
       if (bank === "drums" || bank === "kit")
         setLayout({ on: true, id: lay.id, pre: {} });
-      // A project this load started gets Organize too.
-      if (started) setOrganize(true);
       setSelected(null);
       setBank(BANK_SHOWN[bank]);
       setAnalyzing((n) => n + fresh.length);
@@ -2051,7 +2044,6 @@ function App() {
     try {
       const opened = await ensureProject();
       if (!opened) return;
-      if (opened.started) setOrganize(true);
       const cur = latest.current;
       const offset = keyOffset(settings.key, cur.tunedTarget, keyMajor);
       const pitchNote =
@@ -2291,9 +2283,8 @@ function App() {
     setSelected((s) => (s === pad.index ? null : s));
   };
 
-  /** What plays for a pad: its raw audio, or the normalized version once Normalize now has run. */
-  const audioOf = (pad: Pad) =>
-    (normalize && normalizedData[pad.origIndex]) || pad.channelData;
+  /** What plays for a pad: its audio as loaded (the export does the levelling). */
+  const audioOf = (pad: Pad) => pad.channelData;
 
   /** The reference chord is the project key's own on every grab; the Minor and Major squares (dragging up) swap it for the relative key's until the slider is let go. */
   const [refRelative, setRefRelativeState] = useState(false);
@@ -2347,37 +2338,6 @@ function App() {
     );
     waveformVoice.current = { index, handle: releasePad.current.get(index)!, loop: padMode(pad) === "loop" };
     setWaveformPlayback(n => n + 1);
-  };
-
-  /**
-   * Previews what Koala will play: each pad's loudness-normalized audio at its mix knob level.
-   * Measured on the untuned audio, so it can differ from the export by a fraction of a dB where tuning changes a pad.
-   */
-  const normalizeNow = async () => {
-    setNormalizing(true);
-    try {
-      const list = Object.values(pads).filter(isReal);
-      const { gainDb, knobDb } = await getRenderWorker().balance(
-        list.map((p) => ({
-          channelData: p.channelData,
-          sampleRate: p.sampleRate,
-          category: p.category,
-        })),
-        FILE_CEILING_DB,
-      );
-      setNormalizedData(
-        Object.fromEntries(
-          list.map((p, i) => [
-            p.origIndex,
-            applyGainDb(p.channelData, gainDb[i] + knobDb[i]),
-          ]),
-        ),
-      );
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setNormalizing(false);
-    }
   };
 
   /** Which drop target ("kind:index") is under the point, if any. */
@@ -3567,13 +3527,6 @@ function App() {
               disabled={!hasProject}
               onChange={setOrganize}
             />
-            <button
-              className="menu__button"
-              disabled={!organize || !hasProject || normalizing}
-              onClick={normalizeNow}
-            >
-              {normalizing ? "Normalizing…" : "Normalize now"}
-            </button>
             <select
               className="menu__select"
               value={masterStyle}

@@ -98,6 +98,8 @@ export interface SavedState {
   pads?: Record<number, SavedPad>;
   /** Finger-drumming layout chosen in the menu (kept across projects). */
   libraryIndexId?: string;
+  /** Organize now defaults to off; saved states from before that carry no flag, so their stored value is ignored once. */
+  organizeDefaultedOff?: boolean;
   /** Types the user gave folder names (key: the normalised folder name), applied to every library. */
   folderTypes?: Record<string, CategoryId>;
   /** Display names of those folders, by key. */
