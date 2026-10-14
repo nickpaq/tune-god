@@ -68,7 +68,7 @@ describe("persistent library metadata", () => {
     expect(refreshLibrary("Different", files, corrected).reused).toBe(0);
   });
   it("recognizes loop families, inherited loop folders, aliases without subtype fields", () => {
-    expect(classifyFile(["Loops", "Bass", "808"], "take.wav")).toMatchObject({
+    expect(classifyFile(["Loops", "Bass", "Sub"], "take.wav")).toMatchObject({
       category: "bassLoop",
     });
     expect(classifyFile(["Vocal Loops"], "phrase.wav").category).toBe(
@@ -129,4 +129,16 @@ it("reuses old library records while discarding subtype fields and mapping FX va
   expect(next.index.samples[0].classification.category).toBe("fx");
   expect(next.index.samples[0].classification).not.toHaveProperty("subtype");
   expect(next.index.samples[0].correction).not.toHaveProperty("subtype");
+});
+
+describe("classifier version", () => {
+  it("reclassifies unchanged files once when the saved rules are older", () => {
+    const files = [{ name: "Long Gm.wav", folders: ["Pack", "808s"], size: 10, lastModified: 1, source: async () => new ArrayBuffer(0) }] as any;
+    const first = refreshLibrary("lib", files);
+    const stale = { ...first.index, classifierVersion: undefined, samples: first.index.samples.map((s) => ({ ...s, classification: { ...s.classification, category: "melodicLoop" as const } })) };
+    const again = refreshLibrary("lib", files, stale);
+    expect(again.index.samples[0].classification.category).toBe("bass");
+    expect(again.reused).toBe(0);
+    expect(refreshLibrary("lib", files, again.index).reused).toBe(1);
+  });
 });

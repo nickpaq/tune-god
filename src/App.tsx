@@ -583,9 +583,15 @@ function App() {
       if (libraryIndex?.id !== refreshed.index.id) setKitPacks(null);
       setLibraryIndex(refreshed.index); setIndexReused(refreshed.reused);
       saveState({ libraryIndexId: refreshed.index.id });
-      setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
-      if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
-      setIndexProgress({ stage: force ? "Refresh complete" : "Files connected", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
+      // Nothing changed since the saved index (same files, same rules): skip rewriting the whole index to IndexedDB.
+      const unchangedIndex = !force && !!previous && previous.classifierVersion === refreshed.index.classifierVersion && previous.samples.length === refreshed.index.samples.length && refreshed.reused === refreshed.index.samples.length;
+      if (!unchangedIndex) {
+        setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
+        if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
+      }
+      const total = refreshed.index.samples.length;
+      const changed = total - refreshed.reused;
+      setIndexProgress({ stage: force ? "Refresh complete" : changed === 0 ? "Library unchanged · reconnected" : `Files connected · ${changed.toLocaleString()} new or changed ${changed === 1 ? "file" : "files"} classified`, processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
     } catch (error) {
       recordDebug("App operation", error);
       setIndexProgress(null);
@@ -3437,8 +3443,12 @@ function App() {
             </details>
             <details className="menu__library-tools menu__section"><summary>Library tools</summary>
               <button className="menu__button" disabled={analyzing > 0 || loading || !!addPackStatus} onClick={() => { setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); }}>Replace kit · keep bank D</button>
-              <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect & refresh files</button>
-              <p>Reselect the folder to include added or removed samples.</p>
+              <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = false; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect files</button>
+              <p>Reselect the folder. Unchanged libraries reconnect instantly; added or removed samples are picked up.</p>
+              <details className="menu__section"><summary>More</summary>
+                <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reclassify everything</button>
+                <p>Reselect the folder and rerun classification on every file. Your saved Type corrections are kept.</p>
+              </details>
               <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryToolsOpen(true); }}>Edit sample Types</button>
             </details>
             <details className="menu__library-tools menu__section"><summary>Load individual banks</summary>

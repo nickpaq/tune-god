@@ -1,4 +1,4 @@
-import { classifyFile, categoryOfFolder, type PackFile } from "./samplePack";
+import { classifyFile, categoryOfFolder, CLASSIFIER_VERSION, type PackFile } from "./samplePack";
 import { normalizeClassification, type SampleClassification } from "./sampleClassification";
 import { NOTE_NAMES } from "./theory";
 import { bpmFromName, keyFromName } from "./pitch/nameKey";
@@ -22,6 +22,10 @@ export interface LibraryIndex {
   name: string;
   updatedAt: number;
   classificationVersion?: number;
+  /** Rule set the stored classifications came from (see CLASSIFIER_VERSION); older or missing means unchanged files are reclassified once. */
+  classifierVersion?: number;
+  /** Order-independent hash of every file's path and size: when it matches on reconnect the saved records are adopted as they are. */
+  fingerprint?: string;
   samples: IndexedSample[];
 }
 export interface LibraryPack {
@@ -62,6 +66,32 @@ export interface LibraryProgress {
   total: number;
   percent: number;
 }
+/** Two 32-bit FNV-style hashes of a string, so the combined 64 bits make an accidental match negligible. */
+function hashPair(text: string): [number, number] {
+  let a = 0x811c9dc5, b = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = (Math.imul(b, 0x85ebca6b) + c) >>> 0;
+  }
+  return [a, b];
+}
+/** Hash of the unique paths and sizes, combined by addition so file order (and sorting) does not matter. */
+function fingerprintOf<T>(files: PackFile<T>[]): { fingerprint: string; paths: string[] } {
+  let x = 0, y = 0;
+  const seen = new Set<string>();
+  const paths: string[] = [];
+  for (const file of files) {
+    const path = sourcePath(file);
+    if (seen.has(path)) continue;
+    seen.add(path);
+    paths.push(path);
+    const [a, b] = hashPair(`${path}\u0000${file.size}`);
+    x = (x + a) >>> 0;
+    y = (y + b) >>> 0;
+  }
+  return { fingerprint: `${paths.length}:${x.toString(36)}:${y.toString(36)}`, paths };
+}
 const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /** Rebind files without reading audio. Unchanged metadata retains its classification; refresh reruns rules, keeping corrections. */
@@ -74,10 +104,36 @@ function* refreshSteps<T>(
   const id = `library:${name}`;
   const old = new Map<string, IndexedSample>();
   const savedSamples = previous?.id === id ? previous.samples : [];
+  const currentRules = previous?.classifierVersion === CLASSIFIER_VERSION;
   yield { stage: "Restoring saved index", processed: 0, total: savedSamples.length, percent: 15 };
   for (let i = 0; i < savedSamples.length; i++) {
     old.set(savedSamples[i].path, savedSamples[i]);
     if ((i + 1) % 500 === 0) yield { stage: "Restoring saved index", processed: i + 1, total: savedSamples.length, percent: 15 + 5 * (i + 1) / savedSamples.length };
+  }
+  const currentFingerprint = fingerprintOf(files).fingerprint;
+  if (!force && previous?.id === id && previous.classifierVersion === CLASSIFIER_VERSION && previous.classificationVersion === CLASSIFICATION_VERSION && previous.fingerprint === currentFingerprint) {
+    // Same files, same sizes, same rules: adopt the saved records and only attach each file to its record.
+    const rebound: PackFile<T>[] = [];
+    const byPath = new Map(savedSamples.map((sample) => [sample.path, sample]));
+    const attached = new Set<string>();
+    let legacy = false;
+    for (const file of files) {
+      const path = sourcePath(file);
+      const sample = byPath.get(path);
+      if (!sample || (file.duration !== undefined && file.duration !== sample.duration)) break;
+      if (attached.has(path)) continue;
+      attached.add(path);
+      const classification = normalizeClassification(sample.classification);
+      if (classification.category !== sample.classification.category || Object.keys(sample.classification).length !== Object.keys(classification).length || (sample.correction && Object.keys(sample.correction).length !== 4)) legacy = true;
+      rebound.push({ ...file, libraryId: sample.id, classification, sourcePack: sample.pack, sourcePath: path });
+    }
+    if (attached.size === savedSamples.length) {
+      // Records saved by older versions (retired categories, subtype fields) are normalized; current ones are adopted untouched.
+      const index = legacy
+        ? { ...previous, samples: savedSamples.map((sample) => ({ ...sample, classification: normalizeClassification(sample.classification), correction: sample.correction ? normalizeClassification(sample.correction) : undefined })) }
+        : previous;
+      return { index, files: rebound, reused: savedSamples.length };
+    }
   }
   const established = new Set<string>();
   yield { stage: "Identifying sample packs", processed: 0, total: files.length, percent: 20 };
@@ -104,12 +160,10 @@ function* refreshSteps<T>(
     if (seen.has(path)) continue;
     seen.add(path);
     const saved = old.get(path);
-    const unchanged =
-      saved &&
-      saved.size === file.size &&
-      saved.lastModified === file.lastModified;
+    // Path and size identify an unchanged file; modified times are not trusted (some devices report them unstably).
+    const unchanged = saved && saved.size === file.size;
     const duration = file.duration ?? (unchanged ? saved.duration : undefined);
-    const reuseClassification = unchanged && !force && previous?.classificationVersion === CLASSIFICATION_VERSION && duration === saved.duration;
+    const reuseClassification = unchanged && !force && currentRules && previous?.classificationVersion === CLASSIFICATION_VERSION && duration === saved.duration;
     const classification = normalizeClassification(
       saved?.correction ??
       (reuseClassification
@@ -149,7 +203,7 @@ function* refreshSteps<T>(
     });
   }
   return {
-    index: { id, name, updatedAt: Date.now(), classificationVersion: CLASSIFICATION_VERSION, samples },
+    index: { id, name, updatedAt: Date.now(), classifierVersion: CLASSIFIER_VERSION, classificationVersion: CLASSIFICATION_VERSION, fingerprint: currentFingerprint, samples },
     files: rebound,
     reused,
   };
