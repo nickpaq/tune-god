@@ -1,6 +1,6 @@
 // Remembers the app between visits: small settings in localStorage, the project file itself
 // in IndexedDB (it's too big for localStorage). Every read/write is best-effort.
-import type { LibraryIndex } from "./audio/libraryIndex";
+import { reclassifyLibrary, type LibraryIndex } from "./audio/libraryIndex";
 import type { PadPlayback } from "./audio/padSettings";
 import { normalizeClassification, type SampleClassification } from "./audio/sampleClassification";
 import { migrateCategory, type CategoryId } from "./audio/classify";
@@ -97,6 +97,7 @@ export interface SavedState {
   pads?: Record<number, SavedPad>;
   /** Finger-drumming layout chosen in the menu (kept across projects). */
   libraryIndexId?: string;
+  kitPacks?: string[] | null;
   balancePacks?: boolean;
   loadHotSwapSpares?: boolean;
   typeSettings?: Partial<Record<CategoryId, PadPlayback>>;
@@ -313,7 +314,7 @@ export async function loadLibraryIndex(id: string): Promise<LibraryIndex | null>
         const req = db.transaction("library-index").objectStore("library-index").get(id);
         req.onsuccess = () => {
           const index = req.result as LibraryIndex | undefined;
-          resolve(index ? { ...index, samples: index.samples.map((sample) => ({ ...sample, classification: normalizeClassification(sample.classification), correction: sample.correction ? normalizeClassification(sample.correction) : undefined })) } : null);
+          resolve(index ? reclassifyLibrary({ ...index, samples: index.samples.map((sample) => ({ ...sample, classification: normalizeClassification(sample.classification), correction: sample.correction ? normalizeClassification(sample.correction) : undefined })) }) : null);
         }; req.onerror = () => reject(req.error);
       });
     } finally { db.close(); }

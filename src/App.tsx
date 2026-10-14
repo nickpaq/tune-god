@@ -1,3 +1,5 @@
+import { eligibleHotSwapSound } from "./audio/hotSwap";
+import { durationMetadata } from "./audio/durationMetadata";
 import { suggestedSongIndex } from "./audio/acapellaRoles";
 import { replaceCorrectedPad } from "./audio/correctPadType";
 import { normalizeClassification } from "./audio/sampleClassification";
@@ -543,6 +545,8 @@ function App() {
   const nextFavoriteSlot = useRef(-100000);
   const [libraryIndex, setLibraryIndex] = useState<LibraryIndex | null>(null);
   const libraryFiles = useRef<FoundPack | null>(null);
+  const [kitPacks, setKitPacks] = useState<string[] | null>(saved.kitPacks ?? null);
+  useEffect(() => { saveState({ kitPacks }); }, [kitPacks]);
   const libraryInput = useRef<HTMLInputElement>(null);
   const refreshOnReconnect = useRef(false);
   const [libraryToolsOpen, setLibraryToolsOpen] = useState(false);
@@ -560,7 +564,7 @@ function App() {
   useEffect(() => {
     if (!saved.libraryIndexId) return;
     let cancelled = false;
-    void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); setLibraryOpen(true); } });
+    void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); void saveLibraryIndex(index); setLibraryOpen(true); } });
     return () => { cancelled = true; };
   }, [saved.libraryIndexId]);
   const connectLibrary = async (input: FoundPack | File[], force = false) => {
@@ -572,8 +576,9 @@ function App() {
     try {
       const found = Array.isArray(input) ? await findPackInFileListAsync(input, (processed, total) => setIndexProgress({ stage: "Reading file names and folder paths", processed, total, percent: total ? 15 * processed / total : 0 })) : input;
       const previous = libraryIndex?.name === found.name ? libraryIndex : await loadLibraryIndex(`library:${found.name}`);
-      const refreshed = await refreshLibraryAsync(found.name, found.files, previous, force, setIndexProgress);
+      const refreshed = await refreshLibraryAsync(found.name, found.files, previous, force, setIndexProgress, durationMetadata);
       libraryFiles.current = { name: found.name, files: refreshed.files };
+      if (libraryIndex?.id !== refreshed.index.id) setKitPacks(null);
       setLibraryIndex(refreshed.index); setIndexReused(refreshed.reused);
       saveState({ libraryIndexId: refreshed.index.id });
       setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
@@ -3080,7 +3085,7 @@ function App() {
   const connectedCandidates = (category: CategoryId, target: Pad) => {
     const active = new Set(Object.values(latest.current.pads).filter(pad => pad.index !== target.index).map(pad => pad.libraryId));
     const locked = new Set([...Object.values(latest.current.pads), ...Object.values(latest.current.hidden)].filter(pad => pad.locked).map(pad => pad.libraryId));
-    const eligible = libraryFiles.current?.files.filter(file => file.classification?.category === category && file.libraryId !== target.libraryId && !locked.has(file.libraryId)) ?? [];
+    const eligible = libraryFiles.current?.files.filter(file => (kitPacks === null || kitPacks.includes(file.sourcePack ?? "")) && file.classification?.category === category && file.libraryId !== target.libraryId && !locked.has(file.libraryId)) ?? [];
     const unused = eligible.filter(file => !active.has(file.libraryId));
     return shuffled(unused.length ? unused : eligible);
   };
@@ -3173,9 +3178,12 @@ function App() {
     category: sample.classification.category, classification: sample.classification,
     tune: false, semis: 0, cents: 0,
   })) ?? [], [libraryIndex]);
+  const selectedSwapSources = useMemo(() => kitPacks === null ? null : new Set(
+    libraryIndex?.samples.filter(sample => kitPacks.includes(sample.pack)).flatMap(sample => [sample.id, sample.path]) ?? [],
+  ), [kitPacks, libraryIndex]);
   const hotSwapSounds = (target: Pad) => {
     const slotCategory = (layout.on && target.index < 16 ? layoutById(null).slots[target.index]?.category : undefined) || target.category;
-    const eligible = (pad: Pad) => isKitCategory(slotCategory) ? isKitCategory(pad.category) : pad.category === slotCategory;
+    const eligible = (pad: Pad) => eligibleHotSwapSound(pad, slotCategory, selectedSwapSources);
     const loadedIds = new Set([...Object.values(pads), ...Object.values(hidden)].map((pad) => pad.libraryId));
     const favoriteIds = new Set(favoritePads.map(pad => pad.libraryId));
     return [
@@ -3564,7 +3572,7 @@ function App() {
         )}
 
         {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
-        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
+        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setKitPacks(packs); setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
             records={sampleLibrary}
