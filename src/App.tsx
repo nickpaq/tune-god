@@ -117,7 +117,7 @@ import { SwapList } from "./components/SwapList";
 import { LibraryBrowser } from "./components/LibraryBrowser";
 import { PlaybackEditor } from "./components/PlaybackEditor";
 import { buildScanReport } from "./audio/scanReport";
-import { fileNamesExport } from "./audio/fileNamesExport";
+import { fileNamesExport, fileTreeExport } from "./audio/fileNamesExport";
 import { TOOL_VERSIONS } from "./toolVersions";
 import { FolderTypesModal } from "./components/FolderTypesModal";
 import { DEFAULT_FOLDER_TYPES, DEFAULT_FOLDER_TYPE_NAMES } from "./audio/defaultFolderTypes";
@@ -3478,7 +3478,8 @@ function App() {
               <p>Reselect the folder, reclassify every file and report where each file went: skipped, merged, indexed and typed.</p>
               <button className="menu__button" disabled={!libraryIndex} onClick={() => { if (!libraryIndex) return; downloadBlob(new Blob([fileNamesExport(libraryIndex)], { type: "text/tab-separated-values" }), "tunegod-file-names.tsv"); setNotice(`${libraryIndex.samples.length.toLocaleString()} file names exported.`); }}>Export all file names</button>
               <button className="menu__button" disabled={!libraryIndex} onClick={() => { if (!libraryIndex) return; const text = fileNamesExport(libraryIndex, "unclassified"); downloadBlob(new Blob([text], { type: "text/tab-separated-values" }), "tunegod-unclassified-file-names.tsv"); setNotice(`${(text.split("\n").length - 2).toLocaleString()} unclassified file names exported.`); }}>Export unclassified file names</button>
-              <p>Type, how it was decided and the path of each file, from the saved index (no folder pick needed), to look for naming patterns.</p>
+              <button className="menu__button" disabled={!libraryIndex} onClick={() => { if (!libraryIndex) return; downloadBlob(new Blob([fileTreeExport(libraryIndex)], { type: "text/plain" }), "tunegod-folder-tree.txt"); setNotice("Folder tree exported."); }}>Export folder tree</button>
+              <p>From the saved index (no folder pick needed): the file lists give each file's Type, how it was decided and its path, to look for naming patterns. The folder tree lists every folder and subfolder with the audio files inside it (wav, mp3, flac and so on), with a file count on each folder.</p>
               {scanReport && <button className="menu__button" onClick={() => { setMenuOpen(false); setScanReportOpen(true); }}>Show last report</button>}
             </details>
             <details className="menu__library-tools menu__section"><summary>Load individual banks</summary>

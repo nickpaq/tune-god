@@ -23,3 +23,30 @@ describe("file names export", () => {
     expect(lines).toEqual(["Type\tHow\tPath", "Other\tunknown\tKit/Gun Cock/Best Gun Cock.wav"]);
   });
 });
+
+import { fileTreeExport } from "./fileNamesExport";
+
+describe("file tree export", () => {
+  it("nests folders and files with counts, folders before files, audio only", () => {
+    const files = [
+      mk("Lib/Pack B/Kicks/Kick 10.wav"), mk("Lib/Pack B/Kicks/Kick 2.wav"), mk("Lib/Pack B/Kicks/._Kick 2.wav"), mk("Lib/Pack B/Kicks/Kick 2.asd"),
+      mk("Lib/Pack A/Loops/Sub/Loop.flac"), mk("Lib/Pack A/cover.png"), mk("Lib/Pack A/Intro.mp3"),
+    ];
+    // the picker filters like the app does: audio only, no hidden files
+    const audio = files.filter((f) => /\.(wav|flac|mp3)$/i.test(f.name) && !f.name.startsWith("."));
+    const { index } = refreshLibrary("Lib", audio);
+    expect(fileTreeExport(index)).toBe([
+      "Lib/  (4)",
+      "  Pack A/  (2)",
+      "    Loops/  (1)",
+      "      Sub/  (1)",
+      "        Loop.flac",
+      "    Intro.mp3",
+      "  Pack B/  (2)",
+      "    Kicks/  (2)",
+      "      Kick 2.wav",
+      "      Kick 10.wav",
+      "",
+    ].join("\n"));
+  });
+});
