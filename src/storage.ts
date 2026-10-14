@@ -98,6 +98,10 @@ export interface SavedState {
   pads?: Record<number, SavedPad>;
   /** Finger-drumming layout chosen in the menu (kept across projects). */
   libraryIndexId?: string;
+  /** Types the user gave folder names (key: the normalised folder name), applied to every library. */
+  folderTypes?: Record<string, CategoryId>;
+  /** Display names of those folders, by key. */
+  folderTypeNames?: Record<string, string>;
   kitPacks?: string[] | null;
   balancePacks?: boolean;
   loadHotSwapSpares?: boolean;

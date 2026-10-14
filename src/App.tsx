@@ -117,7 +117,9 @@ import { SwapList } from "./components/SwapList";
 import { LibraryBrowser } from "./components/LibraryBrowser";
 import { PlaybackEditor } from "./components/PlaybackEditor";
 import { buildScanReport } from "./audio/scanReport";
-import { correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
+import { FolderTypesModal } from "./components/FolderTypesModal";
+import type { FolderTypes } from "./audio/samplePack";
+import { ambiguousFolders, ambiguousFoldersText, applyFolderTypes, correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
 import { type SampleClassification } from "./audio/sampleClassification";
 import { matchingTemplateLabel } from "./audio/kitGeneration";
 import { loadLibraryIndex, saveLibraryIndex } from "./storage";
@@ -555,6 +557,10 @@ function App() {
   const reportOnReconnect = useRef(false);
   const [scanReport, setScanReport] = useState<string | null>(null);
   const [scanReportOpen, setScanReportOpen] = useState(false);
+  const [folderTypes, setFolderTypes] = useState<FolderTypes>(saved.folderTypes ?? {});
+  const [folderTypeNames, setFolderTypeNames] = useState<Record<string, string>>(saved.folderTypeNames ?? {});
+  const [folderTypesOpen, setFolderTypesOpen] = useState(false);
+  useEffect(() => { saveState({ folderTypes, folderTypeNames }); }, [folderTypes, folderTypeNames]);
   const [libraryToolsOpen, setLibraryToolsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryError, setLibraryError] = useState("");
@@ -582,7 +588,7 @@ function App() {
     try {
       const found = Array.isArray(input) ? await findPackInFileListAsync(input, (processed, total) => setIndexProgress({ stage: "Reading file names and folder paths", processed, total, percent: total ? 15 * processed / total : 0 })) : input;
       const previous = libraryIndex?.name === found.name ? libraryIndex : await loadLibraryIndex(`library:${found.name}`);
-      const refreshed = await refreshLibraryAsync(found.name, found.files, previous, force, setIndexProgress, durationMetadata);
+      const refreshed = await refreshLibraryAsync(found.name, found.files, previous, force, setIndexProgress, durationMetadata, folderTypes);
       libraryFiles.current = { name: found.name, files: refreshed.files };
       if (libraryIndex?.id !== refreshed.index.id) setKitPacks(null);
       setLibraryIndex(refreshed.index); setIndexReused(refreshed.reused);
@@ -603,6 +609,24 @@ function App() {
       setLibraryError("Could not reconnect this folder. Choose your packs folder again.");
       setNotice(error instanceof Error ? error.message : "Could not index this folder.");
     } finally { setIndexBusy(false); }
+  };
+  const ambiguous = useMemo(() => libraryIndex ? ambiguousFolders(libraryIndex) : [], [libraryIndex]);
+  const setFolderType = (key: string, category: CategoryId | null) => {
+    setFolderTypes((prev) => { const next = { ...prev }; if (category) next[key] = category; else delete next[key]; return next; });
+    setFolderTypeNames((prev) => { const next = { ...prev }; if (category) next[key] = prev[key] ?? ambiguous.find((folder) => folder.key === key)?.name ?? key; else delete next[key]; return next; });
+  };
+  /** Reclassify the saved index with the folder Types, with no folder pick: corrections stay, the connected files follow. */
+  const applyFolderTypesNow = () => {
+    if (!libraryIndex) return;
+    const next = applyFolderTypes(libraryIndex, folderTypes);
+    const changed = next.samples.filter((sample, i) => sample.classification.category !== libraryIndex.samples[i].classification.category).length;
+    setLibraryIndex(next);
+    if (libraryFiles.current) {
+      const byId = new Map(next.samples.map((sample) => [sample.id, sample.classification]));
+      libraryFiles.current.files = libraryFiles.current.files.map((file) => ({ ...file, classification: byId.get(file.libraryId ?? "") ?? file.classification }));
+    }
+    void saveLibraryIndex(next).then((ok) => { if (!ok) setNotice("Folder Types could not be saved on this device."); });
+    setNotice(`${changed.toLocaleString()} ${changed === 1 ? "sound" : "sounds"} reclassified.`);
   };
   const correctLibrarySample = (id: string, classification: SampleClassification) => {
     if (!libraryIndex) return;
@@ -3471,6 +3495,7 @@ function App() {
                 <p>Reselect the folder and rerun classification on every file. Your saved Type corrections are kept.</p>
               </details>
               <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryToolsOpen(true); }}>Edit sample Types</button>
+              <button className="menu__button" disabled={!libraryIndex} onClick={() => { setMenuOpen(false); setFolderTypesOpen(true); }}>Folder Types{ambiguous.length ? ` · ${ambiguous.length.toLocaleString()} unsorted` : ""}</button>
             </details>
             <details className="menu__library-tools menu__section"><summary>Developer</summary>
               <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; reportOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Rescan and generate report</button>
@@ -3613,6 +3638,18 @@ function App() {
         )}
 
         {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
+        {folderTypesOpen && libraryIndex && (
+          <FolderTypesModal
+            folders={ambiguous}
+            folderTypes={folderTypes}
+            names={folderTypeNames}
+            busy={indexBusy}
+            onSet={setFolderType}
+            onApply={applyFolderTypesNow}
+            onCopy={() => { void navigator.clipboard?.writeText(ambiguousFoldersText(ambiguous, folderTypes)).then(() => setNotice("Folder list copied."), () => setNotice("Could not copy the folder list.")); }}
+            onClose={() => setFolderTypesOpen(false)}
+          />
+        )}
         {scanReportOpen && scanReport && (
           <div className="sample-library-backdrop">
             <section className="sample-library" role="dialog" aria-modal="true" aria-labelledby="scan-report-title">

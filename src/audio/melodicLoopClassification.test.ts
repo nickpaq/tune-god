@@ -65,7 +65,7 @@ it("reads duration only during indexing and reuses it on reconnect", async () =>
   const next = await refreshLibraryAsync("Library", [file()], first.index, true, undefined, read);
   expect(reads).toBe(1);
   expect(next.files[0].duration).toBe(12);
-  const changed = await refreshLibraryAsync("Library", [{ ...file(), lastModified: 2 }], next.index, false, undefined, read);
+  const changed = await refreshLibraryAsync("Library", [{ ...file(), size: file().size + 1 }], next.index, false, undefined, read);
   expect(reads).toBe(2);
   expect(changed.index.samples[0].classification.category).toBe("melodicLoop");
 });

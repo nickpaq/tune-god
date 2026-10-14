@@ -105,7 +105,7 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
 const GENERIC_FOLDER = /^(one ?shots?|shots?|samples?|sounds?|hits?|drums?|audio|wav|wavs|stems?|packs?|kit|kits|processed|dry|wet|[0-9 _.-]+)$/i;
 
 /** Folder names are normalised the way file names are: separators become spaces, lower case. */
-function tidy(name: string): string {
+export function tidy(name: string): string {
   return name.replace(/[_\-.()[\]]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
@@ -132,6 +132,9 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
   return null;
 }
 
+/** Types the user gave folder names (key: `tidy(folderName)`), applied wherever that folder name appears. */
+export type FolderTypes = Record<string, CategoryId>;
+
 /** Bumped whenever the classification rules change, so saved library indexes reclassify unchanged files once instead of keeping stale results. */
 export const CLASSIFIER_VERSION = 3;
 
@@ -141,7 +144,7 @@ export function is808Folder(folder: string): boolean {
 }
 
 /** Folder hierarchy supplies the family; specific names refine mixed hats and generic folders. */
-export function classifyFile(folders: string[], fileName: string, correction?: SampleClassification, duration?: number): SampleClassification {
+export function classifyFile(folders: string[], fileName: string, correction?: SampleClassification, duration?: number, folderTypes?: FolderTypes): SampleClassification {
   if (correction) return { ...normalizeClassification(correction), confidence: 1, needsReview: false, evidence: "correction" };
   if (folders.some(is808Folder)) return { category: "bass", confidence: 0.95, needsReview: false, evidence: "folder" };
   const byName = classifyByName(fileName);
@@ -149,7 +152,8 @@ export function classifyFile(folders: string[], fileName: string, correction?: S
   let category: CategoryId | null = null;
   let evidence: SampleClassification["evidence"] = "unknown";
   for (let i = folders.length - 1; i >= 0; i--) {
-    const found = categoryOfFolder(folders[i]);
+    // A Type the user gave this folder name beats the built-in folder words; the nearest folder that says anything wins.
+    const found = folderTypes?.[tidy(folders[i])] ?? categoryOfFolder(folders[i]);
     if (!found || found === "other") continue;
     category = found === "hat" ? (byName === "openHat" || byName === "closedHat" ? byName : hatOpenness(tidy([...folders.slice(i + 1), fileName].join(" "))) ?? "closedHat") : found;
     evidence = "folder";

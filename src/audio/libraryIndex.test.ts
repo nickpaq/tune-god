@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { correctSample, libraryPacks, refreshLibrary, refreshLibraryAsync } from "./libraryIndex";
+import { ambiguousFolders, ambiguousFoldersText, applyFolderTypes, correctSample, libraryPacks, refreshLibrary, refreshLibraryAsync } from "./libraryIndex";
 import { classifyFile, type PackFile } from "./samplePack";
 import { validTypeSelection } from "./sampleClassification";
 const file = (path: string, lastModified = 1): PackFile<null> => {
@@ -140,5 +140,46 @@ describe("classifier version", () => {
     expect(again.index.samples[0].classification.category).toBe("bass");
     expect(again.reused).toBe(0);
     expect(refreshLibrary("lib", files, again.index).reused).toBe(1);
+  });
+});
+
+describe("folder Types", () => {
+  const mk = (path: string, size = 10) => ({ name: path.split("/").pop()!, folders: path.split("/").slice(1, -1), rootFolder: path.split("/")[0], size, lastModified: 1, source: async () => new ArrayBuffer(0) }) as any;
+  const files = [mk("Lib/Kit/Stomps/a.wav"), mk("Lib/Kit/Stomps/b.wav"), mk("Lib/Kit2/Stomps/c.wav"), mk("Lib/Kit/Kicks/k.wav")];
+
+  it("lists ambiguous folders by name across packs, and a Type beats the built-in rules while the path stays searchable", () => {
+    const first = refreshLibrary("Lib", files);
+    const list = ambiguousFolders(first.index);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ key: "stomps", name: "Stomps", files: 3, packs: 2 });
+    expect(ambiguousFoldersText(list)).toContain("Stomps\t3\t2");
+
+    const applied = applyFolderTypes(first.index, { stomps: "fx" });
+    expect(applied.samples.filter((s) => s.classification.category === "fx")).toHaveLength(3);
+    expect(applied.samples.find((s) => s.name === "a.wav")!.path).toContain("Stomps");
+    expect(ambiguousFolders(applied)).toHaveLength(0);
+  });
+
+  it("keeps per-sample corrections and reclassifies on reconnect when the folder Types change", () => {
+    const first = refreshLibrary("Lib", files);
+    const corrected = correctSample(first.index, first.index.samples[0].id, { category: "perc", confidence: 1, needsReview: false, evidence: "correction" });
+    const again = refreshLibrary("Lib", files, corrected, false, { stomps: "fx" });
+    expect(again.reused).toBe(0);
+    expect(again.index.samples[0].classification.category).toBe("perc");
+    expect(again.index.samples[1].classification.category).toBe("fx");
+    expect(refreshLibrary("Lib", files, again.index, false, { stomps: "fx" }).reused).toBe(4);
+  });
+});
+
+describe("duration pass", () => {
+  it("reads nothing for files whose duration is already saved", async () => {
+    const files = [{ name: "a.wav", folders: ["Kicks"], rootFolder: "Lib", size: 10, lastModified: 1, source: "x" }] as any;
+    let reads = 0;
+    const read = async () => { reads++; return 1.5; };
+    const first = await refreshLibraryAsync("Lib", files, null, false, undefined, read);
+    expect(reads).toBe(1);
+    const again = await refreshLibraryAsync("Lib", files.map((f: any) => ({ ...f, lastModified: 999 })), first.index, false, undefined, read);
+    expect(reads).toBe(1);
+    expect(again.index.samples[0].duration).toBe(1.5);
   });
 });
