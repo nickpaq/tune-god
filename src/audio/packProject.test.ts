@@ -91,3 +91,28 @@ it("fills a sparse kit with actual available Types and shares audio rather than 
   expect(json.pads).toHaveLength(48);
   expect(json.samples).toHaveLength(1);
 });
+
+describe("levelling is optional", () => {
+  const load = async (levelling: boolean) => {
+    const project: ParsedKoalaProject = { zip: new JSZip(), samplerJson: { pads: [], samples: [] }, originalName: "test.koala", padBase: 0, pads: [] };
+    const data = Float32Array.from({ length: 44100 }, (_, i) => Math.sin(i / 20) * 0.1);
+    const blob = encodeWav({ sampleRate: 44100, channelData: [data], bitDepth: 24 });
+    const result = await writeBankSounds(project, [{ category: "kick", want: 1, candidates: [{ name: "kick.wav", folders: ["Kicks"], size: blob.size, source: async () => new File([blob], "kick.wav") }] }], { existing: [], byteBudget: 1000000, levelling });
+    const bytes = new Uint8Array(await project.zip.file(`sampler/${result!.sounds[0].sampleId}.wav`)!.async("uint8array"));
+    let peak = 0;
+    for (let i = 44; i + 2 < bytes.length; i += 3) {
+      const v = (bytes[i] | (bytes[i + 1] << 8) | (bytes[i + 2] << 16)) << 8 >> 8;
+      peak = Math.max(peak, Math.abs(v) / 0x7fffff);
+    }
+    return { peak, vol: project.samplerJson.pads[0].vol };
+  };
+  it("writes the sound as it came in, with the volume knob untouched, when levelling is off", async () => {
+    const off = await load(false);
+    expect(off.peak).toBeCloseTo(0.1, 2);
+    expect(off.vol).toBe(1);
+  });
+  it("peak-normalizes the file when levelling is on", async () => {
+    const on = await load(true);
+    expect(on.peak).toBeGreaterThan(0.8);
+  });
+});

@@ -1149,7 +1149,7 @@ function App() {
       );
       const excludedIds = new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : []));
       const groups = (loadHotSwapSpares ? plan.groups : padOnlyGroups(bank, plan.groups, lockedSlots)).map((group) => ({ ...group, candidates: group.candidates.filter((file) => !file.libraryId || !excludedIds.has(file.libraryId)) }));
-      const result = await writeBankSounds(project, groups, {
+      const result = await writeBankSounds(project, groups, { levelling: organize,
         existing: kept.map((p) => ({
           channelData: p.channelData,
           sampleRate: p.sampleRate,
@@ -2769,17 +2769,21 @@ function App() {
           : pad.channelData;
         if (fade && isEight(pad))
           channelData = fadeIn(channelData, pad.sampleRate, fade);
-        stats.push(
-          await getRenderWorker().measure({
-            channelData,
-            sampleRate: pad.sampleRate,
-            category: pad.category,
-          }),
-        );
+        // Levelling is part of Organize: off, the file goes out as it is (after any tuning) and the pad keeps its own volume.
+        if (organize)
+          stats.push(
+            await getRenderWorker().measure({
+              channelData,
+              sampleRate: pad.sampleRate,
+              category: pad.category,
+            }),
+          );
         rendered.push({ pad, channelData, retimed });
       }
       const vols = new Map<number, number>();
-      const gains = balanceFromStats(stats, FILE_CEILING_DB);
+      const gains = organize
+        ? balanceFromStats(stats, FILE_CEILING_DB)
+        : { gainDb: rendered.map(() => 0), knobDb: rendered.map(() => 0) };
       rendered.forEach((r, i) => {
         vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
         tuned.push({
@@ -2838,9 +2842,9 @@ function App() {
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, {
         bpm: projectBpm,
-        vols,
+        vols: organize ? vols : undefined,
         pitches,
-        busNames: BUS_NAMES,
+        busNames: organize ? BUS_NAMES : undefined,
         busEffects: routeBuses,
         masterChain,
         masterStyle,
@@ -3060,7 +3064,7 @@ function App() {
     setAddPackStatus("Loading sound…");
     try {
       const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
-      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], {
+      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], { levelling: organize,
         existing: used.map(pad => ({ channelData: audioOf(pad), sampleRate: pad.sampleRate, category: pad.category })),
         byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)), maxSeconds: MAX_LOAD_SECONDS,
         measure: input => getRenderWorker().measure(input),
@@ -3170,7 +3174,7 @@ function App() {
       libraryId: record.id, favorite: true, sourceName: record.name, sourcePack: record.pack, sourcePath: record.sourcePath,
     };
     const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
-    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], {
+    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], { levelling: organize,
       existing: used.map((p) => ({ channelData: audioOf(p), sampleRate: p.sampleRate, category: p.category })),
       byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
       measure: (input) => getRenderWorker().measure(input),
@@ -3522,7 +3526,7 @@ function App() {
             <button className="menu__button" onClick={() => { setMenuOpen(false); setPlaybackEditorOpen(true); }}>Koala Type & pad settings</button>
             <Switch
               label="Organize"
-              hint="Levels, each sound type's settings, bus routing, the melodic spread and the master chain. Never moves, labels or colours pads: the Load Bank steps do that"
+              hint="All the mixing: peak-normalizing every file and setting pad volumes (on load and at export), bus names and effects, the melodic spread, the 808 fade-in and the master chain. Off, sounds come out as they went in. Never moves, labels or colours pads"
               on={organize}
               disabled={!hasProject}
               onChange={setOrganize}

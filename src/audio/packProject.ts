@@ -161,6 +161,8 @@ export interface WriteOptions {
   fillTo?: number;
   fallbackCandidates?: PackFile<PackSource>[];
   random?: () => number;
+  /** Level the new sounds (peak-normalize the file and set the pad's volume knob). Off, they are written as they came in. Default on. */
+  levelling?: boolean;
 }
 
 /** Conservative one-shot tails; loops have their own slots and duration budget. */
@@ -180,7 +182,7 @@ const TRIES_PER_SOUND = 8;
  * not touched. Returns null when nothing could be taken.
  */
 export async function writeBankSounds(project: ParsedKoalaProject, groups: BankGroup<PackSource>[], options: WriteOptions): Promise<WriteResult | null> {
-  const { measure = async (input: BalanceInput) => balanceStats(input), onProgress, existing, byteBudget, maxSeconds, replace } = options;
+  const { measure = async (input: BalanceInput) => balanceStats(input), onProgress, existing, byteBudget, maxSeconds, replace, levelling = true } = options;
   const maxFileBytes = maxFileBytesFor(Math.max(byteBudget, 1));
   groups = [...groups];
   const random = options.random ?? Math.random;
@@ -189,7 +191,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
   const stats: BalanceStats[] = [];
   for (const [n, input] of existing.entries()) {
     onProgress?.(`Reading project ${n + 1}/${existing.length}`);
-    stats.push(await measure(input));
+    if (levelling) stats.push(await measure(input));
   }
 
   // Pass 1: decode and measure the candidates, one at a time, until each group has what it wants.
@@ -222,7 +224,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
           skipped++;
           return false;
         }
-        stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: group.category }));
+        if (levelling) stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: group.category }));
         bytes += retainedBytes;
         taken.push({ file, group: g, number: taken.length + 1 });
         return true;
@@ -257,7 +259,8 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
     if (await take({ ...file, classification }, group)) chosen.add(id);
   }
   if (!taken.length) return null;
-  const balance = balanceFromStats(stats, FILE_CEILING_DB);
+  // With levelling off the sounds keep their own level: no file gain, and the pad volume knob stays at 0 dB.
+  const balance = levelling ? balanceFromStats(stats, FILE_CEILING_DB) : { gainDb: new Array(existing.length + taken.length).fill(0), knobDb: new Array(existing.length + taken.length).fill(0) };
   if (replace?.length) await removeFromProject(project, replace);
 
   // Pass 2: decode again, bake in the gain and write the 24-bit WAV. Only the processed sound goes into the project, so the knob carries the per-type mix.
