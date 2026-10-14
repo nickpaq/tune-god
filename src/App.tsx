@@ -113,6 +113,7 @@ import {
 import { SwapList } from "./components/SwapList";
 import { LibraryBrowser } from "./components/LibraryBrowser";
 import { PlaybackEditor } from "./components/PlaybackEditor";
+import { buildScanReport } from "./audio/scanReport";
 import { correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
 import { type SampleClassification } from "./audio/sampleClassification";
 import { matchingTemplateLabel } from "./audio/kitGeneration";
@@ -545,6 +546,9 @@ function App() {
   const libraryFiles = useRef<FoundPack | null>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
   const refreshOnReconnect = useRef(false);
+  const reportOnReconnect = useRef(false);
+  const [scanReport, setScanReport] = useState<string | null>(null);
+  const [scanReportOpen, setScanReportOpen] = useState(false);
   const [libraryToolsOpen, setLibraryToolsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryError, setLibraryError] = useState("");
@@ -563,7 +567,7 @@ function App() {
     void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); setLibraryOpen(true); } });
     return () => { cancelled = true; };
   }, [saved.libraryIndexId]);
-  const connectLibrary = async (input: FoundPack | File[], force = false) => {
+  const connectLibrary = async (input: FoundPack | File[], force = false, report = false) => {
     if (indexBusy) return;
     setIndexBusy(true);
     setLibraryError("");
@@ -582,6 +586,7 @@ function App() {
         setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
         if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
       }
+      if (report && Array.isArray(input)) { setScanReport(buildScanReport(input.map((file) => ({ path: file.webkitRelativePath || file.name, size: file.size })), refreshed.index)); setScanReportOpen(true); }
       const total = refreshed.index.samples.length;
       const changed = total - refreshed.reused;
       setIndexProgress({ stage: force ? "Refresh complete" : changed === 0 ? "Library unchanged · reconnected" : `Files connected · ${changed.toLocaleString()} new or changed ${changed === 1 ? "file" : "files"} classified`, processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
@@ -2270,10 +2275,13 @@ function App() {
 
   const pressPad = (index: number) => {
     const pad = pads[index];
-    if (!pad) return;
     stopMatch();
+    // An empty pad (or a labelled gap) has nothing to play: select it and open the Type page, whose keys load a sound of that Type from the connected library.
+    if (!pad || pad.placeholder) {
+      if (index < CHOP_BANK_START) { setSelected(index); setMode("type"); }
+      return;
+    }
     setSelected(index);
-    if (pad.placeholder) return; // silent: nothing to play
     holdVoice.current?.release();
     holdVoice.current = null;
     holdIndex.current = null;
@@ -3062,7 +3070,8 @@ function App() {
       const written = result.sounds[0];
       const ref = project.pads.find(pad => pad.pad === written.pad)!;
       const decoded = await decodeNative(await koalaPadToFile(project, ref));
-      if (token !== loadToken.current || projectRef.current !== project || latest.current.pads[target.index]?.origIndex !== target.origIndex) return false;
+      const now = latest.current.pads[target.index];
+      if (token !== loadToken.current || projectRef.current !== project || (target.placeholder && !now ? false : now?.origIndex !== target.origIndex)) return false;
       const incoming: Pad = { index: target.index, origIndex: written.pad, libraryId: written.libraryId,
         name: written.fileName, sourcePath: written.sourcePath, sampleId: written.sampleId,
         sampleRate: decoded.sampleRate, channelData: decoded.channelData, category: written.category,
@@ -3098,6 +3107,18 @@ function App() {
     const cached = Object.values(latest.current.hidden).find(pad => pad.libraryId === first.libraryId && pad.category === intended && !pad.locked);
     if (cached) { swapInHidden(cached, target, !correction); return true; }
     return insertLibrarySound({ ...target, category: intended, libraryId: first.libraryId }, target, correction, candidates);
+  };
+
+  /** A Type key pressed on an empty pad: load a sound of that Type from the connected library into it. */
+  const fillEmptyPad = async (index: number, category: CategoryId) => {
+    if (addPackStatus || loading || index >= CHOP_BANK_START) return;
+    const current = latest.current.pads[index];
+    if (current && !current.placeholder) return;
+    if (!libraryFiles.current) return setNotice("Reconnect the library folder to load a sound into this pad.");
+    const gap: Pad = current ?? { index, origIndex: -1 - index, name: "", sampleId: -1, sampleRate: 44100, channelData: [], tune: false, semis: 0, cents: 0, placeholder: { kind: "empty", label: "Empty" } };
+    try {
+      if (!await loadConnectedReplacement(gap, category)) setNotice(`No ${categoryLabel(category)} in the connected library.`);
+    } catch { setNotice("Could not load that sound from the connected library."); }
   };
 
   const loadCorrectedReplacement = async (gap: Pad, intended: CategoryId) => {
@@ -3296,7 +3317,7 @@ function App() {
         {/* Outside the menu: closing the menu unmounts it, and an input that is gone never reports the folder that was picked. */}
         <input ref={libraryInput} type="file" hidden
           // @ts-expect-error browser directory picker
-          webkitdirectory="" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) { const force = refreshOnReconnect.current; refreshOnReconnect.current = false; void connectLibrary(files, force); } }} />
+          webkitdirectory="" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) { const force = refreshOnReconnect.current; const report = reportOnReconnect.current; refreshOnReconnect.current = false; reportOnReconnect.current = false; void connectLibrary(files, force || report, report); } }} />
         <input
           ref={drumsInput}
           type="file"
@@ -3439,6 +3460,11 @@ function App() {
               </details>
               <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryToolsOpen(true); }}>Edit sample Types</button>
             </details>
+            <details className="menu__library-tools menu__section"><summary>Developer</summary>
+              <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; reportOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Rescan and generate report</button>
+              <p>Reselect the folder, reclassify every file and report where each file went: skipped, merged, indexed and typed.</p>
+              {scanReport && <button className="menu__button" onClick={() => { setMenuOpen(false); setScanReportOpen(true); }}>Show last report</button>}
+            </details>
             <details className="menu__library-tools menu__section"><summary>Load individual banks</summary>
             <button
               className="menu__button"
@@ -3574,6 +3600,21 @@ function App() {
         )}
 
         {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
+        {scanReportOpen && scanReport && (
+          <div className="sample-library-backdrop">
+            <section className="sample-library" role="dialog" aria-modal="true" aria-labelledby="scan-report-title">
+              <header className="sample-library__header">
+                <h2 id="scan-report-title">Library scan report</h2>
+                <button onClick={() => setScanReportOpen(false)} aria-label="Close report">×</button>
+              </header>
+              <pre className="scan-report">{scanReport}</pre>
+              <div className="library-actions">
+                <button className="menu__button" onClick={() => { void navigator.clipboard?.writeText(scanReport).then(() => setNotice("Report copied."), () => setNotice("Could not copy the report.")); }}>Copy report</button>
+                <button className="menu__button" onClick={() => setScanReportOpen(false)}>Close</button>
+              </div>
+            </section>
+          </div>
+        )}
         {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
@@ -3964,6 +4005,7 @@ function App() {
                     }
                     palette={palette}
                     onClassify={classifyPad}
+                    onFill={selected !== null && selected < CHOP_BANK_START && (!selectedPad || selectedPad.placeholder) && !addPackStatus ? (category) => void fillEmptyPad(selected, category) : undefined}
                   />
                 </div>
               )}

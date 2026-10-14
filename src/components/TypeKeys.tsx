@@ -27,7 +27,7 @@ const LEGEND: Record<CategoryId, string> = {
  * The deck in Type mode: the fifteen sound types as keys in five columns, each with a lamp in its palette colour. The
  * chosen type's key is pushed in and its lamp lit; the others' lamps are dim.
  */
-export function TypeKeys({ pad, palette, onClassify }: { pad: Pad | null; palette: Palette; onClassify: (pad: Pad, category: CategoryId) => void }) {
+export function TypeKeys({ pad, palette, onClassify, onFill }: { pad: Pad | null; palette: Palette; onClassify: (pad: Pad, category: CategoryId) => void; /** Set while an empty pad is selected: a key then loads a sound of that Type into it. */ onFill?: (category: CategoryId) => void }) {
   const chosen = pad?.category;
   return (
     <div className="type-keys" role="group" aria-label="Sound type">
@@ -38,10 +38,10 @@ export function TypeKeys({ pad, palette, onClassify }: { pad: Pad | null; palett
             key={id}
             className={`type-key${chosen === id ? " type-key--on" : ""}`}
             style={{ ["--c" as string]: c }}
-            disabled={!pad}
+            disabled={!pad && !onFill}
             aria-pressed={chosen === id}
             aria-label={CATEGORIES.find((cat) => cat.id === id)?.label}
-            onClick={() => pad && onClassify(pad, id)}
+            onClick={() => (pad ? onClassify(pad, id) : onFill?.(id))}
           >
             <span className="type-key__lamp" />
             <span className="type-key__legend">{LEGEND[id]}</span>
