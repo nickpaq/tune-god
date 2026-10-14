@@ -169,7 +169,7 @@ import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal
 import { packArrangement, type WorkspaceResult } from "./audio/song/sectionWorkspace";
 import { PatternMaker } from "./components/PatternMaker";
 import { patternBars, slotNotes, STEPS_PER_BEAT } from "./audio/song/patternMaker";
-import { CHOPPER_MIN_SECONDS, ChopperSourceModal } from "./components/ChopperSourceModal";
+import { ChopperSourceModal } from "./components/ChopperSourceModal";
 import { GHOST_LABEL, makeGhostAudio } from "./audio/ghost";
 import { padLabel } from "./audio/padLabels";
 import { PadButton } from "./components/PadButton";
@@ -1336,7 +1336,7 @@ function App() {
 
   /** The Acapella / Chopper button asks which mode first. */
   const [modeAsk, setModeAsk] = useState(false);
-  /** Chopper mode's list of samples over 10 seconds. */
+  /** Chopper mode's list of samples. */
   const [sourcePick, setSourcePick] = useState<"chopper" | "synced" | null>(
     null,
   );
@@ -1354,16 +1354,12 @@ function App() {
   };
 
   /**
-   * A pad was dragged onto the Chopper zone. Chopper mode takes it as the sample to chop (it must be over 10 seconds). Acapella mode looks for its pair by
+   * A pad was dragged onto the Chopper zone. Chopper mode takes it as the sample to chop (any length). Acapella mode looks for its pair by
    * label: the pad and a pad labelled like it with VOCALS after it (or, when it is the stem, the song it is named after).
    */
   const chopPad = async (mode: ChopMode, pad: Pad) => {
     if (addPackStatus || loading || analyzing > 0) return;
     if (mode === "chopper" || mode === "synced") {
-      if (pad.channelData[0].length / pad.sampleRate < CHOPPER_MIN_SECONDS)
-        return void window.alert(
-          `${mode === "synced" ? "Synced" : "Chopper"} mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`,
-        );
       return void (await (mode === "synced"
         ? launchSynced(pad)
         : launchChopper(pad)));
@@ -1410,20 +1406,14 @@ function App() {
     mode: "chopper" | "synced" = "chopper",
   ) => {
     pickedMode.current = null;
-    const modeName = mode === "synced" ? "Synced" : "Chopper";
     let audio: Awaited<ReturnType<typeof decodeNative>>;
     try {
       audio = await decodeNative(file);
     } catch (error) { recordDebug("App operation", error);
       return void window.alert("That audio file could not be read.");
     }
-    if (
-      audio.channelData.length === 0 ||
-      audio.channelData[0].length / audio.sampleRate < CHOPPER_MIN_SECONDS
-    )
-      return void window.alert(
-        `${modeName} mode needs a sample over ${CHOPPER_MIN_SECONDS} seconds.`,
-      );
+    if (audio.channelData.length === 0 || audio.channelData[0].length === 0)
+      return void window.alert("That audio file is empty.");
     const opened = await ensureProject();
     if (!opened) return;
     const { project } = opened;
@@ -3438,7 +3428,7 @@ function App() {
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, chopped onto the pads you pick, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample over 10 seconds, 127 chops per pad, duplicating the pad past that). With no project open it asks for a Koala project first."
+              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, chopped onto the pads you pick, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample, 127 chops per pad, duplicating the pad past that). With no project open it asks for a Koala project first."
               onClick={() => askChopMode()}
             >
               {addPackStatus || "Load Bank D: Chopper"}
@@ -4209,10 +4199,7 @@ function App() {
               ...Object.values(pads).filter(isReal),
               ...Object.values(hidden),
             ]
-              .filter(
-                (p) =>
-                  p.channelData[0].length / p.sampleRate >= CHOPPER_MIN_SECONDS,
-              )
+              .filter((p) => p.channelData[0]?.length > 0)
               .sort(
                 (a, b) =>
                   b.channelData[0].length / b.sampleRate -

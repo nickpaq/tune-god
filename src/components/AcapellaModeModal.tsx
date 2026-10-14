@@ -14,7 +14,7 @@ const SYNCED_POINTS = [
   "Stays in time with the project, even if the BPM changes",
   "As many chops as the pads you pick, one pad each",
   "Overwrites only the pads you choose",
-  "Works on any sample over 10 seconds",
+  "Works on any sample",
 ];
 
 const CHOPPER_POINTS = [
@@ -22,7 +22,7 @@ const CHOPPER_POINTS = [
   "Does not stay in sync with the project",
   "Changing the pitch, or Koala's BPM, takes it out of time",
   "Sets the project's BPM to match the sample (and follows the pitch)",
-  "Works on any sample over 10 seconds",
+  "Works on any sample",
 ];
 
 /** Asked when Acapella is tapped: the two ways to chop a long sample, and what each one does. */

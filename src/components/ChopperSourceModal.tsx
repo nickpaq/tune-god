@@ -1,16 +1,13 @@
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
 
-/** The shortest sample Chopper mode offers (seconds). */
-export const CHOPPER_MIN_SECONDS = 10;
-
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `${s}s`;
 }
 
-/** Chopper mode: every sample over 10 seconds in the project, to pick the one to chop. */
+/** Chopper mode: every sample in the project, to pick the one to chop. */
 export function ChopperSourceModal({ pads, onPick, onCancel }: { pads: Pad[]; onPick: (pad: Pad) => void; onCancel: () => void }) {
   const preview = useSoundPreview();
   return (
@@ -23,7 +20,7 @@ export function ChopperSourceModal({ pads, onPick, onCancel }: { pads: Pad[]; on
           </button>
         </div>
         <div className="palette-modal__key">
-          {pads.length === 0 ? `This project has no sample over ${CHOPPER_MIN_SECONDS} seconds.` : `Samples over ${CHOPPER_MIN_SECONDS} seconds in this project. Play one to check, then choose it.`}
+          {pads.length === 0 ? "This project has no samples." : "Samples in this project, longest first. Play one to check, then choose it."}
         </div>
         <div className="palette-modal__list">
           {pads.map((pad) => (

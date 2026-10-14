@@ -169,11 +169,9 @@ export interface WriteOptions {
   levelling?: boolean;
 }
 
-/** Conservative one-shot tails; loops have their own slots and duration budget. */
-export const ONE_SHOT_MAX_SECONDS = { bass: 5, melodic: 6 } as const;
-export function acceptsOneShotDuration(category: CategoryId, seconds: number): boolean {
-  const limit = category === "bass" ? ONE_SHOT_MAX_SECONDS.bass : category === "melodic" ? ONE_SHOT_MAX_SECONDS.melodic : undefined;
-  return Number.isFinite(seconds) && seconds > 0 && (limit === undefined || seconds <= limit);
+/** A decoded sound must have a real length; there is no maximum for a one-shot (the 30 s load limit and the project size limit are the only bounds). */
+export function acceptsOneShotDuration(_category: CategoryId, seconds: number): boolean {
+  return Number.isFinite(seconds) && seconds > 0;
 }
 
 /** Most files tried per sound wanted, so a folder full of over-long files does not get decoded end to end. */
@@ -222,7 +220,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
         const seconds = decoded.channelData[0].length / decoded.sampleRate;
         if (!explicit && !acceptsOneShotDuration(group.category, seconds)) {
           skipped++;
-          onSkip?.(`it is ${seconds.toFixed(1)} s long, over the ${group.category === "bass" ? ONE_SHOT_MAX_SECONDS.bass : ONE_SHOT_MAX_SECONDS.melodic} s limit for one-shot sounds of this Type`, file.name);
+          onSkip?.("its length could not be read", file.name);
           return false;
         }
         if (maxSeconds !== undefined && seconds > maxSeconds) {

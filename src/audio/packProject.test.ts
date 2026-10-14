@@ -31,17 +31,9 @@ describe("original folder paths", () => {
   });
 });
 
-describe("one-shot duration limits", () => {
-  it("keeps bass tails up to five seconds but excludes longer bass and songs", () => {
-    expect(acceptsOneShotDuration("bass", 5)).toBe(true);
-    expect(acceptsOneShotDuration("bass", 5.001)).toBe(false);
-    expect(acceptsOneShotDuration("bass", 180)).toBe(false);
-  });
-  it("keeps melodic tails up to six seconds while leaving loops eligible", () => {
-    expect(acceptsOneShotDuration("melodic", 6)).toBe(true);
-    expect(acceptsOneShotDuration("melodic", 6.001)).toBe(false);
-    expect(acceptsOneShotDuration("melodicLoop", 16)).toBe(true);
-    expect(acceptsOneShotDuration("bassLoop", 16)).toBe(true);
+describe("one-shot durations", () => {
+  it("has no maximum length for a one-shot of any Type", () => {
+    for (const [category, seconds] of [["bass", 5.001], ["bass", 180], ["melodic", 6.001], ["melodic", 600], ["melodicLoop", 16]] as const) expect(acceptsOneShotDuration(category, seconds), `${category} ${seconds}`).toBe(true);
   });
   it("rejects invalid decoded durations", () => {
     for (const duration of [0, -1, NaN, Infinity]) expect(acceptsOneShotDuration("bass", duration)).toBe(false);
@@ -49,16 +41,16 @@ describe("one-shot duration limits", () => {
 });
 
 describe("one-shot import safety", () => {
-  it("skips long mislabeled bass and short explicit loops, continuing to a valid hit", async () => {
+  it("skips short explicit loops but takes a long bass, whatever its length", async () => {
     const project: ParsedKoalaProject = { zip: new JSZip(), samplerJson: { pads: [], samples: [] }, originalName: "test.koala", padBase: 0, pads: [] };
     const candidate = (name: string, seconds: number) => {
       const data = Float32Array.from({ length: Math.round(seconds * 1000) }, (_, i) => Math.sin(i) * 0.3);
       const blob = encodeWav({ sampleRate: 1000, channelData: [data], bitDepth: 24 });
       return { name, folders: ["Bass"], size: blob.size, source: async () => new File([blob], name) };
     };
-    const result = await writeBankSounds(project, [{ category: "bass", want: 1, candidates: [candidate("808_long.wav", 6), candidate("808_loop.wav", 2), candidate("808_hit.wav", 1)] }], { existing: [], byteBudget: 1000000 });
-    expect(result?.skipped).toBe(2);
-    expect(result?.sounds.map((s) => s.sourceName)).toEqual(["808_hit.wav"]);
+    const result = await writeBankSounds(project, [{ category: "bass", want: 1, candidates: [candidate("808_loop.wav", 2), candidate("808_long.wav", 6), candidate("808_hit.wav", 1)] }], { existing: [], byteBudget: 1000000 });
+    expect(result?.skipped).toBe(1);
+    expect(result?.sounds.map((s) => s.sourceName)).toEqual(["808_long.wav"]);
     const written = await JSZip.loadAsync(await result!.file.arrayBuffer());
     expect(JSON.parse(await written.file("sampler/sampler.json")!.async("string")).pads).toHaveLength(1);
     expect(result?.sounds[0].category).toBe("bass");
@@ -125,13 +117,9 @@ describe("sounds the user picks themselves", () => {
     return { name, folders, size: blob.size, source: async () => new File([blob], name) };
   };
 
-  it("says why an automatic load refused a long bass, and accepts it when the user picked it", async () => {
-    const reasons: string[] = [];
-    const refused = await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("808 long.wav", ["Pack", "bass"])] }], { existing: [], byteBudget: 1000000, onSkip: (reason) => reasons.push(reason) });
-    expect(refused).toBeNull();
-    expect(reasons[0]).toContain("6.0 s long, over the 5 s limit");
-    const accepted = await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("808 long.wav", ["Pack", "bass"])] }], { existing: [], byteBudget: 1000000, explicit: true, maxSeconds: 30 });
-    expect(accepted?.sounds).toHaveLength(1);
+  it("takes a long bass automatically, with no length limit", async () => {
+    const result = await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("808 long.wav", ["Pack", "bass"])] }], { existing: [], byteBudget: 1000000 });
+    expect(result?.sounds).toHaveLength(1);
   });
 
   it("accepts a picked sound whose pack name says loop, and reports the loop name for an automatic load", async () => {
