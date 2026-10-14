@@ -582,7 +582,9 @@ function App() {
         setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
         if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
       }
-      setIndexProgress({ stage: force ? "Refresh complete" : "Files connected", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
+      const total = refreshed.index.samples.length;
+      const changed = total - refreshed.reused;
+      setIndexProgress({ stage: force ? "Refresh complete" : changed === 0 ? "Library unchanged · reconnected" : `Files connected · ${changed.toLocaleString()} new or changed ${changed === 1 ? "file" : "files"} classified`, processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
     } catch (error) {
       setIndexProgress(null);
       setLibraryError("Could not reconnect this folder. Choose your packs folder again.");
