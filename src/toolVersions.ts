@@ -10,6 +10,8 @@ export interface ToolVersion { name: string; version: string }
 export const TOOL_VERSIONS: ToolVersion[] = [
   { name: "Product spec", version: "1.14.0" },
   { name: "Chopper mode", version: "1.0.0" },
+  { name: "Song chop editor", version: "0.9.0" },
+  { name: "Chop to pads", version: "1.2.0" },
   { name: "Pattern maker", version: "1.0.0" },
   { name: "Acapella mode", version: "1.0.0" },
   { name: "Synced mode", version: "1.0.0" },
