@@ -46,7 +46,6 @@ describe("persistent library metadata", () => {
     expect(first.index.samples[1].classification.needsReview).toBe(true);
     const corrected = correctSample(first.index, first.index.samples[1].id, {
       category: "melodic",
-      subtype: "piano",
       confidence: 0,
       needsReview: true,
       evidence: "unknown",
@@ -68,23 +67,21 @@ describe("persistent library metadata", () => {
     expect(refreshed.files[0].libraryId).toBe(first.index.samples[1].id);
     expect(refreshLibrary("Different", files, corrected).reused).toBe(0);
   });
-  it("recognizes loop families, inherited loop folders, aliases and detailed subtypes", () => {
+  it("recognizes loop families, inherited loop folders, aliases without subtype fields", () => {
     expect(classifyFile(["Loops", "Bass", "808"], "take.wav")).toMatchObject({
       category: "bassLoop",
-      subtype: "808",
     });
     expect(classifyFile(["Vocal Loops"], "phrase.wav").category).toBe(
       "voxLoop",
     );
     expect(classifyFile(["FX Loops"], "glitch.wav").category).toBe("fxLoop");
-    expect(classifyFile(["Snares"], "sidestick.wav").subtype).toBe("sidestick");
+    expect(classifyFile(["Snares"], "sidestick.wav").category).toBe("snare");
     expect(classifyFile(["FX"], "noise fall.wav")).toMatchObject({
-      category: "fall",
-      subtype: "noise fall",
+      category: "fx",
     });
-    expect(classifyFile(["Cymbals"], "crash.wav").subtype).toBe("crash");
+    expect(classifyFile(["Cymbals"], "crash.wav").category).toBe("cymbal");
   });
-  it("keeps DRUM and LOOP alone invalid and lets drum subtypes imply DRUM", () => {
+  it("keeps DRUM and LOOP alone invalid and lets drum Types imply DRUM", () => {
     for (const types of [["DRUM"], ["LOOP"], []])
       expect(validTypeSelection(types)).toBe(false);
     for (const types of [["kick"], ["DRUM", "LOOP"], ["BASS", "LOOP"], ["FX"]])
@@ -114,9 +111,22 @@ it("indexes large libraries in responsive metadata batches and restores unchange
 });
 
 
-it("leaves unknown snare subtypes blank without requiring confirmation", () => {
+it("classifies ordinary snares without requiring confirmation", () => {
   const classification = classifyFile(["Library", "Pack", "Snares"], "snare_001.wav");
   expect(classification.category).toBe("snare");
-  expect(classification.subtype).toBeUndefined();
+  expect(classification).not.toHaveProperty("subtype");
   expect(classification.needsReview).toBe(false);
+});
+
+it("reuses old library records while discarding subtype fields and mapping FX variants", () => {
+  const files = [file("Library/Pack/FX/fall_noise.wav")];
+  const first = refreshLibrary("Library", files);
+  const legacy = { category: "fall", subtype: "noise fall", confidence: 1, needsReview: false, evidence: "correction" };
+  Object.assign(first.index.samples[0], { classification: legacy, correction: legacy });
+  const next = refreshLibrary("Library", files, first.index);
+  expect(next.reused).toBe(1);
+  expect(next.index.samples[0].id).toBe(first.index.samples[0].id);
+  expect(next.index.samples[0].classification.category).toBe("fx");
+  expect(next.index.samples[0].classification).not.toHaveProperty("subtype");
+  expect(next.index.samples[0].correction).not.toHaveProperty("subtype");
 });

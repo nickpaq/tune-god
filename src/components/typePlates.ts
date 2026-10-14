@@ -8,5 +8,5 @@ import type { CategoryId } from "../audio/classify";
  */
 export const PLATES: { name: string; ids: CategoryId[] }[] = [
   { name: "Drums", ids: ["kick", "snare", "clap", "closedHat", "openHat", "cymbal", "vox", "perc", "drumLoop", "percLoop"] },
-  { name: "Melodic, bass and other", ids: ["melodic", "melodicLoop", "bass", "bassLoop", "voxLoop", "fx", "riser", "fall", "fxLoop", "other"] },
+  { name: "Melodic, bass and other", ids: ["melodic", "melodicLoop", "bass", "bassLoop", "voxLoop", "fx", "fxLoop", "other"] },
 ];

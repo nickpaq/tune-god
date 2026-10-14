@@ -98,8 +98,9 @@ export async function buildTunedKoala(
         pad.stretching = typeof pad.stretching === "string" ? "false" : false;
       } else if (play.stretch) {
         pad.stretch = STRETCH_MODE[play.stretch];
-        // Without a length in beats Koala has nothing to stretch to, so the mode is written but stretch stays as the pad had it.
-        if (stretch?.has(pad.sampleId)) pad.stretching = typeof pad.stretching === "string" ? "true" : true;
+        // Let Koala determine ordinary loop lengths, including previously exported guesses.
+        pad.stretching = typeof pad.stretching === "string" ? "true" : true;
+        delete pad.stretchLength;
       }
       if (play.eq) applyPadEq(pad, play.eq);
     }

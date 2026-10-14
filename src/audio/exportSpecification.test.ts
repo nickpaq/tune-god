@@ -21,8 +21,6 @@ const cases: [CategoryId, number, boolean, number, boolean][] = [
   ["vox", 3, true, 0, false],
   ["voxLoop", 3, false, 6, true],
   ["fx", 3, true, 0, false],
-  ["riser", 3, true, 0, false],
-  ["fall", 3, true, 0, false],
   ["fxLoop", 3, false, 0, true],
 ];
 describe("Koala product specification", () => {

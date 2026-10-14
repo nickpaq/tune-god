@@ -4,7 +4,10 @@ import { waveformPeaks } from "../audio/peaks";
 const BUCKETS = 240;
 
 /** The selected sound's waveform, scaled so its loudest peak fills the height. Drawn in the screen's ink colour. */
-export function Waveform({ channelData }: { channelData: Float32Array[] }) {
+export function Waveform({ channelData, playbackPosition, playbackKey = 0 }: { channelData: Float32Array[]; playbackPosition?: () => number | null; playbackKey?: number }) {
+  const playhead = useRef<HTMLDivElement>(null);
+  const position = useRef(playbackPosition);
+  position.current = playbackPosition;
   const canvas = useRef<HTMLCanvasElement>(null);
   const peaks = useMemo(() => waveformPeaks(channelData, BUCKETS), [channelData]);
 
@@ -42,5 +45,23 @@ export function Waveform({ channelData }: { channelData: Float32Array[] }) {
     return () => observer.disconnect();
   }, [peaks]);
 
-  return <canvas ref={canvas} className="waveform" role="img" aria-label="Waveform" />;
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      const value = position.current?.() ?? null;
+      const line = playhead.current;
+      if (line) {
+        line.hidden = value === null;
+        if (value !== null) line.style.left = `${Math.max(0, Math.min(1, value)) * 100}%`;
+      }
+      if (value !== null) frame = requestAnimationFrame(update);
+    };
+    frame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frame);
+  }, [playbackKey, channelData]);
+
+  return <div className="waveform" role="img" aria-label="Waveform">
+    <canvas ref={canvas} className="waveform__canvas" />
+    <div ref={playhead} className="waveform__playhead" hidden aria-hidden="true" />
+  </div>;
 }

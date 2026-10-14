@@ -1,14 +1,17 @@
+import { suggestedSongIndex } from "./audio/acapellaRoles";
+import { replaceCorrectedPad } from "./audio/correctPadType";
+import { normalizeClassification } from "./audio/sampleClassification";
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { resolvePlayback, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import {
-  acapellaProjectFromAudio,
   guessAcapellaRoles,
   blankProject,
   entriesOfDrop,
@@ -22,15 +25,16 @@ import {
   BANK_ZONES,
   bankTakes,
   MAX_LOAD_SECONDS,
-  numberedLabel,
+  exportPadLabel,
   placeBank,
   planBank,
+  padOnlyGroups,
   type BankLoad,
 } from "./audio/bankLoad";
 import { displayName, packTags } from "./audio/sampleName";
-import { packByteBudget, PROJECT_BYTE_BUDGET, projectNameForFiles, type PackFile, type PackMemory } from "./audio/samplePack";
+import { packByteBudget, PROJECT_BYTE_BUDGET, projectNameForFiles, shuffled, type PackFile, type PackMemory } from "./audio/samplePack";
 import { PadPanel, type Pad } from "./components/PadPanel";
-import { decodeNative, monoFromChannelData } from "./audio/decode";
+import { decodeNative } from "./audio/decode";
 import {
   parseKoalaProject,
   koalaPadToFile,
@@ -40,6 +44,7 @@ import {
 } from "./audio/koalaProject";
 import {
   setReferencePitch,
+  stopAllPads,
   startPad,
   type PadHandle,
   type PadMode,
@@ -69,6 +74,7 @@ import { balancedSpread } from "./audio/spread";
 import {
   CATEGORIES,
   categoryIndex,
+  categoryLabel,
   is808Name,
   isKitCategory,
   isTunedCategory,
@@ -107,16 +113,15 @@ import {
 import { SwapList } from "./components/SwapList";
 import { LibraryBrowser } from "./components/LibraryBrowser";
 import { PlaybackEditor } from "./components/PlaybackEditor";
-import { LayoutEditor } from "./components/LayoutEditor";
 import { correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
 import { type SampleClassification } from "./audio/sampleClassification";
-import { matchingTemplateLabel, type AdditionalBanks } from "./audio/kitGeneration";
+import { matchingTemplateLabel } from "./audio/kitGeneration";
 import { loadLibraryIndex, saveLibraryIndex } from "./storage";
 import { SampleLibraryModal } from "./components/SampleLibraryModal";
 import { TypeKeys } from "./components/TypeKeys";
 import { Waveform } from "./components/Waveform";
 import { LongSamplesModal } from "./components/LongSamplesModal";
-import { layoutById, type FingerLayout } from "./audio/fingerLayouts";
+import { layoutById } from "./audio/fingerLayouts";
 import { makePlaceholderPad, placeholderColor } from "./audio/placeholderPads";
 import { makeGhostPad } from "./audio/ghostPads";
 import { makeSectionPads } from "./audio/songPads";
@@ -182,7 +187,7 @@ import {
   trimCents,
   bassLiftSemitones,
 } from "./audio/theory";
-import { nextAnalysisWorker, getRenderWorker } from "./workers/workerClient";
+import { analyzeAudio, getRenderWorker } from "./workers/workerClient";
 import { useOledCell } from "./components/useOledCell";
 import { resetStoredType } from "./audio/seq/session";
 import { encodeWav } from "./audio/wavEncode";
@@ -351,7 +356,16 @@ function App() {
   useOledCell();
   useSafeArea();
   // Read once: what the previous visit left behind.
-  const saved = useRef(loadState()).current;
+  const [saved] = useState(() => {
+    const state = loadState();
+    for (const pad of Object.values(state.pads ?? {})) {
+      if (!pad.classification) continue;
+      const classification = normalizeClassification(pad.classification);
+      if (pad.libraryId && ("subtype" in pad.classification || classification.category !== pad.classification.category)) pad.label = categoryLabel(classification.category);
+      pad.classification = classification;
+    }
+    return state;
+  });
   const [pads, setPads] = useState<Record<number, Pad>>({});
   /** A sample pack's spare sounds (by original slot): not on any pad, offered in the hot-swap menu, and left out of the export. */
   const [hidden, setHidden] = useState<Record<number, Pad>>({});
@@ -420,7 +434,7 @@ function App() {
   const [longSamples, setLongSamples] = useState<number[]>([]);
   const [layout, setLayout] = useState<LayoutState>({
     on: false,
-    id: saved.layoutId ?? layoutById(null).id,
+    id: layoutById(null).id,
     pre: {},
   });
   const [toneOn, setToneOn] = useState(saved.toneOn ?? false);
@@ -449,6 +463,13 @@ function App() {
     y: number;
   } | null>(null);
   const [hover, setHover] = useState("");
+  const dragGhost = useRef<HTMLDivElement>(null);
+  const dragPosition = useRef<{ from: number; x: number; y: number } | null>(null);
+  const paintDrag = () => {
+    const position = dragPosition.current;
+    if (position && dragGhost.current) dragGhost.current.style.transform = `translate3d(${position.x}px, ${position.y}px, 0) translate(-50%, -50%)`;
+  };
+  useLayoutEffect(paintDrag, [drag]);
   /** The all-pads view that opens when a drag dwells over the bank buttons. */
   const [expanded, setExpanded] = useState(false);
   /** One record per finger/pointer holding a pad, so a second touch never disturbs the first. */
@@ -469,6 +490,8 @@ function App() {
   const finishPointer = useRef<(pointerId: number, cancelled: boolean) => void>(
     () => {},
   );
+  const [waveformPlayback, setWaveformPlayback] = useState(0);
+  const waveformVoice = useRef<{ index: number; handle: PadHandle; loop: boolean } | null>(null);
   const releasePad = useRef<Map<number, PadHandle>>(new Map());
   /** The sample dropped on HOLD; it loops until any pad is pressed. */
   const holdVoice = useRef<PadHandle | null>(null);
@@ -505,6 +528,8 @@ function App() {
   const oneShotsInput = useRef<HTMLInputElement>(null);
   const acapellaInput = useRef<HTMLInputElement>(null);
   /** The two audio files picked for acapella mode, waiting for the user to confirm which is the song and which the vocal. */
+  const [pairNeeded, setPairNeeded] = useState(false);
+  const externalAudio = useRef(new Map<File, Awaited<ReturnType<typeof decodeNative>>>());
   const [roleAsk, setRoleAsk] = useState<{ song: File; stem: File } | null>(null);
   /** The stem's pad settings from the acapella zip being chopped (not in the project), for the export. */
   const acapellaTemplate = useRef<SongTemplate | undefined>(undefined);
@@ -515,6 +540,7 @@ function App() {
   const [importStatus, setImportStatus] = useState("");
   const [sampleLibrary, setSampleLibrary] = useState<SampleLibraryRecord[]>([]);
   const [favoritePads, setFavoritePads] = useState<Pad[]>([]);
+  const nextFavoriteSlot = useRef(-100000);
   const [libraryIndex, setLibraryIndex] = useState<LibraryIndex | null>(null);
   const libraryFiles = useRef<FoundPack | null>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
@@ -526,15 +552,11 @@ function App() {
   const [indexProgress, setIndexProgress] = useState<LibraryProgress | null>(null);
   const [kitReport, setKitReport] = useState<{ filled: number; requested: number; shortages: string[] } | null>(null);
   const [indexReused, setIndexReused] = useState(0);
-  const [additionalBanks, setAdditionalBanks] = useState<AdditionalBanks>(saved.additionalBanks ?? 0);
   const [typeSettings, setTypeSettings] = useState<Partial<Record<CategoryId, PadPlayback>>>(saved.typeSettings ?? {});
   const [playbackEditorOpen, setPlaybackEditorOpen] = useState(false);
+  const [loadHotSwapSpares, setLoadHotSwapSpares] = useState(saved.loadHotSwapSpares ?? false);
   const [balancePacks, setBalancePacks] = useState(saved.balancePacks ?? true);
-  const [templates, setTemplates] = useState<FingerLayout[]>(saved.customTemplates ?? []);
-  const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
-  const [activeLayout, setActiveLayout] = useState<FingerLayout>(() => saved.customTemplates?.find((t) => t.id === saved.layoutId) ?? layoutById(saved.layoutId));
-  const getLayout = (id: string | null | undefined) => id === activeLayout.id ? activeLayout : templates.find((t) => t.id === id) ?? layoutById(id);
-  useEffect(() => { saveState({ additionalBanks, balancePacks, customTemplates: templates, typeSettings }); }, [additionalBanks, balancePacks, templates, typeSettings]);
+  useEffect(() => { saveState({ balancePacks, typeSettings, loadHotSwapSpares }); }, [balancePacks, typeSettings, loadHotSwapSpares]);
   useEffect(() => {
     if (!saved.libraryIndexId) return;
     let cancelled = false;
@@ -577,32 +599,13 @@ function App() {
       const records = await loadSampleLibrary();
       if (cancelled) return;
       setSampleLibrary(records);
-      const favorites: Pad[] = [];
-      for (const [i, record] of records.entries()) {
-        if (!record.favorite || !record.audio || !record.sampleRate) continue;
-        try {
-          const decoded = await decodeNative(new File([record.audio], record.name, { type: "audio/wav" }));
-          favorites.push({
-            index: -1,
-            origIndex: -100000 - i,
-            libraryId: record.id,
-            favorite: true,
-            name: record.name,
-            sourcePath: record.sourcePath,
-            sampleId: -1,
-            sampleRate: record.sampleRate || decoded.sampleRate,
-            channelData: decoded.channelData,
-            category: record.category,
-            is808: record.is808,
-            tune: false,
-            semis: 0,
-            cents: 0,
-          });
-        } catch {
-          // A corrupt cached favorite is omitted from playable hot-swap candidates.
-        }
-      }
-      if (!cancelled) setFavoritePads(favorites);
+      const favorites: Pad[] = records.filter(record => record.favorite && record.audio).map((record, i) => ({
+        index: -1, origIndex: -100000 - i, libraryId: record.id, favorite: true,
+        name: record.name, sourcePath: record.sourcePath, sampleId: -1,
+        sampleRate: record.sampleRate ?? 44100, channelData: [], category: record.category,
+        is808: record.is808, tune: false, semis: 0, cents: 0,
+      }));
+      if (!cancelled) { nextFavoriteSlot.current = -100000 - favorites.length; setFavoritePads(favorites); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -632,7 +635,7 @@ function App() {
         );
         setLayout((l) => ({
           on: layoutOn,
-          id: layoutOn ? saved.layoutId ?? l.id : l.id,
+          id: l.id,
           pre: layoutOn ? (saved.layoutPre ?? {}) : {},
         }));
         setHidden({});
@@ -720,9 +723,8 @@ function App() {
           )
             tooLong.push(ref.pad);
           // Analysis runs on a worker while the next pad decodes.
-          nextAnalysisWorker()
-            .analyze(
-              monoFromChannelData(pad.channelData),
+          analyzeAudio(
+              pad.channelData,
               pad.sampleRate,
               pad.sourcePath ?? ref.fileName,
               false,
@@ -769,7 +771,7 @@ function App() {
                         locked: remembered.locked,
                         category: cat,
                         label: remembered.label ?? ref.label,
-                        classification: remembered.classification ?? ref.classification,
+                        classification: remembered.classification ? normalizeClassification(remembered.classification) : ref.classification,
                         playback: remembered.playback ?? ref.playback,
                       }
                     : { category }),
@@ -958,16 +960,20 @@ function App() {
   }, [pads, hidden, analyzing, loading, layout]);
 
   /** Unloads the project and forgets it, so the app opens on the drop screen next time. Settings stay. */
-  const clearProject = () => {
-    if (
+  const clearProject = (confirm = true) => {
+    if (confirm &&
       !window.confirm(
         "Clear the loaded project? Your tuning edits for it will be lost.",
       )
     )
       return;
     loadToken.current++; // abandons any load or analysis still in flight
-    for (const handle of releasePad.current.values()) handle.release();
+    stopAllPads();
+    for (const handle of releasePad.current.values()) handle.cut();
     releasePad.current.clear();
+    stopMatch();
+    waveformVoice.current?.handle.cut();
+    waveformVoice.current = null;
     projectRef.current = null;
     past.current = [];
     future.current = [];
@@ -1050,8 +1056,8 @@ function App() {
     setAddPackStatus("Reading…");
     try {
       const found = await find();
-      const plan = planBank(bank, found.files, Math.random, { layout: activeLayout, additionalBanks, balancePacks });
-      if (plan.problem) {
+      const plan = planBank(bank, found.files, Math.random, { balancePacks, loadHotSwapSpares });
+      if (plan.problem && !((bank === "kit" || bank === "drums") && found.files.length)) {
         window.alert(plan.problem);
         return;
       }
@@ -1063,7 +1069,7 @@ function App() {
       const { project, started } = opened;
       const token = loadToken.current;
       const cur = latest.current;
-      const lay = activeLayout;
+      const lay = layoutById(null);
       // What this load replaces: the real sounds on its pads, and the spares of its kind in the hot-swap pool.
       // A locked pad keeps its sound: it is not replaced, and what the pack brings for its place goes to the hot-swap options instead.
       const lockedSlots = new Set(
@@ -1098,7 +1104,7 @@ function App() {
           ),
       );
       const excludedIds = new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : []));
-      const groups = plan.groups.map((group) => ({ ...group, candidates: group.candidates.filter((file) => !file.libraryId || !excludedIds.has(file.libraryId)) }));
+      const groups = (loadHotSwapSpares ? plan.groups : padOnlyGroups(bank, plan.groups, lockedSlots)).map((group) => ({ ...group, candidates: group.candidates.filter((file) => !file.libraryId || !excludedIds.has(file.libraryId)) }));
       const result = await writeBankSounds(project, groups, {
         existing: kept.map((p) => ({
           channelData: p.channelData,
@@ -1106,11 +1112,10 @@ function App() {
           category: p.category,
         })),
         byteBudget: budget,
-        maxSeconds:
-          bank === "loops" || bank === "oneShots"
-            ? MAX_LOAD_SECONDS
-            : undefined,
+        maxSeconds: MAX_LOAD_SECONDS,
         replace: replaced.map((p) => p.origIndex),
+        fillTo: bank === "kit" || bank === "drums" ? zone.end - zone.start - lockedSlots.size : undefined,
+        fallbackCandidates: bank === "kit" || bank === "drums" ? shuffled(found.files) : undefined,
         measure: (input) => getRenderWorker().measure(input),
         onProgress: setAddPackStatus,
       });
@@ -1143,12 +1148,14 @@ function App() {
           identity: s.libraryId,
         })),
         lay,
-        { additionalBanks, locked: lockedSlots, excluded: new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : [])) },
+        { locked: lockedSlots, excluded: new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : [])) },
       );
       const fresh: Pad[] = [];
+      const decodedSamples = new Map<number, Awaited<ReturnType<typeof decodeNative>>>();
       for (const sound of result.sounds) {
         const ref = project.pads.find((p) => p.pad === sound.pad)!;
-        const decoded = await decodeNative(await koalaPadToFile(project, ref));
+        const decoded = decodedSamples.get(sound.sampleId) ?? await decodeNative(await koalaPadToFile(project, ref));
+        decodedSamples.set(sound.sampleId, decoded);
         if (token !== loadToken.current) return;
         categoryHints.current = {
           ...categoryHints.current,
@@ -1176,7 +1183,7 @@ function App() {
           cents: 0,
         });
       }
-      if (bank === "kit" || bank === "drums") setKitReport({ filled: placement.positions.size + [...lockedSlots].filter((index) => index < (bank === "kit" ? (additionalBanks + 1) * 16 : 16)).length, requested: bank === "kit" ? (additionalBanks + 1) * 16 : 16, shortages: placement.shortages?.map((gap) => `${String.fromCharCode(65 + Math.floor(gap.index / 16))}${gap.index % 16 + 1} · ${gap.label}`) ?? [] });
+      if (bank === "kit" || bank === "drums") setKitReport({ filled: placement.positions.size + [...lockedSlots].filter((index) => index < (bank === "kit" ? 48 : 16)).length, requested: bank === "kit" ? 48 : 16, shortages: placement.shortages?.map((gap) => `${String.fromCharCode(65 + Math.floor(gap.index / 16))}${gap.index % 16 + 1} · ${gap.label}`) ?? [] });
       const onPads = fresh.filter((p) => p.index >= 0);
       const spares = fresh.filter((p) => p.index < 0);
       setSampleLibrary(await loadSampleLibrary());
@@ -1212,16 +1219,10 @@ function App() {
       setSelected(null);
       setBank(BANK_SHOWN[bank]);
       setAnalyzing((n) => n + fresh.length);
-      if (placement.shortages?.length) {
-        setNotice(`Missing ${placement.shortages.length} requested pads: ${placement.shortages.map((gap) => `${String.fromCharCode(65 + Math.floor(gap.index / 16))}${gap.index % 16 + 1} ${gap.label}`).join(", ")}. No substitute sounds used.${result.skipped ? ` ${result.skipped} files skipped.` : ""}`);
-      } else if (result.skipped > 0)
-        setNotice(
-          `${result.skipped} file${result.skipped === 1 ? "" : "s"} skipped: too long, too big for the project size limit or unreadable`,
-        );
+      const analyses = new Map<number, ReturnType<typeof analyzeAudio>>();
       for (const pad of fresh) {
-        nextAnalysisWorker()
-          .analyze(
-            monoFromChannelData(pad.channelData),
+        const analysis = analyses.get(pad.sampleId) ?? analyzeAudio(
+            pad.channelData,
             pad.sampleRate,
             pad.sourcePath ?? pad.name,
             pad.category === "melodicLoop",
@@ -1234,8 +1235,9 @@ function App() {
             centroid: undefined,
             bpm: null,
             named: false,
-          }))
-          .then(({ midi: detectedMidi, detail, centroid, bpm, named }) => {
+          }));
+        analyses.set(pad.sampleId, analysis);
+        analysis.then(({ midi: detectedMidi, detail, centroid, bpm, named }) => {
             if (token !== loadToken.current) return;
             const analysed = (p: Pad): Pad => ({
               ...p,
@@ -1326,7 +1328,7 @@ function App() {
       ...Object.values(cur.pads).filter(isReal),
       ...Object.values(cur.hidden),
     ]);
-    if (!check.ok) return void window.alert(check.message);
+    if (!check.ok) return void setPairNeeded(true);
     await launchAcapella(check.song, check.vocals);
   };
 
@@ -1419,7 +1421,20 @@ function App() {
         pickedMode.current = null;
         return void window.alert("Acapella mode needs two audio files: the song and its vocal stem. Pick both together, or open a Koala project that already holds them.");
       }
-      return void setRoleAsk(guessAcapellaRoles(picked));
+      setAddPackStatus("Reading song and vocal…");
+      try {
+        const audio = await Promise.all(picked.map(file => decodeNative(file)));
+        externalAudio.current = new Map(picked.map((file, i) => [file, audio[i]]));
+        const named = guessAcapellaRoles(picked);
+        const index = suggestedSongIndex(audio as [typeof audio[0], typeof audio[0]]);
+        // An explicit vocal filename is stronger evidence than an acoustic guess.
+        const vocalNamed = /vocals?|acapella|a[ _-]?cappella|vox|stem/i;
+        const namesDecide = picked.filter(file => vocalNamed.test(file.name)).length === 1;
+        setPairNeeded(false);
+        setRoleAsk(!namesDecide && index !== null ? { song: picked[index], stem: picked[1-index] } : named);
+      } catch { window.alert("One of the audio files could not be read."); }
+      finally { setAddPackStatus(""); }
+      return;
     }
     return void (await openAcapellaFile(project));
   };
@@ -1427,12 +1442,23 @@ function App() {
   /** The two files were picked and the user has settled which is the song and which the vocal: make the project and open it. */
   const finishAcapellaRoles = async (song: File, stem: File) => {
     setRoleAsk(null);
-    const made = await acapellaProjectFromAudio([song, stem], { song, stem });
-    if ("problem" in made) {
+    try {
+      const audio = await Promise.all([song, stem].map(file => externalAudio.current.get(file) ?? decodeNative(file)));
+      if (Math.abs(audio[0].channelData[0].length / audio[0].sampleRate - audio[1].channelData[0].length / audio[1].sampleRate) > 0.03) {
+        setRoleAsk({ song, stem });
+        return void window.alert("The song and vocal must have the same duration and start together. Export both from the same stem split without trimming.");
+      }
+      const opened = await ensureProject();
+      if (!opened) return;
+      const ids = [...opened.project.pads.map(p => p.sampleId), ...(opened.project.samplerJson.samples ?? []).map((s: any) => Number(s.id))];
+      const firstId = Math.max(0, ...ids) + 1;
+      const source = (file: File, i: number): Pad => ({ index: -1, origIndex: CHOPPER_ORIG_INDEX - i, sampleId: firstId + i,
+        name: file.name, sampleRate: audio[i].sampleRate, channelData: audio[i].channelData,
+        category: i === 0 ? "melodic" : "vox", tune: false, semis: 0, cents: 0 });
+      await launchAcapella(source(song, 0), source(stem, 1));
       pickedMode.current = null;
-      return void window.alert(made.problem);
-    }
-    await openAcapellaFile(made.file);
+    } catch { window.alert("One of the audio files could not be read."); }
+    finally { externalAudio.current.clear(); }
   };
 
   const openAcapellaFile = async (file: File) => {
@@ -1471,7 +1497,7 @@ function App() {
       [...onPads, ...Object.values(cur.hidden)],
     );
     if (!found.ok) {
-      window.alert(found.message);
+      setPairNeeded(true);
       return;
     }
     await launchAcapella(found.song, found.vocals);
@@ -1553,41 +1579,45 @@ function App() {
   };
 
   const patchPad = (index: number, patch: Partial<Pad>) => {
+    const current = latest.current.pads[index];
+    if (!current || Object.entries(patch).every(([key, value]) => current[key as keyof Pad] === value)) return;
     recordEdit("semis" in patch || "cents" in patch ? `${index}:trim` : "");
     setPads((prev) => ({ ...prev, [index]: { ...prev[index], ...patch } }));
   };
 
-  /** Changes a sound's type in place. Tune follows the new type unless the user set it by hand. The pad stays where it is: only the loaders place sounds. */
+  /** Correct the sound's metadata, keep it in hot swap, and refill its slot with the original Type. */
   const classifyPad = (pad: Pad, category: CategoryId) => {
-    if (pad.libraryId && libraryIndex?.samples.some((sample) => sample.id === pad.libraryId)) correctLibrarySample(pad.libraryId, { category, confidence: 1, needsReview: false, evidence: "correction" });
+    if (addPackStatus || loading) return;
     if (pad.category === category) return;
+    const classification = { category, confidence: 1, needsReview: false, evidence: "correction" as const };
+    if (pad.libraryId && libraryIndex?.samples.some((sample) => sample.id === pad.libraryId)) correctLibrarySample(pad.libraryId, classification);
+    const corrected = {
+      ...pad, category, label: undefined, classification,
+      tune: pad.tuneLocked ? pad.tune : tuneDefault(false, false, category, pad.detectedMidi, tunedTarget),
+    };
+    const connected = !!libraryFiles.current;
+    const next = replaceCorrectedPad(latest.current.pads, connected ? {} : latest.current.hidden, corrected, pad.category ?? "other");
+    if (connected) next.hidden = { ...latest.current.hidden, ...next.hidden };
+    if (next.replacement) next.pads[pad.index] = {
+      ...next.replacement,
+      tune: tuneDefault(next.replacement.tuneLocked, next.replacement.tune, next.replacement.category, next.replacement.detectedMidi, tunedTarget),
+    };
+    recordEdit();
+    stopMatch();
+    releasePad.current.get(pad.index)?.cut();
+    if (waveformVoice.current?.index === pad.index) waveformVoice.current.handle.cut();
+    setPads(next.pads);
+    setHidden(next.hidden);
+    const replacement = next.pads[pad.index];
     resetStoredType(
-      projectFile.current
-        ? `${projectFile.current.name}:${projectFile.current.size}`
-        : "current",
-      pad.index,
-      category,
-      pad.channelData[0].length / pad.sampleRate,
-      projectBpm,
-      Object.values(pads).find((p) => p.category === "kick")?.index,
+      projectFile.current ? `${projectFile.current.name}:${projectFile.current.size}` : "current",
+      pad.index, replacement.category ?? pad.category ?? "other",
+      replacement.channelData[0].length / replacement.sampleRate, projectBpm,
+      Object.values(next.pads).find((p) => p.category === "kick")?.index,
     );
-    patchPad(
-      pad.index,
-      pad.tuneLocked
-        ? { category, label: undefined, classification: { category, confidence: 1, needsReview: false, evidence: "correction" } }
-        : {
-            category,
-            label: undefined,
-            classification: { category, confidence: 1, needsReview: false, evidence: "correction" },
-            tune: tuneDefault(
-              false,
-              false,
-              category,
-              pad.detectedMidi,
-              tunedTarget,
-            ),
-          },
-    );
+    if (pad.locked) setNotice("Type corrected. Unlock this pad to replace its sound.");
+    else if (!next.replacement) void loadCorrectedReplacement(next.pads[pad.index], pad.category ?? "other");
+    else setNotice(`Corrected to ${categoryLabel(category)} and kept in hot swap. Loaded another ${categoryLabel(pad.category ?? "other")}.`);
   };
 
   /** The sound being chopped (the cuts are found on it), and in acapella mode its vocal stem (what is cut), with the project's beats per bar, while the chop editor is open. */
@@ -1604,7 +1634,7 @@ function App() {
   const openChop = async (pad: Pad) => {
     const check = checkStems(pad, Object.values(pads).filter(isReal));
     if (!check.ok) {
-      window.alert(check.message);
+      setPairNeeded(true);
       return;
     }
     await launchAcapella(check.song, check.vocals);
@@ -2263,6 +2293,8 @@ function App() {
         toneVolume * 2,
       ),
     );
+    waveformVoice.current = { index, handle: releasePad.current.get(index)!, loop: padMode(pad) === "loop" };
+    setWaveformPlayback(n => n + 1);
   };
 
   /**
@@ -2305,6 +2337,7 @@ function App() {
   };
 
   const endDrag = (d?: { timer: number | null }) => {
+    dragPosition.current = null;
     if (d?.timer) clearTimeout(d.timer);
     setDrag(null);
     setExpanded(false);
@@ -2419,7 +2452,10 @@ function App() {
         return;
       d.active = true; // the sound keeps playing through the drag; the release at the end of the hold stops it
     }
-    setDrag({ from: d.from, x: e.clientX, y: e.clientY });
+    const newDrag = dragPosition.current?.from !== d.from;
+    dragPosition.current = { from: d.from, x: e.clientX, y: e.clientY };
+    if (newDrag) setDrag(dragPosition.current);
+    else paintDrag();
     const target = targetAt(e.clientX, e.clientY);
     if (target === d.hover) return;
     d.hover = target;
@@ -2506,6 +2542,8 @@ function App() {
         toneVolume * 2,
       ),
     };
+    waveformVoice.current = { index: pad.index, handle: matchVoice.current.handle, loop: true };
+    setWaveformPlayback(n => n + 1);
   };
 
   /**
@@ -2774,39 +2812,19 @@ function App() {
         if (p.classification) classifications.set(p.origIndex, { ...p.classification, category: p.category });
         if (settings) padPlayback.set(p.origIndex, autoPlayback ? settings : { ...settings, eq: undefined });
       }
-      // The pads the loaders made (Kick 1, Snare 2, Loop 3...) are written with the colour and label they show in the app; a sound from a project that was
-      // opened keeps the colour and label it already had.
-      // Loops are written stretched, as long (in beats) as they are at their own tempo; Koala then plays them at the project's tempo. A loop whose name
-      // states no tempo is stretched to its length at the project tempo, rounded to whole bars. One-shots are never stretched.
-      const stretch = new Map<number, number>();
-      const beatsPerBar = await beatsPerBarOfProject();
-      for (const p of allPads) {
-        const seconds = p.channelData[0].length / p.sampleRate;
-        const settings = padPlayback.get(p.origIndex);
-        if (settings?.stretch && settings.stretch !== "off") {
-          const beats = p.bpm
-            ? seconds * (p.bpm / 60)
-            : seconds * (projectBpm / 60);
-          stretch.set(
-            p.sampleId,
-            p.bpm || beats < beatsPerBar
-              ? Math.max(1, Math.round(beats))
-              : Math.round(beats / beatsPerBar) * beatsPerBar,
-          );
-        }
-      }
+      // Sounds export compact Type labels without file or preset numbering.
+      // Ordinary loops use Koala’s automatic length detection; chop exports write their exact lengths.
       const colors = new Map<number, { color: string; label: string }>();
       for (const p of allPads) {
         // The label is what the pad's caption says in the app, without its number.
-        if (p.category && numberedLabel(p))
+        if (p.category)
           colors.set(p.sampleId, {
             color: autoColorOf(p),
-            label: captionOf(p) || labelOf(p),
+            label: exportPadLabel(p.category, p.is808),
           });
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, {
         bpm: projectBpm,
-        stretch,
         vols,
         pitches,
         busNames: BUS_NAMES,
@@ -2865,12 +2883,6 @@ function App() {
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
   const sectionLabel = (p: Pad): string =>
     `${p.section!.synced ? "Chop" : CATEGORIES[categoryIndex("vox")].label} ${p.section!.number}`;
-  // Validate saved labels too, so projects generated before this fix display correctly.
-  const templateLabelOf = (p: Pad): string | undefined => {
-    if (!p.libraryId || !p.label) return undefined;
-    const slot = getLayout(layout.id).slots.find((slot) => slot.label === p.label);
-    return slot && p.category ? matchingTemplateLabel(slot, { category: p.category, classification: p.classification }) : p.label;
-  };
   const labelOf = (p: Pad): string =>
     p.placeholder
       ? p.placeholder.label
@@ -2880,7 +2892,7 @@ function App() {
           ? "Chopper"
           : p.section
             ? sectionLabel(p)
-            : (templateLabelOf(p) ?? numberedLabel(p)?.label ?? padLabel(p));
+            : (p.category ? exportPadLabel(p.category, p.is808) : padLabel(p));
   const colorOfPad = (p: Pad) =>
     p.placeholder ? placeholderColor(p) : autoColorOf(p);
   const hasProject =
@@ -2927,11 +2939,11 @@ function App() {
     const pc = pad.tune ? (pad.keyPc ?? keyPc) : null;
     return pc === null ? "--" : NOTE_NAMES[pc];
   };
-  const tags = packTags(
+  const tags = useMemo(() => packTags(
     [...Object.values(pads).filter(isReal), ...Object.values(hidden)].map(
       (p) => p.name,
     ),
-  );
+  ), [pads, hidden]);
   const padName = (pad: Pad) =>
     `${BANKS[Math.floor(pad.index / 16)]}${(pad.index % 16) + 1}`;
   const panel = selectedPad &&
@@ -2973,7 +2985,14 @@ function App() {
         onToneVolume={changeToneVolume}
         onFavorite={() => toggleFavorite(selectedPad, !selectedPad.favorite)}
         toneOn={toneOn}
-        projectBpm={projectBpm}
+        playbackKey={waveformPlayback}
+        playbackPosition={() => {
+          const voice = waveformVoice.current;
+          if (!voice || voice.index !== selectedPad.index || !voice.handle.isPlaying()) return null;
+          const duration = audioOf(selectedPad)[0].length / selectedPad.sampleRate;
+          const seconds = voice.handle.position();
+          return duration > 0 ? (voice.loop ? seconds % duration : Math.min(seconds, duration)) / duration : null;
+        }}
         onTrim={moveTrim}
         onHoldStart={startMatch}
         onHoldEnd={stopMatch}
@@ -2986,8 +3005,8 @@ function App() {
     );
   /** The type the selected pad's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */
   /** Swaps a hidden spare onto the selected pad; the sound it replaces goes back into the hot-swap menu, so the swap can be undone by swapping again. */
-  const swapInHidden = (other: Pad, target: Pad) => {
-    recordEdit();
+  const swapInHidden = (other: Pad, target: Pad, remember = true) => {
+    if (remember) recordEdit();
     const incoming: Pad = {
       ...other,
       index: target.index,
@@ -3007,7 +3026,83 @@ function App() {
       return next;
     });
   };
+  const readSwapAudio = async (pad: Pad) => {
+    if (pad.channelData.length) return { channelData: audioOf(pad), sampleRate: pad.sampleRate };
+    const cached = sampleLibrary.find(record => record.id === pad.libraryId)?.audio;
+    const file = libraryFiles.current?.files.find(file => file.libraryId === pad.libraryId);
+    if (!cached && !file) throw new Error("Reconnect the library folder to load this sound.");
+    const source = cached ? new File([cached], pad.name, { type: "audio/wav" }) : await file!.source();
+    if (source.size > packByteBudget(packMemory) / 4) throw new Error("This sound exceeds the current memory limit.");
+    const decoded = await decodeNative(source);
+    if (decoded.channelData[0].length / decoded.sampleRate > MAX_LOAD_SECONDS) throw new Error("Hot swap supports sounds up to 30 seconds.");
+    return decoded;
+  };
+
+  const insertLibrarySound = async (other: Pad, target: Pad, correction = false, alternatives?: PackFile<() => Promise<File>>[]) => {
+    if (addPackStatus || loading) return false;
+    const project = projectRef.current;
+    const file = libraryFiles.current?.files.find(file => file.libraryId === other.libraryId);
+    if (!project || !file) throw new Error("Reconnect the library folder to load this sound.");
+    const token = loadToken.current;
+    setAddPackStatus("Loading sound…");
+    try {
+      const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
+      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], {
+        existing: used.map(pad => ({ channelData: audioOf(pad), sampleRate: pad.sampleRate, category: pad.category })),
+        byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)), maxSeconds: MAX_LOAD_SECONDS,
+        measure: input => getRenderWorker().measure(input),
+      });
+      if (!result) throw new Error("This sound is too long, unreadable, or exceeds the project memory limit.");
+      const written = result.sounds[0];
+      const ref = project.pads.find(pad => pad.pad === written.pad)!;
+      const decoded = await decodeNative(await koalaPadToFile(project, ref));
+      if (token !== loadToken.current || projectRef.current !== project || latest.current.pads[target.index]?.origIndex !== target.origIndex) return false;
+      const incoming: Pad = { index: target.index, origIndex: written.pad, libraryId: written.libraryId,
+        name: written.fileName, sourcePath: written.sourcePath, sampleId: written.sampleId,
+        sampleRate: decoded.sampleRate, channelData: decoded.channelData, category: written.category,
+        classification: written.classification, is808: written.is808 || undefined, knobDb: written.knobDb,
+        tune: tuneDefault(false, false, written.category, undefined, tunedTarget), semis: 0, cents: 0,
+      };
+      if (!correction) recordEdit();
+      projectFile.current = result.file;
+      void saveProjectFile(result.file);
+      setPads(prev => ({ ...prev, [target.index]: incoming }));
+      if (isReal(target)) setHidden(prev => ({ ...prev, [target.origIndex]: { ...target, index: -1 } }));
+      setAnalyzing(n => n + 1);
+      void analyzeAudio(incoming.channelData, incoming.sampleRate, incoming.sourcePath ?? incoming.name, incoming.category === "melodicLoop", incoming.category).then(analysis => {
+        if (token !== loadToken.current) return;
+        setPads(prev => prev[incoming.index]?.origIndex === incoming.origIndex ? { ...prev, [incoming.index]: { ...prev[incoming.index], detectedMidi: analysis.midi, centroid: analysis.centroid, bpm: analysis.bpm ?? undefined, tune: tuneDefault(prev[incoming.index].tuneLocked, prev[incoming.index].tune, incoming.category, analysis.midi, tunedTarget) } } : prev);
+      }).finally(() => { if (token === loadToken.current) setAnalyzing(n => Math.max(0, n - 1)); }).catch(() => {});
+      return true;
+    } finally { if (token === loadToken.current) setAddPackStatus(""); }
+  };
+
+  const connectedCandidates = (category: CategoryId, target: Pad) => {
+    const active = new Set(Object.values(latest.current.pads).filter(pad => pad.index !== target.index).map(pad => pad.libraryId));
+    const locked = new Set([...Object.values(latest.current.pads), ...Object.values(latest.current.hidden)].filter(pad => pad.locked).map(pad => pad.libraryId));
+    const eligible = libraryFiles.current?.files.filter(file => file.classification?.category === category && file.libraryId !== target.libraryId && !locked.has(file.libraryId)) ?? [];
+    const unused = eligible.filter(file => !active.has(file.libraryId));
+    return shuffled(unused.length ? unused : eligible);
+  };
+
+  const loadConnectedReplacement = async (target: Pad, intended: CategoryId, correction = false) => {
+    const candidates = connectedCandidates(intended, target);
+    if (!candidates.length) return false;
+    const first = candidates[0];
+    const cached = Object.values(latest.current.hidden).find(pad => pad.libraryId === first.libraryId && pad.category === intended && !pad.locked);
+    if (cached) { swapInHidden(cached, target, !correction); return true; }
+    return insertLibrarySound({ ...target, category: intended, libraryId: first.libraryId }, target, correction, candidates);
+  };
+
+  const loadCorrectedReplacement = async (gap: Pad, intended: CategoryId) => {
+    try {
+      if (!await loadConnectedReplacement(gap, intended, true)) setNotice(`No other ${categoryLabel(intended)} in the connected library.`);
+      else setNotice("Type saved · replacement loaded");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not load a replacement from the library."); }
+  };
+
   const toggleFavorite = async (pad: Pad, favorite: boolean) => {
+    if (favorite && !pad.channelData.length) pad = { ...pad, ...await readSwapAudio(pad) };
     const sourcePad = pad;
     pad = { ...pad, libraryId: pad.libraryId ?? `favorite:${crypto.randomUUID()}` };
     const matches = (candidate: Pad) => candidate.libraryId === pad.libraryId || (!sourcePad.libraryId && candidate.origIndex === sourcePad.origIndex);
@@ -3031,10 +3126,11 @@ function App() {
     } else await setSampleFavorite(pad.libraryId!, favorite, audio, pad.sampleRate);
     setPads((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, matches(p) ? { ...p, libraryId: pad.libraryId, favorite } : p])));
     setHidden((prev) => Object.fromEntries(Object.entries(prev).map(([key, p]) => [key, matches(p) ? { ...p, libraryId: pad.libraryId, favorite } : p])));
+    const favoriteSlot = nextFavoriteSlot.current--;
     setFavoritePads((prev) => {
       if (!favorite) return prev.filter((p) => p.libraryId !== pad.libraryId);
       const exists = prev.some((p) => p.libraryId === pad.libraryId);
-      return exists ? prev.map((p) => p.libraryId === pad.libraryId ? { ...p, favorite: true } : p) : [...prev, { ...pad, index: -1, favorite: true }];
+      return exists ? prev.map((p) => p.libraryId === pad.libraryId ? { ...p, favorite: true } : p) : [...prev, { ...pad, origIndex: favoriteSlot, channelData: [], index: -1, favorite: true }];
     });
     setSampleLibrary(await loadSampleLibrary());
   };
@@ -3065,19 +3161,27 @@ function App() {
     setPads((prev) => ({ ...prev, [target.index]: incoming }));
     if (isReal(target)) setHidden((prev) => ({ ...prev, [target.origIndex]: { ...target, index: -1 } }));
     setAnalyzing((n) => n + 1);
-    nextAnalysisWorker().analyze(monoFromChannelData(incoming.channelData), incoming.sampleRate, incoming.name, false, incoming.category).then((analysis) => {
+    analyzeAudio(incoming.channelData, incoming.sampleRate, incoming.name, false, incoming.category).then((analysis) => {
       setPads((prev) => prev[incoming.index]?.origIndex === incoming.origIndex ? { ...prev, [incoming.index]: { ...prev[incoming.index], detectedMidi: analysis.midi, centroid: analysis.centroid } } : prev);
       setAnalyzing((n) => Math.max(0, n - 1));
     }).catch(() => setAnalyzing((n) => Math.max(0, n - 1)));
   };
   /** Use the same candidate pool for the hot-swap list and the pad shuffle action. */
+  const librarySwapPads = useMemo<Pad[]>(() => libraryIndex?.samples.map((sample, i) => ({
+    index: -1, origIndex: -200000 - i, libraryId: sample.id, name: sample.name,
+    sourcePath: sample.path, sampleId: -1, sampleRate: 44100, channelData: [],
+    category: sample.classification.category, classification: sample.classification,
+    tune: false, semis: 0, cents: 0,
+  })) ?? [], [libraryIndex]);
   const hotSwapSounds = (target: Pad) => {
-    const slotCategory = (layout.on && target.index < 16 ? getLayout(layout.id).slots[target.index]?.category : undefined) || target.category;
+    const slotCategory = (layout.on && target.index < 16 ? layoutById(null).slots[target.index]?.category : undefined) || target.category;
     const eligible = (pad: Pad) => isKitCategory(slotCategory) ? isKitCategory(pad.category) : pad.category === slotCategory;
     const loadedIds = new Set([...Object.values(pads), ...Object.values(hidden)].map((pad) => pad.libraryId));
+    const favoriteIds = new Set(favoritePads.map(pad => pad.libraryId));
     return [
       ...Object.values(hidden).filter(eligible),
       ...favoritePads.filter((pad) => eligible(pad) && !loadedIds.has(pad.libraryId)),
+      ...(libraryFiles.current ? librarySwapPads.filter(pad => eligible(pad) && !loadedIds.has(pad.libraryId) && !favoriteIds.has(pad.libraryId)) : []),
       ...Object.values(pads).filter((pad) => isReal(pad) && isKitCategory(pad.category) && pad.index >= 16 && pad.index !== target.index && isKitCategory(slotCategory)),
     ];
   };
@@ -3085,10 +3189,17 @@ function App() {
     const target = latest.current.pads[index];
     if (!target || !isReal(target)) return;
     if (target.locked) return setNotice("Unlock this pad before shuffling it.");
+    if (libraryFiles.current) {
+      try {
+        if (!await loadConnectedReplacement(target, target.category ?? "other")) setNotice(`No other ${categoryLabel(target.category ?? "other")} in the connected library.`);
+      } catch { setNotice("Could not load that sound from the connected library."); }
+      return;
+    }
     const other = chooseShuffleSound(target, hotSwapSounds(target));
     if (!other) return setNotice("No other sound of this Type is available in hot swap.");
     try {
-      if (other.libraryId && other.origIndex <= -100000) await insertFavorite(other, target);
+      if (other.origIndex <= -200000) await insertLibrarySound(other, target);
+      else if (other.libraryId && other.origIndex <= -100000) await insertFavorite(other, target);
       else if (hidden[other.origIndex]) swapInHidden(other, target);
       else { recordEdit(); setPads((prev) => target.ghost ? fillGhostSlot(prev, target.index, other.index) : movePad(prev, target.index, other.index)); }
     } catch { setNotice("Could not load that sound. Reconnect its sample folder or save it as a favorite again."); }
@@ -3099,7 +3210,7 @@ function App() {
     /** The type the target's slot wants: a finger-drumming slot's own type on bank A, otherwise the sound's own type. */
     const slotCategory =
       (layout.on && target.index < 16
-        ? getLayout(layout.id).slots[target.index]?.category
+        ? layoutById(null).slots[target.index]?.category
         : undefined) || target.category;
     return (
       <SwapList
@@ -3118,9 +3229,13 @@ function App() {
             : 0,
         ).sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite))}
         audioOf={audioOf}
+        readAudio={readSwapAudio}
+        busy={!!addPackStatus}
+        onError={setNotice}
         nameOf={(p) => displayName(p.name, tags)}
         onFavorite={toggleFavorite}
         onSwap={(other) => {
+          if (other.origIndex <= -200000) return void insertLibrarySound(other, target).catch(error => setNotice(error instanceof Error ? error.message : "Could not load this library sound."));
           if (other.libraryId && other.origIndex <= -100000) return void insertFavorite(other, target);
           if (hidden[other.origIndex]) return swapInHidden(other, target);
           recordEdit();
@@ -3133,7 +3248,7 @@ function App() {
       />
     );
   };
-  const swapList = selectedPad && swapListFor(selectedPad);
+  const swapList = shownMode === "swap" && selectedPad && swapListFor(selectedPad);
 
   /** The colour a loaded pad lights up in: its sound type's colour when auto-colour is on, else the default lilac. */
   /** The wording printed next to a pad's number: its placeholder or ghost label, else its sound type. */
@@ -3144,8 +3259,7 @@ function App() {
     if (pad.chopper) return "Chopper";
     if (pad.placeholder || pad.ghost) return labelOf(pad);
     return isReal(pad) && pad.category
-      ? (templateLabelOf(pad) ?? numberedLabel(pad)?.caption ??
-          CATEGORIES[categoryIndex(pad.category)].short)
+      ? exportPadLabel(pad.category, pad.is808)
       : "";
   };
   /** The sound type a pad's symbol shows: real sounds and ghosts have one, silent placeholders none. */
@@ -3242,10 +3356,16 @@ function App() {
         />
         {menuOpen && (
           <div className="menu">
-            <label className="menu__a4">
-              Project BPM
-              <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.02} wholePerPx={1 / 14} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
-            </label>
+            <button className="menu__button menu__button--build" disabled={analyzing > 0 || loading || !!addPackStatus || indexBusy} onClick={() => {
+              clearProject(false);
+              setNotice("");
+              setKitReport(null);
+              setLibraryError("");
+              setLibraryToolsOpen(false);
+              setLibraryOpen(true);
+            }} title="Clear all four banks and open pack selection for a fresh kit.">
+              {hasProject ? "Build another kit" : "Build a kit"}
+            </button>
             <button
               className="menu__button menu__button--primary"
               disabled={!canExport}
@@ -3276,70 +3396,40 @@ function App() {
             </div>
             <button
               className="menu__button"
-              disabled={!hasProject && !loading}
-              onClick={clearProject}
+              disabled={analyzing > 0 || loading || !!addPackStatus}
+              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, chopped onto the pads you pick, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample over 10 seconds, 127 chops per pad, duplicating the pad past that). With no project open it asks for a Koala project first."
+              onClick={() => askChopMode()}
             >
-              Clear project
+              {addPackStatus || "Load Bank D: Chopper"}
             </button>
-            <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryOpen(true); }}>Library · select packs & generate</button>
-            <details className="menu__library-tools"><summary>Library tools</summary>
+            <button className="menu__button" onClick={() => setSampleLibraryOpen(true)}>
+              Favorites on device ({sampleLibrary.length})
+            </button>
+            <details className="menu__library-tools menu__section"><summary>Kit & memory</summary>
+              <Switch label="Load hot-swap spares" hint="Off: no extra sounds are preloaded. Drag a pad to Shuffle to load another of the same Type from your connected library." on={loadHotSwapSpares} onChange={setLoadHotSwapSpares}/>
+            <Switch label="Balance across packs" on={balancePacks} onChange={setBalancePacks}/>
+            <label className="menu__a4">
+              Project size limit
+              <select
+                className="menu__select"
+                value={packMemory}
+                onChange={(e) => setPackMemory(e.target.value as PackMemory)}
+                aria-label="Project size limit"
+              >
+                <option value="low">Low (96 MB)</option>
+                <option value="auto">
+                  Default ({Math.round(packByteBudget("auto") / 1048576)} MB)
+                </option>
+              </select>
+            </label>
+            </details>
+            <details className="menu__library-tools menu__section"><summary>Library tools</summary>
+              <button className="menu__button" disabled={analyzing > 0 || loading || !!addPackStatus} onClick={() => { setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); }}>Replace kit · keep bank D</button>
               <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect & refresh files</button>
               <p>Reselect the folder to include added or removed samples.</p>
               <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryToolsOpen(true); }}>Edit sample Types</button>
             </details>
-            <label className="menu__a4">Additional banks to fill<select aria-label="Additional banks to fill" value={additionalBanks} onChange={(event) => setAdditionalBanks(Number(event.target.value) as AdditionalBanks)}><option value={0}>0 · A only (16 / 64)</option><option value={1}>1 · A + hybrid B (32 / 64)</option><option value={2}>2 · A + instruments B + loops C (48 / 64)</option></select></label>
-            <Switch label="Balance across packs" on={balancePacks} onChange={setBalancePacks}/>
-            <button className="menu__button" onClick={() => { setMenuOpen(false); setLayoutEditorOpen(true); }}>Edit Bank A layout</button>
-            <button className="menu__button" onClick={() => { setMenuOpen(false); setPlaybackEditorOpen(true); }}>Koala Type & pad settings</button>
-            <button className="menu__button" onClick={() => setSampleLibraryOpen(true)}>
-              Favorites on device ({sampleLibrary.length})
-            </button>
-            <Switch
-              label="Organize"
-              hint="Levels, each sound type's settings, bus routing, the melodic spread and the master chain. Never moves, labels or colours pads: the Load Bank steps do that"
-              on={organize}
-              disabled={!hasProject}
-              onChange={setOrganize}
-            />
-            <button
-              className="menu__button"
-              disabled={!organize || !hasProject || normalizing}
-              onClick={normalizeNow}
-            >
-              {normalizing ? "Normalizing…" : "Normalize now"}
-            </button>
-            <select
-              className="menu__select"
-              value={masterStyle}
-              disabled={!organize}
-              onChange={(e) => setMasterStyle(e.target.value as MasterStyle)}
-              aria-label="Master chain style"
-            >
-              {MASTER_STYLES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            <Switch
-              label="Sidechain"
-              hint={SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
-              on={sidechainReady && sidechainOn}
-              disabled={!sidechainReady}
-              onChange={setSidechainOn}
-            />
-            <button
-              className="menu__button"
-              disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Choose sample packs and generate a kit. Reconnect your packs folder if its files are unavailable."
-              onClick={() => {
-                setLibraryToolsOpen(false);
-                setLibraryOpen(true);
-                setMenuOpen(false);
-              }}
-            >
-              {addPackStatus || "Generate kit · choose packs"}
-            </button>
+            <details className="menu__library-tools menu__section"><summary>Load individual banks</summary>
             <button
               className="menu__button"
               disabled={analyzing > 0 || loading || !!addPackStatus}
@@ -3384,43 +3474,47 @@ function App() {
             >
               {addPackStatus || "Load Bank B: 808 & Bass"}
             </button>
-            <button
-              className="menu__button"
-              disabled={analyzing > 0 || loading || !!addPackStatus}
-              title="Chop a long sample on Bank D, in acapella mode (a song and its VOCALS stem, chopped onto the pads you pick, stretched to the project), synced mode (the same, cutting the sample itself) or chopper mode (any sample over 10 seconds, 127 chops per pad, duplicating the pad past that). With no project open it asks for a Koala project first."
-              onClick={() => askChopMode()}
-            >
-              {addPackStatus || "Load Bank D: Chopper"}
-            </button>
-            <button
-              className="menu__button"
-              title="Choose the colour scheme: the pad, sound-type and chop colours, the lamps and the menu all follow it."
-              onClick={() => {
-                setSchemeOpen(true);
-                setMenuOpen(false);
-              }}
-            >
-              Colour scheme: {palette.name}
-            </button>
-            <Switch
-              label="Show symbols on pads"
-              on={padSymbols}
-              onChange={setPadSymbols}
-            />
+            </details>
+            <details className="menu__library-tools menu__section"><summary>Project & sound settings</summary>
             <label className="menu__a4">
-              Project size limit
-              <select
-                className="menu__select"
-                value={packMemory}
-                onChange={(e) => setPackMemory(e.target.value as PackMemory)}
-                aria-label="Project size limit"
-              >
-                <option value="low">Low (96 MB)</option>
-                <option value="auto">
-                  Default ({Math.round(packByteBudget("auto") / 1048576)} MB)
-                </option>
-              </select>
+              Project BPM
+              <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.02} wholePerPx={1 / 14} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
             </label>
+            <button className="menu__button" onClick={() => { setMenuOpen(false); setPlaybackEditorOpen(true); }}>Koala Type & pad settings</button>
+            <Switch
+              label="Organize"
+              hint="Levels, each sound type's settings, bus routing, the melodic spread and the master chain. Never moves, labels or colours pads: the Load Bank steps do that"
+              on={organize}
+              disabled={!hasProject}
+              onChange={setOrganize}
+            />
+            <button
+              className="menu__button"
+              disabled={!organize || !hasProject || normalizing}
+              onClick={normalizeNow}
+            >
+              {normalizing ? "Normalizing…" : "Normalize now"}
+            </button>
+            <select
+              className="menu__select"
+              value={masterStyle}
+              disabled={!organize}
+              onChange={(e) => setMasterStyle(e.target.value as MasterStyle)}
+              aria-label="Master chain style"
+            >
+              {MASTER_STYLES.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <Switch
+              label="Sidechain"
+              hint={SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
+              on={sidechainReady && sidechainOn}
+              disabled={!sidechainReady}
+              onChange={setSidechainOn}
+            />
             <label className="menu__a4">
               A4 reference (Hz)
               <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v))} onDoubleTap={() => setA4(440)} />
@@ -3436,6 +3530,31 @@ function App() {
                 Reset to A440
               </button>
             )}
+            <button
+              className="menu__button"
+              disabled={!hasProject && !loading}
+              onClick={() => clearProject()}
+            >
+              Clear project
+            </button>
+            </details>
+            <details className="menu__library-tools menu__section"><summary>Appearance</summary>
+            <button
+              className="menu__button"
+              title="Choose the colour scheme: the pad, sound-type and chop colours, the lamps and the menu all follow it."
+              onClick={() => {
+                setSchemeOpen(true);
+                setMenuOpen(false);
+              }}
+            >
+              Colour scheme: {palette.name}
+            </button>
+            <Switch
+              label="Show symbols on pads"
+              on={padSymbols}
+              onChange={setPadSymbols}
+            />
+            </details>
             <div className="menu__version">
               tunegod v{__APP_VERSION__} · {__APP_BUILD__}
               <br />
@@ -3446,7 +3565,6 @@ function App() {
 
         {playbackEditorOpen && <PlaybackEditor pad={selectedPad ?? null} settings={typeSettings} onClose={() => setPlaybackEditorOpen(false)} onType={(category, value) => setTypeSettings((prev) => ({ ...prev, [category]: value }))} onPad={(value) => { if (selectedPad) patchPad(selectedPad.index, { playback: value, stretch: value?.stretch ? value.stretch !== "off" : undefined }); }}/>}
         {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
-        {layoutEditorOpen && <LayoutEditor layout={activeLayout} templates={templates} onClose={() => setLayoutEditorOpen(false)} onSelect={(template) => setActiveLayout(template)} onSave={(template) => { setTemplates((prev) => [...prev.filter((old) => old.id !== template.id), template]); setActiveLayout(template); saveState({ layoutId: template.id }); }} onApply={(template) => { const applied = template.id === "horizontal" ? { ...template, id: "custom:active" } : template; setActiveLayout(applied); setTemplates((prev) => [...prev.filter((old) => old.id !== applied.id), applied]); setLayout((prev) => ({ ...prev, id: applied.id })); setLayoutEditorOpen(false); setNotice("Layout ready for the next kit generation."); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
             records={sampleLibrary}
@@ -3832,7 +3950,7 @@ function App() {
                 <div className="deck">
                   <TypeKeys
                     pad={
-                      selectedPad && isReal(selectedPad) ? selectedPad : null
+                      selectedPad && isReal(selectedPad) && !addPackStatus ? selectedPad : null
                     }
                     palette={palette}
                     onClassify={classifyPad}
@@ -3965,12 +4083,26 @@ function App() {
           />
         )}
 
+        {pairNeeded && (
+          <div className="palette-backdrop" onClick={() => setPairNeeded(false)}>
+            <div className="palette-modal" role="dialog" aria-label="Select song and vocal" onClick={e => e.stopPropagation()}>
+              <div className="palette-modal__head"><strong>Song and vocal</strong><button aria-label="Close" onClick={() => setPairNeeded(false)}>✕</button></div>
+              <div className="palette-modal__key">No matching song and vocal pair was found. Select the full song and its isolated vocal from your stem split. Both files must start together and have the same duration.</div>
+              <button className="menu__button" onClick={() => {
+                pickedMode.current = "acapella";
+                if (acapellaInput.current) { acapellaInput.current.removeAttribute("accept"); acapellaInput.current.multiple = true; acapellaInput.current.click(); }
+              }}>Select two audio files</button>
+            </div>
+          </div>
+        )}
         {roleAsk && (
           <AcapellaFilesModal
+            audio={externalAudio.current}
             song={roleAsk.song}
             stem={roleAsk.stem}
             onSwap={() => setRoleAsk({ song: roleAsk.stem, stem: roleAsk.song })}
             onCancel={() => {
+              externalAudio.current.clear();
               setRoleAsk(null);
               pickedMode.current = null;
             }}
@@ -4098,10 +4230,11 @@ function App() {
       </div>
       {drag && pads[drag.from] && (
         <div
+          ref={dragGhost}
           className="drag-ghost"
           style={{
-            left: drag.x,
-            top: drag.y,
+            left: 0,
+            top: 0,
             background: colorOfPad(pads[drag.from]),
           }}
         />

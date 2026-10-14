@@ -56,7 +56,7 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
           <button onClick={onClose} aria-label="Close library">×</button>
         </header>
         {tools ? <>
-          <p>Change a sound's Type only if you want to. Uncertain subtypes stay blank and never require confirmation.</p>
+          <p>Choose a Type for each sound. This determines which preset pads it can fill.</p>
           {report && <details><summary>Last kit: {report.filled} / {report.requested} pads · {report.shortages.length} shortages</summary>{report.shortages.map((shortage) => <div key={shortage}>{shortage}</div>)}</details>}
           <input aria-label="Search sample paths" placeholder="Search samples" value={query} onChange={(event) => setQuery(event.target.value)} />
           {previewError && <p role="status">{previewError}</p>}
@@ -66,7 +66,7 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
               <small>{sample.pack}</small>
               <div className="library-actions">
                 <button disabled={!connected || busy} aria-label={`Preview ${sample.name}`} onClick={() => void audition(sample.id)}>♪ Preview</button>
-                <select disabled={busy} aria-label={`Type for ${sample.name}`} value={sample.classification.category} onChange={(event) => onCorrect(sample.id, { ...sample.classification, category: event.target.value as CategoryId, subtype: undefined })}>
+                <select disabled={busy} aria-label={`Type for ${sample.name}`} value={sample.classification.category} onChange={(event) => onCorrect(sample.id, { ...sample.classification, category: event.target.value as CategoryId })}>
                   {CATEGORIES.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
                 </select>
               </div>
@@ -75,7 +75,7 @@ export function LibraryBrowser({ error, tools = false, progress, report, onRead,
             {!index && <p>Reconnect a sample folder from the library first.</p>}
           </div>
         </> : <>
-          <p>{connected ? "Check the packs you want in your kit." : "Reconnect your sample folder, then choose your packs."}</p>
+          <p>{connected ? "A: MPC drums · B/C: mixed sounds · D: chops. Choose your packs." : "Reconnect your sample folder, then choose your packs."}</p>
           {error && <p role="alert">{error}</p>}
           <div className="library-actions">
             <button className="menu__button" onClick={onChoose} disabled={busy}>Reconnect files</button>

@@ -30,7 +30,7 @@ describe("type locks", () => {
       "voxLoop",
       "fxLoop",
     ]);
-    expect(groups.drums).toHaveLength(12);
+    expect(groups.drums).toHaveLength(10);
   });
   it("applies hats 5, bass 6, drum self choke and loop one shots", () => {
     expect(defaults("openHat").choke).toBe(5);

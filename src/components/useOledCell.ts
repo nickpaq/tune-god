@@ -63,9 +63,12 @@ export function useOledCell() {
   useEffect(() => {
     let frame = 0;
     let observedOled: HTMLElement | null = null;
-    let lastKey = "";
+    let lastCell = "";
 
     const setCell = (cell: number, ratio: number) => {
+      const key = `${cell}|${ratio}`;
+      if (key === lastCell) return;
+      lastCell = key;
       const root = document.documentElement.style;
       root.setProperty("--c", `${cell / ratio}px`);
       // The hot-swap list's own cell, between the full cell and the smallest the fit goes to, the same on every bank.
@@ -89,21 +92,16 @@ export function useOledCell() {
         setCell(base, ratio);
         return;
       }
-      // Only refit when something the fit depends on changed: the base size, the screen's box or its text.
+      // Text and pad changes do not change the pixel size. Refit only when geometry changes.
+      setCell(base, ratio);
       const box = oled.getBoundingClientRect();
-      const key = `${base}|${ratio}|${box.width.toFixed(1)}x${box.height.toFixed(1)}|${oled.textContent}`;
-      if (key !== lastKey) {
-        // One size, always: the text is never stepped down or grown to fit, so it looks the same on every screen and in every mode.
-        setCell(base, ratio);
-        const after = oled.getBoundingClientRect();
-        lastKey = `${base}|${ratio}|${after.width.toFixed(1)}x${after.height.toFixed(1)}|${oled.textContent}`;
-      }
       // How many rows of text the screen holds, counted in cells; the text never changes size, so a short screen drops its least important lines
       // instead (see `data-tight` in App.css). Never taller than the screen is the rule for everything on it.
       const rows = Math.floor(box.height / (base / ratio));
-      oled.dataset.tight = rows < TIGHT_ROWS ? "1" : "";
-      oled.style.left = oled.style.top = "0px";
-      const placed = oled.getBoundingClientRect();
+      const tight = rows < TIGHT_ROWS ? "1" : "";
+      if (oled.dataset.tight !== tight) oled.dataset.tight = tight;
+      // Subtract the previous nudge instead of resetting styles and forcing another layout.
+      const placed = { left: box.left - (parseFloat(oled.style.left) || 0), top: box.top - (parseFloat(oled.style.top) || 0) };
       const nudge = (edge: number) => (Math.round(edge * ratio) - edge * ratio) / ratio;
       oled.style.left = `${nudge(placed.left)}px`;
       oled.style.top = `${nudge(placed.top)}px`;
@@ -115,14 +113,20 @@ export function useOledCell() {
     const sizes = new ResizeObserver(schedule);
 
     apply();
-    // The screen is replaced, resized and rewritten as the app changes, so the fit and the nudge are worked out again after each layout.
+    // Observe actual size changes; text updates and drag ghosts must not trigger layout work.
     sizes.observe(document.documentElement);
-    const mutations = new MutationObserver(schedule);
-    mutations.observe(document.body, { childList: true, subtree: true, characterData: true });
+    const phone = document.querySelector(".phone");
+    if (phone) sizes.observe(phone);
+    const upper = document.querySelector(".upper");
+    if (upper) sizes.observe(upper);
+    const containsOled = (node: Node) => node instanceof Element && (node.matches(".oled") || !!node.querySelector(".oled"));
+    const mutations = new MutationObserver((records) => {
+      if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some(containsOled))) schedule();
+    });
+    mutations.observe(document.body, { childList: true, subtree: true });
     window.addEventListener("resize", schedule);
     // The pixel font arriving changes how wide the text is.
     void document.fonts?.ready.then(() => {
-      lastKey = "";
       schedule();
     });
     return () => {

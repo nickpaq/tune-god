@@ -67,24 +67,26 @@ describe("pad rules and stretch", () => {
     expect(melodic.chokeGroup).toBe(0);
   });
 
-  it("stretches a melodic loop in the modern mode and a drum loop in beats mode, to their length in beats", async () => {
+  it("enables loop modes without writing a length, clearing old guessed lengths", async () => {
     const project = await load();
     const [a, b] = project.samplerJson.pads;
+    a.stretchLength = 28;
+    b.stretchLength = 28;
+    a.stretching = "false";
     const json = await sampler(project, {
       playback: new Map([[a.sampleId, playbackFor("melodicLoop")!], [b.sampleId, playbackFor("drumLoop")!]]),
-      stretch: new Map([[a.sampleId, 16], [b.sampleId, 8]]),
     });
     const loop = json.pads.find((p: any) => p.sampleId === a.sampleId);
     const drums = json.pads.find((p: any) => p.sampleId === b.sampleId);
     expect(String(loop.stretching)).toBe("true");
     expect(loop.stretch).toBe(STRETCH_MODE.modern);
-    expect(loop.stretchLength).toBe(16);
+    expect(loop).not.toHaveProperty("stretchLength");
     expect(loop.chokeGroup).toBe(4);
     expect(String(loop.oneshot)).toBe("false");
     expect(String(loop.looping)).toBe("false");
     expect(String(drums.stretching)).toBe("true");
     expect(drums.stretch).toBe(STRETCH_MODE.beats);
-    expect(drums.stretchLength).toBe(8);
+    expect(drums).not.toHaveProperty("stretchLength");
   });
 
   it("never stretches a pad whose rule says stretch off, even if a length is given", async () => {

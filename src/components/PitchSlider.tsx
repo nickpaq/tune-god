@@ -4,7 +4,7 @@ import { scrubSpeed } from "./scrub";
 
 /** The slider's range: 12 semitones either way. */
 const RANGE = 1200;
-/** In cents mode the slider covers this many cents either side of the semitone it was set on: just past the halfway point (50), where the pitch snaps to the next semitone and the dial centres on it. */
+/** In cents mode the slider covers this many cents either side of the semitone it was set on: crossing the halfway point (50) changes the anchor by one semitone while retaining the total pitch. */
 const CENTS_RANGE = 55;
 /** A press that moves less than this (px) and ends within TAP_MS is a tap. */
 const TAP_PX = 6;
@@ -39,7 +39,7 @@ function onLine(u: number, k: number) {
  * The Tune screen's pitch slider (the pad's trim, in cents, +-12 semitones). Drag left or right to scrub: the speed slows smoothly to a tenth toward the
  * bottom of the screen (`scrubSpeed`), but in semitone mode the value always lands on whole semitones (with any cents offset the pad already has kept).
  * A press anywhere on the track picks the marker up where it is (it never jumps to the finger); a tap swaps semitone and cents mode; a double tap puts the pitch back to the middle (leaving the mode as it was). In cents mode the line bends into a tuner dial
- * with a hand, and the slider covers 55 cents either side of the semitone it was on (past that it snaps to the next semitone). Dragged up, the value stays put and `onAbove` reports the finger.
+ * with a hand, and the slider covers 55 cents either side of the semitone it was on (past that it wraps to the next semitone without changing the total pitch). Dragged up, the value stays put and `onAbove` reports the finger.
  */
 export function PitchSlider({
   value,
@@ -52,7 +52,6 @@ export function PitchSlider({
   onAbove,
   disabled,
   title,
-  valueLabel,
 }: {
   value: number;
   cents: boolean;
@@ -65,7 +64,6 @@ export function PitchSlider({
   onAbove?: (point: { x: number; y: number } | null) => void;
   disabled?: boolean;
   title?: string;
-  valueLabel?: (value: number) => string;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: number; x0: number; y0: number; x: number; t0: number; raw: number; offset: number; anchor: number; moved: boolean } | null>(null);
@@ -118,10 +116,9 @@ export function PitchSlider({
     d.raw += (dx / rect.width) * span * scrubSpeed(d.y0, e.clientY);
     if (cents) {
       d.raw = clamp(d.raw, -RANGE, RANGE);
-      // Past the edge of the dial the pitch snaps to the next semitone and the dial centres on it.
-      if (Math.abs(d.raw - d.anchor) > CENTS_RANGE) {
+      // Change the semitone anchor, retaining the continuous pitch and remaining cents offset.
+      if (Math.abs(d.raw - d.anchor) > 50) {
         d.anchor = wholeSemitone(d.raw);
-        d.raw = d.anchor;
       }
       onChange(Math.round(d.raw * 10) / 10);
     } else {
@@ -185,8 +182,6 @@ export function PitchSlider({
   const thumb = onLine(thumbU, bend);
   const tip = onLine(handU, bend);
   const handAngle = handU * HALF_ANGLE;
-  const labelU = bend > 0.5 ? handU : thumbU;
-  const pct = ((labelU + 1) / 2) * 100;
 
   return (
     <div
@@ -222,11 +217,7 @@ export function PitchSlider({
           />
         )}
       </svg>
-      {dragging && valueLabel && (
-        <div className="precision-slider__bubble" style={{ left: `${pct}%`, transform: `translateX(-${pct}%)` }}>
-          {valueLabel(value)}
-        </div>
-      )}
+
     </div>
   );
 }

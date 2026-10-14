@@ -1,8 +1,7 @@
 // The drums a finger-drumming layout had no slot for: real kit sounds sitting past bank A.
 import type { Pad } from "../components/PadPanel";
 import { isDrumCategory } from "./classify";
-import { EMPTY_PAD_LABEL } from "./fingerDrumming";
-import { makePlaceholderPad } from "./placeholderPads";
+import { EMPTY_PAD_LABEL, makePlaceholderPad } from "./placeholderPads";
 import { PADS_PER_BANK, inChopBank } from "./padMoves";
 
 /** What to do with them at export: keep them (backfilled on the last page) or delete them. */

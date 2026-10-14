@@ -1,10 +1,9 @@
 // Remembers the app between visits: small settings in localStorage, the project file itself
 // in IndexedDB (it's too big for localStorage). Every read/write is best-effort.
 import type { LibraryIndex } from "./audio/libraryIndex";
-import type { FingerLayout } from "./audio/fingerLayouts";
 import type { PadPlayback } from "./audio/padSettings";
-import type { SampleClassification } from "./audio/sampleClassification";
-import type { CategoryId } from "./audio/classify";
+import { normalizeClassification, type SampleClassification } from "./audio/sampleClassification";
+import { migrateCategory, type CategoryId } from "./audio/classify";
 
 const STATE_KEY = "tune-god:state";
 const DB_NAME = "tune-god";
@@ -98,9 +97,8 @@ export interface SavedState {
   pads?: Record<number, SavedPad>;
   /** Finger-drumming layout chosen in the menu (kept across projects). */
   libraryIndexId?: string;
-  additionalBanks?: 0 | 1 | 2;
   balancePacks?: boolean;
-  customTemplates?: FingerLayout[];
+  loadHotSwapSpares?: boolean;
   typeSettings?: Partial<Record<CategoryId, PadPlayback>>;
   layoutId?: string;
   /** This project is currently arranged with that layout. */
@@ -212,7 +210,7 @@ export async function loadSampleLibrary(): Promise<SampleLibraryRecord[]> {
       req.onsuccess = () => {
         const all = req.result as SampleLibraryRecord[];
         for (const record of all) if (!record.favorite) store.delete(record.id);
-        favorites = all.filter((record) => record.favorite && record.audio).sort((a, b) => b.importedAt - a.importedAt);
+        favorites = all.filter((record) => record.favorite && record.audio).map((record) => ({ ...record, category: migrateCategory(record.category) })).sort((a, b) => b.importedAt - a.importedAt);
       };
       tx.oncomplete = () => resolve(favorites);
       tx.onerror = () => reject(tx.error);
@@ -313,7 +311,10 @@ export async function loadLibraryIndex(id: string): Promise<LibraryIndex | null>
     try {
       return await new Promise<LibraryIndex | null>((resolve, reject) => {
         const req = db.transaction("library-index").objectStore("library-index").get(id);
-        req.onsuccess = () => resolve(req.result ?? null); req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const index = req.result as LibraryIndex | undefined;
+          resolve(index ? { ...index, samples: index.samples.map((sample) => ({ ...sample, classification: normalizeClassification(sample.classification), correction: sample.correction ? normalizeClassification(sample.correction) : undefined })) } : null);
+        }; req.onerror = () => reject(req.error);
       });
     } finally { db.close(); }
   } catch { return null; }

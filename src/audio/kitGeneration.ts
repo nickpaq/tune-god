@@ -1,70 +1,24 @@
-import type { CategoryId } from "./classify";
-import type { FingerLayout, LayoutSlot } from "./fingerLayouts";
+import { categoryLabel, type CategoryId } from "./classify";
+import { layoutById, type LayoutSlot } from "./fingerLayouts";
 import type { SampleClassification } from "./sampleClassification";
 
-export type AdditionalBanks = 0 | 1 | 2;
-const slot = (
-  category: CategoryId,
-  label = category,
-  subtype?: string,
-): LayoutSlot => ({ category, label, subtype });
-const hybrid: CategoryId[] = [
-  "bass",
-  "bass",
-  "bassLoop",
-  "bass",
-  "melodic",
-  "melodic",
-  "melodic",
-  "melodic",
-  "vox",
-  "vox",
-  "fx",
-  "riser",
-  "melodicLoop",
-  "melodicLoop",
-  "drumLoop",
-  "voxLoop",
+// One preset: A is the MPC drum layout. B and C each mix sound families in fixed rows.
+const BANK_B: CategoryId[] = [
+  "melodicLoop", "melodicLoop", "drumLoop", "percLoop",
+  "vox", "vox", "fx", "fxLoop",
+  "melodic", "melodic", "melodic", "melodic",
+  "bass", "bass", "bassLoop", "bassLoop",
 ];
-const instruments: CategoryId[] = [
-  "bass",
-  "bass",
-  "bass",
-  "bass",
-  ...Array<CategoryId>(12).fill("melodic"),
-];
-const extras: CategoryId[] = [
-  "drumLoop",
-  "drumLoop",
-  "percLoop",
-  "drumLoop",
-  "melodicLoop",
-  "melodicLoop",
-  "melodicLoop",
-  "melodicLoop",
-  "bassLoop",
-  "bassLoop",
-  "voxLoop",
-  "voxLoop",
-  "vox",
-  "riser",
-  "fall",
-  "fxLoop",
+const BANK_C: CategoryId[] = [
+  "drumLoop", "percLoop", "melodicLoop", "fxLoop",
+  "vox", "voxLoop", "fx", "fx",
+  "melodic", "melodic", "melodicLoop", "melodicLoop",
+  "bass", "bass", "bassLoop", "voxLoop",
 ];
 
-export function generationSlots(
-  layout: FingerLayout,
-  additional: AdditionalBanks,
-): LayoutSlot[] {
-  return [
-    ...layout.slots,
-    ...(additional
-      ? (additional === 1 ? hybrid : instruments).map((category) =>
-          slot(category),
-        )
-      : []),
-    ...(additional === 2 ? extras.map((category) => slot(category)) : []),
-  ];
+/** Exactly 48 slots, never including Bank D. */
+export function generationSlots(): LayoutSlot[] {
+  return [...layoutById(null).slots, ...BANK_B.concat(BANK_C).map((category) => ({ category, label: categoryLabel(category) }))];
 }
 export interface KitSound {
   key: number;
@@ -76,56 +30,44 @@ export interface KitShortage {
   index: number;
   label: string;
   category: CategoryId;
-  subtype?: string;
-}
-
-/** FX one-shots share a parent Type; loops remain a separate Type. */
-export function sameKitType(a: CategoryId, b: CategoryId): boolean {
-  const fx = (category: CategoryId) => category === "fx" || category === "riser" || category === "fall";
-  return a === b || (fx(a) && fx(b));
 }
 
 /** Display the template name only when the loaded sound actually fulfills it. */
 export function matchingTemplateLabel(slot: LayoutSlot | undefined, sound: Pick<KitSound, "category" | "classification">): string | undefined {
-  return slot && sound.category === slot.category && (!slot.subtype || sound.classification?.subtype === slot.subtype)
+  return slot && sound.category === slot.category
     ? slot.label : undefined;
 }
 
-/** Specific subtypes reserve their candidates before generic slots; each sample can be used only once. */
+/** Match main Types first, then fill unmet slots randomly from available sounds. */
 export function allocateKit(
   sounds: KitSound[],
   slots: LayoutSlot[],
   locked: ReadonlySet<number> = new Set(),
   excluded: ReadonlySet<string> = new Set(),
+  random: () => number = Math.random,
 ): { positions: Map<number, number>; shortages: KitShortage[] } {
   const positions = new Map<number, number>();
   const used = new Set<string>(excluded);
   const occupied = new Set<number>(locked);
-  for (const { slot, index } of slots
-    .map((slot, index) => ({ slot, index }))
-    .sort((a, b) => Number(!!b.slot.subtype || b.slot.category === "riser" || b.slot.category === "fall") - Number(!!a.slot.subtype || a.slot.category === "riser" || a.slot.category === "fall"))) {
+  for (const [index, slot] of slots.entries()) {
     if (occupied.has(index)) continue;
     const candidate = sounds.find(
       (sound) =>
         !used.has(sound.identity ?? String(sound.key)) &&
-        sound.category === slot.category &&
-        (!slot.subtype || sound.classification?.subtype === slot.subtype),
+        sound.category === slot.category,
     );
     if (!candidate) continue;
     used.add(candidate.identity ?? String(candidate.key));
     occupied.add(index);
     positions.set(candidate.key, index);
   }
-  // Reserve exact matches first, then fill unmet requests from their parent Type.
-  for (const [index, slot] of slots.entries()) {
-    if (occupied.has(index)) continue;
-    const available = (sound: KitSound) => !used.has(sound.identity ?? String(sound.key));
-    const candidate = sounds.find((sound) => available(sound) && sound.category === slot.category)
-      ?? sounds.find((sound) => available(sound) && sameKitType(sound.category, slot.category));
-    if (!candidate) continue;
-    used.add(candidate.identity ?? String(candidate.key));
+  const remaining = sounds.filter(sound => !positions.has(sound.key));
+  for (const [index] of slots.entries()) {
+    if (occupied.has(index) || !remaining.length) continue;
+    const at = Math.min(remaining.length - 1, Math.floor(random() * remaining.length));
+    const [sound] = remaining.splice(at, 1);
     occupied.add(index);
-    positions.set(candidate.key, index);
+    positions.set(sound.key, index);
   }
   const shortages = slots.flatMap((slot, index) =>
     occupied.has(index)
@@ -135,7 +77,6 @@ export function allocateKit(
             index,
             label: slot.label,
             category: slot.category,
-            subtype: slot.subtype,
           },
         ],
   );

@@ -1,5 +1,5 @@
 import { classifyFile, categoryOfFolder, type PackFile } from "./samplePack";
-import type { SampleClassification } from "./sampleClassification";
+import { normalizeClassification, type SampleClassification } from "./sampleClassification";
 import { NOTE_NAMES } from "./theory";
 import { bpmFromName, keyFromName } from "./pitch/nameKey";
 
@@ -103,14 +103,14 @@ function* refreshSteps<T>(
       saved &&
       saved.size === file.size &&
       saved.lastModified === file.lastModified;
-    const classification =
+    const classification = normalizeClassification(
       saved?.correction ??
       (unchanged && !force
         ? saved.classification
         : classifyFile(
             [...(file.rootFolder ? [file.rootFolder] : []), ...file.folders],
             file.name,
-          ));
+          )));
     if (unchanged && !force) reused++;
     const key = keyFromName(file.name);
     const sample: IndexedSample = {
@@ -122,7 +122,7 @@ function* refreshSteps<T>(
       lastModified: file.lastModified,
       pack: packFor(file),
       classification,
-      correction: saved?.correction,
+      correction: saved?.correction ? normalizeClassification(saved.correction) : undefined,
       bpm: bpmFromName(file.name) ?? undefined,
       key: key
         ? `${NOTE_NAMES[key.pc]}${key.minor ? " minor" : " major"}`
@@ -179,7 +179,7 @@ export function correctSample(
   classification: SampleClassification,
 ): LibraryIndex {
   const correction = {
-    ...classification,
+    ...normalizeClassification(classification),
     confidence: 1,
     needsReview: false,
     evidence: "correction" as const,

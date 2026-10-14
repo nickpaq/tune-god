@@ -117,7 +117,7 @@ const apart = (a: string, b: string) => {
   return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
 };
 /** Extended Types keep their family tone; original palette separation rules stay intact. */
-const FAMILY_COLOR: Partial<Record<CategoryId, CategoryId>> = { bassLoop: "bass", voxLoop: "vox", fxLoop: "fx", riser: "fx", fall: "fx" };
+const FAMILY_COLOR: Partial<Record<CategoryId, CategoryId>> = { bassLoop: "bass", voxLoop: "vox", fxLoop: "fx" };
 const ALL_CATEGORIES = (Object.keys(CATEGORY_TONE) as CategoryId[]).filter((category) => !FAMILY_COLOR[category]);
 
 /** Whether a palette keeps every type apart from every other (0.034) and snares, cymbals and perc well apart (0.15, 0.15 and 0.11). */
@@ -327,7 +327,7 @@ const ORGAN: Record<CategoryId, string> = {
   melodicLoop: "#C88BA2",
   bass: "#57517A",
   fx: "#9A7390",
-  bassLoop: "#57517A", voxLoop: "#F0A66E", fxLoop: "#9A7390", riser: "#9A7390", fall: "#9A7390",
+  bassLoop: "#57517A", voxLoop: "#F0A66E", fxLoop: "#9A7390",
   other: "#44444E",
 };
 

@@ -20,8 +20,6 @@ export type CategoryId =
   | "bassLoop"
   | "voxLoop"
   | "fxLoop"
-  | "riser"
-  | "fall"
   | "other";
 
 export interface Category {
@@ -50,8 +48,6 @@ export const CATEGORIES: Category[] = [
   { id: "bassLoop", label: "Bass Loop", short: "Bass loop" },
   { id: "voxLoop", label: "Vocal Loop", short: "Vox loop" },
   { id: "fxLoop", label: "FX Loop", short: "FX loop" },
-  { id: "riser", label: "Riser", short: "Riser" },
-  { id: "fall", label: "Fall", short: "Fall" },
   { id: "other", label: "Other", short: "Other" },
 ];
 
@@ -82,8 +78,6 @@ export const CATEGORY_TONE: Record<CategoryId, ToneId> = {
   bassLoop: "bass",
   voxLoop: "percVox",
   fxLoop: "fx",
-  riser: "fx",
-  fall: "fx",
   other: "other",
 };
 
@@ -109,6 +103,7 @@ export function isDrumCategory(category: CategoryId | undefined): boolean {
 
 /** Older saves and projects may hold category ids that no longer exist ("hat", "vocal"); unknown ones become "other". */
 export function migrateCategory(id: string | undefined): CategoryId {
+  if (id === "riser" || id === "fall") return "fx";
   if (id === "hat") return "closedHat";
   if (id === "vocal") return "vox";
   return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : "other";
@@ -116,7 +111,7 @@ export function migrateCategory(id: string | undefined): CategoryId {
 
 /** What a finger-drumming layout is made of: the drum categories plus FX hits. */
 export function isKitCategory(category: CategoryId | undefined): boolean {
-  return isDrumCategory(category) || category === "fx" || category === "riser" || category === "fall";
+  return isDrumCategory(category) || category === "fx";
 }
 
 // Order matters: the first matching rule wins, so specific words come before generic ones.
@@ -137,9 +132,7 @@ const NAME_RULES: [CategoryId | "hat", RegExp][] = [
   ["closedHat", /\b(closed ?hat|closed ?hh|chat|chh|pedal)\b/],
   ["hat", /\b(hi ?hat|hh|hat|hats)\b/],
   ["vox", /\b(vocal|vocals|vox|voice|choir|acapella|chant|breath|adlib|ad-lib)\b/],
-  ["riser", /\b(risers?|uplifters?)\b/],
-  ["fall", /\b(falls?|downlifters?)\b/],
-  ["fx", /\b(fx|sfx|riser|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone|zap|laser|siren|reverse|reversed|rev|scratch|vinyl|crackle|static|stinger|sting|boom|rumble|burst|effect|effects|sci ?fi|explosion|bomb)\b/],
+  ["fx", /\b(fx|sfx|risers?|falls?|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone|zap|laser|siren|reverse|reversed|rev|scratch|vinyl|crackle|static|stinger|sting|boom|rumble|burst|effect|effects|sci ?fi|explosion|bomb)\b/],
   // Named percussion instruments only. The generic words "perc", "percussion" and "drum" come after the melodic words below, because a
   // pitched sound is often labelled with them ("Bell Perc", "Pluck Perc", "Synth Drum") and should stay melodic.
   ["perc", /\b(tom|toms|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro)\b/],
@@ -160,8 +153,6 @@ const LOOP_OF: Partial<Record<CategoryId, CategoryId>> = {
   bass: "bassLoop",
   vox: "voxLoop",
   fx: "fxLoop",
-  riser: "fxLoop",
-  fall: "fxLoop",
   melodic: "melodicLoop",
 };
 

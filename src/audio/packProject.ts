@@ -5,7 +5,7 @@ import JSZip from "jszip";
 import { decodeNative } from "./decode";
 import { encodeWav } from "./wavEncode";
 import type { SampleClassification } from "./sampleClassification";
-import type { CategoryId } from "./classify";
+import { is808Name, type CategoryId } from "./classify";
 import { applyGainDb } from "./gain";
 import { balanceFromStats, balanceStats, FILE_CEILING_DB, type BalanceInput, type BalanceStats } from "./loudness";
 import type { ParsedKoalaProject } from "./koalaProject";
@@ -158,6 +158,9 @@ export interface WriteOptions {
   /** Where loudness is measured (a worker in the app, so long loops don't stall the screen). */
   measure?: (input: BalanceInput) => Promise<BalanceStats>;
   onProgress?: (text: string) => void;
+  fillTo?: number;
+  fallbackCandidates?: PackFile<PackSource>[];
+  random?: () => number;
 }
 
 /** Conservative one-shot tails; loops have their own slots and duration budget. */
@@ -179,6 +182,8 @@ const TRIES_PER_SOUND = 8;
 export async function writeBankSounds(project: ParsedKoalaProject, groups: BankGroup<PackSource>[], options: WriteOptions): Promise<WriteResult | null> {
   const { measure = async (input: BalanceInput) => balanceStats(input), onProgress, existing, byteBudget, maxSeconds, replace } = options;
   const maxFileBytes = maxFileBytesFor(Math.max(byteBudget, 1));
+  groups = [...groups];
+  const random = options.random ?? Math.random;
 
   // Existing sounds are measured first so the common loudness is the one the whole project is already at.
   const stats: BalanceStats[] = [];
@@ -191,21 +196,17 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
   const taken: { file: PackFile<PackSource>; group: number; number: number }[] = [];
   let skipped = 0;
   let bytes = 0;
-  for (const [g, group] of groups.entries()) {
-    let got = 0;
-    let tries = 0;
-    for (const file of group.candidates) {
-      if (got >= group.want || tries >= group.want * TRIES_PER_SOUND) break;
-      tries++;
+  const take = async (file: PackFile<PackSource>, g: number): Promise<boolean> => {
+    const group = groups[g];
       if (file.size <= 0 || file.size > maxFileBytes || bytes + file.size > byteBudget) {
         skipped++;
-        continue;
+        return false;
       }
       if (group.category === "bass" || group.category === "melodic") {
         const inferred = classifyFile([...(file.rootFolder ? [file.rootFolder] : []), ...file.folders], file.name);
         if (file.classification?.category === "bassLoop" || file.classification?.category === "melodicLoop" || inferred.category === "bassLoop" || inferred.category === "melodicLoop") {
           skipped++;
-          continue;
+          return false;
         }
       }
       onProgress?.(`Measuring ${taken.length + 1}`);
@@ -213,16 +214,47 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
         const decoded = await decodeNative(await file.source());
         if (!acceptsOneShotDuration(group.category, decoded.channelData[0].length / decoded.sampleRate) || (maxSeconds !== undefined && decoded.channelData[0].length / decoded.sampleRate > maxSeconds)) {
           skipped++;
-          continue;
+          return false;
+        }
+        // Compressed source sizes do not bound the WAV/audio memory retained by the project.
+        const retainedBytes = 44 + decoded.channelData.reduce((sum, channel) => sum + channel.length * 3, 0);
+        if (retainedBytes > maxFileBytes || bytes + retainedBytes > byteBudget) {
+          skipped++;
+          return false;
         }
         stats.push(await measure({ channelData: decoded.channelData, sampleRate: decoded.sampleRate, category: group.category }));
-        bytes += file.size;
-        taken.push({ file, group: g, number: ++got });
+        bytes += retainedBytes;
+        taken.push({ file, group: g, number: taken.length + 1 });
+        return true;
       } catch (err) {
         console.error(err);
         skipped++;
       }
+    return false;
+  };
+  for (const [g, group] of groups.entries()) {
+    let got = 0;
+    let tries = 0;
+    for (const file of group.candidates) {
+      if (got >= group.want || tries >= group.want * TRIES_PER_SOUND) break;
+      tries++;
+      if (await take(file, g)) got++;
     }
+  }
+  // Try unused available Types after strict quotas, without decoding the whole library.
+  const fillTo = options.fillTo ?? 0;
+  const chosen = new Set(taken.map(({ file }) => file.libraryId ?? file.sourcePath ?? file.name));
+  let fallbackTries = 0;
+  const fallbackLimit = Math.max(0, fillTo - taken.length) * TRIES_PER_SOUND;
+  for (const file of options.fallbackCandidates ?? []) {
+    if (taken.length >= fillTo || fallbackTries >= fallbackLimit) break;
+    const id = file.libraryId ?? file.sourcePath ?? file.name;
+    if (chosen.has(id)) continue;
+    fallbackTries++;
+    const classification = file.classification ?? classifyFile([file.rootFolder ?? "", ...file.folders], file.name);
+    let group = groups.findIndex(group => group.category === classification.category && !group.is808);
+    if (group < 0) { group = groups.length; groups.push({ category: classification.category, candidates: [], want: 0 }); }
+    if (await take({ ...file, classification }, group)) chosen.add(id);
   }
   if (!taken.length) return null;
   const balance = balanceFromStats(stats, FILE_CEILING_DB);
@@ -260,7 +292,7 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
       sampleId,
       fileName,
       category,
-      is808: !!is808 || ((category === "bass" || category === "bassLoop") && file.classification?.subtype === "808"),
+      is808: !!is808 || ((category === "bass" || category === "bassLoop") && [file.sourcePath ?? "", file.rootFolder ?? "", ...file.folders, file.name].some(is808Name)),
       classification: file.classification,
       knobDb,
       group,
@@ -271,6 +303,16 @@ export async function writeBankSounds(project: ParsedKoalaProject, groups: BankG
       sourcePack: file.sourcePack ?? sourcePackOf(file),
       favorite: !!file.favorite,
     });
+  }
+  // A tiny library can still fill the kit: independent pads share existing sample audio.
+  const available = [...sounds];
+  while (sounds.length < fillTo && available.length) {
+    const source = available[Math.min(available.length - 1, Math.floor(random() * available.length))];
+    const pad = nextPad++;
+    const original = pads.find(p => p.pad === source.pad + base);
+    pads.push({ ...original, pad: pad + base });
+    project.pads.push({ pad, sampleId: source.sampleId, fileName: source.fileName });
+    sounds.push({ ...source, pad });
   }
   project.zip.file("sampler/sampler.json", JSON.stringify(json));
   const blob = await project.zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true });

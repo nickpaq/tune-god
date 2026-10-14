@@ -2,7 +2,7 @@
 // memory budget a project may use. What each bank takes from a folder is in bankLoad.ts. All of this works on file names
 // and sizes only; no audio is read until a file has been picked.
 import { classifyByName, hatOpenness, type CategoryId } from "./classify";
-import { isLoopCategory, subtypeOf, type SampleClassification } from "./sampleClassification";
+import { isLoopCategory, normalizeClassification, type SampleClassification } from "./sampleClassification";
 
 const MB = 1024 * 1024;
 /** Total file size of the sounds a project may hold: the default limit. Decoded audio takes about three times this in memory. */
@@ -81,8 +81,6 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["bassLoop", /\b(bass|808|sub) ?loops?\b/],
   ["voxLoop", /\b(vocal|vox|voice) ?loops?\b/],
   ["fxLoop", /\b(fx|effects?) ?loops?\b/],
-  ["riser", /\b(risers?|uplifters?)\b/],
-  ["fall", /\b(falls?|downlifters?)\b/],
   ["melodicLoop", /\b(melod(y|ic|ies) ?loops?|synth ?loops?|chord ?loops?|music ?loops?|bass ?loops?|guitar ?loops?|piano ?loops?|keys? ?loops?|arps?)\b/],
   ["kick", /\b(kicks?|kiks?|bd|bass ?drums?)\b/],
   ["clap", /\b(claps?|handclaps?)\b/],
@@ -92,7 +90,7 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["cymbal", /\b(cymbals?|crash(es)?|rides?|chinas?|splash(es)?)\b/],
   ["hat", /\b(hi ?hats?|hats?|hh)\b/],
   ["vox", /\b(vocals?|vox|voices?|choirs?|acapellas?|chants?|breaths?|ad ?libs?|speech|shouts?)\b/],
-  ["fx", /\b(fx|sfx|effects?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|booms?|zaps?|lasers?|sirens?|reverses?|reversed|scratch(es)?|vinyl|crackles?|stingers?|stings?|rumbles?|bursts?|explosions?|sci ?fi)\b/],
+  ["fx", /\b(fx|sfx|effects?|falls?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|booms?|zaps?|lasers?|sirens?|reverses?|reversed|scratch(es)?|vinyl|crackles?|stingers?|stings?|rumbles?|bursts?|explosions?|sci ?fi)\b/],
   // Percussion folders take precedence over melodic keywords.
   ["perc", /\b(toms?|congas?|bongos?|tamb(ourines?)?|cowbells?|bells?|chimes?|glock(enspiel)?s?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
   ["perc", /\b(perc|percs|percussions?)\b/],
@@ -124,7 +122,7 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
     if (id !== "hat" && isLoopCategory(id)) return id;
     if (id === "bass") return "bassLoop";
     if (id === "vox") return "voxLoop";
-    if (id === "fx" || id === "riser" || id === "fall") return "fxLoop";
+    if (id === "fx") return "fxLoop";
     if (id === "melodic") return "melodicLoop";
     return "drumLoop";
   }
@@ -134,7 +132,7 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
 
 /** Folder hierarchy supplies the family; specific names refine mixed hats and generic folders. */
 export function classifyFile(folders: string[], fileName: string, correction?: SampleClassification): SampleClassification {
-  if (correction) return { ...correction, confidence: 1, needsReview: false, evidence: "correction" };
+  if (correction) return { ...normalizeClassification(correction), confidence: 1, needsReview: false, evidence: "correction" };
   const byName = classifyByName(fileName);
   const loop = [...folders, fileName].some((word) => /\bloops?\b/i.test(tidy(word)));
   let category: CategoryId | null = null;
@@ -146,15 +144,13 @@ export function classifyFile(folders: string[], fileName: string, correction?: S
     evidence = "folder";
     break;
   }
-  // Specific FX names refine a general FX family; a typed drum folder still wins over misleading names.
-  if (category === "fx" && (byName === "fall" || byName === "riser")) category = byName;
+  // A typed folder wins over misleading filenames.
   if (!category && byName) { category = byName === "hat" ? "closedHat" : byName; evidence = "filename"; }
   if (category && loop && !isLoopCategory(category)) {
-    category = category === "bass" ? "bassLoop" : category === "melodic" ? "melodicLoop" : category === "vox" ? "voxLoop" : ["fx", "riser", "fall"].includes(category) ? "fxLoop" : category === "perc" ? "percLoop" : "drumLoop";
+    category = category === "bass" ? "bassLoop" : category === "melodic" ? "melodicLoop" : category === "vox" ? "voxLoop" : category === "fx" ? "fxLoop" : category === "perc" ? "percLoop" : "drumLoop";
   }
-  const path = [...folders, fileName].join("/");
   const confidence = category ? evidence === "folder" ? 0.9 : 0.8 : 0;
-  return { category: category ?? "other", subtype: subtypeOf(category ?? "other", path), confidence, needsReview: !category || confidence < 0.8, evidence };
+  return { category: category ?? "other", confidence, needsReview: !category || confidence < 0.8, evidence };
 }
 
 export function categoryOfFile(folders: string[], fileName: string): CategoryId {

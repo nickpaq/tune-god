@@ -3,7 +3,8 @@
 // pad's audio lives at sampler/{sampleId}.wav. We read/write that structure
 // directly from the zip bytes; the .koala extension is cosmetic (JSZip
 // doesn't care what the file is called), so no literal rename is needed.
-import type { SampleClassification } from "./sampleClassification";
+import { categoryLabel } from "./classify";
+import { normalizeClassification, type SampleClassification } from "./sampleClassification";
 import type { PadPlayback } from "./padSettings";
 import JSZip from "jszip";
 
@@ -45,9 +46,11 @@ export async function parseKoalaProject(file: File): Promise<ParsedKoalaProject>
   if (!samplerEntry) throw new Error("That doesn't look like a Koala project file (no sampler/sampler.json inside).");
   const samplerJson = JSON.parse(await samplerEntry.async("string"));
 
+  const metadataById = new Map<number, any>();
   const nameById = new Map<number, string>();
   const pathById = new Map<number, string>();
   for (const s of samplerJson.samples ?? []) {
+    metadataById.set(s.id, s.metadata);
     const path = s?.metadata?.originalPath;
     nameById.set(s.id, path ? basename(path) : `sample-${s.id}.wav`);
     const sourcePath = s?.metadata?.sourcePath ?? path;
@@ -65,12 +68,19 @@ export async function parseKoalaProject(file: File): Promise<ParsedKoalaProject>
       sampleId: p.sampleId as number,
       fileName: nameById.get(p.sampleId) ?? `sample-${p.sampleId}.wav`,
       sourcePath: pathById.get(p.sampleId),
-      classification: p.tunegodClassification ?? samplerJson.samples?.find((s: any) => s.id === p.sampleId)?.metadata?.tunegodClassification,
+      classification: p.tunegodClassification ?? metadataById.get(p.sampleId)?.tunegodClassification,
       playback: p.tunegodPlayback,
-      libraryId: samplerJson.samples?.find((s: any) => s.id === p.sampleId)?.metadata?.tunegodLibraryId,
+      libraryId: metadataById.get(p.sampleId)?.tunegodLibraryId,
       label: typeof p.label === "string" ? p.label.trim() : "",
     }))
     .sort((a: KoalaPadRef, b: KoalaPadRef) => a.pad - b.pad);
+
+  for (const pad of pads) {
+    if (!pad.classification) continue;
+    const classification = normalizeClassification(pad.classification);
+    if (pad.libraryId && ("subtype" in pad.classification || classification.category !== pad.classification.category)) pad.label = categoryLabel(classification.category);
+    pad.classification = classification;
+  }
 
   if (!pads.length) throw new Error("No sample pads found in this Koala project.");
 

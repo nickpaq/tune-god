@@ -2,7 +2,13 @@
 // "Empty pad" fills every other free spot. Both are real pads in the exported project, each with a
 // tiny silent WAV.
 import type { Pad } from "../components/PadPanel";
-import type { ArrangePlaceholder } from "./fingerDrumming";
+export const EMPTY_PAD_LABEL = "Empty pad";
+
+export interface ArrangePlaceholder {
+  index: number;
+  kind: "missing" | "empty";
+  label: string;
+}
 
 /** Koala's dark grey background, which "missing" pads use so a gap reads as dark. */
 export const MISSING_PAD_COLOR = "#2E2B2B";

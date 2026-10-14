@@ -106,7 +106,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
       drumLoop: -22,
       percLoop: -27,
       melodicLoop: -22,
-  bassLoop: -15, voxLoop: -19, fxLoop: -27, riser: -27, fall: -27,
+  bassLoop: -15, voxLoop: -19, fxLoop: -27,
       other: -22,
     },
   },
