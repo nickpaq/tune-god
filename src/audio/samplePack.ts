@@ -1,7 +1,7 @@
 // Reading a sample pack folder: the audio files in it (see packProject.ts), the sound type a folder name implies, and the
 // memory budget a project may use. What each bank takes from a folder is in bankLoad.ts. All of this works on file names
 // and sizes only; no audio is read until a file has been picked.
-import { classifyByName, hatOpenness, type CategoryId } from "./classify";
+import { classifyByName, explicitCategoryByName, hatOpenness, isAutomaticMelodicLoop, isProtectedCategory, type CategoryId } from "./classify";
 import { isLoopCategory, normalizeClassification, type SampleClassification } from "./sampleClassification";
 
 const MB = 1024 * 1024;
@@ -25,6 +25,8 @@ export const maxFileBytesFor = (byteBudget: number) => Math.round(byteBudget / 6
 export interface PackFile<T = unknown> {
   folders: string[];
   lastModified?: number;
+  /** Duration in seconds collected during indexing, without retaining audio. */
+  duration?: number;
   classification?: SampleClassification;
   /** Selected root, retained separately so flat bank loaders can still reject subfolders. */
   rootFolder?: string;
@@ -139,7 +141,7 @@ export function is808Folder(folder: string): boolean {
 }
 
 /** Folder hierarchy supplies the family; specific names refine mixed hats and generic folders. */
-export function classifyFile(folders: string[], fileName: string, correction?: SampleClassification): SampleClassification {
+export function classifyFile(folders: string[], fileName: string, correction?: SampleClassification, duration?: number): SampleClassification {
   if (correction) return { ...normalizeClassification(correction), confidence: 1, needsReview: false, evidence: "correction" };
   if (folders.some(is808Folder)) return { category: "bass", confidence: 0.95, needsReview: false, evidence: "folder" };
   const byName = classifyByName(fileName);
@@ -158,12 +160,16 @@ export function classifyFile(folders: string[], fileName: string, correction?: S
   if (category && loop && !isLoopCategory(category)) {
     category = category === "bass" ? "bassLoop" : category === "melodic" ? "melodicLoop" : category === "vox" ? "voxLoop" : category === "fx" ? "fxLoop" : category === "perc" ? "percLoop" : "drumLoop";
   }
+  if (!(evidence === "folder" && isProtectedCategory(category)) && !isProtectedCategory(explicitCategoryByName(fileName)) && isAutomaticMelodicLoop(fileName, duration)) {
+    category = "melodicLoop";
+    evidence = "metadata";
+  }
   const confidence = category ? evidence === "folder" ? 0.9 : 0.8 : 0;
   return { category: category ?? "other", confidence, needsReview: !category || confidence < 0.8, evidence };
 }
 
-export function categoryOfFile(folders: string[], fileName: string): CategoryId {
-  return classifyFile(folders, fileName).category;
+export function categoryOfFile(folders: string[], fileName: string, correction?: SampleClassification, duration?: number): CategoryId {
+  return classifyFile(folders, fileName, correction, duration).category;
 }
 
 /** Fisher-Yates shuffle into a new array. `random` is injectable so tests are repeatable. */

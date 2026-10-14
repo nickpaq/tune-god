@@ -7,13 +7,13 @@ const BANK_B: CategoryId[] = [
   "melodicLoop", "melodicLoop", "drumLoop", "percLoop",
   "vox", "vox", "fx", "fxLoop",
   "melodic", "melodic", "melodic", "melodic",
-  "bass", "bass", "bassLoop", "bassLoop",
+  "bass", "bass", "melodicLoop", "melodicLoop",
 ];
 const BANK_C: CategoryId[] = [
   "drumLoop", "percLoop", "melodicLoop", "fxLoop",
   "vox", "voxLoop", "fx", "fx",
   "melodic", "melodic", "melodicLoop", "melodicLoop",
-  "bass", "bass", "bassLoop", "voxLoop",
+  "bass", "bass", "melodicLoop", "voxLoop",
 ];
 
 /** Exactly 48 slots, never including Bank D. */
@@ -62,9 +62,12 @@ export function allocateKit(
     positions.set(candidate.key, index);
   }
   const remaining = sounds.filter(sound => !positions.has(sound.key));
-  for (const [index] of slots.entries()) {
+  for (const [index, slot] of slots.entries()) {
     if (occupied.has(index) || !remaining.length) continue;
-    const at = Math.min(remaining.length - 1, Math.floor(random() * remaining.length));
+    const eligible = remaining.filter(sound => slot.category !== "melodicLoop" || sound.category !== "bassLoop");
+    if (!eligible.length) continue;
+    const candidate = eligible[Math.min(eligible.length - 1, Math.floor(random() * eligible.length))];
+    const at = remaining.indexOf(candidate);
     const [sound] = remaining.splice(at, 1);
     occupied.add(index);
     positions.set(sound.key, index);

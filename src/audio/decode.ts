@@ -1,3 +1,4 @@
+import { recordDebug } from "../diagnostics";
 // File/ArrayBuffer -> AudioBuffer decoding helpers. Runs entirely client-side
 // via the Web Audio API; no data ever leaves the device.
 
@@ -7,6 +8,8 @@ let sharedContext: AudioContext | null = null;
 export function getAudioContext(): AudioContext {
   if (!sharedContext) {
     sharedContext = new AudioContext();
+    sharedContext.addEventListener("statechange", () => recordDebug("Audio state", sharedContext?.state, "info"));
+    recordDebug("Audio created", `${sharedContext.state} · ${sharedContext.sampleRate} Hz`, "info");
   }
   return sharedContext;
 }
@@ -86,4 +89,9 @@ export function cloneChannelData(buffer: AudioBuffer): Float32Array[] {
     channels.push(buffer.getChannelData(ch).slice());
   }
   return channels;
+}
+
+/** Inspect without creating or resuming an audio context. */
+export function audioDebugState(): Record<string, unknown> {
+  return { audioState: sharedContext?.state ?? "Not created", sampleRate: sharedContext?.sampleRate ?? null };
 }

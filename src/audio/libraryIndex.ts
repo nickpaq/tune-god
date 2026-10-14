@@ -10,6 +10,7 @@ export interface IndexedSample {
   name: string;
   size: number;
   lastModified?: number;
+  duration?: number;
   pack: string;
   classification: SampleClassification;
   correction?: SampleClassification;
@@ -20,6 +21,7 @@ export interface LibraryIndex {
   id: string;
   name: string;
   updatedAt: number;
+  classificationVersion?: number;
   /** Rule set the stored classifications came from (see CLASSIFIER_VERSION); older or missing means unchanged files are reclassified once. */
   classifierVersion?: number;
   /** Order-independent hash of every file's path and size: when it matches on reconnect the saved records are adopted as they are. */
@@ -31,6 +33,9 @@ export interface LibraryPack {
   name: string;
   samples: IndexedSample[];
 }
+
+/** Increment whenever canonical classification rules change. */
+export const CLASSIFICATION_VERSION = 2;
 
 const structural =
   /^(samples?|sounds?|audio|wav|wavs|one[ _-]?shots?|shots?|hits?|drums?|loops?|packs?|kits?|dry|wet|processed|stems?)$/i;
@@ -106,7 +111,7 @@ function* refreshSteps<T>(
     if ((i + 1) % 500 === 0) yield { stage: "Restoring saved index", processed: i + 1, total: savedSamples.length, percent: 15 + 5 * (i + 1) / savedSamples.length };
   }
   const currentFingerprint = fingerprintOf(files).fingerprint;
-  if (!force && previous?.id === id && previous.classifierVersion === CLASSIFIER_VERSION && previous.fingerprint === currentFingerprint) {
+  if (!force && previous?.id === id && previous.classifierVersion === CLASSIFIER_VERSION && previous.classificationVersion === CLASSIFICATION_VERSION && previous.fingerprint === currentFingerprint) {
     // Same files, same sizes, same rules: adopt the saved records and only attach each file to its record.
     const rebound: PackFile<T>[] = [];
     const byPath = new Map(savedSamples.map((sample) => [sample.path, sample]));
@@ -115,7 +120,7 @@ function* refreshSteps<T>(
     for (const file of files) {
       const path = sourcePath(file);
       const sample = byPath.get(path);
-      if (!sample) break;
+      if (!sample || (file.duration !== undefined && file.duration !== sample.duration)) break;
       if (attached.has(path)) continue;
       attached.add(path);
       const classification = normalizeClassification(sample.classification);
@@ -157,15 +162,19 @@ function* refreshSteps<T>(
     const saved = old.get(path);
     // Path and size identify an unchanged file; modified times are not trusted (some devices report them unstably).
     const unchanged = saved && saved.size === file.size;
+    const duration = file.duration ?? (unchanged ? saved.duration : undefined);
+    const reuseClassification = unchanged && !force && currentRules && previous?.classificationVersion === CLASSIFICATION_VERSION && duration === saved.duration;
     const classification = normalizeClassification(
       saved?.correction ??
-      (unchanged && !force && currentRules
+      (reuseClassification
         ? saved.classification
         : classifyFile(
             [...(file.rootFolder ? [file.rootFolder] : []), ...file.folders],
             file.name,
+            undefined,
+            duration,
           )));
-    if (unchanged && !force && currentRules) reused++;
+    if (reuseClassification) reused++;
     const key = keyFromName(file.name);
     const sample: IndexedSample = {
       id: `${id}:${path}`,
@@ -174,6 +183,7 @@ function* refreshSteps<T>(
       name: file.name,
       size: file.size,
       lastModified: file.lastModified,
+      duration,
       pack: packFor(file),
       classification,
       correction: saved?.correction ? normalizeClassification(saved.correction) : undefined,
@@ -185,6 +195,7 @@ function* refreshSteps<T>(
     samples.push(sample);
     rebound.push({
       ...file,
+      duration: sample.duration,
       libraryId: sample.id,
       classification,
       sourcePack: sample.pack,
@@ -192,7 +203,7 @@ function* refreshSteps<T>(
     });
   }
   return {
-    index: { id, name, updatedAt: Date.now(), classifierVersion: CLASSIFIER_VERSION, fingerprint: currentFingerprint, samples },
+    index: { id, name, updatedAt: Date.now(), classifierVersion: CLASSIFIER_VERSION, classificationVersion: CLASSIFICATION_VERSION, fingerprint: currentFingerprint, samples },
     files: rebound,
     reused,
   };
@@ -205,7 +216,22 @@ export function refreshLibrary<T>(name: string, files: PackFile<T>[], previous?:
   return step.value;
 }
 /** Metadata only: yield between batches so progress can paint and input stays responsive. */
-export async function refreshLibraryAsync<T>(name: string, files: PackFile<T>[], previous?: LibraryIndex | null, force = false, onProgress?: (progress: LibraryProgress) => void) {
+export async function refreshLibraryAsync<T>(name: string, files: PackFile<T>[], previous?: LibraryIndex | null, force = false, onProgress?: (progress: LibraryProgress) => void, readDuration?: (source: T) => Promise<number | undefined>) {
+  if (readDuration) {
+    const old = new Map(previous?.id === `library:${name}` ? previous.samples.map(sample => [sample.path, sample]) : []);
+    const withDuration: PackFile<T>[] = [];
+    for (let i = 0; i < files.length; i += 4) {
+      onProgress?.({ stage: "Reading duration metadata", processed: i, total: files.length, percent: 15 });
+      withDuration.push(...await Promise.all(files.slice(i, i + 4).map(async file => {
+        const saved = old.get(sourcePath(file));
+        const unchanged = saved?.size === file.size && saved?.lastModified === file.lastModified;
+        const duration = file.duration ?? (unchanged ? saved?.duration : undefined) ?? await readDuration(file.source).catch(() => undefined);
+        return { ...file, duration };
+      })));
+      await yieldToBrowser();
+    }
+    files = withDuration;
+  }
   const steps = refreshSteps(name, files, previous, force);
   let step = steps.next();
   while (!step.done) {
@@ -245,5 +271,16 @@ export function correctSample(
         ? { ...sample, classification: correction, correction }
         : sample,
     ),
+  };
+}
+
+/** Upgrade persisted metadata even before files are reconnected; manual corrections remain authoritative. */
+export function reclassifyLibrary(index: LibraryIndex): LibraryIndex {
+  if (index.classificationVersion === CLASSIFICATION_VERSION) return index;
+  return {
+    ...index, classificationVersion: CLASSIFICATION_VERSION,
+    samples: index.samples.map(sample => ({ ...sample, classification: classifyFile(
+      sample.path.split("/").slice(0, -1), sample.name, sample.correction, sample.duration,
+    ) })),
   };
 }

@@ -40,11 +40,17 @@ export function toggle(selection: Selection, pad: DestinationPad): Set<number> {
 /** Whether a tap selects an occupied pad that was not selected: the one transition that plays the pad's sample. */
 export const tapPreviews = (selection: Selection, pad: DestinationPad): boolean => pad.occupied && !pad.locked && !selection.has(pad.index);
 
-/** Only the empty pads, whatever was selected before. */
-export const selectUnused = (pads: readonly DestinationPad[]): Set<number> => new Set(pads.filter((p) => !p.occupied && !p.locked).map((p) => p.index));
+/** The empty pads, the first `count` of them. */
+export const selectUnused = (pads: readonly DestinationPad[], count: number = Infinity): Set<number> =>
+  new Set(pads.filter((p) => !p.occupied && !p.locked).slice(0, Math.max(0, count)).map((p) => p.index));
 
-/** Every pad that can be written to, occupied or not. */
-export const selectAll = (pads: readonly DestinationPad[]): Set<number> => new Set(pads.filter((p) => !p.locked).map((p) => p.index));
+/** The tapped pad and the unlocked pads after it, `count` in all (fewer when the banks run out): one pad per chop, no more. */
+export const rangeFrom = (pads: readonly DestinationPad[], start: number, count: number): Set<number> =>
+  new Set(pads.filter((p) => p.index >= start && !p.locked).slice(0, Math.max(0, count)).map((p) => p.index));
+
+/** The most chops that can be asked for before the pads are known: the chops marked, and Koala's free pattern slots for the multiple-pattern export. */
+export const chopsWanted = (chopsMarked: number, patternSlots: number, pattern: "multiple" | "single"): number =>
+  Math.max(0, Math.min(chopsMarked, pattern === "multiple" ? patternSlots : Infinity));
 
 export interface SelectionSummary {
   selected: number;

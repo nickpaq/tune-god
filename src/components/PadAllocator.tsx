@@ -3,16 +3,15 @@ import {
   BANK_LETTERS,
   assign,
   chopLimit,
+  chopsWanted,
   orderedDestinations,
   overwriteMessage,
   overwrites,
   padName,
-  selectAll,
+  rangeFrom,
   selectUnused,
   summarize,
-  tapPreviews,
-  toggle,
-  type DestinationPad,
+    type DestinationPad,
 } from "../audio/chopDestinations";
 import { haptic } from "../audio/haptics";
 import { PADS_PER_BANK } from "../audio/padMoves";
@@ -55,9 +54,17 @@ export function PadAllocator({
   onConfirm: (destinations: number[]) => void;
   onCancel: () => void;
 }) {
-  const [selection, setSelection] = useState<Set<number>>(() => new Set());
+  /** The pad the chops start on: they fill it and the pads after it, one per chop. */
+  const [start, setStart] = useState<number | null>(null);
+  /** The pads picked by "Select All Unused Pads" instead of a start pad. */
+  const [unusedPick, setUnusedPick] = useState(false);
   /** null: All (as many as fit); a number: that many chops. */
   const [custom, setCustom] = useState<number | null>(null);
+  const wanted = custom === null ? chopsWanted(chopsMarked, patternSlots, pattern) : Math.min(custom, chopsWanted(chopsMarked, patternSlots, pattern));
+  const selection = useMemo(
+    () => (unusedPick ? selectUnused(pads, wanted) : start === null ? new Set<number>() : rangeFrom(pads, start, wanted)),
+    [pads, start, unusedPick, wanted],
+  );
   /** The occupied pad last tapped, whose warning is spelled out. */
   const [focus, setFocus] = useState<number | null>(null);
 
@@ -70,15 +77,23 @@ export function PadAllocator({
 
   const tap = (pad: DestinationPad) => {
     if (pad.locked) return;
-    if (tapPreviews(selection, pad)) {
-      onPreview(pad.index);
-      haptic("heavy");
-      setFocus(pad.index);
+    if (pad.index !== start) {
+      // A tap on any pad makes it the first; the chops fill the pads after it.
+      if (pad.occupied) {
+        onPreview(pad.index);
+        haptic("heavy");
+        setFocus(pad.index);
+      } else {
+        haptic("light");
+        setFocus(null);
+      }
+      setUnusedPick(false);
+      setStart(pad.index);
     } else {
       haptic("light");
-      if (focus === pad.index) setFocus(null);
+      setFocus(null);
+      setStart(null);
     }
-    setSelection(toggle(selection, pad));
   };
 
   const leftover = earlierChop.filter((i) => !assigned.includes(i));
@@ -132,20 +147,15 @@ export function PadAllocator({
           </div>
 
           <p className="alloc__focus" data-warn={focused?.occupied && selection.has(focused.index) ? "true" : undefined}>
-            {focused && focused.occupied && selection.has(focused.index) ? `${padName(focused.index)}${focused.name ? ` · ${focused.name}` : ""}: This sample will be overwritten.` : "Tap a pad to choose it. Pads with a speaker already hold a sample."}
+            {focused && focused.occupied && selection.has(focused.index) ? `${padName(focused.index)}${focused.name ? ` · ${focused.name}` : ""}: This sample will be overwritten.` : "Tap the pad the chops start on. They fill every pad after it, one per chop. Pads with a speaker already hold a sample."}
           </p>
 
           {focused?.occupied && <button className="chop__btn" onClick={() => onPreview(focused.index)} aria-label={`Preview ${padName(focused.index)} without changing selection`}><Speaker /> Preview {padName(focused.index)}</button>}
           <div className="chop__row">
-            <button className="chop__btn chop__grow" onClick={() => (haptic("light"), setSelection(selectUnused(pads)))}>
-              Select All Unused Pads
+            <button className="chop__btn chop__grow" onClick={() => (haptic("light"), setUnusedPick(true), setStart(null))}>
+              Use Unused Pads
             </button>
-            <button className="chop__btn chop__grow" onClick={() => (haptic("light"), setSelection(selectAll(pads)))}>
-              Select All Pads
-            </button>
-          </div>
-          <div className="chop__row">
-            <button className="chop__btn chop__grow" disabled={selection.size === 0} onClick={() => (haptic("light"), setSelection(new Set()), setFocus(null))}>
+            <button className="chop__btn chop__grow" disabled={selection.size === 0} onClick={() => (haptic("light"), setUnusedPick(false), setStart(null), setFocus(null))}>
               Clear Selection
             </button>
           </div>
