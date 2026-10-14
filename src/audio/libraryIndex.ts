@@ -111,16 +111,23 @@ function* refreshSteps<T>(
     const rebound: PackFile<T>[] = [];
     const byPath = new Map(savedSamples.map((sample) => [sample.path, sample]));
     const attached = new Set<string>();
+    let legacy = false;
     for (const file of files) {
       const path = sourcePath(file);
       const sample = byPath.get(path);
       if (!sample) break;
       if (attached.has(path)) continue;
       attached.add(path);
-      rebound.push({ ...file, libraryId: sample.id, classification: sample.classification, sourcePack: sample.pack, sourcePath: path });
+      const classification = normalizeClassification(sample.classification);
+      if (classification.category !== sample.classification.category || Object.keys(sample.classification).length !== Object.keys(classification).length || (sample.correction && Object.keys(sample.correction).length !== 4)) legacy = true;
+      rebound.push({ ...file, libraryId: sample.id, classification, sourcePack: sample.pack, sourcePath: path });
     }
     if (attached.size === savedSamples.length) {
-      return { index: previous, files: rebound, reused: savedSamples.length };
+      // Records saved by older versions (retired categories, subtype fields) are normalized; current ones are adopted untouched.
+      const index = legacy
+        ? { ...previous, samples: savedSamples.map((sample) => ({ ...sample, classification: normalizeClassification(sample.classification), correction: sample.correction ? normalizeClassification(sample.correction) : undefined })) }
+        : previous;
+      return { index, files: rebound, reused: savedSamples.length };
     }
   }
   const established = new Set<string>();
