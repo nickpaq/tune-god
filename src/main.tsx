@@ -20,7 +20,7 @@ installDiagnostics();
 document.addEventListener(
   "touchmove",
   (e) => {
-    if (!(e.target as Element | null)?.closest?.(".palette-modal__list, .swap-list__rows, .chop__scroll, .menu, .sample-library, .debug-report")) e.preventDefault();
+    if (!(e.target as Element | null)?.closest?.(".palette-modal__list, .swap-list__rows, .chop__scroll, .menu, .sample-library, .folder-types .sample-library__rows, .scan-report, .debug-report")) e.preventDefault();
   },
   { passive: false },
 );

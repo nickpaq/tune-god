@@ -118,6 +118,8 @@ import { LibraryBrowser } from "./components/LibraryBrowser";
 import { PlaybackEditor } from "./components/PlaybackEditor";
 import { buildScanReport } from "./audio/scanReport";
 import { FolderTypesModal } from "./components/FolderTypesModal";
+import { DEFAULT_FOLDER_TYPES, DEFAULT_FOLDER_TYPE_NAMES } from "./audio/defaultFolderTypes";
+import { FOLDER_TYPES_FILE_NAME, folderTypesFile, parseFolderTypesFile } from "./audio/folderTypesFile";
 import type { FolderTypes } from "./audio/samplePack";
 import { ambiguousFolders, ambiguousFoldersText, applyFolderTypes, correctSample, refreshLibraryAsync, type LibraryProgress, type LibraryIndex } from "./audio/libraryIndex";
 import { type SampleClassification } from "./audio/sampleClassification";
@@ -561,6 +563,9 @@ function App() {
   const [folderTypeNames, setFolderTypeNames] = useState<Record<string, string>>(saved.folderTypeNames ?? {});
   const [folderTypesOpen, setFolderTypesOpen] = useState(false);
   useEffect(() => { saveState({ folderTypes, folderTypeNames }); }, [folderTypes, folderTypeNames]);
+  /** The folder Types in force: the ones that ship with the app, overridden by the user's own. */
+  const allFolderTypes = useMemo(() => ({ ...DEFAULT_FOLDER_TYPES, ...folderTypes }), [folderTypes]);
+  const allFolderTypeNames = useMemo(() => ({ ...DEFAULT_FOLDER_TYPE_NAMES, ...folderTypeNames }), [folderTypeNames]);
   const [libraryToolsOpen, setLibraryToolsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryError, setLibraryError] = useState("");
@@ -588,7 +593,7 @@ function App() {
     try {
       const found = Array.isArray(input) ? await findPackInFileListAsync(input, (processed, total) => setIndexProgress({ stage: "Reading file names and folder paths", processed, total, percent: total ? 15 * processed / total : 0 })) : input;
       const previous = libraryIndex?.name === found.name ? libraryIndex : await loadLibraryIndex(`library:${found.name}`);
-      const refreshed = await refreshLibraryAsync(found.name, found.files, previous, force, setIndexProgress, durationMetadata, folderTypes);
+      const refreshed = await refreshLibraryAsync(found.name, found.files, previous, force, setIndexProgress, durationMetadata, allFolderTypes);
       libraryFiles.current = { name: found.name, files: refreshed.files };
       if (libraryIndex?.id !== refreshed.index.id) setKitPacks(null);
       setLibraryIndex(refreshed.index); setIndexReused(refreshed.reused);
@@ -618,7 +623,7 @@ function App() {
   /** Reclassify the saved index with the folder Types, with no folder pick: corrections stay, the connected files follow. */
   const applyFolderTypesNow = () => {
     if (!libraryIndex) return;
-    const next = applyFolderTypes(libraryIndex, folderTypes);
+    const next = applyFolderTypes(libraryIndex, allFolderTypes);
     const changed = next.samples.filter((sample, i) => sample.classification.category !== libraryIndex.samples[i].classification.category).length;
     setLibraryIndex(next);
     if (libraryFiles.current) {
@@ -3641,12 +3646,14 @@ function App() {
         {folderTypesOpen && libraryIndex && (
           <FolderTypesModal
             folders={ambiguous}
-            folderTypes={folderTypes}
-            names={folderTypeNames}
+            folderTypes={allFolderTypes}
+            names={allFolderTypeNames}
             busy={indexBusy}
             onSet={setFolderType}
             onApply={applyFolderTypesNow}
-            onCopy={() => { void navigator.clipboard?.writeText(ambiguousFoldersText(ambiguous, folderTypes)).then(() => setNotice("Folder list copied."), () => setNotice("Could not copy the folder list.")); }}
+            onCopy={() => { void navigator.clipboard?.writeText(ambiguousFoldersText(ambiguous, allFolderTypes)).then(() => setNotice("Folder list copied."), () => setNotice("Could not copy the folder list.")); }}
+            onExport={() => { downloadBlob(new Blob([folderTypesFile(allFolderTypes, allFolderTypeNames, __APP_VERSION__)], { type: "application/json" }), FOLDER_TYPES_FILE_NAME); setNotice("Folder Types exported. Bring the file back to add them to the next release."); }}
+            onImport={(file) => { void file.text().then((text) => { const parsed = parseFolderTypesFile(text); if (!parsed) return setNotice("That is not a Folder Types file."); setFolderTypes((prev) => ({ ...prev, ...parsed.folderTypes })); setFolderTypeNames((prev) => ({ ...prev, ...parsed.names })); setNotice(`${Object.keys(parsed.folderTypes).length.toLocaleString()} folder Types imported. Apply and reclassify to use them.`); }, () => setNotice("Could not read that file.")); }}
             onClose={() => setFolderTypesOpen(false)}
           />
         )}

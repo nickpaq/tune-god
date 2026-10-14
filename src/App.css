@@ -2282,6 +2282,7 @@
 }
 .sample-library p { margin: 0; opacity: .75; font-size: .9rem; }
 .sample-library__rows { overflow: auto; min-height: 0; }
+.folder-types .sample-library__rows, .scan-report { touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .scan-report { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 8px; font: 11px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; touch-action: pan-y; overscroll-behavior: contain; }
 .sample-library__row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid #ffffff24; }
 .sample-library__details { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
