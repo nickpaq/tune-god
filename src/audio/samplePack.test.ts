@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryOfFile, categoryOfFolder, fairPackOrder, packByteBudget, projectNameForFiles } from "./samplePack";
+import { categoryOfFile, classifyFile, categoryOfFolder, fairPackOrder, packByteBudget, projectNameForFiles } from "./samplePack";
 
 describe("hierarchy and filename classification", () => {
   it("uses names in untyped folders and respects explicit typed folders", () => {
@@ -88,5 +88,21 @@ describe("projectNameForFiles", () => {
   });
   it("lets the first of several dropped folders name the project", () => {
     expect(projectNameForFiles([f(undefined, "First Pack", "Kicks"), f(undefined, "Second Pack", "Kicks")])).toBe("TuneGod - First Pack");
+  });
+});
+
+describe("808 folders", () => {
+  it("classify everything inside as 808 bass, whatever the name says", () => {
+    for (const [folders, name] of [
+      [["Pack", "808s"], "Long 808 Gm.wav"],
+      [["Pack", "808"], "Am 140bpm.wav"],
+      [["Pack", "808s", "Loops"], "Slide loop C#.wav"],
+      [["Pack", "Melodic Loops", "808s"], "F minor.wav"],
+    ] as [string[], string][]) {
+      expect(classifyFile(folders, name).category).toBe("bass");
+    }
+  });
+  it("leaves 808 loop folders alone", () => {
+    expect(classifyFile(["Pack", "808 Loops"], "Am.wav").category).toBe("bassLoop");
   });
 });

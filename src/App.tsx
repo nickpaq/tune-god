@@ -576,8 +576,12 @@ function App() {
       libraryFiles.current = { name: found.name, files: refreshed.files };
       setLibraryIndex(refreshed.index); setIndexReused(refreshed.reused);
       saveState({ libraryIndexId: refreshed.index.id });
-      setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
-      if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
+      // Nothing changed since the saved index (same files, same rules): skip rewriting the whole index to IndexedDB.
+      const unchangedIndex = !force && !!previous && previous.classifierVersion === refreshed.index.classifierVersion && previous.samples.length === refreshed.index.samples.length && refreshed.reused === refreshed.index.samples.length;
+      if (!unchangedIndex) {
+        setIndexProgress({ stage: "Saving metadata on this device", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 95 });
+        if (!await saveLibraryIndex(refreshed.index)) setNotice("Index is available this session, but device storage could not save it.");
+      }
       setIndexProgress({ stage: force ? "Refresh complete" : "Files connected", processed: refreshed.index.samples.length, total: refreshed.index.samples.length, percent: 100 });
     } catch (error) {
       setIndexProgress(null);

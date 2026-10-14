@@ -1,4 +1,4 @@
-import { classifyFile, categoryOfFolder, type PackFile } from "./samplePack";
+import { classifyFile, categoryOfFolder, CLASSIFIER_VERSION, type PackFile } from "./samplePack";
 import { normalizeClassification, type SampleClassification } from "./sampleClassification";
 import { NOTE_NAMES } from "./theory";
 import { bpmFromName, keyFromName } from "./pitch/nameKey";
@@ -20,6 +20,8 @@ export interface LibraryIndex {
   id: string;
   name: string;
   updatedAt: number;
+  /** Rule set the stored classifications came from (see CLASSIFIER_VERSION); older or missing means unchanged files are reclassified once. */
+  classifierVersion?: number;
   samples: IndexedSample[];
 }
 export interface LibraryPack {
@@ -69,6 +71,7 @@ function* refreshSteps<T>(
   const id = `library:${name}`;
   const old = new Map<string, IndexedSample>();
   const savedSamples = previous?.id === id ? previous.samples : [];
+  const currentRules = previous?.classifierVersion === CLASSIFIER_VERSION;
   yield { stage: "Restoring saved index", processed: 0, total: savedSamples.length, percent: 15 };
   for (let i = 0; i < savedSamples.length; i++) {
     old.set(savedSamples[i].path, savedSamples[i]);
@@ -105,13 +108,13 @@ function* refreshSteps<T>(
       saved.lastModified === file.lastModified;
     const classification = normalizeClassification(
       saved?.correction ??
-      (unchanged && !force
+      (unchanged && !force && currentRules
         ? saved.classification
         : classifyFile(
             [...(file.rootFolder ? [file.rootFolder] : []), ...file.folders],
             file.name,
           )));
-    if (unchanged && !force) reused++;
+    if (unchanged && !force && currentRules) reused++;
     const key = keyFromName(file.name);
     const sample: IndexedSample = {
       id: `${id}:${path}`,
@@ -138,7 +141,7 @@ function* refreshSteps<T>(
     });
   }
   return {
-    index: { id, name, updatedAt: Date.now(), samples },
+    index: { id, name, updatedAt: Date.now(), classifierVersion: CLASSIFIER_VERSION, samples },
     files: rebound,
     reused,
   };

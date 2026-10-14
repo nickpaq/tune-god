@@ -130,9 +130,18 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
   return null;
 }
 
+/** Bumped whenever the classification rules change, so saved library indexes reclassify unchanged files once instead of keeping stale results. */
+export const CLASSIFIER_VERSION = 2;
+
+/** A folder named exactly 808 or 808s ("808's" too): everything inside is an 808, whatever its length, loop wording or root note. */
+export function is808Folder(folder: string): boolean {
+  return /^808('?s)?$/.test(tidy(folder));
+}
+
 /** Folder hierarchy supplies the family; specific names refine mixed hats and generic folders. */
 export function classifyFile(folders: string[], fileName: string, correction?: SampleClassification): SampleClassification {
   if (correction) return { ...normalizeClassification(correction), confidence: 1, needsReview: false, evidence: "correction" };
+  if (folders.some(is808Folder)) return { category: "bass", confidence: 0.95, needsReview: false, evidence: "folder" };
   const byName = classifyByName(fileName);
   const loop = [...folders, fileName].some((word) => /\bloops?\b/i.test(tidy(word)));
   let category: CategoryId | null = null;
