@@ -3429,8 +3429,12 @@ function App() {
             </details>
             <details className="menu__library-tools menu__section"><summary>Library tools</summary>
               <button className="menu__button" disabled={analyzing > 0 || loading || !!addPackStatus} onClick={() => { setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); }}>Replace kit · keep bank D</button>
-              <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect & refresh files</button>
-              <p>Reselect the folder to include added or removed samples.</p>
+              <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = false; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect files</button>
+              <p>Reselect the folder. Unchanged libraries reconnect instantly; added or removed samples are picked up.</p>
+              <details className="menu__section"><summary>More</summary>
+                <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = true; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reclassify everything</button>
+                <p>Reselect the folder and rerun classification on every file. Your saved Type corrections are kept.</p>
+              </details>
               <button className="menu__button" onClick={() => { setMenuOpen(false); setLibraryToolsOpen(true); }}>Edit sample Types</button>
             </details>
             <details className="menu__library-tools menu__section"><summary>Load individual banks</summary>
