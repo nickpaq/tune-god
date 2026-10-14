@@ -117,6 +117,7 @@ import { SwapList } from "./components/SwapList";
 import { LibraryBrowser } from "./components/LibraryBrowser";
 import { PlaybackEditor } from "./components/PlaybackEditor";
 import { buildScanReport } from "./audio/scanReport";
+import { TOOL_VERSIONS } from "./toolVersions";
 import { FolderTypesModal } from "./components/FolderTypesModal";
 import { DEFAULT_FOLDER_TYPES, DEFAULT_FOLDER_TYPE_NAMES } from "./audio/defaultFolderTypes";
 import { FOLDER_TYPES_FILE_NAME, folderTypesFile, parseFolderTypesFile } from "./audio/folderTypesFile";
@@ -3634,6 +3635,10 @@ function App() {
             />
             </details>
             <button className="menu__button" onClick={() => { setMenuOpen(false); openDebug(); }}>Debug info · copy error report</button>
+            <details className="menu__library-tools menu__section menu__tool-versions">
+              <summary>Tool versions</summary>
+              {TOOL_VERSIONS.map((tool) => <p key={tool.name}>{tool.name} v{tool.version}</p>)}
+            </details>
             <div className="menu__version">
               tunegod v{__APP_VERSION__} · {__APP_BUILD__}
               <br />

@@ -1,14 +1,15 @@
 {
   "name": "tunegod",
   "private": true,
-  "version": "1.15.11",
+  "version": "1.15.12",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release": "npm version patch --no-git-tag-version && python3 scripts/icon/stamp-icons.py"
   },
   "dependencies": {
     "@fontsource/barlow-semi-condensed": "^5.3.0",
