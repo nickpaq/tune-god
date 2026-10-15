@@ -49,7 +49,7 @@
   flex-direction: column;
   gap: 2cqw;
   /* Center the compact grid; its bottom outer margin matches its actual side margins. */
-  padding: 0 4.1cqw calc(2.6cqw + (91.8cqw - var(--pad-grid-width)) / 2);
+  padding: 0 4.1cqw calc(4.1cqw + (88.5cqw - var(--pad-grid-width)) / 2);
   box-shadow: inset 0 1px 0 var(--seam-l);
 }
 
@@ -176,8 +176,8 @@
 .screen-wrap {
   flex: 1;
   min-height: var(--screen-min);
-  /* locked proportions: the screen never grows past this (278 px on the 402 px phone, the size the start-screen squares were approved at), whatever room the viewport leaves */
-  max-height: 69.2cqw;
+  /* locked proportions: the screen never grows past this, whatever room the viewport leaves. 70.8cqw = the OLED's approved 65.2cqw plus the bezel (2.8cqw) on top and bottom, so the start-screen squares keep their approved size */
+  max-height: 70.8cqw;
   position: relative;
   display: flex;
 }
@@ -186,7 +186,7 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  padding: 2cqw 2.8cqw;
+  padding: 2.8cqw;
   border-radius: 2.6cqw;
   background: var(--bezel);
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75), 0 1px 0 var(--seam-l);
@@ -895,8 +895,10 @@
 .padzone {
   position: relative;
   isolation: isolate;
-  margin-inline: -1.5cqw;
-  padding: 1.5cqw;
+  /* hugs the grid: the same spacing on all four sides, and at full size exactly as wide as the screen above it */
+  width: fit-content;
+  margin-inline: auto;
+  padding: 1.65cqw;
   border-radius: 2.6cqw;
   background: #0d0d0e;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8);
@@ -2477,3 +2479,23 @@
 
 .swap-list__search { flex: none; min-width: 0; width: 100%; box-sizing: border-box; font: inherit; font-size: calc(var(--cell) * 6); background: transparent; color: var(--oled); border: 0; border-bottom: 1px solid var(--track); border-radius: 0; padding: var(--cell); }
 .swap-list__foot { display: flex; align-items: center; justify-content: space-between; font-size: calc(var(--cell) * 6); }
+
+/* Hot swap: the title bar, the search field and the page bar collapse while the list is scrolled down, and return on scrolling up. */
+.oled__head, .swap-list__search, .swap-list__foot {
+  transition: height 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.16s ease, padding 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-width 0.22s ease;
+}
+.swap-list__search { box-sizing: border-box; height: calc(var(--cell) * 11); }
+.swap-list__foot { height: max(40px, calc(var(--cell) * 14)); overflow: hidden; }
+.oled[data-swap-chrome="hidden"] .oled__head,
+.oled[data-swap-chrome="hidden"] .swap-list__search,
+.oled[data-swap-chrome="hidden"] .swap-list__foot {
+  height: 0;
+  padding-block: 0;
+  border-bottom-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .oled__head, .swap-list__search, .swap-list__foot { transition: none; }
+}

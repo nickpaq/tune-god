@@ -17,6 +17,7 @@ export const TOOL_VERSIONS: ToolVersion[] = [
   { name: "Synced mode", version: "1.1.0" },
   { name: "Sequencer (SEQ)", version: "1.0.0" },
   { name: "Library index", version: "1.1.0" },
+  { name: "Hot swap", version: "1.1.0" },
   { name: "Classifier rules", version: `${CLASSIFIER_VERSION}.${CLASSIFICATION_VERSION}` },
   { name: "Folder Types", version: "1.0.0" },
   { name: "Mix balance", version: "2.0.0" },
