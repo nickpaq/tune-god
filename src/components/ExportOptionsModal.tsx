@@ -7,7 +7,7 @@ type Flag = Exclude<keyof ExportOptions, "masterStyle">;
 
 /** Asked at every export: what the app may do to the sounds and pads on the way out. The choices are remembered. */
 const CHOICES: { key: Flag; label: string; hint: string }[] = [
-  { key: "normalize", label: "Normalize and balance sounds", hint: "Every file peak-normalized, then each pad's volume turned down to its type's loudness, with harsh sounds (3 to 4 kHz and above) turned down further. Also per-type pad EQ." },
+  { key: "normalize", label: "Apply per-type pad EQ", hint: "A high-pass, mid and high shelf by sound type. Sounds are never made louder or quieter." },
   { key: "colorsAndLabels", label: "Apply colours and labels to pads", hint: "The pad colours and names shown in the app. Off, pads keep what the project gave them." },
   { key: "masterChain", label: "Add the Koala FX master chain", hint: "EQ, drive, compressor, clipper and limiter on the master (replaces effects already there)." },
   { key: "buses", label: "Route to and rename buses", hint: "Kick, Bass, Drums and Melodic buses, with the kick clipper and melodic EQ." },

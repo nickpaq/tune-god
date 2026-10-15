@@ -59,7 +59,6 @@ import {
   type GhostPadExport,
   type TunedSample,
 } from "./audio/exportProject";
-import { applyGainDb } from "./audio/gain";
 import { pitchKnobFor, shiftFor, snapSemitones } from "./audio/shift";
 import {
   fadeIn,
@@ -67,11 +66,6 @@ import {
   kickTransientMs,
   medianTransientMs,
 } from "./audio/kickTransient";
-import {
-  balanceFromStats,
-  FILE_CEILING_DB,
-  type BalanceStats,
-} from "./audio/loudness";
 import {
   CATEGORIES,
   categoryIndex,
@@ -256,7 +250,6 @@ interface LayoutState {
 }
 
 /** Pad volume knob value for a dB level: plain linear amplitude (checked against a Koala project: -60 dB = 0.001, -6 dB = 0.501, 0 dB = 1, +6 dB = 1.995, -inf = 0). */
-const volFromDb = (db: number) => 10 ** (db / 20);
 
 /** A sound from the project itself: not a silent placeholder and not a ghost copy the layout made. */
 const isReal = (p: Pad) =>
@@ -2720,7 +2713,7 @@ function App() {
         for (const [sampleId, pan] of panPlan(Object.values(pads).filter(isReal))) pans.set(sampleId, pan);
       }
       const allPads = Object.values(pads).filter(isReal);
-      // Every file is rendered to its final audio and peak-normalized; the mix is on the Koala volume knob, and every tuning on the pitch knob.
+      // Every file is rendered to its final audio (no loudness matching, no volume knob); every tuning is on the pitch knob.
       // The only audio that is changed is 808 and bass (resampled onto their nearest semitone, then faded in under the kick) and it is measured as it is
       // rendered, so the whole project is never shipped to the worker or copied at once.
       const fade = fadeFor(allPads, options.fade808 && sidechainReady);
@@ -2729,7 +2722,6 @@ function App() {
         channelData: Float32Array[];
         retimed: boolean;
       }[] = [];
-      const stats: BalanceStats[] = [];
       const pitches = new Map<number, number>();
       // Loops with a tempo in their name: the export works out their length in bars from it (and gives each melodic loop a pattern).
       const loopLengths = new Map<number, { bpm: number; seconds: number; melodic: boolean }>();
@@ -2750,35 +2742,20 @@ function App() {
           : pad.channelData;
         if (fade && isEight(pad))
           channelData = fadeIn(channelData, pad.sampleRate, fade);
-        // Levelling is part of Organize: off, the file goes out as it is (after any tuning) and the pad keeps its own volume.
-        if (options.normalize)
-          stats.push(
-            await getRenderWorker().measure({
-              channelData,
-              sampleRate: pad.sampleRate,
-              category: pad.category,
-              harsh: true,
-            }),
-          );
         rendered.push({ pad, channelData, retimed });
         if (isLoopCategory(pad.category) && pad.bpm && pad.bpm > 0 && channelData[0]?.length)
           loopLengths.set(pad.sampleId, { bpm: pad.bpm, seconds: channelData[0].length / pad.sampleRate, melodic: pad.category === "melodicLoop" });
       }
       const vols = new Map<number, number>();
-      const gains = options.normalize
-        ? balanceFromStats(stats, FILE_CEILING_DB)
-        : { gainDb: rendered.map(() => 0), knobDb: rendered.map(() => 0) };
-      rendered.forEach((r, i) => {
-        // Organize off: no mix level is written, and a volume a loader set while Organize was on goes back to 0 dB.
-        if (options.normalize) vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
-        else if (r.pad.knobDb !== undefined) vols.set(r.pad.sampleId, 1);
+      rendered.forEach((r) => {
+        // No loudness matching: files and volume knobs go out as they came, and a volume a loader once set goes back to 0 dB.
+        if (r.pad.knobDb !== undefined) vols.set(r.pad.sampleId, 1);
         tuned.push({
           sampleId: r.pad.sampleId,
           sampleRate: r.pad.sampleRate,
           channelData: r.channelData,
           retimed: r.retimed,
           trimmedFrom: r.pad.trimmedFrom,
-          gainDb: gains.gainDb[i],
         });
       });
       // Ghost snares and soft kicks are made from their source's final audio (tuned and loudness-balanced), then quieted and dulled.
@@ -2789,8 +2766,7 @@ function App() {
         );
         if (!source) continue;
         const at = rendered.findIndex((r) => r.pad === source);
-        let audio = at >= 0 ? rendered[at].channelData : source.channelData;
-        if (at >= 0) audio = applyGainDb(audio, gains.gainDb[at]);
+        const audio = at >= 0 ? rendered[at].channelData : source.channelData;
         ghostExports.push({
           index: gp.index,
           label: GHOST_LABEL[gp.ghost!.kind],
