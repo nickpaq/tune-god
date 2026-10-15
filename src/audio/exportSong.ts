@@ -83,6 +83,10 @@ export function songTemplate(samplerJson: any, sourceSampleId: number): SongTemp
 export const emptySequence = () => ({ lastViewedPath: "", noteSequence: { pattern: { notes: null, numBars: 1 } }, parameterSequences: null });
 
 export const isEmpty = (seq: any) => !Array.isArray(seq?.noteSequence?.pattern?.notes) || seq.noteSequence.pattern.notes.length === 0;
+/** A pattern TuneGod wrote for a melodic loop (see loopPatterns.ts): a chop may take its slot. */
+export const isLoopPattern = (seq: any) => typeof seq?.tunegodLoopPattern === "number";
+/** A slot a chop may write to: empty, or holding a loop pattern. */
+export const isFreeForChop = (seq: any) => isEmpty(seq) || isLoopPattern(seq);
 
 /** The mute group the sections take when the song pad has none: group 7, the first one the sound types do not use (1 to 6), as long as no other pad uses it. */
 export const SECTION_MUTE_GROUP = FIRST_FREE_MUTE_GROUP;
@@ -176,7 +180,7 @@ export async function addSongSections(project: ParsedKoalaProject, samplerJson: 
   while (sequences.length < SEQUENCE_SLOTS) sequences.push(emptySequence());
   if (song.beatsPerBar && song.beatsPerBar > 0) sequence.beatsPerBar = song.beatsPerBar;
   const beatsPerBar = Number(sequence.beatsPerBar) > 0 ? Number(sequence.beatsPerBar) : 4;
-  const freeSlots = sequences.map((s, i) => (isEmpty(s) ? i : -1)).filter((i) => i >= 0);
+  const freeSlots = sequences.map((s, i) => (isFreeForChop(s) ? i : -1)).filter((i) => i >= 0);
 
   // Every section file is peak-normalized, and the gain taken off again on the pad's volume knob so the sections keep their levels to one another
   // (the loudest sits at the vox target loudness; the knob only turns down).

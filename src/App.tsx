@@ -2,7 +2,7 @@ import { eligibleHotSwapSound } from "./audio/hotSwap";
 import { durationMetadata } from "./audio/durationMetadata";
 import { suggestedSongIndex } from "./audio/acapellaRoles";
 import { replaceCorrectedPad } from "./audio/correctPadType";
-import { normalizeClassification } from "./audio/sampleClassification";
+import { isLoopCategory, normalizeClassification } from "./audio/sampleClassification";
 import { openDebug, recordDebug } from "./diagnostics";
 import {
   useCallback,
@@ -2751,6 +2751,8 @@ function App() {
       }[] = [];
       const stats: BalanceStats[] = [];
       const pitches = new Map<number, number>();
+      // Loops with a tempo in their name: the export works out their length in bars from it (and gives each melodic loop a pattern).
+      const loopLengths = new Map<number, { bpm: number; seconds: number; melodic: boolean }>();
       let done = 0;
       for (const pad of allPads) {
         setExportProgress(`${done++}/${allPads.length}`);
@@ -2778,6 +2780,8 @@ function App() {
             }),
           );
         rendered.push({ pad, channelData, retimed });
+        if (isLoopCategory(pad.category) && pad.bpm && pad.bpm > 0 && channelData[0]?.length)
+          loopLengths.set(pad.sampleId, { bpm: pad.bpm, seconds: channelData[0].length / pad.sampleRate, melodic: pad.category === "melodicLoop" });
       }
       const vols = new Map<number, number>();
       const gains = organize
@@ -2859,6 +2863,7 @@ function App() {
         ghosts: ghostExports,
         song: songExport,
         chopper: chopperPad ? chopperExportOf(chopperPad) : undefined,
+        loops: loopLengths,
       });
       downloadBlob(blob, filename);
       haptic("success");

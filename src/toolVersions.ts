@@ -21,4 +21,5 @@ export const TOOL_VERSIONS: ToolVersion[] = [
   { name: "Classifier rules", version: `${CLASSIFIER_VERSION}.${CLASSIFICATION_VERSION}` },
   { name: "Folder Types", version: "1.0.0" },
   { name: "Mix balance", version: "2.0.0" },
+  { name: "Loop patterns", version: "1.0.0" },
 ];
