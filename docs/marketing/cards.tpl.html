@@ -1,0 +1,313 @@
+<meta charset="utf-8">
+<title>KoalaTune Feature Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Silkscreen&display=swap">
+<style>
+/* A tall feature card: one column on the graphite chassis, each feature a panel with its screenshot or diagram; Silkscreen only on OLED-style readouts. */
+:root {
+  --stage: #1a1b1d;
+  --chassis1: #2a2b2e;
+  --chassis2: #222326;
+  --seam: #3a3c40;
+  --edge: #121314;
+  --well: #18191b;
+  --ink: #dcd8cc;
+  --ink-dim: #9a968b;
+  --accent: #ff5b24;
+  --oled: #eef2ec;
+  --font-ui: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-pixel: "Silkscreen", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--stage); color: var(--ink); font-family: var(--font-ui); font-weight: 500; padding-inline: 16px; padding-block: 24px; }
+.card {
+  container-type: inline-size;
+  width: min(100%, 560px); margin-inline: auto;
+  background: var(--chassis1);
+  border-radius: 3cqw; overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--seam), 0 2cqw 6cqw rgba(0,0,0,.55);
+}
+.sec { padding: 7cqw 6cqw; display: grid; gap: 4cqw; border-top: 1px solid var(--edge); box-shadow: inset 0 1px 0 var(--seam); }
+.sec:nth-of-type(even) { background: var(--chassis2); }
+.sec:first-child { border-top: 0; box-shadow: none; }
+.kick { display: flex; align-items: center; gap: 2cqw; font-weight: 700; font-size: 2.8cqw; letter-spacing: .3em; text-transform: uppercase; color: var(--ink-dim); }
+.led { width: 1.8cqw; height: 1.8cqw; border-radius: 50%; background: var(--accent); box-shadow: 0 0 2cqw var(--accent); flex: none; }
+h1, h2 { margin: 0; font-weight: 700; line-height: 1.02; text-wrap: balance; letter-spacing: -.005em; }
+h1 { font-size: 11cqw; }
+h2 { font-size: 8.4cqw; }
+p { margin: 0; font-size: 4cqw; line-height: 1.32; color: var(--ink); max-width: 46ch; }
+p.dim { color: var(--ink-dim); }
+b { color: #fff; font-weight: 700; }
+.oled { background: #000; border-radius: 1.6cqw; padding: 3cqw 3.4cqw; box-shadow: inset 0 0 0 1.2cqw #0b0b0c, inset 0 0 0 1.3cqw var(--edge); font-family: var(--font-pixel); text-transform: uppercase; color: var(--oled); }
+.oled .big { font-size: 6.2cqw; line-height: 1.15; margin: 0; }
+.oled .row { font-size: 3.1cqw; line-height: 1.7; display: flex; justify-content: space-between; gap: 2cqw; }
+.oled .row span:last-child { text-align: right; }
+.oled .dim { opacity: .6; }
+.shot { margin: 0; border-radius: 2.4cqw; overflow: hidden; box-shadow: 0 0 0 .5cqw var(--edge), 0 0 0 .6cqw var(--seam), 0 2cqw 4cqw rgba(0,0,0,.5); background: #000; }
+.shot img { display: block; width: 100%; height: auto; }
+.shot figcaption { padding: 2.2cqw 3cqw; font-size: 3cqw; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); background: var(--well); }
+.hero { display: grid; grid-template-columns: 1fr 41cqw; gap: 4cqw; align-items: end; }
+.hero .shot { transform: rotate(2.5deg); }
+.chips { display: flex; flex-wrap: wrap; gap: 1.6cqw; }
+.chip { font-size: 3cqw; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 1.2cqw 2.4cqw; border-radius: 1cqw; background: #3c3e43; color: var(--ink); box-shadow: 0 2px 0 var(--edge); border-left: 1.2cqw solid var(--c, #777); }
+.map { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1.2cqw 2.4cqw; font-size: 3.4cqw; }
+.map .f { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 3cqw; background: var(--well); padding: 1.2cqw 2cqw; border-radius: 1cqw; color: var(--ink); overflow-wrap: anywhere; }
+.map .a { color: var(--accent); font-weight: 700; }
+.map .t { font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); }
+.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 2.4cqw; counter-reset: s; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 8cqw 1fr; gap: 3cqw; align-items: start; font-size: 3.7cqw; line-height: 1.3; }
+.steps li::before { content: counter(s); display: grid; place-items: center; width: 8cqw; height: 8cqw; border-radius: 1.2cqw; background: #3c3e43; box-shadow: 0 2px 0 var(--edge); font-weight: 700; font-size: 4cqw; color: var(--accent); }
+.steps b { display: block; font-size: 4cqw; }
+figure.diagram { margin: 0; background: var(--well); border-radius: 2cqw; padding: 3.4cqw; box-shadow: inset 0 0 0 1px var(--edge); }
+figure.diagram figcaption { margin-top: 2.4cqw; font-size: 3cqw; color: var(--ink-dim); line-height: 1.3; }
+svg { display: block; width: 100%; height: auto; }
+svg text { font-family: var(--font-ui); fill: var(--ink-dim); }
+.specs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2cqw; }
+.spec { background: #000; border-radius: 1.2cqw; padding: 2.6cqw 3cqw; box-shadow: inset 0 0 0 .8cqw #0b0b0c; font-family: var(--font-pixel); text-transform: uppercase; color: var(--oled); }
+.spec .v { font-size: 5.4cqw; line-height: 1.1; }
+.spec .k { font-size: 2.3cqw; line-height: 1.5; opacity: .6; margin-top: 1.2cqw; }
+table { width: 100%; border-collapse: collapse; font-size: 3.4cqw; font-variant-numeric: tabular-nums; }
+td { padding: 1.6cqw 0; border-top: 1px solid var(--edge); vertical-align: top; }
+td:first-child { color: var(--ink-dim); width: 40%; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 3cqw; align-items: start; }
+.foot { padding: 6cqw; text-align: center; background: var(--chassis2); border-top: 1px solid var(--edge); display: grid; gap: 1.6cqw; }
+.foot .n { font-weight: 700; font-size: 5cqw; letter-spacing: .4em; text-transform: uppercase; }
+.foot .m { font-weight: 600; font-size: 2.6cqw; letter-spacing: .24em; text-transform: uppercase; color: var(--ink-dim); }
+
+.threeup { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqw; align-items: start; }
+.threeup .shot { border-radius: 1.6cqw; }
+.threeup figcaption { padding: 1.4cqw 1.6cqw; font-size: 2.4cqw; }
+</style>
+
+<main class="card">
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Koala Sampler companion</div>
+  <h1>Drop a folder.<br>Get a kit, in key.</h1>
+  <div class="hero">
+    <div style="display:grid;gap:3.4cqw">
+      <p>KoalaTune builds a Koala kit from your sample library, tunes it to your key and exports a .koala project. It runs on your phone. Nothing is uploaded.</p>
+      <div class="chips" style="--c:#999">
+        <span class="chip">18 sound types</span><span class="chip">Offline PWA</span><span class="chip">Exports .koala</span>
+      </div>
+    </div>
+    <figure class="shot"><img alt="The start screen: Project, Drums, Kit and Chopper" src="data:image/webp;base64,@@start@@"></figure>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Build a kit</div>
+  <h2>Point it at your whole library.</h2>
+  <p>Reconnect your sample folder, tick the packs you want and press <b>Generate kit</b>. KoalaTune fills <b>48 pads across banks A to C</b> and leaves bank D for chops. Only names, sizes, durations and Types are kept on the device, never the audio.</p>
+  <figure class="shot"><img alt="The sample library: three packs with a dot for every sound type they hold" src="data:image/webp;base64,@@lib@@"><figcaption>Each pack shows a dot for every sound Type it holds</figcaption></figure>
+  <div class="specs">
+    <div class="spec"><div class="v">A</div><div class="k">MPC drum layout, 16 pads</div></div>
+    <div class="spec"><div class="v">B · C</div><div class="k">Mixed rows: loops, vocals and FX, melodic, bass</div></div>
+    <div class="spec"><div class="v">D</div><div class="k">Left for your chops</div></div>
+    <div class="spec"><div class="v">0 audio</div><div class="k">Stored from your library</div></div>
+  </div>
+  <p class="dim">The requested Type comes first and gaps are filled at random with sounds of other Types, never a made-up shortage. <b>Balance across packs</b> alternates the packs you picked. Locked pads stay as they are when you build again.</p>
+  <div class="threeup">
+    <figure class="shot"><img alt="Bank A, the drum kit" src="data:image/webp;base64,@@kitA@@"><figcaption>Bank A</figcaption></figure>
+    <figure class="shot"><img alt="Bank B" src="data:image/webp;base64,@@kitB@@"><figcaption>Bank B</figcaption></figure>
+    <figure class="shot"><img alt="Bank C" src="data:image/webp;base64,@@kitC@@"><figcaption>Bank C</figcaption></figure>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Classification</div>
+  <h2>It reads folders, names, tempo and key.</h2>
+  <p>Every file is typed from its <b>whole folder path</b>, its file name and aliases, and your saved corrections, and keeps a confidence score. Sounds nothing could type are flagged for review instead of being dropped on a random pad.</p>
+  <figure class="diagram">
+    <div class="map">
+      <div class="f">Rio/Drums/Snares/</div><div class="a">→</div><div class="t">Snare</div>
+      <div class="f">Rio/808s/</div><div class="a">→</div><div class="t">Bass (808)</div>
+      <div class="f">Kick_140_BPM.wav</div><div class="a">→</div><div class="t">Drum Loop</div>
+      <div class="f">Pad_Am_90bpm.wav</div><div class="a">→</div><div class="t">Melodic Loop</div>
+      <div class="f">Rio/Risers/</div><div class="a">→</div><div class="t">FX</div>
+      <div class="f">Snare Roll 03.wav</div><div class="a">→</div><div class="t">Drum Loop</div>
+    </div>
+    <figcaption>A stated tempo makes a loop; a take number at the end ("Kick 120") does not. Producer tags such as [tumfy] or @twowav are stripped before a name is read.</figcaption>
+  </figure>
+  <ul class="steps">
+    <li><span><b>Eighteen Types.</b>Kick, snare, clap, closed and open hat, cymbal, vox, perc, melodic, bass, FX, other, and the loop versions of drums, perc, melodic, bass, vocal and FX.</span></li>
+    <li><span><b>Keyed loops.</b>A sound over five seconds with a key in its name ("Ambient_B_minor", "F# major") is a Melodic Loop, unless the name says bass or another Type.</span></li>
+    <li><span><b>Folder Types.</b>Folders nothing could type are listed with a picker each. Your choice beats the built-in rules, and the list can be exported and shared.</span></li>
+  </ul>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Four banks</div>
+  <h2>Or load each bank your own way.</h2>
+  <p>Each loader fills only its bank and leaves the others alone. Sounds are named by Type and number, and the pad's Koala label uses that name. Bass, melodic loops and melodic one-shots are tuned by default.</p>
+  <table>
+    <tr><td>Bank A: Drums</td><td>A pack with subfolders. Type comes from the folder name: 10 kicks, 10 snares, 5 closed and 5 open hats, 5 of every other drum type</td></tr>
+    <tr><td>Bank B: Melodic Loops</td><td>A folder of loops: 12 at random on the top three rows, plus 4 spares</td></tr>
+    <tr><td>Bank B: 808 &amp; Bass</td><td>Two basses and two 808s on the bottom row, four spares of each</td></tr>
+    <tr><td>Bank C: One Shots</td><td>A folder of one-shots: 16 at random, plus 4 spares</td></tr>
+    <tr><td>Bank D: Chopper</td><td>Acapella, chopper or synced mode (below)</td></tr>
+  </table>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Hot swap and shuffle</div>
+  <h2>Every sound in your library, one tap away.</h2>
+  <p>Select a pad and the screen lists the other sounds of its Type from your connected library. Search, preview with Play, tap the swap key, or <b>star</b> a sound to keep it on the device for later projects. The list grows 50 rows at a time as you scroll, and only the sound you ask for is decoded.</p>
+  <figure class="shot"><img alt="Hot swap list for a snare pad with search, star, play and swap keys" src="data:image/webp;base64,@@swap@@"><figcaption>Hot swap: star, play, swap</figcaption></figure>
+  <p class="dim">Names are cleaned up for reading: the pack tag, tempo, key and Type words are taken out, and the tempo and key are shown dimmed after the name.</p>
+  <figure class="shot"><img alt="Dragging a pad turns the screen into Shuffle, Delete, Lock and Chopper" src="data:image/webp;base64,@@drag@@"><figcaption>Drag a pad: Shuffle, Delete, Lock, Chopper</figcaption></figure>
+  <ul class="steps">
+    <li><span><b>Shuffle.</b>Loads a random sound of the same Type from your library. Offline it uses the hot-swap pool and keeps the pad's Type.</span></li>
+    <li><span><b>Lock.</b>A locked pad shows a padlock, and building a kit or loading a bank never touches it.</span></li>
+    <li><span><b>Fix a Type.</b>Re-type a sound and it moves to hot swap while a sound of the intended Type takes the slot, or a labelled gap if there is none.</span></li>
+  </ul>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Pitch detection</div>
+  <h2>It finds the root note for you.</h2>
+  <p>Every pad is analysed on a background worker with a custom <b>YIN</b> tracker (de Cheveigné and Kawahara, 2002). It needs no model weights, which keeps the install small on a phone, and it is accurate on clean one-shots.</p>
+  <div class="specs">
+    <div class="spec"><div class="v">2048</div><div class="k">Frame size, samples</div></div>
+    <div class="spec"><div class="v">512</div><div class="k">Hop, samples</div></div>
+    <div class="spec"><div class="v">0.15</div><div class="k">CMND threshold</div></div>
+    <div class="spec"><div class="v">40–4000 Hz</div><div class="k">Search range</div></div>
+  </div>
+  <p class="dim">YIN's classic failure is locking onto the 3rd harmonic, which would retune a sample five to seven semitones wrong, so an early dip only counts if it is nearly as deep as the global best and frames vote on a pitch class. <b>Melodic loops</b> are keyed from chroma instead, as a key rather than a note. A key written in the file name beats any measurement, and a pad whose key came from its name is drawn a shade darker: the darkness says the tuning is sure.</p>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Tune</div>
+  <h2>Pick a key. Every pad follows.</h2>
+  <figure class="shot"><img alt="Tune screen with piano keys, Minor and Tone keys and ticks on the tuned pads" src="data:image/webp;base64,@@tune@@"><figcaption>Tune: key, shift, waveform, pitch slider</figcaption></figure>
+  <ul class="steps">
+    <li><span><b>Tap a note on the piano.</b>Bass, melodic one-shots and melodic loops retune to it, and a tick marks every pad that moved. Drums are left alone. Tap the same note again and everything returns to its own pitch.</span></li>
+    <li><span><b>Minor or Major.</b>Says whether the key you picked is minor (the default) or major. A loop is moved by whole semitones into the same key.</span></li>
+    <li><span><b>Tone.</b>Plays a reference tone on the key under a pad. A sine for most sounds, a soft saw chord for a melodic loop, and the pixel knob sets its volume.</span></li>
+    <li><span><b>Written to Koala's pitch knob.</b>Every tuning goes into the pad's pitch, to two decimals, so what you hear is what Koala plays.</span></li>
+  </ul>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Pitch slider</div>
+  <h2>The lower your finger, the finer the control.</h2>
+  <p>One slider per pad, built from scratch because iOS Safari fights native range inputs. Grab it and the pad loops at its current tuning with the reference tone on the key, and both stop when you let go.</p>
+  <ul class="steps">
+    <li><span><b>Semitone mode.</b>The value lands on whole semitones, with a detent mark for each of the 25. Any cents the pad already has are kept.</span></li>
+    <li><span><b>Tap for cents.</b>The line bends into a tuner dial with a hand, 55 cents either side. Past that the pitch steps to the next semitone and the dial centres on it.</span></li>
+    <li><span><b>Slide down the screen.</b>The thumb follows your finger, slowing smoothly to a tenth of the speed toward the bottom.</span></li>
+    <li><span><b>Double-tap resets.</b>Back to the middle, in whichever mode you were in.</span></li>
+    <li><span><b>Finger above the slider.</b>On a melodic loop, Minor and Major squares appear and the chord swaps to the relative key's.</span></li>
+  </ul>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>808 and bass</div>
+  <h2>Rendered to the semitone with a 256-tap sinc.</h2>
+  <p>The pitch knob carries almost every tuning, but 808s and basses are rendered tuned, onto the nearest semitone,. They are read from the second half of the sound, where the glide has settled. The resampler is built to sit far below the 24-bit noise floor.</p>
+  <div class="specs">
+    <div class="spec"><div class="v">256 taps</div><div class="k">128 each side of the read position</div></div>
+    <div class="spec"><div class="v">β = 14</div><div class="k">Kaiser window, about 140 dB stopband</div></div>
+    <div class="spec"><div class="v">4096</div><div class="k">Kernel phases per sample, linearly interpolated</div></div>
+    <div class="spec"><div class="v">float64</div><div class="k">Accumulation</div></div>
+    <div class="spec"><div class="v">−145 dB</div><div class="k">Error on pure tones, to about −150 dB</div></div>
+    <div class="spec"><div class="v">19 kHz</div><div class="k">Response flat through</div></div>
+  </div>
+  <figure class="diagram">
+    <svg viewBox="0 0 480 250" role="img" aria-label="The Kaiser-windowed sinc kernel, full and zoomed"><g id="kern"></g></svg>
+    <figcaption>The actual kernel, computed here with the same parameters: sinc(πd) × Kaiser(β = 14), over ±128 taps, and a zoom on the centre ±6.</figcaption>
+  </figure>
+  <p class="dim">A 808 can also get a soft fade-in as long as your kicks' main transient, so the kick hits through without a sidechain. Opt in from the export box.</p>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Chop</div>
+  <h2>Cut a song into a playable kit.</h2>
+  <p>Bank D is the chops' bank. Three modes, all reached from the Chopper key.</p>
+  <div class="specs">
+    <div class="spec"><div class="v">127</div><div class="k">Slices on one Koala chopper pad</div></div>
+    <div class="spec"><div class="v">16</div><div class="k">Section pads in acapella and synced mode</div></div>
+    <div class="spec"><div class="v">4 · 8</div><div class="k">Chop by, in acapella mode</div></div>
+    <div class="spec"><div class="v">64</div><div class="k">Pads you can send chops to</div></div>
+  </div>
+  <ul class="steps">
+    <li><span><b>Chopper.</b>Any sample becomes one chopper pad with up to 127 slices, picked by velocity. A pattern maker arranges them into a new sequence, from one to sixteen bars.</span></li>
+    <li><span><b>Acapella.</b>Give it a song and its vocal stem, from a project or as two audio files. The cuts are found on the song and made on the stem, so you get 16 section pads with a pattern each, in time and stretched.</span></li>
+    <li><span><b>Synced.</b>The same as acapella without the stem: markers go on the sample and the same sound is cut into 16 sections.</span></li>
+    <li><span><b>Your pads, your choice.</b>Chops go to the pads you tick on a four-bank grid. Nothing is overwritten until you confirm.</span></li>
+  </ul>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Export</div>
+  <h2>Tick what the app should do for you.</h2>
+  <p>Unticked, sounds and pads come out exactly as they went in. Nothing is made louder or quieter.</p>
+  <figure class="shot"><img alt="The export box: per-type pad EQ, colours and labels, master chain, buses, melodic loop patterns, project name, BPM and A4" src="data:image/webp;base64,@@export@@"><figcaption>Export options, project name, BPM and A4</figcaption></figure>
+  <table>
+    <tr><td>Pad EQ</td><td>A high-pass, mid and high shelf by sound type</td></tr>
+    <tr><td>Master chain</td><td>Koala FX: EQ, drive, compressor, clipper and limiter, Dynamic or Loud. It replaces effects already there, and the app warns first</td></tr>
+    <tr><td>Buses</td><td>Kick, Bass, Drums and Melodic buses, with a kick clipper and a melodic EQ</td></tr>
+    <tr><td>Patterns</td><td>Each melodic loop gets its own pattern of its length in bars</td></tr>
+    <tr><td>Stereo</td><td>Optional pan spread for hats (±30%) and melodic sounds (±40%)</td></tr>
+    <tr><td>File name</td><td>name - key - bpm.koala, with a random name taken from your own sounds</td></tr>
+  </table>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Koala settings</div>
+  <h2>Every pad set up the way Koala wants it.</h2>
+  <p>Type defaults apply first, then your own Type settings, then anything you set on one pad. Loops get their length in bars, snapped to 2, 4, 8 or 16 from the name's tempo or the project BPM, because Koala does not detect it.</p>
+  <figure class="shot" style="max-width:74%;margin-inline:auto"><img alt="Koala export settings for the selected pad: bus, one shot, choke group, stretch" src="data:image/webp;base64,@@ktps@@"><figcaption>Bus, one shot, choke group and stretch, per Type or per pad</figcaption></figure>
+  <table>
+    <tr><td>Choke groups</td><td>Closed and open hats 1, cymbals 2, drum and perc loops 3, melodic loops 4, bass and 808 5, vocal loops 6</td></tr>
+    <tr><td>One-shots</td><td>One shot on, stretch off</td></tr>
+    <tr><td>Loops</td><td>One shot off, stretch on: Beats for drum and perc loops, Modern for the rest</td></tr>
+    <tr><td>Labels</td><td>Compact, from the Type: M Loop, D Loop, HH Closed, HH Open, M Oneshot</td></tr>
+  </table>
+</section>
+
+<section class="sec">
+  <div class="kick"><span class="led"></span>Colour schemes</div>
+  <h2>About thirty of them, all live.</h2>
+  <p>A scheme is ten tone colours for the pads and sound types, a lamp colour for the keys and switches, and an optional tint for the chassis. Pads, type keys, chops and the exported pad colours all follow it, and changing it recolours everything at once. Snare, cymbal and perc always stay well apart.</p>
+  <figure class="shot" style="max-width:74%;margin-inline:auto"><img alt="The colour scheme list with Organ selected" src="data:image/webp;base64,@@scheme@@"><figcaption>Colour scheme: Organ is the default</figcaption></figure>
+</section>
+
+<div class="foot"><div class="n">KoalaTune</div><div class="m">Local-first · installs to your home screen · works offline</div></div>
+</main>
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent, text) {
+    var n = document.createElementNS(NS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    parent.appendChild(n); return n;
+  }
+  var INK = "#dcd8cc", DIM = "#9a968b", ACC = "#ff5b24", TRK = "#3a3c40";
+
+  /* Kaiser-windowed sinc, beta 14, 128 taps each side */
+  function i0(x) { var s = 1, t = 1, q = x * x / 4; for (var k = 1; k < 60; k++) { t *= q / (k * k); s += t; if (t < s * 1e-16) break; } return s; }
+  var BETA = 14, HALF = 128, NORM = i0(BETA);
+  function kern(d) { var r = d / HALF; if (Math.abs(r) >= 1) return 0; var x = Math.PI * d; return (d === 0 ? 1 : Math.sin(x) / x) * i0(BETA * Math.sqrt(1 - r * r)) / NORM; }
+  var kn = document.getElementById("kern");
+  function plot(x0, y0, w, h, range, title, step) {
+    el("rect", { x: x0, y: y0, width: w, height: h, fill: "none", stroke: TRK }, kn);
+    el("line", { x1: x0, x2: x0 + w, y1: y0 + h * 0.72, y2: y0 + h * 0.72, stroke: TRK }, kn);
+    var d = "";
+    for (var s = -range; s <= range; s += step) {
+      var px = x0 + (s + range) / (2 * range) * w, py = y0 + h * 0.72 - kern(s) * h * 0.66;
+      d += (d ? "L" : "M") + px.toFixed(1) + " " + py.toFixed(1);
+    }
+    el("path", { d: d, fill: "none", stroke: INK, "stroke-width": 1.2 }, kn);
+    el("text", { x: x0, y: y0 - 6, "font-size": 11, "font-weight": 600 }, kn, title);
+    el("text", { x: x0, y: y0 + h + 14, "font-size": 10 }, kn, "−" + range + " taps");
+    el("text", { x: x0 + w, y: y0 + h + 14, "text-anchor": "end", "font-size": 10 }, kn, "+" + range + " taps");
+  }
+  plot(0, 22, 232, 190, 128, "Full kernel, 256 taps", 0.25);
+  plot(248, 22, 232, 190, 6, "Centre, ±6 taps", 0.02);
+})();
+</script>

@@ -1,0 +1,17 @@
+import { open, b, S } from "./lib.tmp.mjs";
+const L="/tmp/claude-0/-home-user-tune-god/097905a2-ce7d-57e6-80ba-3260f8a663d5/scratchpad/mk/lib";
+const p=await open(402,874); await p.waitForTimeout(1200);
+await p.locator("button",{hasText:/^\s*kit\s*$/i}).first().click(); await p.waitForTimeout(800);
+const [fc]=await Promise.all([p.waitForEvent("filechooser"),p.locator("button",{hasText:/reconnect files/i}).first().click()]);
+await fc.setFiles(L); await p.waitForTimeout(15000);
+await p.screenshot({path:S+"lib1.png"});
+await p.locator("button",{hasText:/select all/i}).first().click(); await p.waitForTimeout(600);
+await p.screenshot({path:S+"lib2.png"});
+await p.locator("button",{hasText:/generate kit/i}).first().click(); await p.waitForTimeout(30000);
+await p.screenshot({path:S+"kit1.png"});
+console.log("pads",(await p.$$(".pad--loaded")).length);
+const tap=async(i)=>{const r=await p.locator(".pad").nth(i).boundingBox(); await p.mouse.move(r.x+r.width/2,r.y+r.height/2); await p.mouse.down(); await p.mouse.up(); await p.waitForTimeout(900);};
+await tap(13); await p.screenshot({path:S+"swapL.png"});
+await p.click('button[aria-label="Bank B"]'); await p.waitForTimeout(600); await p.screenshot({path:S+"kitB.png"});
+await p.click('button[aria-label="Bank C"]'); await p.waitForTimeout(600); await p.screenshot({path:S+"kitC.png"});
+await b.close();
