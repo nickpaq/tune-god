@@ -66,7 +66,7 @@ export interface Pad {
   chopper?: { page?: number; sourceSampleId: number; slices: number; bpm: number; beatsPerBar: number; pitch: number; layout: { starts: number[]; sections: { slice: number; bars: number }[] }; color?: string; /** The chops as the pattern maker lists them, and the sequence it made (none until Done). */ maker?: { chops: MakerChop[]; /** The sample's frames to a beat at its own tempo. */ beatFrames: number; grid?: TapGrid; rhythm?: RhythmPattern; slots?: Slot[] } };
   /** The tempo the file name states ("140bpm"), when it does: a loop of this tempo can be stretched to the project's. */
   bpm?: number;
-  /** The key the pad is tuned from was read from its file name (a sure one), not detected from the audio: its pad is shaded darker. */
+  /** The key the pad is tuned from was read from its file name rather than detected from the audio. It does not change the pad's colour (the colour scheme alone does). */
   keyFromName?: boolean;
   /** The loop is stretched from its own tempo to the project tempo (written to the export as Koala's stretch). */
   stretch?: boolean;

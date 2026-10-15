@@ -72,7 +72,6 @@ import {
 import {
   chopColor,
   colorFor,
-  darker,
   paletteById,
   shade,
   DEFAULT_PALETTE_ID,
@@ -2821,8 +2820,7 @@ function App() {
     if (p.section) return chopColor(palette.colors, p.section.colorIndex ?? 0);
     const base = colorFor(palette, p.category ?? "other");
     if (p.ghost) return shade(base, 2);
-    // A key read from the file name is a sure one: the pad is a slightly darker shade. A key that was only detected leaves the normal shade.
-    return p.keyFromName ? darker(base) : base;
+    return base;
   };
   /** Generated Bank A sounds keep their template labels; other sounds show their numbered Type or detail. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
