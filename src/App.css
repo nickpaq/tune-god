@@ -2487,7 +2487,7 @@
   transition: height 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.16s ease, padding 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-width 0.22s ease;
 }
 .swap-list__search { box-sizing: border-box; height: calc(var(--cell) * 11); }
-.swap-list__foot { height: max(40px, calc(var(--cell) * 14)); overflow: hidden; }
+.swap-list__foot { height: calc(var(--cell) * 10); overflow: hidden; justify-content: center; text-align: center; }
 .oled[data-swap-chrome="hidden"] .oled__head,
 .oled[data-swap-chrome="hidden"] .swap-list__search,
 .oled[data-swap-chrome="hidden"] .swap-list__foot {

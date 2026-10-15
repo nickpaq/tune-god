@@ -30,6 +30,9 @@ const SwapGlyph = () => (
  */
 /** Scroll distances (px) for the collapsing bars: down this far hides them, up this far brings them back, and a list must have this much to scroll before they hide. */
 const HIDE_AFTER = 32;
+/** Rows added per step of the infinite scroll, and how close (px) to the end of the list the next step starts. */
+const BATCH = 50;
+const LOAD_AHEAD = 400;
 const SHOW_AFTER = 16;
 const MIN_SCROLL_TO_HIDE = 160;
 
@@ -59,10 +62,11 @@ export function SwapList({
   const preview = useSoundPreview();
   const rows = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState(0);
+  // The list grows as it is scrolled: BATCH rows at first, BATCH more each time the end comes within LOAD_AHEAD px (there are no pages).
+  const [shown, setShown] = useState(BATCH);
   const [loading, setLoading] = useState(false);
   const request = useRef(0);
-  // The title bar, the search field and the page bar hide while the list is scrolled down and come back on scrolling up (the usual collapsing-header pattern).
+  // The title bar, the search field and the count bar hide while the list is scrolled down and come back on scrolling up (the usual collapsing-header pattern).
   const [chromeHidden, setChromeHidden] = useState(false);
   const hiddenNow = useRef(false);
   const lastTop = useRef(0);
@@ -78,6 +82,7 @@ export function SwapList({
     const el = rows.current;
     if (!el) return;
     const top = el.scrollTop;
+    if (el.scrollHeight - top - el.clientHeight < LOAD_AHEAD) setShown(n => (n < filtered.length ? n + BATCH : n));
     const delta = top - lastTop.current;
     lastTop.current = top;
     if (performance.now() < settleUntil.current || delta === 0) return;
@@ -92,12 +97,10 @@ export function SwapList({
     oled?.setAttribute("data-swap-chrome", chromeHidden ? "hidden" : "shown");
     return () => oled?.removeAttribute("data-swap-chrome");
   }, [chromeHidden]);
-  // A new pad, a new page or a new search starts at the top with the bars showing.
-  useEffect(() => { lastTop.current = 0; if (hiddenNow.current) setChrome(false); }, [slotLabel, page, query]);
+  // A new pad or a new search starts at the top with the bars showing.
+  useEffect(() => { lastTop.current = 0; if (hiddenNow.current) setChrome(false); }, [slotLabel, query]);
   const filtered = useMemo(() => candidates.filter(pad => `${pad.name} ${pad.sourcePath ?? ""}`.toLowerCase().includes(query.toLowerCase())), [candidates, query]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / 50));
-  const currentPage = Math.min(page, pageCount - 1);
-  const visible = filtered.slice(currentPage * 50, (currentPage + 1) * 50);
+  const visible = filtered.slice(0, shown);
   const audition = async (pad: Pad) => {
     if (loading || busy) return;
     const token = ++request.current;
@@ -118,13 +121,13 @@ export function SwapList({
     request.current++;
     setLoading(false);
     setQuery("");
-    setPage(0);
+    setShown(BATCH);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotLabel]);
   useEffect(() => () => { request.current++; }, []);
   return (
     <div className="swap-list">
-      <input className="swap-list__search" aria-label="Search hot-swap sounds" placeholder="Search sounds" value={query} onChange={event => { setQuery(event.target.value); setPage(0); if (rows.current) rows.current.scrollTop = 0; }} />
+      <input className="swap-list__search" aria-label="Search hot-swap sounds" placeholder="Search sounds" value={query} onChange={event => { setQuery(event.target.value); setShown(BATCH); if (rows.current) rows.current.scrollTop = 0; }} />
       <div className="swap-list__rows" ref={rows} onScroll={onScroll}>
         {filtered.length === 0 && <div className="swap-list__empty">No other sounds to swap in</div>}
         {visible.map((pad) => {
@@ -173,9 +176,7 @@ export function SwapList({
         })}
       </div>
       <div className="swap-list__foot">
-        <button className="swap-row__btn" aria-label="Previous hot-swap page" disabled={currentPage === 0 || loading || busy} onClick={() => { setPage(currentPage - 1); if (rows.current) rows.current.scrollTop = 0; }}>‹</button>
-        <span>{loading || busy ? "Loading…" : `${filtered.length} sounds · ${currentPage + 1}/${pageCount}`}</span>
-        <button className="swap-row__btn" aria-label="Next hot-swap page" disabled={currentPage + 1 === pageCount || loading || busy} onClick={() => { setPage(currentPage + 1); if (rows.current) rows.current.scrollTop = 0; }}>›</button>
+        <span>{loading || busy ? "Loading…" : `${filtered.length.toLocaleString()} sounds`}</span>
       </div>
     </div>
   );
