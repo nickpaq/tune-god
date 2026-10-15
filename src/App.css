@@ -2494,7 +2494,7 @@
   scroll-padding-bottom: var(--foot-h);
 }
 .swap-list__search { position: absolute; top: var(--head-h, 0px); left: 0; right: 0; z-index: 2; height: var(--search-h); background: #000; }
-.swap-list__foot { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; height: var(--foot-h); display: flex; align-items: center; justify-content: center; text-align: center; background: #000; opacity: 1; border-top: 1px solid var(--track); box-sizing: border-box; }
+.swap-list__foot { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; height: var(--foot-h); display: flex; align-items: center; justify-content: center; text-align: center; opacity: 1; pointer-events: none; box-sizing: border-box; } /* no bar behind the count: the rows show through it */
 .swap-list__foot > span { opacity: 0.6; }
 .oled__head, .swap-list__search, .swap-list__foot { transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1); will-change: transform; }
 .oled--swap:has(.swap-list[data-chrome="hidden"]) .oled__head { transform: translateY(-100%); }
