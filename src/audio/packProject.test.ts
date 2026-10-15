@@ -124,10 +124,10 @@ describe("sounds the user picks themselves", () => {
 
   it("accepts a picked sound whose pack name says loop, and reports the loop name for an automatic load", async () => {
     const reasons: string[] = [];
-    const auto = await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("Bass hit.wav", ["Loop Kit", "bass"])] }], { existing: [], byteBudget: 1000000, onSkip: (reason) => reasons.push(reason) });
+    const auto = await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("Bass hit.wav", ["Loops", "bass"])] }], { existing: [], byteBudget: 1000000, onSkip: (reason) => reasons.push(reason) });
     expect(auto).toBeNull();
     expect(reasons[0]).toContain("says loop");
-    expect(await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("Bass hit.wav", ["Loop Kit", "bass"])] }], { existing: [], byteBudget: 1000000, explicit: true })).not.toBeNull();
+    expect(await writeBankSounds(project(), [{ category: "bass", want: 1, candidates: [long("Bass hit.wav", ["Loops", "bass"])] }], { existing: [], byteBudget: 1000000, explicit: true })).not.toBeNull();
   });
 
   it("names the size limit when a sound is too big for the room left", async () => {

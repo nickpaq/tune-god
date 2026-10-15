@@ -651,6 +651,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Tempo and key found in the file name, after the name. */
+.swap-row__meta {
+  flex: none;
+  opacity: 0.55;
+  white-space: nowrap;
+}
 
 /* OLED buttons: an outlined box, in inverse video while pressed or playing */
 .swap-row__btn {
@@ -2495,7 +2501,19 @@
 }
 .swap-list__search { position: absolute; top: var(--head-h, 0px); left: 0; right: 0; z-index: 2; height: var(--search-h); background: #000; }
 /* a black bar at 60% opacity, so the rows scrolling under it show through dimmed; it does not take touches, so a row under it still gets the tap */
-.swap-list__foot { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; height: var(--foot-h); display: flex; align-items: center; justify-content: center; text-align: center; background: #000; opacity: 0.6; pointer-events: none; box-sizing: border-box; }
+.swap-list__foot { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; height: var(--foot-h); display: flex; align-items: center; justify-content: center; gap: calc(var(--cell) * 8); text-align: center; background: rgba(0, 0, 0, 0.6); opacity: 1; pointer-events: none; box-sizing: border-box; }
+/* The two keys of the count bar: the sounds count (all sounds) and the star (favorites only). The chosen one is bright, the other dim; only the keys take touches. */
+.swap-foot__key { pointer-events: auto; flex: none; font: inherit; color: var(--oled); background: transparent; border: 0; padding: 0 var(--cell); opacity: 0.45; cursor: pointer; }
+.swap-foot__key.is-on { opacity: 1; }
+.swap-foot__star { display: grid; place-items: center; width: calc(var(--cell) * 9); height: calc(var(--cell) * 8); border: var(--cell) solid var(--oled); padding: 0; }
+.swap-foot__star svg { width: calc(var(--cell) * 5); height: calc(var(--cell) * 5); fill: currentColor; }
+/* A favorite is lit white with its text knocked out in unlit pixels (inverse video); in favorites mode every row is one. */
+.swap-row--favorite { background: var(--oled); color: #000; }
+.swap-row--favorite .swap-row__meta { opacity: 0.6; }
+.swap-row--favorite .swap-row__btn { border-color: #000; color: #000; }
+.swap-row--favorite .swap-row__favorite.is-favorite { color: #000; }
+.swap-row--favorite .swap-row__btn:active,
+.swap-row--favorite .swap-row__btn--on { background: #000; color: var(--oled); }
 .oled__head, .swap-list__search, .swap-list__foot { transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1); will-change: transform; }
 .oled--swap:has(.swap-list[data-chrome="hidden"]) .oled__head { transform: translateY(-100%); }
 .swap-list[data-chrome="hidden"] .swap-list__search { transform: translateY(calc(-100% - var(--head-h, 0px))); }

@@ -122,22 +122,22 @@ export function isKitCategory(category: CategoryId | undefined): boolean {
 // would otherwise get into its loop version (see LOOP_OF); breaks count as drum loops.
 /** Words that name a pitched instrument or sound. Also used to spot a melodic folder by its file names (see inferMelodicFolders). */
 export const MELODIC_NAME =
-  /\b(pianos?|keys?|keyboards?|bells?|plucks?|plucked|guitars?|ukulele|banjo|mandolin|sitar|harps?|mallets?|marimbas?|kalimbas?|rhodes|wurlitzer|epianos?|stabs?|vibraphones?|vibes|glock(enspiel)?s?|xylophones?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|violins?|violas?|cellos?|organs?|accordion|harmonica|harpsichord|clavinet|clav|mellotron|moog|juno|arps?|saw|brass|horns?|trumpets?|trombones?|saxes|saxophones?|sax|clarinets?|oboes?|bassoon|flutes?|pan ?flutes?|orchestra|orchestral|melodic|melody|melodies|tonal|pitched)\b/;
+  /\b(pianos?|keys?|keyboards?|bells?|plucks?|plucked|guitars?|ukulele|banjo|mandolin|sitar|harps?|mallets?|marimbas?|kalimbas?|rhodes|wurlitzer|epianos?|stabs?|vibraphones?|vibes|glock(enspiel)?s?|xylophones?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|violins?|violas?|cellos?|organs?|accordion|harmonica|harpsichord|clavinet|clav|mellotron|moog|juno|arps?|saw|brass|horns?|trumpets?|trombones?|saxes|saxophones?|sax|clarinets?|oboes?|bassoon|flutes?|pan ?flutes?|orchestra|orchestral|pizzicato|spiccato|staccato|woodwinds?|melodic|melody|melodies|tonal|pitched)\b/;
 
 const NAME_RULES: [CategoryId | "hat", RegExp][] = [
-  ["drumLoop", /\b(break|breakbeat|amen|drum loops?|drums loops?|beat loops?)\b/],
-  ["kick", /\b(kick|kik|bd|bassdrum|bass drum)\b/],
+  ["drumLoop", /\b(break|breakbeat|amen|drum loops?|drums loops?|beat loops?|top loops?|drum ?fills?|fills?|(snare|hi ?hat|hat|kick|drum) ?rolls?\d*)\b/],
+  ["kick", /\b(kicks?|kiks?|bd|bassdrum|bass drum)\b/],
   ["clap", /\b(clap|claps|handclap)\b/],
-  ["snare", /\b(snare|rim|rimshot|sidestick|side stick|snap|sd)\b/],
+  ["snare", /\b(snares?|rims?|rimshots?|sidesticks?|side sticks?|snaps?|sd)\b/],
   ["openHat", /\b(open ?hat|open ?hh|ohat|ohh|ohh)\b/],
-  ["cymbal", /\b(crash|cymbal|china|splash|ride)\b/],
+  ["cymbal", /\b(crash(es)?|cymbals?|china|splash|ride)\b/],
   ["closedHat", /\b(closed ?hat|closed ?hh|chat|chh|pedal)\b/],
   ["hat", /\b(hi ?hat|hh|hat|hats)\b/],
-  ["vox", /\b(vocal|vocals|vox|voice|choir|acapella|chant|breath|adlib|ad-lib)\b/],
-  ["fx", /\b(fx|sfx|risers?|falls?|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone|zap|laser|siren|reverse|reversed|rev|scratch|vinyl|crackle|static|stinger|sting|boom|rumble|burst|effect|effects|sci ?fi|explosion|bomb)\b/],
+  ["vox", /\b(vocal|vocals|vox|voice|choir|acapella|chant|breath|adlib|ad-lib|laughs?|laughter|skits?)\b/],
+  ["fx", /\b(fx|sfx\w*|tags?|gun ?cock|risers?|falls?|sweep|impact|whoosh|transition|downlifter|uplifter|noise|glitch|foley|texture|swell|ambience|ambient|atmos|drone|zap|laser|siren|reverse|reversed|rev|scratch|vinyl|crackle|static|stinger|sting|boom|rumble|burst|effect|effects|sci ?fi|explosion|bomb)\b/],
   // Named percussion instruments only. The generic words "perc", "percussion" and "drum" come after the melodic words below, because a
   // pitched sound is often labelled with them ("Bell Perc", "Pluck Perc", "Synth Drum") and should stay melodic.
-  ["perc", /\b(tom|toms|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro)\b/],
+  ["perc", /\b(tom|toms|conga|bongo|tamb|tambourine|cowbell|clave|woodblock|timpani|shaker|shakers|cabasa|guiro|stomps?|gongs?)\b/],
   ["bass", /\b(808|bass|sub|reese)\b/],
   ["melodic", MELODIC_NAME],
   ["perc", /\b(perc|percussion|percussive|drum)\b/],
@@ -184,10 +184,57 @@ export function is808Name(name: string): boolean {
   return /(^|[^0-9a-z])808s?($|[^0-9a-z])/i.test(name.replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " "));
 }
 
+/** Producer and label tags in a name ("[tumfy]", "@twowav", "PRODBY.XERO") name the maker, not the sound, so they never take part in matching. */
+export function stripProducerTags(name: string): string {
+  return name.replace(/\[tumfy\]/gi, " ").replace(/@[\w.]+/g, " ").replace(/\bprod\.? ?by[ .]?xero\b/gi, " ");
+}
+
+/**
+ * Whether a name states a tempo: "152BPM", "bpm73", "(116)", or a bare 70-200 number beside a word ("danasol 140"). Only used for sounds nothing else
+ * could type, where a tempo alone says the file is a loop.
+ */
+export function hasTempoInName(fileName: string): boolean {
+  const base = stripProducerTags(fileName).replace(/\.[a-z0-9]+$/i, "");
+  if (/(?<!\d)\d{2,3}[ _]?bpm|bpm[ _]?\d{2,3}(?!\d)/i.test(base)) return true;
+  const inRange = (n: string) => Number(n) >= 70 && Number(n) <= 200;
+  const paren = /\((\d{2,3})\)\s*$/.exec(base);
+  if (paren && inRange(paren[1])) return true;
+  const tidy = base.replace(/[_\-.()[\]]+/g, " ").replace(/\s+/g, " ").trim();
+  const trailing = /[a-z] (\d{2,3})$/i.exec(tidy);
+  if (trailing && inRange(trailing[1])) return true;
+  const leading = /^(\d{2,3}) [a-z]/i.exec(tidy);
+  return !!leading && inRange(leading[1]);
+}
+
+/**
+ * A tempo the name states for certain: a number beside "bpm", or a bare 60-200 number with words on both sides ("EUD_140_808_askari"). A number at the
+ * very end ("Kick 120") is a take number, so it does not count. A sound with a stated tempo is a loop, whatever else its name says.
+ */
+export function hasStatedTempo(fileName: string): boolean {
+  const base = stripProducerTags(fileName).replace(/\.[a-z0-9]+$/i, "").replace(/\((\d+)\)/g, " n$1 ").replace(/(\d)(bpm)/gi, "$1 $2").replace(/(bpm)(\d)/gi, "$1 $2");
+  const tokens = base.split(/[\s_\-.()[\]]+/).filter((t) => /[a-z0-9]/i.test(t));
+  const inRange = (t: string | undefined) => t !== undefined && /^\d{2,3}$/.test(t) && Number(t) >= 60 && Number(t) <= 200;
+  for (let i = 0; i < tokens.length; i++) {
+    if (/^bpm$/i.test(tokens[i]) && (inRange(tokens[i - 1]) || inRange(tokens[i + 1]))) return true;
+    if (i > 0 && i < tokens.length - 1 && inRange(tokens[i]) && /[a-z]/i.test(tokens[i - 1]) && /[a-z]/i.test(tokens[i + 1])) return true;
+  }
+  return false;
+}
+
+/** Words that mark a sampled-music file (a chop, a song starter, a layer) when nothing else says what it is. */
+export function isSampledMusicName(fileName: string): boolean {
+  return /\b(chops?|songstarters?|song ?starters?|phrases?|layer \d+|stems?)\b/i.test(stripProducerTags(fileName).replace(/[_\-.()[\]]+/g, " "));
+}
+
 /** Category implied by a file name ("hat" when it is a hat of unknown openness), or null when it has no telltale word. */
 export function classifyByName(fileName: string): CategoryId | "hat" | null {
-  const name = fileName
+  const name = stripProducerTags(fileName)
     .replace(/\.[a-z0-9]+$/i, "")
+    // A pack code in front of a tempo ("SS_SD_90_guitar_lion", "EUD_140_808_askari") names the pack, not a snare or a kick.
+    .replace(/^(?:[A-Z][A-Z0-9]{1,9}[ _-])+(?=\d{2,3}[ _-])/, "")
+    // "DrumLoops3", "FullLoop2": run-together words and a number stuck to a word are separate words.
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([a-z])(\d)/gi, "$1 $2")
     .replace(/[_\-.()[\]]+/g, " ")
     .toLowerCase();
   const isLoop = /\b(loop|loops)\b/.test(name);
@@ -212,7 +259,7 @@ export function explicitCategoryByName(fileName: string): CategoryId | "hat" | n
 /** Filename evidence plus stored duration; never reads or decodes audio. */
 export function isAutomaticMelodicLoop(fileName: string, duration: number | undefined): boolean {
   return duration !== undefined && Number.isFinite(duration) && duration > 5 &&
-    !/bass/i.test(fileName) && keyFromName(fileName) !== null;
+    !/bass|808/i.test(fileName) && keyFromName(fileName) !== null;
 }
 
 /** In-place radix-2 FFT of `re`/`im` (length must be a power of two). */

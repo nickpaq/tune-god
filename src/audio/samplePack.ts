@@ -1,7 +1,7 @@
 // Reading a sample pack folder: the audio files in it (see packProject.ts), the sound type a folder name implies, and the
 // memory budget a project may use. What each bank takes from a folder is in bankLoad.ts. All of this works on file names
 // and sizes only; no audio is read until a file has been picked.
-import { classifyByName, explicitCategoryByName, hatOpenness, isAutomaticMelodicLoop, isProtectedCategory, type CategoryId } from "./classify";
+import { classifyByName, explicitCategoryByName, hasStatedTempo, hasTempoInName, hatOpenness, isAutomaticMelodicLoop, isProtectedCategory, isSampledMusicName, type CategoryId } from "./classify";
 import { isLoopCategory, normalizeClassification, type SampleClassification } from "./sampleClassification";
 
 const MB = 1024 * 1024;
@@ -91,12 +91,14 @@ const FOLDER_RULES: [CategoryId | "hat", RegExp][] = [
   ["closedHat", /\b(closed ?(hi ?)?hats?|closed ?hh|chh?|chats?|pedal ?hats?)\b/],
   ["cymbal", /\b(cymbals?|crash(es)?|rides?|chinas?|splash(es)?)\b/],
   ["hat", /\b(hi ?hats?|hats?|hh)\b/],
-  ["vox", /\b(vocals?|vox|voices?|choirs?|acapellas?|chants?|breaths?|ad ?libs?|speech|shouts?)\b/],
-  ["fx", /\b(fx|sfx|effects?|falls?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|booms?|zaps?|lasers?|sirens?|reverses?|reversed|scratch(es)?|vinyl|crackles?|stingers?|stings?|rumbles?|bursts?|explosions?|sci ?fi)\b/],
+  ["vox", /\b(vocals?|vox|voices?|choirs?|acapellas?|chants?|breaths?|ad ?libs?|speech|shouts?|laughs?|skits?)\b/],
+  ["fx", /\b(fx|sfx|effects?|tags?|falls?|risers?|sweeps?|impacts?|whooshe?s?|transitions?|downlifters?|uplifters?|noises?|glitch(es)?|foley|textures?|swells?|ambien(ce|t)s?|atmos(pheres?)?|drones?|booms?|zaps?|lasers?|sirens?|reverses?|reversed|scratch(es)?|vinyl|crackles?|stingers?|stings?|rumbles?|bursts?|explosions?|sci ?fi)\b/],
   // Percussion folders take precedence over melodic keywords.
-  ["perc", /\b(toms?|congas?|bongos?|tamb(ourines?)?|cowbells?|bells?|chimes?|glock(enspiel)?s?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?)\b/],
+  ["perc", /\b(toms?|congas?|bongos?|tamb(ourines?)?|cowbells?|bells?|chimes?|glock(enspiel)?s?|claves?|wood ?blocks?|timpani|shakers?|cabasas?|guiros?|stomps?|gongs?)\b/],
   ["perc", /\b(perc|percs|percussions?|percussive)\b/],
   ["bass", /\b(808s?|bass(es)?|subs?|reese)\b/],
+  // Folders of sampled music: loop kits and collections, song starters, phrases, chops.
+  ["melodicLoop", /\b(songstarters?|song ?starters?|phrase bank|sample me later|chops?)\b/],
   ["melodic", /\b(pianos?|keys?|keyboards?|bells?|plucks?|guitars?|harps?|mallets?|marimbas?|kalimbas?|rhodes|epianos?|stabs?|vibraphones?|glock(enspiel)?s?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|organs?|brass|horns?|flutes?|melod(y|ic|ies)|instruments?|tonal|pitched)\b/],
   ["other", /\b(other|misc|miscellaneous|uncategorized)\b/],
 ];
@@ -136,11 +138,53 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
 export type FolderTypes = Record<string, CategoryId>;
 
 /** Bumped whenever the classification rules change, so saved library indexes reclassify unchanged files once instead of keeping stale results. */
-export const CLASSIFIER_VERSION = 3;
+export const CLASSIFIER_VERSION = 6;
 
 /** A folder named exactly 808 or 808s ("808's" too): everything inside is an 808, whatever its length, loop wording or root note. */
 export function is808Folder(folder: string): boolean {
   return /^808('?s)?$/.test(tidy(folder));
+}
+
+/** The drum families a folder name mentions ("Snares + Claps + Rimshots": snare and clap; every hat kind is one family), to tell a mixed folder from a single-type one. */
+function folderDrumFamilies(folder: string): Set<string> {
+  const name = tidy(folder);
+  const found = new Set<string>();
+  for (const [id, re] of FOLDER_RULES) {
+    if (!re.test(name)) continue;
+    if (id === "openHat" || id === "closedHat" || id === "hat") found.add("hat");
+    else if (id === "kick" || id === "snare" || id === "clap" || id === "cymbal") found.add(id);
+  }
+  return found;
+}
+
+/** Folders of sampled music, which hold anything from bass stems to vocal chops. */
+const SAMPLED_MUSIC_FOLDER = /\b(songstarters?|song ?starters?|phrase bank|sample me later|chops?)\b/;
+
+/** The loop version of a one-shot Type. */
+function loopVersion(category: CategoryId): CategoryId {
+  if (isLoopCategory(category)) return category;
+  return category === "bass" ? "bassLoop" : category === "melodic" ? "melodicLoop" : category === "vox" ? "voxLoop" : category === "fx" ? "fxLoop" : category === "perc" ? "percLoop" : "drumLoop";
+}
+
+/** A folder that only says "drum sounds" (Drum One Shots, Drum Hits): the file name then names the drum. */
+const DRUM_GROUP_FOLDER = /^(drums?|drum (one ?shots?|hits?|samples?|sounds?))$/;
+const DRUM_NAME_CATEGORIES: (CategoryId | "hat")[] = ["kick", "snare", "clap", "closedHat", "openHat", "cymbal", "hat", "perc"];
+
+/**
+ * Whether the sound is a loop because of where it sits: "loop" in its name or any folder, "stems" folders, but not when the nearest folder says
+ * one shots, and not when only the pack's own name ("Drum and Loop Kit") says loop above folders that name the sound.
+ */
+function inLoopContext(folders: string[], fileName: string): boolean {
+  if (/\bloops?\b/i.test(tidy(fileName))) return true;
+  for (let i = folders.length - 1; i >= 0; i--) {
+    const name = tidy(folders[i]);
+    const hasLoop = /\bloops?\b/.test(name);
+    const hasShot = /\bone ?shots?\b/.test(name);
+    if (/^stems?$/.test(name)) return true;
+    if (hasShot && !hasLoop) return false;
+    if (hasLoop && !hasShot && !(i === 0 && folders.length > 1 && /\b(kit|pack|bundle)\b/.test(name))) return true;
+  }
+  return false;
 }
 
 /** Folder hierarchy supplies the family; specific names refine mixed hats and generic folders. */
@@ -148,13 +192,40 @@ export function classifyFile(folders: string[], fileName: string, correction?: S
   if (correction) return { ...normalizeClassification(correction), confidence: 1, needsReview: false, evidence: "correction" };
   if (folders.some(is808Folder)) return { category: "bass", confidence: 0.95, needsReview: false, evidence: "folder" };
   const byName = classifyByName(fileName);
-  const loop = [...folders, fileName].some((word) => /\bloops?\b/i.test(tidy(word)));
+  // There is no one-shot with a tempo: a stated bpm makes a loop of whatever the name or folder says it is.
+  const loop = inLoopContext(folders, fileName) || hasStatedTempo(fileName);
   let category: CategoryId | null = null;
   let evidence: SampleClassification["evidence"] = "unknown";
   for (let i = folders.length - 1; i >= 0; i--) {
+    const folderName = tidy(folders[i]);
+    // A drum-group folder (Drum One Shots) says nothing itself: a drum named in the file beats whatever pack-level word sits above it.
+    if (!(folderTypes?.[folderName]) && DRUM_GROUP_FOLDER.test(folderName)) {
+      if (loop) { category = "drumLoop"; evidence = "folder"; break; }
+      if (byName && DRUM_NAME_CATEGORIES.includes(byName)) {
+        category = byName === "hat" ? "closedHat" : byName;
+        evidence = "filename";
+        break;
+      }
+    }
     // A Type the user gave this folder name beats the built-in folder words; the nearest folder that says anything wins.
-    const found = folderTypes?.[tidy(folders[i])] ?? categoryOfFolder(folders[i]);
+    const found = folderTypes?.[folderName] ?? categoryOfFolder(folders[i]);
     if (!found || found === "other") continue;
+    // A mixed folder ("Snares + Claps", "Open Hats + Crashes") holds several Types, so a file name that names one of them decides.
+    const mixed = !folderTypes?.[folderName] ? folderDrumFamilies(folders[i]) : null;
+    if (mixed && mixed.size > 1 && byName) {
+      const family = byName === "openHat" || byName === "closedHat" || byName === "hat" ? "hat" : byName;
+      if (mixed.has(family)) {
+        category = family === "hat" ? (byName === "openHat" || byName === "closedHat" ? byName : hatOpenness(tidy([...folders.slice(i + 1), fileName].join(" "))) ?? "closedHat") : (byName as CategoryId);
+        evidence = "folder";
+        break;
+      }
+    }
+    // A sampled-music folder (Chops, Songstarters) holds whatever the file name says, as a loop: bass stems are bass loops, vocal chops vocal loops.
+    if (found === "melodicLoop" && (folderTypes?.[folderName] || SAMPLED_MUSIC_FOLDER.test(folderName)) && byName && ["kick", "snare", "clap", "closedHat", "openHat", "hat", "cymbal", "bass", "vox"].includes(byName)) {
+      category = loopVersion(byName === "hat" ? "closedHat" : byName);
+      evidence = "folder";
+      break;
+    }
     category = found === "hat" ? (byName === "openHat" || byName === "closedHat" ? byName : hatOpenness(tidy([...folders.slice(i + 1), fileName].join(" "))) ?? "closedHat") : found;
     evidence = "folder";
     break;
@@ -162,13 +233,21 @@ export function classifyFile(folders: string[], fileName: string, correction?: S
   // A typed folder wins over misleading filenames.
   if (!category && byName) { category = byName === "hat" ? "closedHat" : byName; evidence = "filename"; }
   if (category && loop && !isLoopCategory(category)) {
-    category = category === "bass" ? "bassLoop" : category === "melodic" ? "melodicLoop" : category === "vox" ? "voxLoop" : category === "fx" ? "fxLoop" : category === "perc" ? "percLoop" : "drumLoop";
+    category = loopVersion(category);
+  }
+  // Nothing named the sound: a loop folder, a stated tempo or a chop/song-starter word still says it is a loop (drum loops under a drums folder).
+  let weak = false;
+  if (!category && (loop || hasTempoInName(fileName) || isSampledMusicName(fileName))) {
+    category = loop && folders.slice(-2).some((folder) => /\bdrums?\b/.test(tidy(folder))) ? "drumLoop" : "melodicLoop";
+    evidence = "filename";
+    weak = true;
   }
   if (!(evidence === "folder" && isProtectedCategory(category)) && !isProtectedCategory(explicitCategoryByName(fileName)) && isAutomaticMelodicLoop(fileName, duration)) {
     category = "melodicLoop";
     evidence = "metadata";
+    weak = false;
   }
-  const confidence = category ? evidence === "folder" ? 0.9 : 0.8 : 0;
+  const confidence = category ? weak ? 0.7 : evidence === "folder" ? 0.9 : 0.8 : 0;
   return { category: category ?? "other", confidence, needsReview: !category || confidence < 0.8, evidence };
 }
 

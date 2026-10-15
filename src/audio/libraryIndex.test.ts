@@ -145,29 +145,29 @@ describe("classifier version", () => {
 
 describe("folder Types", () => {
   const mk = (path: string, size = 10) => ({ name: path.split("/").pop()!, folders: path.split("/").slice(1, -1), rootFolder: path.split("/")[0], size, lastModified: 1, source: async () => new ArrayBuffer(0) }) as any;
-  const files = [mk("Lib/Kit/Stomps/a.wav"), mk("Lib/Kit/Stomps/b.wav"), mk("Lib/Kit2/Stomps/c.wav"), mk("Lib/Kit/Kicks/k.wav")];
+  const files = [mk("Lib/Kit/Wobbles/a.wav"), mk("Lib/Kit/Wobbles/b.wav"), mk("Lib/Kit2/Wobbles/c.wav"), mk("Lib/Kit/Kicks/k.wav")];
 
   it("lists ambiguous folders by name across packs, and a Type beats the built-in rules while the path stays searchable", () => {
     const first = refreshLibrary("Lib", files);
     const list = ambiguousFolders(first.index);
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ key: "stomps", name: "Stomps", files: 3, packs: 2 });
-    expect(ambiguousFoldersText(list)).toContain("Stomps\t3\t2");
+    expect(list[0]).toMatchObject({ key: "wobbles", name: "Wobbles", files: 3, packs: 2 });
+    expect(ambiguousFoldersText(list)).toContain("Wobbles\t3\t2");
 
-    const applied = applyFolderTypes(first.index, { stomps: "fx" });
+    const applied = applyFolderTypes(first.index, { wobbles: "fx" });
     expect(applied.samples.filter((s) => s.classification.category === "fx")).toHaveLength(3);
-    expect(applied.samples.find((s) => s.name === "a.wav")!.path).toContain("Stomps");
+    expect(applied.samples.find((s) => s.name === "a.wav")!.path).toContain("Wobbles");
     expect(ambiguousFolders(applied)).toHaveLength(0);
   });
 
   it("keeps per-sample corrections and reclassifies on reconnect when the folder Types change", () => {
     const first = refreshLibrary("Lib", files);
     const corrected = correctSample(first.index, first.index.samples[0].id, { category: "perc", confidence: 1, needsReview: false, evidence: "correction" });
-    const again = refreshLibrary("Lib", files, corrected, false, { stomps: "fx" });
+    const again = refreshLibrary("Lib", files, corrected, false, { wobbles: "fx" });
     expect(again.reused).toBe(0);
     expect(again.index.samples[0].classification.category).toBe("perc");
     expect(again.index.samples[1].classification.category).toBe("fx");
-    expect(refreshLibrary("Lib", files, again.index, false, { stomps: "fx" }).reused).toBe(4);
+    expect(refreshLibrary("Lib", files, again.index, false, { wobbles: "fx" }).reused).toBe(4);
   });
 });
 
