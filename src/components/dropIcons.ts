@@ -119,7 +119,7 @@ export const ACAPELLA_ICON = [
   "....................",
 ];
 
-/** The zones that appear on the screen while a pad is dragged (with the chopper's icon above), 20 x 20 lit cells each: a bin (delete), two bars (hold: the sound plays on until a pad is pressed), a closed padlock (lock the pad) and an open one (shown instead while the dragged pad is locked: unlock it). */
+/** The zones that appear on the screen while a pad is dragged (with the chopper's icon above), 20 x 20 lit cells each: a bin (delete), a shuffle symbol (load another sound of the same Type), a closed padlock (lock the pad) and an open one (shown instead while the dragged pad is locked: unlock it). */
 export const DELETE_ICON = [
   "....................",
   ".......######.......",
@@ -139,29 +139,6 @@ export const DELETE_ICON = [
   ".....#..#..#..#.....",
   ".....#..#..#..#.....",
   ".....##########.....",
-  "....................",
-  "....................",
-];
-
-export const HOLD_ICON = [
-  "....................",
-  "....................",
-  "...####......####...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...#..#......#..#...",
-  "...####......####...",
-  "....................",
   "....................",
   "....................",
 ];

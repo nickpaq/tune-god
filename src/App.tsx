@@ -521,8 +521,6 @@ function App() {
   useEffect(() => { saveState({ kitPacks }); }, [kitPacks]);
   const libraryInput = useRef<HTMLInputElement>(null);
   const refreshOnReconnect = useRef(false);
-  /** "Build another kit" opened the picker: generating the kit then clears every bank first. Closing the picker cancels it. */
-  const buildFreshKit = useRef(false);
   const reportOnReconnect = useRef(false);
   const [scanReport, setScanReport] = useState<string | null>(null);
   const [scanReportOpen, setScanReportOpen] = useState(false);
@@ -3335,8 +3333,7 @@ function App() {
         {menuOpen && (
           <div className="menu">
             <button className="menu__button menu__button--build" disabled={analyzing > 0 || loading || !!addPackStatus || indexBusy} onClick={() => {
-              // Nothing is cleared yet: the loaded kit goes only when a new one is generated, so closing the picker with X leaves it as it was.
-              buildFreshKit.current = true;
+              // Nothing is cleared: generating replaces the unlocked pads of banks A to C only and leaves bank D alone.
               setNotice("");
               setKitReport(null);
               setLibraryError("");
@@ -3401,7 +3398,6 @@ function App() {
             </label>
             </details>
             <details className="menu__library-tools menu__section"><summary>Library tools</summary>
-              <button className="menu__button" disabled={analyzing > 0 || loading || !!addPackStatus} onClick={() => { setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); }}>Replace kit · keep bank D</button>
               <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = false; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect files</button>
               <p>Reselect the folder. Unchanged libraries reconnect instantly; added or removed samples are picked up.</p>
               <details className="menu__section"><summary>More</summary>
@@ -3536,7 +3532,7 @@ function App() {
             </section>
           </div>
         )}
-        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { buildFreshKit.current = false; setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setKitPacks(packs); setLibraryOpen(false); const generate = () => void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); if (buildFreshKit.current) { buildFreshKit.current = false; clearProject(false); window.setTimeout(generate, 60); } else generate(); }}/>}
+        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setKitPacks(packs); setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
             records={sampleLibrary}
