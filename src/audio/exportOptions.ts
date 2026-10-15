@@ -11,15 +11,15 @@ export interface ExportOptions {
   /** Add the Koala FX master chain (`masterStyle` picks which). */
   masterChain: boolean;
   masterStyle: MasterStyle;
-  /** Route pads to Koala's buses by sound type, rename the buses, and put the kick clipper and melodic EQ on them. */
+  /** Route pads to Koala's buses by sound type (Kick, Bass, Drums, Melodic + Chops + FX), rename the buses, and put the kick clipper and melodic EQ on them. */
   buses: boolean;
   /** One pattern per melodic loop (see loopPatterns.ts). Off, patterns made by an earlier export are removed. */
   melodicPatterns: boolean;
   /** Spread hats and melodic sounds across the stereo field. */
   panSpread: boolean;
-  /** Fade every 808 in over the length of the kick's main transient (rendered into the file), so the kick hits through. Needs a kick and a bass or 808 on the pads. */
-  fade808: boolean;
-  /** Set mute groups by sound type (open and closed hats, 808s and basses, melodic loops cut each other off). Off, pads keep their own. */
+  /** Put Koala's SIDECHAIN on the Bass bus, listening to the Kick bus, so the bass and 808s duck under the kick. Needs a kick and a bass or 808 on the pads, and routes the pads to the buses. */
+  sidechain: boolean;
+  /** Set mute groups by sound type (hats, cymbals, drum loops, basses and vocal loops cut each other off; chops get group 4). Off, pads keep their own. */
   chokeGroups: boolean;
 }
 
@@ -32,7 +32,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   buses: false,
   melodicPatterns: true,
   panSpread: false,
-  fade808: false,
+  sidechain: false,
   chokeGroups: true,
 };
 
@@ -60,5 +60,7 @@ export function panPlan(pads: { sampleId: number; category?: CategoryId }[], ran
 
 /** Saved choices may be missing fields (older saves): anything missing takes the default. */
 export function mergeExportOptions(saved?: Partial<ExportOptions> | null): ExportOptions {
-  return { ...DEFAULT_EXPORT_OPTIONS, ...(saved ?? {}) };
+  // `fade808` (the old 808 fade-in) is gone: a saved copy of it is dropped.
+  const { fade808: _gone, ...rest } = (saved ?? {}) as Partial<ExportOptions> & { fade808?: boolean };
+  return { ...DEFAULT_EXPORT_OPTIONS, ...rest };
 }

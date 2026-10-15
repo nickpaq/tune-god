@@ -59,18 +59,11 @@ import {
   type GhostPadExport,
   type TunedSample,
 } from "./audio/exportProject";
-import { pitchKnobFor, shiftFor, snapSemitones } from "./audio/shift";
-import {
-  fadeIn,
-  fadeMsFor,
-  kickTransientMs,
-  medianTransientMs,
-} from "./audio/kickTransient";
+import { shiftFor } from "./audio/shift";
 import {
   CATEGORIES,
   categoryIndex,
   categoryLabel,
-  is808Name,
   isKitCategory,
   isTunedCategory,
   migrateCategory,
@@ -97,7 +90,7 @@ import {
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { chooseShuffleSound } from "./audio/shufflePad";
 import { copyProjectPad } from "./audio/copyProjectPad";
-import { sortForSlot } from "./audio/swapOrder";
+import { rankForSlot, sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import { ExportOptionsModal, type ExportValues } from "./components/ExportOptionsModal";
 import { pickProjectName, rememberName } from "./audio/projectName";
@@ -176,7 +169,6 @@ import {
   saveState,
   type SavedPad,
   loadSampleLibrary,
-  MAX_FAVORITES,
   MAX_FAVORITE_BYTES,
   recordImportedSamples,
   setSampleFavorite,
@@ -187,7 +179,6 @@ import {
   clampA4Reference,
   NOTE_NAMES,
   referenceOffsetSemitones,
-  semitonesToRatio,
   splitTrim,
   trimCents,
   bassLiftSemitones,
@@ -391,11 +382,11 @@ function App() {
    * What the export does for the user (normalize and balance, colours and labels, master chain, buses, melodic loop patterns, pan spread, choke groups):
    * asked with check boxes each time they export, and remembered. Nothing is mixed when a sound is loaded; the loaders bring sounds in as they are.
    */
-  const [exportOptions, setExportOptions] = useState<ExportOptions>(() => mergeExportOptions({ ...(saved.masterStyleDefaultedDynamic && saved.masterStyle ? { masterStyle: saved.masterStyle } : {}), ...saved.exportOptions }));
+  const [exportOptions, setExportOptions] = useState<ExportOptions>(() => mergeExportOptions(saved.exportOptions));
   const [exportDialog, setExportDialog] = useState(false);
   /** The choices of the export in progress, kept while the unused-drums question is asked. */
   const pendingExport = useRef<{ options: ExportOptions; values: ExportValues }>({ options: DEFAULT_EXPORT_OPTIONS, values: { bpm: 120, a4: 440, name: "" } });
-  /** A short message over the screen ("Sounds organized..."). */
+  /** A short message over the screen. */
   const [notice, setNotice] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   /** Temporarily disabled: live-input performance needs a later sequencer port. Keep the screen code for that work. */
@@ -531,8 +522,6 @@ function App() {
   useEffect(() => { saveState({ kitPacks }); }, [kitPacks]);
   const libraryInput = useRef<HTMLInputElement>(null);
   const refreshOnReconnect = useRef(false);
-  /** "Build another kit" opened the picker: generating the kit then clears every bank first. Closing the picker cancels it. */
-  const buildFreshKit = useRef(false);
   const reportOnReconnect = useRef(false);
   const [scanReport, setScanReport] = useState<string | null>(null);
   const [scanReportOpen, setScanReportOpen] = useState(false);
@@ -2647,35 +2636,10 @@ function App() {
   };
 
   /**
-   * Rebuilds the project and downloads it. Every file is peak-normalized and the mix is on each pad's Koala volume knob (audio/loudness.ts); every
-   * tuning is written to the pitch knob (audio/shift.ts). Only 808 and bass audio is rendered: onto its nearest semitone, then faded in under the kick.
+   * Rebuilds the project and downloads it. No sound is re-rendered: every tuning, the 808s' and basses' included, is written to the pitch knob
+   * (audio/shift.ts) and the audio stays as it was loaded.
    */
   const padsNow = pads;
-  /** An 808 is a bass sound by the name or by the loader's flag. */
-  const isEight = (p: Pad) =>
-    p.category === "bass" && (!!p.is808 || is808Name(p.name));
-  /** The 808s' fade-in, in ms: the length of the kicks' main transient, when the export option is on. Null when it is off or there is no kick and 808 to work from. */
-  const fadeFor = (list: Pad[], enabled: boolean): number | null => {
-    if (!enabled || !list.some(isEight)) return null;
-    const ms = medianTransientMs(
-      list
-        .filter((p) => p.category === "kick")
-        .map((p) =>
-          kickTransientMs(
-            p.channelData,
-            p.sampleRate,
-            ACTIVE_MIX_PRESET.buses.fade808.withinDb,
-          ),
-        ),
-    );
-    return ms === null
-      ? null
-      : fadeMsFor(
-          ms,
-          ACTIVE_MIX_PRESET.buses.fade808.minMs,
-          ACTIVE_MIX_PRESET.buses.fade808.maxMs,
-        );
-  };
   const [exportName, setExportName] = useState("");
   /** A random name from the loaded sounds' own file names, one not used for an earlier export; null when no sound gives one. */
   const suggestName = () => {
@@ -2713,14 +2677,10 @@ function App() {
         for (const [sampleId, pan] of panPlan(Object.values(pads).filter(isReal))) pans.set(sampleId, pan);
       }
       const allPads = Object.values(pads).filter(isReal);
-      // Every file is rendered to its final audio (no loudness matching, no volume knob); every tuning is on the pitch knob.
-      // The only audio that is changed is 808 and bass (resampled onto their nearest semitone, then faded in under the kick) and it is measured as it is
-      // rendered, so the whole project is never shipped to the worker or copied at once.
-      const fade = fadeFor(allPads, options.fade808 && sidechainReady);
+      // No sound is re-rendered (no loudness matching, no volume knob, no 808 pitch snap): every tuning is on the pitch knob.
       const rendered: {
         pad: Pad;
         channelData: Float32Array[];
-        retimed: boolean;
       }[] = [];
       const pitches = new Map<number, number>();
       // Loops with a tempo in their name: the export works out their length in bars from it (and gives each melodic loop a pattern).
@@ -2729,20 +2689,11 @@ function App() {
       for (const pad of allPads) {
         setExportProgress(`${done++}/${allPads.length}`);
         const shift = shiftFor(pad, tunedTarget, a4, keyMajor);
-        const snap = snapSemitones(pad);
-        const retimed = Math.abs(snap) >= 0.005;
-        if (pad.tune || pad.tuneLocked || snap !== 0)
-          pitches.set(pad.sampleId, pitchKnobFor(pad, shift));
+        // An 808 or bass with Tune off still sits on its nearest semitone, by the pitch knob (shiftFor), not by re-rendering the file.
+        if (pad.tune || pad.tuneLocked || shift !== 0) pitches.set(pad.sampleId, shift);
         // The pad's audio was already cut to Koala's start/end points on load, so a stretched loop stays in time.
-        let channelData = retimed
-          ? await getRenderWorker().resamplePitch(
-              pad.channelData,
-              semitonesToRatio(snap),
-            )
-          : pad.channelData;
-        if (fade && isEight(pad))
-          channelData = fadeIn(channelData, pad.sampleRate, fade);
-        rendered.push({ pad, channelData, retimed });
+        const channelData = pad.channelData;
+        rendered.push({ pad, channelData });
         if (isLoopCategory(pad.category) && pad.bpm && pad.bpm > 0 && channelData[0]?.length)
           loopLengths.set(pad.sampleId, { bpm: pad.bpm, seconds: channelData[0].length / pad.sampleRate, melodic: pad.category === "melodicLoop" });
       }
@@ -2754,7 +2705,7 @@ function App() {
           sampleId: r.pad.sampleId,
           sampleRate: r.pad.sampleRate,
           channelData: r.channelData,
-          retimed: r.retimed,
+          retimed: false,
           trimmedFrom: r.pad.trimmedFrom,
         });
       });
@@ -2785,13 +2736,12 @@ function App() {
       const classifications = new Map<number, unknown>();
       const padOverrides = new Map<number, PadPlayback | null>();
       for (const p of allPads) {
-        // The playback rules by sound type are written on every export; only the per-pad EQ is Organize's.
+        // The playback rules by sound type are written on every export; the per-pad EQ, bus and mute group follow the export check boxes.
         const settings = p.category ? resolvePlayback(p.category, typeSettings[p.category], p.playback, p.stretch) : undefined;
         padOverrides.set(p.origIndex, p.playback || p.stretch !== undefined ? { ...p.playback, ...(p.stretch !== undefined ? { stretch: p.stretch ? settings?.stretch : "off" as const } : {}) } : null);
         if (p.classification) classifications.set(p.origIndex, { ...p.classification, category: p.category });
-        // Bus routing and the per-pad EQ are part of the mix: with Organize off the pad keeps the bus and EQ it came with.
         // The per-type EQ goes with normalize and balance, the bus with the bus routing, and the mute group with the choke groups; the rest of a type's pad rules always apply.
-        if (settings) padPlayback.set(p.origIndex, { ...settings, ...(options.normalize ? {} : { eq: undefined }), ...(options.buses ? {} : { bus: undefined }), ...(options.chokeGroups ? {} : { chokeGroup: undefined }) });
+        if (settings) padPlayback.set(p.origIndex, { ...settings, ...(options.normalize ? {} : { eq: undefined }), ...(options.buses || options.sidechain ? {} : { bus: undefined }), ...(options.chokeGroups ? {} : { chokeGroup: undefined }) });
       }
       // Sounds export compact Type labels without file or preset numbering.
       // Loops are written stretched to 2, 4, 8 or 16 bars; chop exports write their exact lengths.
@@ -2817,8 +2767,10 @@ function App() {
         stretch,
         vols,
         pitches,
-        busNames: options.buses ? BUS_NAMES : undefined,
+        // The sidechain needs the kick and the bass on their own buses, so it brings the bus routing with it.
+        busNames: options.buses || options.sidechain ? BUS_NAMES : undefined,
         busEffects: options.buses,
+        sidechain: options.sidechain,
         masterChain: options.masterChain,
         masterStyle: options.masterStyle,
         arrangement,
@@ -3017,8 +2969,21 @@ function App() {
       return next;
     });
   };
+  /** The last few library sounds auditioned in hot swap, kept decoded so playing one again (or swapping it in) is instant. Kit pads are always decoded already. */
+  const swapAudioCache = useRef(new Map<string, Awaited<ReturnType<typeof decodeNative>>>());
   const readSwapAudio = async (pad: Pad) => {
     if (pad.channelData.length) return { channelData: audioOf(pad), sampleRate: pad.sampleRate };
+    const key = pad.libraryId;
+    const hit = key ? swapAudioCache.current.get(key) : undefined;
+    if (hit) return hit;
+    const decoded = await readSwapAudioFresh(pad);
+    if (key) {
+      swapAudioCache.current.set(key, decoded);
+      if (swapAudioCache.current.size > 24) swapAudioCache.current.delete(swapAudioCache.current.keys().next().value!);
+    }
+    return decoded;
+  };
+  const readSwapAudioFresh = async (pad: Pad) => {
     const cached = sampleLibrary.find(record => record.id === pad.libraryId)?.audio;
     const file = libraryFiles.current?.files.find(file => file.libraryId === pad.libraryId);
     if (!cached && !file) throw new Error("Reconnect the library folder to load this sound.");
@@ -3115,11 +3080,11 @@ function App() {
       ? await encodeWav({ sampleRate: pad.sampleRate, channelData: audioOf(pad), bitDepth: 24 })
       : undefined;
     if (audio) {
-      // Favorites are kept on the device, but only a few sounds: never whole batches.
+      // Favorites are kept on the device one sound at a time: as many as fit in the byte limit.
       const kept = sampleLibrary.filter((r) => r.favorite && r.audio && r.id !== pad.libraryId);
       const bytes = kept.reduce((n, r) => n + (r.audio?.size ?? 0), audio.size);
-      if (kept.length >= MAX_FAVORITES || bytes > MAX_FAVORITE_BYTES)
-        return void window.alert(`Favorites keep their audio on this device, so they are limited to ${MAX_FAVORITES} sounds or ${MAX_FAVORITE_BYTES / 1024 / 1024} MB. Remove a favorite first.`);
+      if (bytes > MAX_FAVORITE_BYTES)
+        return void window.alert(`Favorites keep their audio on this device, so they are limited to ${MAX_FAVORITE_BYTES / 1024 / 1024 / 1024} GB in all. Remove a favorite first.`);
     }
     if (!old && favorite) {
       await recordImportedSamples([{
@@ -3178,9 +3143,13 @@ function App() {
     category: sample.classification.category, classification: sample.classification,
     tune: false, semis: 0, cents: 0,
   })) ?? [], [libraryIndex]);
-  const selectedSwapSources = useMemo(() => kitPacks === null ? null : new Set(
-    libraryIndex?.samples.filter(sample => kitPacks.includes(sample.pack)).flatMap(sample => [sample.id, sample.path]) ?? [],
-  ), [kitPacks, libraryIndex]);
+  /** The sources hot swap may offer: only sounds in the selected packs, for every Type. null (no limit) when no pack is chosen or every pack is. */
+  const selectedSwapSources = useMemo(() => {
+    if (kitPacks === null || !libraryIndex) return null;
+    const chosen = new Set(kitPacks);
+    if (libraryIndex.samples.every(sample => chosen.has(sample.pack))) return null;
+    return new Set(libraryIndex.samples.filter(sample => chosen.has(sample.pack)).flatMap(sample => [sample.id, sample.path]));
+  }, [kitPacks, libraryIndex]);
   const hotSwapSounds = (target: Pad) => {
     const slotCategory = (layout.on && target.index < 16 ? layoutById(null).slots[target.index]?.category : undefined) || target.category;
     const eligible = (pad: Pad) => eligibleHotSwapSound(pad, slotCategory, selectedSwapSources);
@@ -3227,6 +3196,7 @@ function App() {
             ? `${GHOST_LABEL[target.ghost.kind]} (made on export unless filled)`
             : `PAD ${(target.index % 16) + 1}`
         }
+        groupOf={(p) => `${p.favorite ? 1 : 0}|${slotCategory === "bass" ? Number(!!p.is808 !== !!target.is808) : 0}|${rankForSlot(slotCategory, p.category)}`}
         candidates={sortForSlot(
           hotSwapSounds(target),
           slotCategory,
@@ -3365,8 +3335,7 @@ function App() {
         {menuOpen && (
           <div className="menu">
             <button className="menu__button menu__button--build" disabled={analyzing > 0 || loading || !!addPackStatus || indexBusy} onClick={() => {
-              // Nothing is cleared yet: the loaded kit goes only when a new one is generated, so closing the picker with X leaves it as it was.
-              buildFreshKit.current = true;
+              // Nothing is cleared: generating replaces the unlocked pads of banks A to C only and leaves bank D alone.
               setNotice("");
               setKitReport(null);
               setLibraryError("");
@@ -3431,7 +3400,6 @@ function App() {
             </label>
             </details>
             <details className="menu__library-tools menu__section"><summary>Library tools</summary>
-              <button className="menu__button" disabled={analyzing > 0 || loading || !!addPackStatus} onClick={() => { setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); }}>Replace kit · keep bank D</button>
               <button className="menu__button" disabled={indexBusy} onClick={() => { refreshOnReconnect.current = false; setMenuOpen(false); setLibraryToolsOpen(false); setLibraryOpen(true); libraryInput.current?.click(); }}>Reconnect files</button>
               <p>Reselect the folder. Unchanged libraries reconnect instantly; added or removed samples are picked up.</p>
               <details className="menu__section"><summary>More</summary>
@@ -3566,7 +3534,7 @@ function App() {
             </section>
           </div>
         )}
-        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { buildFreshKit.current = false; setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setKitPacks(packs); setLibraryOpen(false); const generate = () => void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); if (buildFreshKit.current) { buildFreshKit.current = false; clearProject(false); window.setTimeout(generate, 60); } else generate(); }}/>}
+        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setKitPacks(packs); setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
             records={sampleLibrary}
@@ -4224,7 +4192,7 @@ function App() {
             keyText={keyLabel(keyPc, keyMajor)}
             onShuffle={suggestName}
             a4Range={A4_REFERENCE_RANGE}
-            fade808Blocker={sidechainReady ? undefined : SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
+            sidechainBlocker={sidechainReady ? undefined : SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
             onCancel={() => setExportDialog(false)}
             onExport={(options, values) => {
               setExportDialog(false);

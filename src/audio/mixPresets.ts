@@ -3,7 +3,7 @@
 // A preset sets:
 //   1. Loudness   how loud each sound type sits against the others: every file is peak-normalized and the Koala volume knob brings it to its type's target.
 //   2. Pad EQ     a highpass, and optionally a high-shelf cut, on each pad by sound type (Koala's per-pad EQ).
-//   3. Buses      the effects on the Kick and Melodic buses (clipper, EQ), and the 808 fade-in that stands in for a sidechain.
+//   3. Buses      the effects on the Kick, Bass and Melodic buses (clipper, sidechain, EQ).
 //   4. Master     the master chain, in order.
 //
 // To add a genre: copy HEAVY_WARM_HIP_HOP, change what you want (every field says what it does and its valid range), add it to MIX_PRESETS
@@ -67,10 +67,10 @@ export interface MixPreset {
       oversample: number;
     };
     /**
-     * The 808s are not sidechained. Instead each gets a soft fade-in as long as the kick's main transient (the time its envelope stays within
-     * `withinDb` of its peak, see kickTransient.ts), kept between `minMs` and `maxMs`, so the kick's hit shows through.
+     * SIDECHAIN on the Bass bus (bus B), listening to the Kick bus (`source` 0 = bus A): the bass and 808s duck under each kick.
+     * `threshold` -60 to 0 dB (lower ducks harder; -14 barely ducks, -24 ducks about 17 dB), `release` 10 to 1000 ms, `output` -12 to +12 dB after the duck.
      */
-    fade808: { withinDb: number; minMs: number; maxMs: number };
+    sidechain: PluginParams;
     /** EQ on the Melodic bus (bus D): lo = low shelf, mid = bell, hi = high shelf (measured; gain 0 is flat). */
     melodicEq: PluginParams;
   };
@@ -139,7 +139,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
   },
   buses: {
     kickClipper: { input: 4, threshold: -6, output: 0, oversample: 1 }, // about 9 dB of drive into a soft clip
-    fade808: { withinDb: 6, minMs: 4, maxMs: 30 }, // very subtle: just room for the kick's transient
+    sidechain: { threshold: -20, release: 80, output: 0, source: 0 }, // a duck of roughly 8 to 10 dB (docs/koala-mixer-reference.md, round 2); source 0 is the Kick bus
     melodicEq: {
       "lo freq": 150, "lo gain": -6, "lo Q": 0.7, // low SHELF (measured; it is not a highpass, and gain 0 is flat): -6 dB below 150 Hz leaves the low end to the kick and bass
       "mid freq": 1016.1063842773438, "mid gain": 0, "mid Q": 0.5, // untouched

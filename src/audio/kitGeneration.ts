@@ -2,19 +2,34 @@ import { categoryLabel, isDrumCategory, type CategoryId } from "./classify";
 import { layoutById, type LayoutSlot } from "./fingerLayouts";
 import type { SampleClassification } from "./sampleClassification";
 
-// One preset: A is the MPC drum layout. B and C each mix sound families in fixed rows.
+// One preset: A is the MPC drum layout. B and C each mix sound families in rows of 4, and every Type on them takes an even number of
+// pads (2, 4 or 8, never 1, 3 or 5), side by side, so the Types sit together instead of scattering.
 const BANK_B: CategoryId[] = [
-  "melodicLoop", "melodicLoop", "drumLoop", "percLoop",
-  "vox", "vox", "fx", "fxLoop",
-  "melodic", "melodic", "melodic", "melodic",
-  "bass", "bass", "melodicLoop", "melodicLoop",
+  "melodicLoop", "melodicLoop", "melodicLoop", "melodicLoop",
+  "drumLoop", "drumLoop", "percLoop", "percLoop",
+  "vox", "vox", "fx", "fx",
+  "bass", "bass", "melodic", "melodic",
 ];
 const BANK_C: CategoryId[] = [
-  "drumLoop", "percLoop", "melodicLoop", "fxLoop",
-  "vox", "voxLoop", "fx", "fx",
-  "melodic", "melodic", "melodicLoop", "melodicLoop",
-  "bass", "bass", "melodicLoop", "voxLoop",
+  "melodicLoop", "melodicLoop", "melodicLoop", "melodicLoop",
+  "voxLoop", "voxLoop", "fxLoop", "fxLoop",
+  "melodic", "melodic", "melodic", "melodic",
+  "bass", "bass", "vox", "vox",
 ];
+
+/** The first slot that is filled in groups (Bank B). Bank A's slots are single pads. */
+const GROUPED_FROM = 16;
+
+/** Runs of neighbouring slots of one Type (a row's pair or four), with their indexes. */
+function slotGroups(slots: LayoutSlot[]): { category: CategoryId; start: number; indexes: number[] }[] {
+  const out: { category: CategoryId; start: number; indexes: number[] }[] = [];
+  slots.forEach((slot, index) => {
+    const last = out[out.length - 1];
+    if (last && last.category === slot.category && last.indexes[last.indexes.length - 1] === index - 1 && index % 4 !== 0) last.indexes.push(index);
+    else out.push({ category: slot.category, start: index, indexes: [index] });
+  });
+  return out;
+}
 
 /** Exactly 48 slots, never including Bank D. */
 export function generationSlots(): LayoutSlot[] {
@@ -82,8 +97,9 @@ export function allocateKit(
     occupied.add(index);
     positions.set(sound.key, index);
   }
+  // Banks A is filled slot by slot (its slots are single pads); B and C below are filled in groups.
   for (const [index, slot] of slots.entries()) {
-    if (occupied.has(index) || !remaining.length) continue;
+    if (index >= GROUPED_FROM || occupied.has(index) || !remaining.length) continue;
     const eligible = remaining.filter(sound => slot.category !== "melodicLoop" || sound.category !== "bassLoop");
     if (!eligible.length) continue;
     const candidate = eligible[Math.min(eligible.length - 1, Math.floor(random() * eligible.length))];
@@ -91,6 +107,39 @@ export function allocateKit(
     const [sound] = remaining.splice(at, 1);
     occupied.add(index);
     positions.set(sound.key, index);
+  }
+  // Banks B and C: a Type never takes an odd number of pads. A group the library could only half fill gives its odd sound back, then every group
+  // of empty pads is filled with one Type at a time (a pair, or the whole group), so the Types stay together.
+  const groups = slotGroups(slots).filter((group) => group.start >= GROUPED_FROM);
+  for (const group of groups) {
+    const placed = group.indexes.filter((index) => index >= 0 && !locked.has(index) && sounds.some((sound) => positions.get(sound.key) === index));
+    if (placed.length % 2 === 1) {
+      const last = placed[placed.length - 1];
+      for (const [key, at] of positions) if (at === last) { positions.delete(key); occupied.delete(last); remaining.push(sounds.find((sound) => sound.key === key)!); }
+    }
+  }
+  for (const group of groups) {
+    const empty = group.indexes.filter((index) => !occupied.has(index));
+    for (let at = 0; at + 1 < empty.length;) {
+      const left = empty.length - at;
+      const usable = (sound: KitSound) => group.category !== "melodicLoop" || sound.category !== "bassLoop";
+      const counts = new Map<CategoryId, KitSound[]>();
+      for (const sound of remaining) if (usable(sound)) counts.set(sound.category, [...(counts.get(sound.category) ?? []), sound]);
+      // The whole rest of the group from one Type when there are enough, otherwise a pair.
+      const whole = [...counts.values()].filter((list) => list.length >= left);
+      const pairs = [...counts.values()].filter((list) => list.length >= 2);
+      const pool = whole.length ? whole : pairs;
+      if (!pool.length) break;
+      const list = pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))];
+      const take = whole.length ? left : Math.min(left, list.length - (list.length % 2));
+      for (let n = 0; n < take; n++) {
+        const sound = list[n];
+        remaining.splice(remaining.indexOf(sound), 1);
+        occupied.add(empty[at + n]);
+        positions.set(sound.key, empty[at + n]);
+      }
+      at += take;
+    }
   }
   const shortages = slots.flatMap((slot, index) =>
     occupied.has(index)

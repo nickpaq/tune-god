@@ -2,7 +2,7 @@
 // one pattern per section holding that pad's note for the section's whole length, and the project tempo set to the song's.
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
-import { applyPadEq, FIRST_FREE_MUTE_GROUP, STRETCH_MODE } from "./padSettings";
+import { applyPadEq, CHOP_MUTE_GROUP, MUTE_GROUPS, STRETCH_MODE } from "./padSettings";
 import { balanceStats, FILE_CEILING_DB } from "./loudness";
 import { ACTIVE_MIX_PRESET } from "./mixPresets";
 import { koalaPitch } from "./pitchWrap";
@@ -88,36 +88,24 @@ export const isLoopPattern = (seq: any) => typeof seq?.tunegodLoopPattern === "n
 /** A slot a chop may write to: empty, or holding a loop pattern. */
 export const isFreeForChop = (seq: any) => isEmpty(seq) || isLoopPattern(seq);
 
-/** The mute group the sections take when the song pad has none: group 7, the first one the sound types do not use (1 to 6), as long as no other pad uses it. */
-export const SECTION_MUTE_GROUP = FIRST_FREE_MUTE_GROUP;
+/** The mute group the chops take: group 4, which no sound type uses. */
+export const SECTION_MUTE_GROUP = CHOP_MUTE_GROUP;
 
 /**
- * The mute group the section pads share (they cut one another). A group the song's pad already has is kept; with none, group 7 if no pad uses it,
- * otherwise the first group from 7 up that nobody uses.
+ * The mute group the section pads share (they cut one another). A group the song's pad already has is kept; with none, group 4 if no pad uses it,
+ * otherwise the first of the six groups nobody uses (all taken: group 4 anyway).
  */
 export function sectionMuteGroup(source: any, pads: any[]): number {
   const own = Number(source?.chokeGroup);
   if (Number.isFinite(own) && own > 0) return own;
-  return pads.some((p) => Number(p.chokeGroup) === SECTION_MUTE_GROUP) ? freeChokeGroup(pads) : SECTION_MUTE_GROUP;
+  return unusedMuteGroup(pads) ?? SECTION_MUTE_GROUP;
 }
 
-/** The first choke group no pad uses yet (0 is no group). */
-function freeChokeGroup(pads: any[]): number {
-  const used = new Set(pads.map((p) => Number(p.chokeGroup)).filter((n) => Number.isFinite(n)));
-  for (let g = FIRST_FREE_MUTE_GROUP; g <= 16; g++) if (!used.has(g)) return g;
-  for (let g = 1; g < FIRST_FREE_MUTE_GROUP; g++) if (!used.has(g)) return g;
-  return FIRST_FREE_MUTE_GROUP;
-}
-
-/** Highest mute group number Koala offers. */
-export const MUTE_GROUPS = 16;
-
-/** A mute group no pad uses: group 7 if free, otherwise the lowest free one from 7 up, then 1 to 6; null when all are taken (then the chops fall back to One Shot off). */
+/** A mute group no pad uses: group 4 if free, otherwise the lowest free one of the six; null when all are taken (then the chops fall back to One Shot off). */
 export function unusedMuteGroup(pads: any[]): number | null {
   const used = new Set(pads.map((p) => Number(p.chokeGroup)).filter((n) => Number.isFinite(n) && n > 0));
   if (!used.has(SECTION_MUTE_GROUP)) return SECTION_MUTE_GROUP;
-  for (let g = FIRST_FREE_MUTE_GROUP; g <= MUTE_GROUPS; g++) if (!used.has(g)) return g;
-  for (let g = 1; g < FIRST_FREE_MUTE_GROUP; g++) if (!used.has(g)) return g;
+  for (let g = 1; g <= MUTE_GROUPS; g++) if (!used.has(g)) return g;
   return null;
 }
 

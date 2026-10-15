@@ -81,7 +81,7 @@ describe("pad rules and stretch", () => {
     expect(String(loop.stretching)).toBe("true");
     expect(loop.stretch).toBe(STRETCH_MODE.modern);
     expect(loop).not.toHaveProperty("stretchLength");
-    expect(loop.chokeGroup).toBe(4);
+    expect(loop.chokeGroup).toBe(0);
     expect(String(loop.oneshot)).toBe("false");
     expect(String(loop.looping)).toBe("false");
     expect(String(drums.stretching)).toBe("true");

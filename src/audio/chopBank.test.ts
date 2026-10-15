@@ -26,3 +26,13 @@ describe("bank D is the chops' bank", () => {
     expect([47, 48, 63, 64].map(inChopBank)).toEqual([false, true, true, false]);
   });
 });
+
+describe("kit generation leaves bank D alone", () => {
+  it("the kit's zone is banks A to C and nothing it places lands on bank D", async () => {
+    const { BANK_ZONES, placeBank } = await import("./bankLoad");
+    expect(BANK_ZONES.kit).toEqual({ start: 0, end: 48 });
+    const sounds = Array.from({ length: 80 }, (_, key) => ({ key, category: (["kick", "snare", "melodic", "vox", "fx"] as const)[key % 5] }));
+    const placed = placeBank("kit", sounds, (await import("./fingerLayouts")).layoutById(null));
+    for (const index of placed.positions.values()) expect(index).toBeLessThan(48);
+  });
+});

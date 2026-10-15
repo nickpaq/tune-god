@@ -1,30 +1,28 @@
-// When the 808s can be faded in under the kick. There is no sidechain in the export any more: the menu's Sidechain switch now switches the soft
-// fade-in the 808s get (kickTransient.ts), which is measured on the kick, so it needs a kick and a bass or 808 on the pads. Hot swaps and a new
-// drum kit change what is on the pads, so this is worked out again from the pads every time.
+// When the sidechain can be written. Koala's SIDECHAIN goes on the Bass bus and listens to the Kick bus (see mixerChain.ts), so the pads need a kick
+// and a bass or 808. Hot swaps and a new drum kit change what is on the pads, so this is worked out again from the pads every time.
 import type { CategoryId } from "./classify";
 
-export type SidechainBlocker = "organize" | "kick" | "bass";
+export type SidechainBlocker = "kick" | "bass";
 
 export interface SidechainStatus {
   hasKick: boolean;
   hasBass: boolean;
-  /** Everything the sidechain needs is there: Organize is on and the pads hold a kick and a bass or 808. */
+  /** The pads hold a kick and a bass or 808. */
   ready: boolean;
-  /** What is missing first, for the menu to say; null when ready. */
+  /** What is missing first, for the export dialog to say; null when ready. */
   blocker: SidechainBlocker | null;
 }
 
 /** `categories` are the types of the real sounds on the pads (not hot-swap spares, ghost copies or silent placeholders). */
-export function sidechainStatus(categories: (CategoryId | undefined)[], organizeOn = true): SidechainStatus {
+export function sidechainStatus(categories: (CategoryId | undefined)[]): SidechainStatus {
   const hasKick = categories.includes("kick");
-  const hasBass = categories.includes("bass");
-  const blocker: SidechainBlocker | null = !organizeOn ? "organize" : !hasKick ? "kick" : !hasBass ? "bass" : null;
+  const hasBass = categories.includes("bass") || categories.includes("bassLoop");
+  const blocker: SidechainBlocker | null = !hasKick ? "kick" : !hasBass ? "bass" : null;
   return { hasKick, hasBass, ready: blocker === null, blocker };
 }
 
 export const SIDECHAIN_HINT: Record<SidechainBlocker | "ready", string> = {
-  ready: "The 808s fade in a touch so the kick hits through",
-  organize: "Needs a kick and a bass or 808 on the pads",
+  ready: "The bass and 808s duck under the kick (Koala's sidechain on the Bass bus, listening to the Kick bus). Turns on bus routing.",
   kick: "Load a drum kit with a kick first",
   bass: "Load a bass or 808 first",
 };

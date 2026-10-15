@@ -69,12 +69,12 @@ it("reads duration only during indexing and reuses it on reconnect", async () =>
   expect(reads).toBe(2);
   expect(changed.index.samples[0].classification.category).toBe("melodicLoop");
 });
-it("replaces exactly the three bass-loop slots and never fills melodic slots with bass loops", () => {
+it("has eight melodic-loop slots, no bass-loop slot, and never fills melodic slots with bass loops", () => {
   const slots = generationSlots();
   expect(slots).toHaveLength(48);
   expect(slots.filter(slot => slot.category === "melodicLoop")).toHaveLength(8);
   expect(slots.some(slot => slot.category === "bassLoop")).toBe(false);
-  for (const index of [30, 31, 46]) expect(slots[index].category).toBe("melodicLoop");
+  for (const index of [16, 17, 18, 19, 32, 33, 34, 35]) expect(slots[index].category).toBe("melodicLoop");
   const bass = { ...file(12), name: "Bass_Loop_Gm.wav", folders: [] };
   expect(planKit([bass]).groups).toEqual([]);
   expect(allocateKit([{ key: 1, category: "bassLoop" }], [{ category: "melodicLoop", label: "Melodic Loop" }]).positions.size).toBe(0);
@@ -87,6 +87,15 @@ it("hot swap rejects other Types, unselected packs, unknown sources and locked s
     expect(eligibleHotSwapSound({ category, libraryId: "selected:1" }, "melodicLoop", allowed)).toBe(false);
   for (const sound of [{ category: "melodicLoop" as const }, { category: "melodicLoop" as const, libraryId: "other:1" }, { category: "melodicLoop" as const, libraryId: "selected:1", locked: true }])
     expect(eligibleHotSwapSound(sound, "melodicLoop", allowed)).toBe(false);
+});
+
+it("hot swap shows only sounds of the selected packs for every Type, and everything when all packs are selected", () => {
+  const allowed = new Set(["selected:1", "Library/Selected/kick.wav"]);
+  expect(eligibleHotSwapSound({ category: "kick", libraryId: "selected:1" }, "kick", allowed)).toBe(true);
+  expect(eligibleHotSwapSound({ category: "kick", sourcePath: "Library/Selected/kick.wav" }, "kick", allowed)).toBe(true);
+  expect(eligibleHotSwapSound({ category: "kick", libraryId: "other:1" }, "kick", allowed)).toBe(false);
+  expect(eligibleHotSwapSound({ category: "kick" }, "kick", allowed)).toBe(false);
+  expect(eligibleHotSwapSound({ category: "kick", libraryId: "other:1" }, "kick", null)).toBe(true);
 });
 
 it("backfills duration on an already migrated legacy index before reusing classification", async () => {

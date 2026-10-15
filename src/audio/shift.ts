@@ -1,6 +1,6 @@
 // How far a pad is moved in pitch, in semitones. Every tuning ends up on Koala's pitch knob, to two decimals (x.xx), in the app and in the
-// file alike. The one exception to "the audio is never touched" is 808 and bass audio, which is rendered onto its nearest semitone (the
-// pitch it settles on, read from the second half of the sound); the pitch knob then carries what is left.
+// file alike. No audio is ever re-rendered at another pitch, the 808s' and basses' included: an 808 with Tune off is moved onto its nearest
+// semitone (the pitch it settles on, read from the second half of the sound) by the knob too.
 import type { Pad } from "../components/PadPanel";
 import { referenceOffsetSemitones } from "./theory";
 import { keyOffset } from "./song/keyOffset";
@@ -9,7 +9,7 @@ import { totalPitch } from "./pitchWrap";
 /** Rounds to Koala's pitch-knob precision, two decimals. */
 export const round2 = (x: number): number => Math.round(x * 100) / 100;
 
-/** Semitones an 808 or bass is rendered by at export so that it sits on its nearest note (0 for any other sound or one with no pitch found). */
+/** Semitones an 808 or bass is moved by (on the pitch knob) so that it sits on its nearest note: 0 for any other sound or one with no pitch found. */
 export function snapSemitones(pad: Pick<Pad, "category" | "detectedMidi">): number {
   if ((pad.category !== "bass" && pad.category !== "bassLoop") || pad.detectedMidi == null) return 0;
   return round2(Math.round(pad.detectedMidi) - pad.detectedMidi);
@@ -36,9 +36,4 @@ export function shiftFor(pad: Pad, projectKey: number | null, a4: number, major 
     else base += referenceOffsetSemitones(a4);
   }
   return round2(base + pad.semis + pad.cents / 100);
-}
-
-/** The value for the pad's pitch knob in Koala: the total shift less whatever the render already moved the audio by. */
-export function pitchKnobFor(pad: Pad, shift: number): number {
-  return round2(shift - snapSemitones(pad));
 }

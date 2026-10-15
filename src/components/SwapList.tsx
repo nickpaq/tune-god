@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getAudioContext } from "../audio/decode";
 import { parseSoundNames } from "../audio/soundName";
+import { shuffleWithinRuns } from "../audio/swapOrder";
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
 
@@ -36,9 +37,29 @@ const BATCH = 50;
 const LOAD_AHEAD = 400;
 const SHOW_AFTER = 16;
 
+/** A candidate's identity: its library id, else its pad number. */
+const idOf = (pad: Pad): string => pad.libraryId ?? `#${pad.origIndex}`;
+
+/** A sound's name in its row. It is cut off with an ellipsis; while the sound plays, a name wider than the row scrolls to and fro so it can be read. */
+function RowName({ text, title, playing }: { text: string; title: string; playing: boolean }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const inner = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const overflow = playing && box.current && inner.current ? Math.max(0, inner.current.scrollWidth - box.current.clientWidth) : 0;
+    inner.current?.style.setProperty("--scroll", `${overflow}px`);
+    inner.current?.classList.toggle("swap-row__text--scroll", overflow > 0);
+  }, [playing, text]);
+  return (
+    <span ref={box} className="swap-row__name" title={title}>
+      <span ref={inner} className="swap-row__text">{text}</span>
+    </span>
+  );
+}
+
 export function SwapList({
   slotLabel,
   candidates,
+  groupOf,
   audioOf,
   readAudio,
   busy = false,
@@ -50,6 +71,8 @@ export function SwapList({
   /** Identifies the tapped slot; the list starts from the top again when it changes. */
   slotLabel: string;
   candidates: Pad[];
+  /** Sounds are shuffled each time the list opens, within runs of neighbours with the same group (their fit and favorite tier stay in order). */
+  groupOf?: (pad: Pad) => string;
   audioOf: (pad: Pad) => Float32Array[];
   readAudio?: (pad: Pad) => Promise<{ channelData: Float32Array[]; sampleRate: number }>;
   busy?: boolean;
@@ -97,10 +120,31 @@ export function SwapList({
   };
   // A new pad or a new search starts at the top with the bars showing.
   useEffect(() => { lastTop.current = 0; if (hiddenNow.current) setChrome(false); }, [slotLabel, query]);
-  const filtered = useMemo(
-    () => candidates.filter(pad => (!favoritesOnly || pad.favorite) && `${pad.name} ${pad.sourcePath ?? ""}`.toLowerCase().includes(query.toLowerCase())),
-    [candidates, query, favoritesOnly],
+  // A new order each time the list opens or moves to another pad; it holds still while the list is scrolled and searched.
+  const seed = useMemo(() => Math.random(), [slotLabel]);
+  const ordered = useMemo(
+    () => groupOf ? shuffleWithinRuns(candidates, idOf, groupOf, seed) : candidates,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [candidates, seed],
   );
+  // The sound's own name, with the pack abbreviation, tempo, key and type words taken out: only the unique identifier is shown. Sounds of one folder share prefixes.
+  const first = candidates[0];
+  const parts = useMemo(
+    () => new Map([...parseSoundNames(candidates, (pad) => pad.name, (pad) => (pad.sourcePath ? pad.sourcePath.replace(/[^/]*$/, "") : `#${pad.origIndex}`))].map(([pad, part]) => [idOf(pad), part])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [candidates.length, first?.libraryId, first?.origIndex, slotLabel],
+  );
+  const filtered = useMemo(() => {
+    const matches = ordered.filter(pad => (!favoritesOnly || pad.favorite) && `${pad.name} ${pad.sourcePath ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+    // Each name appears once: a sound whose name repeats an earlier row's is left out (the first one stays, favorites lead).
+    const seen = new Set<string>();
+    return matches.filter(pad => {
+      const key = (parts.get(idOf(pad))?.name || pad.name).toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [ordered, query, favoritesOnly, parts]);
   const chooseMode = (favorites: boolean) => {
     if (favorites === favoritesOnly) return;
     setFavoritesOnly(favorites);
@@ -108,13 +152,6 @@ export function SwapList({
     if (rows.current) rows.current.scrollTop = 0;
   };
   const visible = filtered.slice(0, shown);
-  // The sound's own name, with the pack abbreviation, tempo, key and type words taken out (shown dimmed after it). Sounds of one folder share prefixes.
-  const first = candidates[0];
-  const parts = useMemo(
-    () => parseSoundNames(candidates, (pad) => pad.name, (pad) => (pad.sourcePath ? pad.sourcePath.replace(/[^/]*$/, "") : `#${pad.origIndex}`)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [candidates.length, first?.libraryId, first?.origIndex, slotLabel],
-  );
   const audition = async (pad: Pad) => {
     if (loading || busy) return;
     const token = ++request.current;
@@ -146,15 +183,10 @@ export function SwapList({
         {filtered.length === 0 && <div className="swap-list__empty">{favoritesOnly ? "No favorites of this type yet" : "No other sounds to swap in"}</div>}
         {visible.map((pad) => {
           const name = nameOf(pad);
-          const part = parts.get(pad);
-          const shownName = part?.name || name;
-          const meta = [part?.bpm ? `${part.bpm}` : "", part?.key ?? ""].filter(Boolean).join(" ");
+          const shownName = parts.get(idOf(pad))?.name || name;
           return (
           <div key={pad.libraryId ?? pad.origIndex} className={`swap-row${pad.favorite ? " swap-row--favorite" : ""}`}>
-              <span className="swap-row__name" title={pad.sourcePath ?? pad.name}>
-                {shownName}
-              </span>
-              {meta && <span className="swap-row__meta">{meta}</span>}
+              <RowName text={shownName} title={pad.sourcePath ?? pad.name} playing={preview.playing === pad.origIndex} />
               <button
                 className={`swap-row__btn swap-row__favorite${pad.favorite ? " is-favorite" : ""}`}
                 disabled={loading || busy}

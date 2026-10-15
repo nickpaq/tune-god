@@ -7,21 +7,20 @@ import { BUS_NAMES, CATEGORY_BUS } from "./routing";
 import { sidechainStatus } from "./sidechain";
 
 describe("sidechainStatus", () => {
-  it("is locked until Organize is on and a kick and a bass are both on the pads", () => {
-    expect(sidechainStatus(["kick", "bass"], false).blocker).toBe("organize");
-    expect(sidechainStatus([], true).blocker).toBe("kick");
-    expect(sidechainStatus(["snare", "bass"], true).blocker).toBe("kick");
-    expect(sidechainStatus(["kick", "snare"], true).blocker).toBe("bass");
-    expect(sidechainStatus(["kick", "bass", "snare"], true)).toEqual({ hasKick: true, hasBass: true, ready: true, blocker: null });
+  it("is locked until a kick and a bass are both on the pads", () => {
+    expect(sidechainStatus([]).blocker).toBe("kick");
+    expect(sidechainStatus(["snare", "bass"]).blocker).toBe("kick");
+    expect(sidechainStatus(["kick", "snare"]).blocker).toBe("bass");
+    expect(sidechainStatus(["kick", "bass", "snare"])).toEqual({ hasKick: true, hasBass: true, ready: true, blocker: null });
   });
 
   it("follows the pads: swapping the only kick out locks it, swapping a kit in with a kick unlocks it", () => {
     const kit = ["kick", "snare", "closedHat", "bass"] as const;
-    expect(sidechainStatus([...kit], true).ready).toBe(true);
+    expect(sidechainStatus([...kit]).ready).toBe(true);
     // the kick is hot swapped for a perc (it goes to the spares, which are not on the pads)
-    expect(sidechainStatus(kit.map((c) => (c === "kick" ? "perc" : c)), true).ready).toBe(false);
+    expect(sidechainStatus(kit.map((c) => (c === "kick" ? "perc" : c))).ready).toBe(false);
     // a new kit with a kick arrives
-    expect(sidechainStatus(["kick", "snare", "bass"], true).ready).toBe(true);
+    expect(sidechainStatus(["kick", "snare", "bass"]).ready).toBe(true);
   });
 });
 
@@ -32,8 +31,8 @@ async function load(): Promise<ParsedKoalaProject> {
   return { zip, samplerJson, originalName: "calibration.koala", pads, padBase: 0 };
 }
 
-const exported = async (buses: Map<number, number>) => {
-  const { blob } = await buildTunedKoala(await load(), [], { buses, busNames: BUS_NAMES });
+const exported = async (buses: Map<number, number>, sidechain = false) => {
+  const { blob } = await buildTunedKoala(await load(), [], { buses, busNames: BUS_NAMES, sidechain });
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
   return {
     sampler: JSON.parse(await zip.file("sampler/sampler.json")!.async("string")),
@@ -42,15 +41,34 @@ const exported = async (buses: Map<number, number>) => {
 };
 
 describe("the routing follows whichever sounds are on the pads at export", () => {
-  it("keeps kick and bass on bus 1 when the kit is swapped", async () => {
+  it("follows the kick and the bass when the kit is swapped", async () => {
     const [a, b] = (await load()).pads.slice(0, 2).map((p) => p.sampleId);
     const first = await exported(new Map([[a, CATEGORY_BUS.kick], [b, CATEGORY_BUS.bass]]));
     const busOf = (j: any, id: number) => j.sampler.pads.find((p: any) => p.sampleId === id).bus;
-    expect([busOf(first, a), busOf(first, b)]).toEqual([0, 0]);
+    expect([busOf(first, a), busOf(first, b)]).toEqual([0, 1]);
     // the kick and bass swap places on the pads: the buses swap with them
     const second = await exported(new Map([[a, CATEGORY_BUS.bass], [b, CATEGORY_BUS.kick]]));
-    expect([busOf(second, a), busOf(second, b)]).toEqual([0, 0]);
-    // no sidechain is written for either order
+    expect([busOf(second, a), busOf(second, b)]).toEqual([1, 0]);
+    // no sidechain is written unless it is asked for
     for (const j of [first, second]) expect(j.mixer.buses.some((b: any) => b.chain.some((fx: any) => fx?.name === "SIDECHAIN"))).toBe(false);
+  });
+});
+
+describe("the sidechain export option", () => {
+  it("writes one SIDECHAIN on the Bass bus (bus 2), listening to the Kick bus, and nowhere else", async () => {
+    const { mixer } = await exported(new Map(), true);
+    const on = (i: number) => mixer.buses[i].chain.filter((fx: any) => fx?.name === "SIDECHAIN");
+    expect(on(1)).toHaveLength(1);
+    expect(on(1)[0].parameters).toMatchObject({ source: 0, threshold: -20, release: 80, output: 0 });
+    expect([0, 2, 3].every((i) => on(i).length === 0)).toBe(true);
+  });
+
+  it("is not doubled when the project already has one", async () => {
+    const first = await exported(new Map(), true);
+    const zip = await load();
+    zip.zip.file("mixer.json", JSON.stringify(first.mixer));
+    const { blob } = await buildTunedKoala(zip, [], { busNames: BUS_NAMES, sidechain: true });
+    const again = JSON.parse(await (await JSZip.loadAsync(await blob.arrayBuffer())).file("mixer.json")!.async("string"));
+    expect(again.buses[1].chain.filter((fx: any) => fx?.name === "SIDECHAIN")).toHaveLength(1);
   });
 });

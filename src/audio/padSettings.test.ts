@@ -20,8 +20,8 @@ describe("per-pad EQ by sound type", () => {
 });
 
 describe("playback rules by sound type", () => {
-  it("melodic loops: mute group 4, one-shot off, loop off, modern stretch", () =>
-    expect(playbackFor("melodicLoop")).toMatchObject({ chokeGroup: 4, oneShot: false, loop: false, stretch: "modern" }));
+  it("melodic loops: no mute group (4 is the chops'), one-shot off, loop off, modern stretch", () =>
+    expect(playbackFor("melodicLoop")).toMatchObject({ chokeGroup: 0, oneShot: false, loop: false, stretch: "modern" }));
 
   it("melodic one-shots: no mute group, one-shot on, release at the maximum, stretch off", () =>
     expect(playbackFor("melodic")).toMatchObject({ chokeGroup: 0, oneShot: true, release: 1, stretch: "off" }));

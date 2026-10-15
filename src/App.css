@@ -651,11 +651,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Tempo and key found in the file name, after the name. */
-.swap-row__meta {
-  flex: none;
-  opacity: 0.55;
-  white-space: nowrap;
+/* The name inside its box: while the sound plays, a name wider than the row scrolls to and fro. */
+.swap-row__text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+.swap-row__text--scroll {
+  max-width: none;
+  overflow: visible;
+  animation: name-scroll 6s linear 1s infinite alternate;
 }
 
 /* OLED buttons: an outlined box, in inverse video while pressed or playing */
@@ -2509,7 +2516,6 @@
 .swap-foot__star svg { width: calc(var(--cell) * 5); height: calc(var(--cell) * 5); fill: currentColor; }
 /* A favorite is lit white with its text knocked out in unlit pixels (inverse video); in favorites mode every row is one. */
 .swap-row--favorite { background: var(--oled); color: #000; }
-.swap-row--favorite .swap-row__meta { opacity: 0.6; }
 .swap-row--favorite .swap-row__btn { border-color: #000; color: #000; }
 .swap-row--favorite .swap-row__favorite.is-favorite { color: #000; }
 .swap-row--favorite .swap-row__btn:active,

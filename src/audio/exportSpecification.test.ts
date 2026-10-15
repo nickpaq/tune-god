@@ -7,17 +7,17 @@ import type { ParsedKoalaProject } from "./koalaProject";
 import type { CategoryId } from "./classify";
 const cases: [CategoryId, number, boolean, number, boolean][] = [
   ["kick", 0, true, 0, false],
-  ["snare", 1, true, 0, false],
-  ["clap", 1, true, 0, false],
-  ["closedHat", 1, true, 1, false],
-  ["openHat", 1, true, 1, false],
-  ["cymbal", 1, true, 2, false],
-  ["perc", 1, true, 0, false],
-  ["drumLoop", 3, false, 3, true],
-  ["melodic", 2, true, 0, false],
-  ["melodicLoop", 2, false, 4, true],
-  ["bass", 0, true, 5, false],
-  ["bassLoop", 0, false, 5, true],
+  ["snare", 2, true, 0, false],
+  ["clap", 2, true, 0, false],
+  ["closedHat", 2, true, 1, false],
+  ["openHat", 2, true, 1, false],
+  ["cymbal", 2, true, 2, false],
+  ["perc", 2, true, 0, false],
+  ["drumLoop", 2, false, 3, true],
+  ["melodic", 3, true, 0, false],
+  ["melodicLoop", 3, false, 0, true],
+  ["bass", 1, true, 5, false],
+  ["bassLoop", 1, false, 5, true],
   ["vox", 3, true, 0, false],
   ["voxLoop", 3, false, 6, true],
   ["fx", 3, true, 0, false],
@@ -121,7 +121,7 @@ describe("Koala product specification", () => {
         .async("string"),
     );
     expect(out.pads[0]).toMatchObject({
-      bus: 0,
+      bus: 1,
       chokeGroup: 5,
       tunegodClassification: { category: "bass" },
     });

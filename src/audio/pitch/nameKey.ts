@@ -24,6 +24,9 @@ const tokensOf = (fileName: string) =>
 // Capital letters only: "am", "e" and "dm" are words and typos, and packs write note names as capitals.
 const KEY_TOKEN = /^([A-G])([#b♯♭]?)(m|min|minor|maj|major|Major|Minor|Maj|Min|M)?$/;
 
+/** A key written in a sound's name beats the measured one when tuning; a sound whose name has no key is measured from the audio instead. */
+export const TRUST_NAME_KEYS = true;
+
 export function keyFromName(fileName: string): NameKey | null {
   const tokens = tokensOf(fileName);
   for (let i = 0; i < tokens.length; i++) {

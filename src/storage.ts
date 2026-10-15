@@ -11,9 +11,8 @@ const DB_NAME = "tune-god";
 const STORE = "project";
 const SAMPLE_LIBRARY_STORE = "sample-library";
 
-/** Favorites keep their audio on the device, a few sounds and not whole packs: at most this many, and this many bytes in all. */
-export const MAX_FAVORITES = 40;
-export const MAX_FAVORITE_BYTES = 60 * 1024 * 1024;
+/** Favorites keep their audio on the device, one sound at a time (never batches): as many as fit in this many bytes (1 GB), with no limit on the count. */
+export const MAX_FAVORITE_BYTES = 1024 * 1024 * 1024;
 
 export interface SampleLibraryRecord {
   id: string;
@@ -59,22 +58,6 @@ export interface SavedPad {
 }
 
 export interface SavedState {
-  /** The menu's Organize switch: levels, bus routing, settings by sound type, the melodic spread and the master chain. */
-  organizeOn?: boolean;
-  /** The menu's Sidechain switch (bass and 808 duck to the kick). */
-  sidechainOn?: boolean;
-  /** Older versions' Mix switch, read once to carry the setting over to Organize and Sidechain. */
-  mix?: boolean;
-  /** Which master chain the Master chain switch writes. */
-  masterStyle?: "dynamic" | "loud";
-  normalize?: boolean;
-  spread?: boolean;
-  autoColor?: boolean;
-  routeBuses?: boolean;
-  masterChain?: boolean;
-  /** The Master chain switch (a newer key than `masterChain`, which an earlier version defaulted to on). */
-  masterChainOn?: boolean;
-  autoPlayback?: boolean;
   /** Show a grey sound-type symbol on each pad. */
   padSymbols?: boolean;
   /** How much of a dropped sample pack to load: "auto" guesses from the device. */
@@ -98,16 +81,10 @@ export interface SavedState {
   pads?: Record<number, SavedPad>;
   /** Finger-drumming layout chosen in the menu (kept across projects). */
   libraryIndexId?: string;
-  /** Organize now defaults to off; saved states from before that carry no flag, so their stored value is ignored once. */
-  organizeDefaultedOff?: boolean;
-  /** The Sidechain switch (the 808 fade-in): off by default, and independent of the export check boxes. */
-  fade808On?: boolean;
   /** Project names already given to an export (see audio/projectName.ts), so a random name is not used twice. */
   usedProjectNames?: string[];
   /** The export check boxes (see audio/exportOptions.ts), remembered between exports. */
   exportOptions?: Partial<import("./audio/exportOptions").ExportOptions>;
-  /** The master style now defaults to dynamic; saved states from before carry no flag, so their stored style is ignored once. */
-  masterStyleDefaultedDynamic?: boolean;
   /** Types the user gave folder names (key: the normalised folder name), applied to every library. */
   folderTypes?: Record<string, CategoryId>;
   /** Display names of those folders, by key. */

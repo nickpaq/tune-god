@@ -1,6 +1,6 @@
 import { isKitCategory, type CategoryId } from "./classify";
 
-/** Melodic loops require both their canonical Type and a source in the selected packs. */
+/** A sound needs a matching Type and, when packs are selected, a source inside them. With every pack selected (`null`) everything in the library qualifies. */
 export function eligibleHotSwapSound(
   sound: { category?: CategoryId; libraryId?: string; sourcePath?: string; locked?: boolean },
   slotCategory: CategoryId | undefined,
@@ -8,7 +8,7 @@ export function eligibleHotSwapSound(
 ): boolean {
   if (sound.locked) return false;
   if (!(isKitCategory(slotCategory) ? isKitCategory(sound.category) : sound.category === slotCategory)) return false;
-  return slotCategory !== "melodicLoop" || selectedSources === null ||
+  return selectedSources === null ||
     (sound.libraryId !== undefined && selectedSources.has(sound.libraryId)) ||
     (sound.sourcePath !== undefined && selectedSources.has(sound.sourcePath));
 }
