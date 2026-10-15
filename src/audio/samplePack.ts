@@ -1,7 +1,7 @@
 // Reading a sample pack folder: the audio files in it (see packProject.ts), the sound type a folder name implies, and the
 // memory budget a project may use. What each bank takes from a folder is in bankLoad.ts. All of this works on file names
 // and sizes only; no audio is read until a file has been picked.
-import { classifyByName, explicitCategoryByName, hasTempoInName, hatOpenness, isAutomaticMelodicLoop, isProtectedCategory, isSampledMusicName, type CategoryId } from "./classify";
+import { classifyByName, explicitCategoryByName, hasStatedTempo, hasTempoInName, hatOpenness, isAutomaticMelodicLoop, isProtectedCategory, isSampledMusicName, type CategoryId } from "./classify";
 import { isLoopCategory, normalizeClassification, type SampleClassification } from "./sampleClassification";
 
 const MB = 1024 * 1024;
@@ -138,7 +138,7 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
 export type FolderTypes = Record<string, CategoryId>;
 
 /** Bumped whenever the classification rules change, so saved library indexes reclassify unchanged files once instead of keeping stale results. */
-export const CLASSIFIER_VERSION = 5;
+export const CLASSIFIER_VERSION = 6;
 
 /** A folder named exactly 808 or 808s ("808's" too): everything inside is an 808, whatever its length, loop wording or root note. */
 export function is808Folder(folder: string): boolean {
@@ -192,7 +192,8 @@ export function classifyFile(folders: string[], fileName: string, correction?: S
   if (correction) return { ...normalizeClassification(correction), confidence: 1, needsReview: false, evidence: "correction" };
   if (folders.some(is808Folder)) return { category: "bass", confidence: 0.95, needsReview: false, evidence: "folder" };
   const byName = classifyByName(fileName);
-  const loop = inLoopContext(folders, fileName);
+  // There is no one-shot with a tempo: a stated bpm makes a loop of whatever the name or folder says it is.
+  const loop = inLoopContext(folders, fileName) || hasStatedTempo(fileName);
   let category: CategoryId | null = null;
   let evidence: SampleClassification["evidence"] = "unknown";
   for (let i = folders.length - 1; i >= 0; i--) {

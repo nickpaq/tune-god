@@ -206,6 +206,21 @@ export function hasTempoInName(fileName: string): boolean {
   return !!leading && inRange(leading[1]);
 }
 
+/**
+ * A tempo the name states for certain: a number beside "bpm", or a bare 60-200 number with words on both sides ("EUD_140_808_askari"). A number at the
+ * very end ("Kick 120") is a take number, so it does not count. A sound with a stated tempo is a loop, whatever else its name says.
+ */
+export function hasStatedTempo(fileName: string): boolean {
+  const base = stripProducerTags(fileName).replace(/\.[a-z0-9]+$/i, "").replace(/\((\d+)\)/g, " n$1 ").replace(/(\d)(bpm)/gi, "$1 $2").replace(/(bpm)(\d)/gi, "$1 $2");
+  const tokens = base.split(/[\s_\-.()[\]]+/).filter((t) => /[a-z0-9]/i.test(t));
+  const inRange = (t: string | undefined) => t !== undefined && /^\d{2,3}$/.test(t) && Number(t) >= 60 && Number(t) <= 200;
+  for (let i = 0; i < tokens.length; i++) {
+    if (/^bpm$/i.test(tokens[i]) && (inRange(tokens[i - 1]) || inRange(tokens[i + 1]))) return true;
+    if (i > 0 && i < tokens.length - 1 && inRange(tokens[i]) && /[a-z]/i.test(tokens[i - 1]) && /[a-z]/i.test(tokens[i + 1])) return true;
+  }
+  return false;
+}
+
 /** Words that mark a sampled-music file (a chop, a song starter, a layer) when nothing else says what it is. */
 export function isSampledMusicName(fileName: string): boolean {
   return /\b(chops?|songstarters?|song ?starters?|phrases?|layer \d+|stems?)\b/i.test(stripProducerTags(fileName).replace(/[_\-.()[\]]+/g, " "));
@@ -215,6 +230,8 @@ export function isSampledMusicName(fileName: string): boolean {
 export function classifyByName(fileName: string): CategoryId | "hat" | null {
   const name = stripProducerTags(fileName)
     .replace(/\.[a-z0-9]+$/i, "")
+    // A pack code in front of a tempo ("SS_SD_90_guitar_lion", "EUD_140_808_askari") names the pack, not a snare or a kick.
+    .replace(/^(?:[A-Z][A-Z0-9]{1,9}[ _-])+(?=\d{2,3}[ _-])/, "")
     // "DrumLoops3", "FullLoop2": run-together words and a number stuck to a word are separate words.
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/([a-z])(\d)/gi, "$1 $2")

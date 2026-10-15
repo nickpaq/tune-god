@@ -46,9 +46,23 @@ describe("tempo, sampled-music and drum-fill names", () => {
     expect(cat("Pack/SO_SNA_75_songstarter_montrose_guita.wav")).toBe("melodicLoop");
     expect(cat("Pack/Hit (9).wav")).toBe("other");
   });
-  it("a tempo never overrides a named sound", () => {
-    expect(cat("Pack/Kick 140bpm.wav")).toBe("kick");
-    expect(cat("Pack/Vocal 120bpm.wav")).toBe("vox");
+  it("a stated tempo overrides the named sound: there is no one-shot with a bpm", () => {
+    expect(cat("Pack/Kick 140bpm.wav")).toBe("drumLoop");
+    expect(cat("Pack/Kicks/Kick_140_BPM.wav")).toBe("drumLoop");
+    expect(cat("Pack/Vocal 120bpm.wav")).toBe("voxLoop");
+    expect(cat("Pack/Snare_100_punchy.wav")).toBe("drumLoop");
+    expect(cat("Pack/Perc_95bpm.wav")).toBe("percLoop");
+    expect(cat("Pack/FX 128bpm.wav")).toBe("fxLoop");
+  });
+  it("a pack code before the tempo names the pack, not a drum", () => {
+    expect(cat("! Splice/SS_SD_90_guitar_lion_rhythm_Amin.wav")).toBe("melodicLoop");
+    expect(cat("! Splice/VOX_JSPR_120_guitar_crunch_next_to_me_Em.wav")).toBe("melodicLoop");
+    expect(cat("! Splice/BD_140_piano_minato_Gmaj.wav")).toBe("melodicLoop");
+  });
+  it("a take number at the end is not a tempo", () => {
+    expect(cat("Pack/Kick 120.wav")).toBe("kick");
+    expect(cat("Pack/Snare (100).wav")).toBe("snare");
+    expect(cat("Pack/808 Kick 01.wav")).toBe("kick");
   });
   it("drum fills and rolls are drum loops", () => {
     expect(cat("! Splice/SS_SC_100_drums_fill_short_kiss.wav")).toBe("drumLoop");
