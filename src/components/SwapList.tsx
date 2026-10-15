@@ -70,9 +70,12 @@ export function SwapList({
   const hiddenNow = useRef(false);
   const lastTop = useRef(0);
   const travel = useRef(0);
-  const setChrome = (hide: boolean) => {
+  // Bars returning because the list was scrolled up wait a moment (0.3 s, in the CSS); reaching the top or a new search shows them at once.
+  const [reveal, setReveal] = useState<"instant" | "delayed">("instant");
+  const setChrome = (hide: boolean, delayed = false) => {
     hiddenNow.current = hide;
     travel.current = 0;
+    setReveal(delayed ? "delayed" : "instant");
     setChromeHidden(hide);
   };
   const onScroll = () => {
@@ -87,7 +90,7 @@ export function SwapList({
     // Distance travelled in one direction; turning round starts it again. Down hides after HIDE_AFTER px, up shows after SHOW_AFTER px.
     travel.current = Math.sign(delta) === Math.sign(travel.current) ? travel.current + delta : delta;
     if (!hiddenNow.current && travel.current > HIDE_AFTER) setChrome(true);
-    else if (hiddenNow.current && travel.current < -SHOW_AFTER) setChrome(false);
+    else if (hiddenNow.current && travel.current < -SHOW_AFTER) setChrome(false, true);
   };
   // A new pad or a new search starts at the top with the bars showing.
   useEffect(() => { lastTop.current = 0; if (hiddenNow.current) setChrome(false); }, [slotLabel, query]);
@@ -118,7 +121,7 @@ export function SwapList({
   }, [slotLabel]);
   useEffect(() => () => { request.current++; }, []);
   return (
-    <div className="swap-list" data-chrome={chromeHidden ? "hidden" : "shown"}>
+    <div className="swap-list" data-chrome={chromeHidden ? "hidden" : "shown"} data-reveal={reveal}>
       <input className="swap-list__search" aria-label="Search hot-swap sounds" placeholder="Search sounds" value={query} onChange={event => { setQuery(event.target.value); setShown(BATCH); if (rows.current) rows.current.scrollTop = 0; }} />
       <div className="swap-list__rows" ref={rows} onScroll={onScroll}>
         {filtered.length === 0 && <div className="swap-list__empty">No other sounds to swap in</div>}

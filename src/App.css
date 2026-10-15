@@ -2500,6 +2500,10 @@
 .oled--swap:has(.swap-list[data-chrome="hidden"]) .oled__head { transform: translateY(-100%); }
 .swap-list[data-chrome="hidden"] .swap-list__search { transform: translateY(calc(-100% - var(--head-h, 0px))); }
 .swap-list[data-chrome="hidden"] .swap-list__foot { transform: translateY(100%); }
+/* returning after a scroll up: a short wait first, so the bars do not jump out at the first touch of an upward scroll (hiding has no wait) */
+.swap-list[data-chrome="shown"][data-reveal="delayed"] .swap-list__search,
+.swap-list[data-chrome="shown"][data-reveal="delayed"] .swap-list__foot,
+.oled--swap:has(.swap-list[data-chrome="shown"][data-reveal="delayed"]) .oled__head { transition-delay: 0.3s; }
 @media (prefers-reduced-motion: reduce) {
   .oled__head, .swap-list__search, .swap-list__foot { transition: none; }
 }
