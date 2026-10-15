@@ -40,6 +40,13 @@ export interface MixPreset {
      * number, the further back the type sits. A type whose file is already quieter than its target stays at 0 dB.
      */
     targetLufs: Record<CategoryId, number>;
+    /**
+     * Harshness weighting for the balance (the export's "Normalize and balance"): the ear is most sensitive around 3 to 4 kHz, and a sound with a lot of
+     * energy there and above reads as harsh at the same loudness. Before measuring, the signal is passed through a bell at `presenceHz` and a high shelf
+     * at `shelfHz` (both a boost), so such a sound measures louder and its volume is turned down further to reach the same target. 0 dB on both is
+     * plain K-weighted loudness.
+     */
+    harshness: { presenceHz: number; presenceDb: number; presenceQ: number; shelfHz: number; shelfDb: number };
   };
   /** Koala's tone knob (a tilt EQ, 0 = the middle) by sound type. A type that is not listed keeps the tone it came with. */
   padTone: Partial<Record<CategoryId, number>>;
@@ -112,6 +119,7 @@ export const HEAVY_WARM_HIP_HOP: MixPreset = {
     //   -9 to -10 dB  perc, hats and cymbals: present and crisp, not harsh (the master shelf and the per-pad highpass keep them smooth).
     //   -11 to -12 dB perc loops and FX.
     targetLufs: TARGET_LUFS,
+    harshness: { presenceHz: 3500, presenceDb: 3, presenceQ: 0.9, shelfHz: 6500, shelfDb: 2 },
   },
   padTone: { snare: -0.1 }, // slightly under the middle: a touch darker
   sectionEq: { highpassHz: 150 }, // above the bass and 808 fundamentals, below the voice

@@ -42,6 +42,41 @@ function kWeightingFilters(fs: number): Biquad[] {
   return [shelf, highpass];
 }
 
+/** Robert Bristow-Johnson's peaking (bell) filter. */
+function peakingFilter(fs: number, freq: number, gainDb: number, q: number): Biquad {
+  const A = 10 ** (gainDb / 40);
+  const w0 = (2 * Math.PI * freq) / fs;
+  const alpha = Math.sin(w0) / (2 * q);
+  const a0 = 1 + alpha / A;
+  return { b0: (1 + alpha * A) / a0, b1: (-2 * Math.cos(w0)) / a0, b2: (1 - alpha * A) / a0, a1: (-2 * Math.cos(w0)) / a0, a2: (1 - alpha / A) / a0 };
+}
+
+/** The same cookbook's high shelf (slope 1). */
+function highShelfFilter(fs: number, freq: number, gainDb: number): Biquad {
+  const A = 10 ** (gainDb / 40);
+  const w0 = (2 * Math.PI * freq) / fs;
+  const cos = Math.cos(w0);
+  const alpha = (Math.sin(w0) / 2) * Math.SQRT2;
+  const sq = 2 * Math.sqrt(A) * alpha;
+  const a0 = A + 1 - (A - 1) * cos + sq;
+  return {
+    b0: (A * (A + 1 + (A - 1) * cos + sq)) / a0,
+    b1: (-2 * A * (A - 1 + (A + 1) * cos)) / a0,
+    b2: (A * (A + 1 + (A - 1) * cos - sq)) / a0,
+    a1: (2 * (A - 1 - (A + 1) * cos)) / a0,
+    a2: (A + 1 - (A - 1) * cos - sq) / a0,
+  };
+}
+
+/** The harshness stages of the active preset (see MixPreset.loudness.harshness), left out where a frequency is too close to the sample rate's limit. */
+function harshnessFilters(fs: number): Biquad[] {
+  const h = ACTIVE_MIX_PRESET.loudness.harshness;
+  const filters: Biquad[] = [];
+  if (h.presenceDb !== 0 && h.presenceHz < fs * 0.45) filters.push(peakingFilter(fs, h.presenceHz, h.presenceDb, h.presenceQ));
+  if (h.shelfDb !== 0 && h.shelfHz < fs * 0.45) filters.push(highShelfFilter(fs, h.shelfHz, h.shelfDb));
+  return filters;
+}
+
 function applyBiquad(input: Float64Array, f: Biquad): Float64Array {
   const out = new Float64Array(input.length);
   let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
@@ -57,11 +92,12 @@ function applyBiquad(input: Float64Array, f: Biquad): Float64Array {
 /**
  * Loudest 200 ms window of the K-weighted signal, in LUFS (channel powers summed), or null when
  * the sample is silent. Windows running past the end are zero-padded, so a hit shorter than the
- * window is averaged over the full window like the ear does.
+ * window is averaged over the full window like the ear does. With `harsh`, the signal is also weighted for harshness (a boost around 3 to 4 kHz and
+ * above) so a harsh sound measures louder than a smooth one.
  */
-export function measureLoudness(channelData: Float32Array[], sampleRate: number): number | null {
+export function measureLoudness(channelData: Float32Array[], sampleRate: number, harsh = false): number | null {
   const length = channelData[0].length;
-  const filters = kWeightingFilters(sampleRate);
+  const filters = harsh ? [...kWeightingFilters(sampleRate), ...harshnessFilters(sampleRate)] : kWeightingFilters(sampleRate);
   const power = new Float64Array(length);
   for (const data of channelData) {
     let signal: Float64Array = Float64Array.from(data);
@@ -92,6 +128,8 @@ export interface BalanceInput {
   channelData: Float32Array[];
   sampleRate: number;
   category?: CategoryId;
+  /** Weight the measurement for harshness (see measureLoudness). The export's balance does; the chops' own levelling does not. */
+  harsh?: boolean;
 }
 
 export interface Balance {
@@ -110,7 +148,7 @@ export interface BalanceStats {
 /** Per-sample numbers balanceFromStats needs, so audio can be measured one sample at a time and dropped. */
 export function balanceStats(input: BalanceInput): BalanceStats {
   return {
-    loud: measureLoudness(input.channelData, input.sampleRate),
+    loud: measureLoudness(input.channelData, input.sampleRate, input.harsh),
     peakDb: 20 * Math.log10(Math.max(peakOf(input.channelData), 1e-12)),
     category: input.category,
   };

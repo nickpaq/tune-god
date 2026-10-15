@@ -7,7 +7,7 @@ import type { SectionPlan } from "./song/chop";
 import { type MakerNote } from "./song/patternMaker";
 import {
   emptySequence,
-  isEmpty,
+  isFreeForChop,
   SEQUENCE_SLOTS,
   TICKS_PER_BEAT,
 } from "./exportSong";
@@ -302,7 +302,7 @@ export async function addChopperPad(
   const beatsPerBar =
     Number(sequence.beatsPerBar) > 0 ? Number(sequence.beatsPerBar) : 4;
   const free = sequences
-    .map((s, i) => (isEmpty(s) ? i : -1))
+    .map((s, i) => (isFreeForChop(s) ? i : -1))
     .filter((i) => i >= 0);
   let written = 0;
   if (chopper.pattern) {

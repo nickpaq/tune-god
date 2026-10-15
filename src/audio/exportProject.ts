@@ -6,7 +6,8 @@ import type { MasterStyle } from "./mixPresets";
 import { appendAfterExisting, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
 import { addChopperPad, type ChopperExport } from "./exportChopper";
-import { addSongSections, emptySequence, SEQUENCE_SLOTS, songTemplate, type SongExport } from "./exportSong";
+import { addSongSections, emptySequence, SEQUENCE_SLOTS, songTemplate, stretchLengthFor, type SongExport } from "./exportSong";
+import { estimateLoopBars, writeLoopPatterns } from "./loopPatterns";
 
 /** A ghost snare or soft kick the layout adds: a quieter copy of another pad, written as its own sample. */
 export interface GhostPadExport {
@@ -65,10 +66,23 @@ export async function buildTunedKoala(
     chopper,
     bpm,
     stretch,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; padPlayback?: Map<number, PadPlayback>; classifications?: Map<number, unknown>; padOverrides?: Map<number, PadPlayback | null>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number> } = {},
+    loops,
+    melodicPatterns = true,
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; padPlayback?: Map<number, PadPlayback>; classifications?: Map<number, unknown>; padOverrides?: Map<number, PadPlayback | null>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number>; loops?: Map<number, { bpm: number; seconds: number; melodic: boolean }>; melodicPatterns?: boolean } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
+
+  // Loops with a tempo in their name: their length in bars (2, 4, 8 or 16, from the length and that tempo) becomes the pad's stretch length. A chop's own length wins.
+  const beatsPerBar = await projectBeatsPerBar(project);
+  const stretchBeats = new Map(stretch ?? []);
+  const loopBars = new Map<number, { bars: number; melodic: boolean }>();
+  for (const [sampleId, loop] of loops ?? []) {
+    const bars = estimateLoopBars(loop.seconds, loop.bpm, beatsPerBar);
+    if (bars === null) continue;
+    loopBars.set(sampleId, { bars, melodic: loop.melodic });
+    if (!stretchBeats.has(sampleId)) stretchBeats.set(sampleId, stretchLengthFor(bars, beatsPerBar));
+  }
 
   for (const pad of samplerJson.pads ?? []) {
     const pan = pans?.get(pad.sampleId);
@@ -104,7 +118,7 @@ export async function buildTunedKoala(
       }
       if (play.eq) applyPadEq(pad, play.eq);
     }
-    const beats = stretch?.get(pad.sampleId);
+    const beats = stretchBeats.get(pad.sampleId);
     if (beats !== undefined && play?.stretch !== "off") {
       // Koala writes some booleans as strings; keep whichever style the pad already uses.
       pad.stretching = typeof pad.stretching === "string" ? "true" : true;
@@ -146,6 +160,7 @@ export async function buildTunedKoala(
   if (song?.sections.length) await addSongSections(project, samplerJson, song, template);
   if (chopper) await addChopperPad(project, samplerJson, chopper);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
+  await writeMelodicLoopPatterns(project, samplerJson, melodicPatterns ? loopBars : new Map(), beatsPerBar);
   if (bpm !== undefined) await writeBpm(project, bpm);
   if (busNames || busEffects || masterChain) await setupMixer(project, { names: busNames, kickClip: busEffects, melodicEq: busEffects, master: masterChain, masterStyle });
 
@@ -153,6 +168,38 @@ export async function buildTunedKoala(
   const base = project.originalName.replace(/\.koala$/i, "");
   // A project named from its sample folder ("TuneGod - All Kits") keeps that name as it is.
   return { blob, filename: /^TuneGod - /.test(base) ? `${base}.koala` : `${base}_tuned.koala` };
+}
+
+/** The project's beats in a bar (4 when it has no sequence.json). */
+async function projectBeatsPerBar(project: ParsedKoalaProject): Promise<number> {
+  const entry = project.zip.file("sequence.json");
+  if (!entry) return 4;
+  try {
+    const value = Number(JSON.parse(await entry.async("string")).beatsPerBar);
+    return value > 0 ? value : 4;
+  } catch {
+    return 4;
+  }
+}
+
+/**
+ * One pattern per melodic loop on the pads the export ends up with, written after the chops so a chop always keeps its slot (see loopPatterns.ts).
+ * Patterns from an earlier export are cleared even when there are no melodic loops now.
+ */
+async function writeMelodicLoopPatterns(project: ParsedKoalaProject, samplerJson: any, loopBars: Map<number, { bars: number; melodic: boolean }>, beatsPerBar: number): Promise<void> {
+  const entries = ((samplerJson.pads ?? []) as any[])
+    .filter((pad) => pad.type === "sample" && loopBars.get(pad.sampleId)?.melodic)
+    .map((pad) => ({ pad: Number(pad.pad), bars: loopBars.get(pad.sampleId)!.bars }))
+    .sort((a, b) => a.pad - b.pad);
+  const file = project.zip.file("sequence.json");
+  const sequence = file ? JSON.parse(await file.async("string")) : null;
+  if (!sequence && entries.length === 0) return;
+  const base = sequence ?? { autoPlay: "next", beatsPerBar: 4, bpm: 120, currSequenceId: 0, quantizeDivision: 16, quantizing: true, seqSnap: "Sequence", swing: 0 };
+  const sequences: any[] = (base.sequences = Array.isArray(base.sequences) ? base.sequences : []);
+  const hadLoopPatterns = sequences.some((s) => typeof s?.tunegodLoopPattern === "number");
+  if (entries.length === 0 && !hadLoopPatterns) return;
+  writeLoopPatterns(sequences, entries, beatsPerBar);
+  project.zip.file("sequence.json", JSON.stringify(base));
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

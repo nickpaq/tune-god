@@ -15,7 +15,7 @@ export interface SidechainStatus {
 }
 
 /** `categories` are the types of the real sounds on the pads (not hot-swap spares, ghost copies or silent placeholders). */
-export function sidechainStatus(categories: (CategoryId | undefined)[], organizeOn: boolean): SidechainStatus {
+export function sidechainStatus(categories: (CategoryId | undefined)[], organizeOn = true): SidechainStatus {
   const hasKick = categories.includes("kick");
   const hasBass = categories.includes("bass");
   const blocker: SidechainBlocker | null = !organizeOn ? "organize" : !hasKick ? "kick" : !hasBass ? "bass" : null;
@@ -24,7 +24,7 @@ export function sidechainStatus(categories: (CategoryId | undefined)[], organize
 
 export const SIDECHAIN_HINT: Record<SidechainBlocker | "ready", string> = {
   ready: "The 808s fade in a touch so the kick hits through",
-  organize: "Turn Organize on first. The sidechain also needs a kick and a bass or 808 on the pads",
+  organize: "Needs a kick and a bass or 808 on the pads",
   kick: "Load a drum kit with a kick first",
   bass: "Load a bass or 808 first",
 };
