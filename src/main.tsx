@@ -24,6 +24,20 @@ document.addEventListener(
   },
   { passive: false },
 );
+// iOS shows its magnifier and selection handles on a press-and-hold of anything it can treat as text, whatever user-select says. Selection is cancelled
+// everywhere but in text fields and the report panels, and a touch that starts on a pad is taken over (pads use pointer events, so nothing is lost), which
+// also stops iOS's own long-press recognisers from starting on the pads.
+const TEXT_AREAS = "input, textarea, .scan-report, .debug-report";
+document.addEventListener("selectstart", (e) => {
+  if (!(e.target as Element | null)?.closest?.(TEXT_AREAS) && !(e.target instanceof Text && e.target.parentElement?.closest(TEXT_AREAS))) e.preventDefault();
+});
+document.addEventListener(
+  "touchstart",
+  (e) => {
+    if ((e.target as Element | null)?.closest?.(".pads .pad, .seq .pad, .seq-pad")) e.preventDefault();
+  },
+  { passive: false },
+);
 for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
   document.addEventListener(type, (e) => e.preventDefault());
 }
