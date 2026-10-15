@@ -109,7 +109,7 @@ td:first-child { color: var(--ink-dim); width: 40%; }
     <div class="spec"><div class="v">D</div><div class="k">Left for your chops</div></div>
     <div class="spec"><div class="v">0 audio</div><div class="k">Stored from your library</div></div>
   </div>
-  <p class="dim">The requested Type comes first and gaps are filled at random with sounds of other Types, never a made-up shortage. <b>Balance across packs</b> alternates the packs you picked. Locked pads stay as they are when you build again.</p>
+  <p class="dim">The requested Type comes first and gaps are filled at random with sounds of other Types, never a made-up shortage. <b>Balance across packs</b> alternates the packs you picked. <b>Build another kit</b> replaces only your unlocked pads in A to C. Bank D, with any chops or acapella on it, is never touched.</p>
   <div class="threeup">
     <figure class="shot"><img alt="Bank A, the drum kit" src="data:image/webp;base64,@@kitA@@"><figcaption>Bank A</figcaption></figure>
     <figure class="shot"><img alt="Bank B" src="data:image/webp;base64,@@kitB@@"><figcaption>Bank B</figcaption></figure>
@@ -148,16 +148,16 @@ td:first-child { color: var(--ink-dim); width: 40%; }
     <tr><td>Bank B: Melodic Loops</td><td>A folder of loops: 12 at random on the top three rows, plus 4 spares</td></tr>
     <tr><td>Bank B: 808 &amp; Bass</td><td>Two basses and two 808s on the bottom row, four spares of each</td></tr>
     <tr><td>Bank C: One Shots</td><td>A folder of one-shots: 16 at random, plus 4 spares</td></tr>
-    <tr><td>Bank D: Chopper</td><td>Acapella, chopper or synced mode (below)</td></tr>
+    <tr><td>Bank D: Chopper</td><td>Acapella, chopper or synced mode (below). Kit builds and the other loaders never touch bank D</td></tr>
   </table>
 </section>
 
 <section class="sec">
   <div class="kick"><span class="led"></span>Hot swap and shuffle</div>
   <h2>Every sound in your library, one tap away.</h2>
-  <p>Select a pad and the screen lists the other sounds of its Type from your connected library. Search, preview with Play, tap the swap key, or <b>star</b> a sound to keep it on the device for later projects. The list grows 50 rows at a time as you scroll, and only the sound you ask for is decoded.</p>
+  <p>Select a pad and the screen lists the other sounds of its Type from the packs you picked, in a fresh shuffle each time it opens. Search, preview with Play, tap the swap key, or <b>star</b> a sound to keep it on the device for later projects (up to 1 GB). The list grows 50 rows at a time as you scroll, and only the sound you ask for is decoded.</p>
   <figure class="shot"><img alt="Hot swap list for a snare pad with search, star, play and swap keys" src="data:image/webp;base64,@@swap@@"><figcaption>Hot swap: star, play, swap</figcaption></figure>
-  <p class="dim">Names are cleaned up for reading: the pack tag, tempo, key and Type words are taken out, and the tempo and key are shown dimmed after the name.</p>
+  <p class="dim">Rows show just each sound's own name, with the pack tag and Type words taken out, and a name that repeats an earlier row's is left out. A long name scrolls while its sound plays.</p>
   <figure class="shot"><img alt="Dragging a pad turns the screen into Shuffle, Delete, Lock and Chopper" src="data:image/webp;base64,@@drag@@"><figcaption>Drag a pad: Shuffle, Delete, Lock, Chopper</figcaption></figure>
   <ul class="steps">
     <li><span><b>Shuffle.</b>Loads a random sound of the same Type from your library. Offline it uses the hot-swap pool and keeps the pad's Type.</span></li>
@@ -176,7 +176,7 @@ td:first-child { color: var(--ink-dim); width: 40%; }
     <div class="spec"><div class="v">0.15</div><div class="k">CMND threshold</div></div>
     <div class="spec"><div class="v">40–4000 Hz</div><div class="k">Search range</div></div>
   </div>
-  <p class="dim">YIN's classic failure is locking onto the 3rd harmonic, which would retune a sample five to seven semitones wrong, so an early dip only counts if it is nearly as deep as the global best and frames vote on a pitch class. <b>Melodic loops</b> are keyed from chroma instead, as a key rather than a note. A key written in the file name beats any measurement, and a pad whose key came from its name is drawn a shade darker: the darkness says the tuning is sure.</p>
+  <p class="dim">YIN's classic failure is locking onto the 3rd harmonic, which would retune a sample five to seven semitones wrong, so an early dip only counts if it is nearly as deep as the global best and frames vote on a pitch class. <b>Melodic loops</b> are keyed from chroma instead, as a key rather than a note. Keys are measured from the audio only, so a key written in a file name never decides the tuning.</p>
 </section>
 
 <section class="sec">
@@ -187,7 +187,7 @@ td:first-child { color: var(--ink-dim); width: 40%; }
     <li><span><b>Tap a note on the piano.</b>Bass, melodic one-shots and melodic loops retune to it, and a tick marks every pad that moved. Drums are left alone. Tap the same note again and everything returns to its own pitch.</span></li>
     <li><span><b>Minor or Major.</b>Says whether the key you picked is minor (the default) or major. A loop is moved by whole semitones into the same key.</span></li>
     <li><span><b>Tone.</b>Plays a reference tone on the key under a pad. A sine for most sounds, a soft saw chord for a melodic loop, and the pixel knob sets its volume.</span></li>
-    <li><span><b>Written to Koala's pitch knob.</b>Every tuning goes into the pad's pitch, to two decimals, so what you hear is what Koala plays.</span></li>
+    <li><span><b>Written to Koala's pitch knob.</b>Every tuning goes into the pad's pitch, to two decimals, 808s and basses included. No audio is re-rendered, so what you hear is what Koala plays.</span></li>
   </ul>
 </section>
 
@@ -205,51 +205,33 @@ td:first-child { color: var(--ink-dim); width: 40%; }
 </section>
 
 <section class="sec">
-  <div class="kick"><span class="led"></span>808 and bass</div>
-  <h2>Rendered to the semitone with a 256-tap sinc.</h2>
-  <p>The pitch knob carries almost every tuning, but 808s and basses are rendered tuned, onto the nearest semitone,. They are read from the second half of the sound, where the glide has settled. The resampler is built to sit far below the 24-bit noise floor.</p>
-  <div class="specs">
-    <div class="spec"><div class="v">256 taps</div><div class="k">128 each side of the read position</div></div>
-    <div class="spec"><div class="v">β = 14</div><div class="k">Kaiser window, about 140 dB stopband</div></div>
-    <div class="spec"><div class="v">4096</div><div class="k">Kernel phases per sample, linearly interpolated</div></div>
-    <div class="spec"><div class="v">float64</div><div class="k">Accumulation</div></div>
-    <div class="spec"><div class="v">−145 dB</div><div class="k">Error on pure tones, to about −150 dB</div></div>
-    <div class="spec"><div class="v">19 kHz</div><div class="k">Response flat through</div></div>
-  </div>
-  <figure class="diagram">
-    <svg viewBox="0 0 480 250" role="img" aria-label="The Kaiser-windowed sinc kernel, full and zoomed"><g id="kern"></g></svg>
-    <figcaption>The actual kernel, computed here with the same parameters: sinc(πd) × Kaiser(β = 14), over ±128 taps, and a zoom on the centre ±6.</figcaption>
-  </figure>
-  <p class="dim">A 808 can also get a soft fade-in as long as your kicks' main transient, so the kick hits through without a sidechain. Opt in from the export box.</p>
-</section>
-
-<section class="sec">
   <div class="kick"><span class="led"></span>Chop</div>
   <h2>Cut a song into a playable kit.</h2>
   <p>Bank D is the chops' bank. Three modes, all reached from the Chopper key.</p>
   <div class="specs">
     <div class="spec"><div class="v">127</div><div class="k">Slices on one Koala chopper pad</div></div>
-    <div class="spec"><div class="v">16</div><div class="k">Section pads in acapella and synced mode</div></div>
+    <div class="spec"><div class="v">2032</div><div class="k">Most slices in one chopper pattern, over D1 to D16</div></div>
     <div class="spec"><div class="v">4 · 8</div><div class="k">Chop by, in acapella mode</div></div>
     <div class="spec"><div class="v">64</div><div class="k">Pads you can send chops to</div></div>
   </div>
   <ul class="steps">
     <li><span><b>Chopper.</b>Any sample becomes one chopper pad with up to 127 slices, picked by velocity. A pattern maker arranges them into a new sequence, from one to sixteen bars.</span></li>
-    <li><span><b>Acapella.</b>Give it a song and its vocal stem, from a project or as two audio files. The cuts are found on the song and made on the stem, so you get 16 section pads with a pattern each, in time and stretched.</span></li>
-    <li><span><b>Synced.</b>The same as acapella without the stem: markers go on the sample and the same sound is cut into 16 sections.</span></li>
-    <li><span><b>Your pads, your choice.</b>Chops go to the pads you tick on a four-bank grid. Nothing is overwritten until you confirm.</span></li>
+    <li><span><b>Acapella.</b>Give it a song and its vocal stem, from a project or as two audio files. The cuts are found on the song and made on the stem, so every section becomes a pad with its own pattern, in time and stretched to its length.</span></li>
+    <li><span><b>Synced.</b>The same as acapella without the stem: markers go on the sample and the same sound is cut into section pads the same way.</span></li>
+    <li><span><b>Your pads, your choice.</b>Chops go to the pads you tick on a four-bank grid, locked pads are never offered, and cuts snap to a beat. The source is checked and nothing is overwritten until you confirm.</span></li>
   </ul>
 </section>
 
 <section class="sec">
   <div class="kick"><span class="led"></span>Export</div>
   <h2>Tick what the app should do for you.</h2>
-  <p>Unticked, sounds and pads come out exactly as they went in. Nothing is made louder or quieter.</p>
+  <p>Unticked, sounds and pads come out as they went in.</p>
   <figure class="shot"><img alt="The export box: per-type pad EQ, colours and labels, master chain, buses, melodic loop patterns, project name, BPM and A4" src="data:image/webp;base64,@@export@@"><figcaption>Export options, project name, BPM and A4</figcaption></figure>
   <table>
     <tr><td>Pad EQ</td><td>A high-pass, mid and high shelf by sound type</td></tr>
     <tr><td>Master chain</td><td>Koala FX: EQ, drive, compressor, clipper and limiter, Dynamic or Loud. It replaces effects already there, and the app warns first</td></tr>
-    <tr><td>Buses</td><td>Kick, Bass, Drums and Melodic buses, with a kick clipper and a melodic EQ</td></tr>
+    <tr><td>Buses</td><td>Kick, Bass, Drums, and Melodic + Chops + FX buses, with a kick clipper and an EQ on the last one</td></tr>
+    <tr><td>Sidechain</td><td>The Bass bus ducks to the Kick bus with Koala's own SIDECHAIN. No sound is changed. Needs a kick and a bass or 808</td></tr>
     <tr><td>Patterns</td><td>Each melodic loop gets its own pattern of its length in bars</td></tr>
     <tr><td>Stereo</td><td>Optional pan spread for hats (±30%) and melodic sounds (±40%)</td></tr>
     <tr><td>File name</td><td>name - key - bpm.koala, with a random name taken from your own sounds</td></tr>
@@ -262,7 +244,7 @@ td:first-child { color: var(--ink-dim); width: 40%; }
   <p>Type defaults apply first, then your own Type settings, then anything you set on one pad. Loops get their length in bars, snapped to 2, 4, 8 or 16 from the name's tempo or the project BPM, because Koala does not detect it.</p>
   <figure class="shot" style="max-width:74%;margin-inline:auto"><img alt="Koala export settings for the selected pad: bus, one shot, choke group, stretch" src="data:image/webp;base64,@@ktps@@"><figcaption>Bus, one shot, choke group and stretch, per Type or per pad</figcaption></figure>
   <table>
-    <tr><td>Choke groups</td><td>Closed and open hats 1, cymbals 2, drum and perc loops 3, melodic loops 4, bass and 808 5, vocal loops 6</td></tr>
+    <tr><td>Choke groups</td><td>Six only: hats 1, cymbals 2, drum and perc loops 3, chops 4, bass and bass loops 5, vocal loops 6. Melodic loops have none</td></tr>
     <tr><td>One-shots</td><td>One shot on, stretch off</td></tr>
     <tr><td>Loops</td><td>One shot off, stretch on: Beats for drum and perc loops, Modern for the rest</td></tr>
     <tr><td>Labels</td><td>Compact, from the Type: M Loop, D Loop, HH Closed, HH Open, M Oneshot</td></tr>
@@ -278,36 +260,3 @@ td:first-child { color: var(--ink-dim); width: 40%; }
 
 <div class="foot"><div class="n">KoalaTune</div><div class="m">Local-first · installs to your home screen · works offline</div></div>
 </main>
-<script>
-(function () {
-  var NS = "http://www.w3.org/2000/svg";
-  function el(tag, attrs, parent, text) {
-    var n = document.createElementNS(NS, tag);
-    for (var k in attrs) n.setAttribute(k, attrs[k]);
-    if (text != null) n.textContent = text;
-    parent.appendChild(n); return n;
-  }
-  var INK = "#dcd8cc", DIM = "#9a968b", ACC = "#ff5b24", TRK = "#3a3c40";
-
-  /* Kaiser-windowed sinc, beta 14, 128 taps each side */
-  function i0(x) { var s = 1, t = 1, q = x * x / 4; for (var k = 1; k < 60; k++) { t *= q / (k * k); s += t; if (t < s * 1e-16) break; } return s; }
-  var BETA = 14, HALF = 128, NORM = i0(BETA);
-  function kern(d) { var r = d / HALF; if (Math.abs(r) >= 1) return 0; var x = Math.PI * d; return (d === 0 ? 1 : Math.sin(x) / x) * i0(BETA * Math.sqrt(1 - r * r)) / NORM; }
-  var kn = document.getElementById("kern");
-  function plot(x0, y0, w, h, range, title, step) {
-    el("rect", { x: x0, y: y0, width: w, height: h, fill: "none", stroke: TRK }, kn);
-    el("line", { x1: x0, x2: x0 + w, y1: y0 + h * 0.72, y2: y0 + h * 0.72, stroke: TRK }, kn);
-    var d = "";
-    for (var s = -range; s <= range; s += step) {
-      var px = x0 + (s + range) / (2 * range) * w, py = y0 + h * 0.72 - kern(s) * h * 0.66;
-      d += (d ? "L" : "M") + px.toFixed(1) + " " + py.toFixed(1);
-    }
-    el("path", { d: d, fill: "none", stroke: INK, "stroke-width": 1.2 }, kn);
-    el("text", { x: x0, y: y0 - 6, "font-size": 11, "font-weight": 600 }, kn, title);
-    el("text", { x: x0, y: y0 + h + 14, "font-size": 10 }, kn, "−" + range + " taps");
-    el("text", { x: x0 + w, y: y0 + h + 14, "text-anchor": "end", "font-size": 10 }, kn, "+" + range + " taps");
-  }
-  plot(0, 22, 232, 190, 128, "Full kernel, 256 taps", 0.25);
-  plot(248, 22, 232, 190, 6, "Centre, ±6 taps", 0.02);
-})();
-</script>
