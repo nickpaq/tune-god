@@ -125,7 +125,7 @@ export const MELODIC_NAME =
   /\b(pianos?|keys?|keyboards?|bells?|plucks?|plucked|guitars?|ukulele|banjo|mandolin|sitar|harps?|mallets?|marimbas?|kalimbas?|rhodes|wurlitzer|epianos?|stabs?|vibraphones?|vibes|glock(enspiel)?s?|xylophones?|celestas?|chimes?|pads?|synths?|leads?|chords?|strings?|violins?|violas?|cellos?|organs?|accordion|harmonica|harpsichord|clavinet|clav|mellotron|moog|juno|arps?|saw|brass|horns?|trumpets?|trombones?|saxes|saxophones?|sax|clarinets?|oboes?|bassoon|flutes?|pan ?flutes?|orchestra|orchestral|pizzicato|spiccato|staccato|woodwinds?|melodic|melody|melodies|tonal|pitched)\b/;
 
 const NAME_RULES: [CategoryId | "hat", RegExp][] = [
-  ["drumLoop", /\b(break|breakbeat|amen|drum loops?|drums loops?|beat loops?|drum ?fills?|fills?|(snare|hi ?hat|hat|kick|drum) ?rolls?\d*)\b/],
+  ["drumLoop", /\b(break|breakbeat|amen|drum loops?|drums loops?|beat loops?|top loops?|drum ?fills?|fills?|(snare|hi ?hat|hat|kick|drum) ?rolls?\d*)\b/],
   ["kick", /\b(kicks?|kiks?|bd|bassdrum|bass drum)\b/],
   ["clap", /\b(clap|claps|handclap)\b/],
   ["snare", /\b(snares?|rims?|rimshots?|sidesticks?|side sticks?|snaps?|sd)\b/],
@@ -215,6 +215,9 @@ export function isSampledMusicName(fileName: string): boolean {
 export function classifyByName(fileName: string): CategoryId | "hat" | null {
   const name = stripProducerTags(fileName)
     .replace(/\.[a-z0-9]+$/i, "")
+    // "DrumLoops3", "FullLoop2": run-together words and a number stuck to a word are separate words.
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([a-z])(\d)/gi, "$1 $2")
     .replace(/[_\-.()[\]]+/g, " ")
     .toLowerCase();
   const isLoop = /\b(loop|loops)\b/.test(name);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAudioContext } from "../audio/decode";
+import { parseSoundNames } from "../audio/soundName";
 import type { Pad } from "./PadPanel";
 import { useSoundPreview } from "./useSoundPreview";
 
@@ -96,6 +97,13 @@ export function SwapList({
   useEffect(() => { lastTop.current = 0; if (hiddenNow.current) setChrome(false); }, [slotLabel, query]);
   const filtered = useMemo(() => candidates.filter(pad => `${pad.name} ${pad.sourcePath ?? ""}`.toLowerCase().includes(query.toLowerCase())), [candidates, query]);
   const visible = filtered.slice(0, shown);
+  // The sound's own name, with the pack abbreviation, tempo, key and type words taken out (shown dimmed after it). Sounds of one folder share prefixes.
+  const first = candidates[0];
+  const parts = useMemo(
+    () => parseSoundNames(candidates, (pad) => pad.name, (pad) => (pad.sourcePath ? pad.sourcePath.replace(/[^/]*$/, "") : `#${pad.origIndex}`)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [candidates.length, first?.libraryId, first?.origIndex, slotLabel],
+  );
   const audition = async (pad: Pad) => {
     if (loading || busy) return;
     const token = ++request.current;
@@ -127,11 +135,15 @@ export function SwapList({
         {filtered.length === 0 && <div className="swap-list__empty">No other sounds to swap in</div>}
         {visible.map((pad) => {
           const name = nameOf(pad);
+          const part = parts.get(pad);
+          const shownName = part?.name || name;
+          const meta = [part?.bpm ? `${part.bpm}` : "", part?.key ?? ""].filter(Boolean).join(" ");
           return (
           <div key={pad.libraryId ?? pad.origIndex} className="swap-row">
               <span className="swap-row__name" title={pad.sourcePath ?? pad.name}>
-                {name}
+                {shownName}
               </span>
+              {meta && <span className="swap-row__meta">{meta}</span>}
               <button
                 className={`swap-row__btn swap-row__favorite${pad.favorite ? " is-favorite" : ""}`}
                 disabled={loading || busy}

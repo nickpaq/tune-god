@@ -651,6 +651,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Tempo and key found in the file name, after the name. */
+.swap-row__meta {
+  flex: none;
+  opacity: 0.55;
+  white-space: nowrap;
+}
 
 /* OLED buttons: an outlined box, in inverse video while pressed or playing */
 .swap-row__btn {

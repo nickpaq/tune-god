@@ -138,7 +138,7 @@ export function categoryOfFolder(folder: string): CategoryId | "hat" | null {
 export type FolderTypes = Record<string, CategoryId>;
 
 /** Bumped whenever the classification rules change, so saved library indexes reclassify unchanged files once instead of keeping stale results. */
-export const CLASSIFIER_VERSION = 4;
+export const CLASSIFIER_VERSION = 5;
 
 /** A folder named exactly 808 or 808s ("808's" too): everything inside is an 808, whatever its length, loop wording or root note. */
 export function is808Folder(folder: string): boolean {
@@ -220,7 +220,7 @@ export function classifyFile(folders: string[], fileName: string, correction?: S
       }
     }
     // A sampled-music folder (Chops, Songstarters) holds whatever the file name says, as a loop: bass stems are bass loops, vocal chops vocal loops.
-    if (found === "melodicLoop" && (folderTypes?.[folderName] || SAMPLED_MUSIC_FOLDER.test(folderName)) && byName && byName !== "melodic" && byName !== "melodicLoop") {
+    if (found === "melodicLoop" && (folderTypes?.[folderName] || SAMPLED_MUSIC_FOLDER.test(folderName)) && byName && ["kick", "snare", "clap", "closedHat", "openHat", "hat", "cymbal", "bass", "vox"].includes(byName)) {
       category = loopVersion(byName === "hat" ? "closedHat" : byName);
       evidence = "folder";
       break;
