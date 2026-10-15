@@ -1181,7 +1181,7 @@ function App() {
           setLibraryError("No samples could be loaded. Reconnect your packs folder and try again.");
           setLibraryToolsOpen(false);
           setLibraryOpen(true);
-        } else window.alert(`No sound in that folder could be loaded: they were too long (bass/808 one-shots: 5 s; melodic one-shots: 6 s; loops: ${MAX_LOAD_SECONDS} s), marked as loops for a one-shot slot, too big for the project size limit, or unreadable.`);
+        } else window.alert(`No sound in that folder could be loaded: they were longer than ${MAX_LOAD_SECONDS} s (the most a bank load takes), marked as loops for a one-shot slot, too big for the project size limit, or unreadable.`);
         return;
       }
       // The first load into a new project names it: "TuneGod - All Kits" for a whole library, "TuneGod - {pack}" for one pack.
@@ -3055,7 +3055,6 @@ function App() {
     const source = cached ? new File([cached], pad.name, { type: "audio/wav" }) : await file!.source();
     if (source.size > packByteBudget(packMemory) / 4) throw new Error("This sound exceeds the current memory limit.");
     const decoded = await decodeNative(source);
-    if (decoded.channelData[0].length / decoded.sampleRate > MAX_LOAD_SECONDS) throw new Error("Hot swap supports sounds up to 30 seconds.");
     return decoded;
   };
 
@@ -3071,7 +3070,7 @@ function App() {
       const reasons: string[] = [];
       const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], { levelling: organize, explicit, onSkip: (reason) => reasons.push(reason),
         existing: used.map(pad => ({ channelData: audioOf(pad), sampleRate: pad.sampleRate, category: pad.category })),
-        byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)), maxSeconds: MAX_LOAD_SECONDS,
+        byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
         measure: input => getRenderWorker().measure(input),
       });
       if (!result) throw new Error(reasons.length ? `That sound could not be loaded: ${reasons[0]}.` : "That sound could not be loaded.");
@@ -3180,7 +3179,7 @@ function App() {
     };
     const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
     const reasons: string[] = [];
-    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], { levelling: organize, explicit: true, maxSeconds: MAX_LOAD_SECONDS, onSkip: (reason) => reasons.push(reason),
+    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], { levelling: organize, explicit: true, onSkip: (reason) => reasons.push(reason),
       existing: used.map((p) => ({ channelData: audioOf(p), sampleRate: p.sampleRate, category: p.category })),
       byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
       measure: (input) => getRenderWorker().measure(input),
