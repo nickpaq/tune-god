@@ -122,3 +122,11 @@ describe("808s for missing kick pads", () => {
     expect(positions.get(2)).toBe(12);
   });
 });
+
+describe("kick pads with no kicks and no 808s", () => {
+  it("takes other drums, never vocals, before the general fill", () => {
+    const { positions } = allocateKit([sample(1, "vox"), ...[2, 3, 4, 5, 6].map((k) => sample(k, "snare"))], generationSlots(), new Set(), new Set(), () => 0);
+    const drumOnKick = [12, 8].map((i) => [...positions].find(([, at]) => at === i)?.[0]);
+    expect(drumOnKick.every((key) => key !== undefined && key !== 1)).toBe(true);
+  });
+});

@@ -12,7 +12,7 @@
 import { allocateKit, generationSlots, type KitShortage } from "./kitGeneration";
 import type { SampleClassification } from "./sampleClassification";
 import type { FingerLayout } from "./fingerLayouts";
-import { categoryLabel, is808Name, type CategoryId } from "./classify";
+import { categoryLabel, is808Name, isDrumCategory, type CategoryId } from "./classify";
 import { categoryOfFile, classifyFile, fairPackOrder, shuffled, type PackFile } from "./samplePack";
 
 export type BankLoad = "drums" | "loops" | "bass" | "oneShots" | "kit";
@@ -162,9 +162,17 @@ export function planDrums<T>(files: PackFile<T>[], random: () => number = Math.r
     bucket.push({ ...file, classification });
     byType.set(category, bucket);
   }
-  const groups = (Object.keys(DRUM_QUOTA) as CategoryId[])
+  const groups: BankGroup<T>[] = (Object.keys(DRUM_QUOTA) as CategoryId[])
     .filter((c) => byType.has(c))
     .map((category) => ({ category, candidates: shuffled(byType.get(category)!, random), want: DRUM_QUOTA[category]! }));
+  // A pack with no kicks gives its two kick pads to 808s.
+  if (!byType.has("kick")) {
+    const eights = files
+      .filter((f) => categoryOfFile([...(f.rootFolder ? [f.rootFolder] : []), ...f.folders], f.name, undefined, f.duration) === "bass")
+      .filter((f) => [...(f.rootFolder ? [f.rootFolder] : []), ...f.folders, f.name].some(is808Name))
+      .map((f) => ({ ...f, classification: f.classification ?? classifyFile([...(f.rootFolder ? [f.rootFolder] : []), ...f.folders], f.name, undefined, f.duration) }));
+    if (eights.length) groups.push({ category: "bass", is808: true, candidates: shuffled(eights, random), want: 2 });
+  }
   if (!groups.length) return { groups, problem: "No drum subfolders were found in that folder. Choose a drum pack whose subfolders are named by sound (Kicks, Snares, Hi Hats, Claps...)." };
   return { groups };
 }
@@ -220,6 +228,16 @@ export function planKit<T>(files: PackFile<T>[], random: () => number = Math.ran
     ...group,
     candidates: options.balancePacks === false ? shuffled(group.candidates, random) : fairPackOrder(group.candidates, random),
   }));
+  if (!buckets.has("kick")) {
+    // No kicks in the library: 808s lead the bass group so they can take the kick pads; with none, other drums get two spare each.
+    const bass = groups.find((group) => group.category === "bass");
+    const eights = bass?.candidates.filter((f) => [...(f.rootFolder ? [f.rootFolder] : []), ...f.folders, f.name].some(is808Name)) ?? [];
+    if (bass && eights.length) bass.candidates = [...eights, ...bass.candidates.filter((f) => !eights.includes(f))];
+    else {
+      const drums = groups.filter((group) => isDrumCategory(group.category) && group.category !== "vox");
+      for (let n = 0; drums.length && n < 2; n++) drums[n % drums.length].want += 1;
+    }
+  }
   return groups.length ? { groups } : { groups, problem: "No samples match the selected pad Types. Review the sample Types or select more packs." };
 }
 

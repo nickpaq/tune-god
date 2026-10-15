@@ -1,4 +1,4 @@
-import { categoryLabel, type CategoryId } from "./classify";
+import { categoryLabel, isDrumCategory, type CategoryId } from "./classify";
 import { layoutById, type LayoutSlot } from "./fingerLayouts";
 import type { SampleClassification } from "./sampleClassification";
 
@@ -72,6 +72,16 @@ export function allocateKit(
     positions.set(candidate.key, index);
   }
   const remaining = sounds.filter(sound => !positions.has(sound.key));
+  // No kick and no 808 for a kick pad: any other drum takes it, before the general random fill.
+  for (const index of [12, 8]) {
+    if (occupied.has(index) || slots[index]?.category !== "kick") continue;
+    const drums = remaining.filter(sound => isDrumCategory(sound.category) && sound.category !== "vox");
+    if (!drums.length) break;
+    const sound = drums[Math.min(drums.length - 1, Math.floor(random() * drums.length))];
+    remaining.splice(remaining.indexOf(sound), 1);
+    occupied.add(index);
+    positions.set(sound.key, index);
+  }
   for (const [index, slot] of slots.entries()) {
     if (occupied.has(index) || !remaining.length) continue;
     const eligible = remaining.filter(sound => slot.category !== "melodicLoop" || sound.category !== "bassLoop");

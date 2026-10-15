@@ -178,24 +178,24 @@ it("bounds kit decoding by Type instead of multiplying the quota by every subtyp
   }))).flat();
   const plan = planKit(files, () => 0.5, { loadHotSwapSpares: true });
   expect(plan.groups).toHaveLength(1);
-  expect(plan.groups[0].want).toBe(7); // Three requested pads + four shared spares.
+  expect(plan.groups[0].want).toBe(9); // Three requested pads + four shared spares + two for the kick pads (no kicks, no 808s).
 });
 
 it("fills the former Rim slot from ordinary snares with one shared spare quota", () => {
   const files = Array.from({ length: 100 }, (_, i) => file(["Snares"], `snare-${i}.wav`));
   const plan = planKit(files, () => 0.5, { loadHotSwapSpares: true });
   expect(plan.groups).toHaveLength(1);
-  expect(plan.groups[0].want).toBe(7);
+  expect(plan.groups[0].want).toBe(9); // includes two for the empty kick pads
   const selected = plan.groups[0].candidates.slice(0, plan.groups[0].want).map((_, key) => ({ key, category: "snare" as const }));
   const placement = placeBank("kit", selected, horizontal);
   expect([...placement.positions.values()].slice(0, 3)).toEqual([9, 10, 13]);
-  expect(placement.positions.size).toBe(7);
+  expect(placement.positions.size).toBe(9);
 });
 
 it("loads only 48 pad sounds by default, with optional shared hot-swap spares", () => {
   const files = Array.from({ length: 100 }, (_, i) => file(["Snares"], `snare-${i}.wav`));
-  expect(planKit(files).groups[0].want).toBe(3);
-  expect(planKit(files, Math.random, { loadHotSwapSpares: true }).groups[0].want).toBe(7);
+  expect(planKit(files).groups[0].want).toBe(5); // three snare pads + two kick pads (no kicks, no 808s)
+  expect(planKit(files, Math.random, { loadHotSwapSpares: true }).groups[0].want).toBe(9);
   expect(padOnlyGroups("kit", planKit(files).groups, new Set([9, 10]))[0].want).toBe(1);
 });
 it("does not load spare sounds for locked loop slots or unused drum Types", () => {
@@ -218,4 +218,13 @@ it("exports compact Type labels without pad numbering", () => {
   expect(exportPadLabel("melodic")).toBe("M Oneshot");
   expect(exportPadLabel("percLoop")).toBe("P Loop");
   expect(exportPadLabel("bass", true)).toBe("808");
+});
+
+it("Bank A pulls two 808s when the pack has no kicks, and none when it has kicks", () => {
+  const snares = Array.from({ length: 4 }, (_, i) => file(["Snares"], `snare-${i}.wav`));
+  const eights = Array.from({ length: 3 }, (_, i) => file(["808s"], `808-${i}.wav`));
+  const none = planDrums([...snares, ...eights], () => 0.5);
+  expect(none.groups.find((g) => g.is808)?.want).toBe(2);
+  const kicks = Array.from({ length: 2 }, (_, i) => file(["Kicks"], `kick-${i}.wav`));
+  expect(planDrums([...snares, ...eights, ...kicks], () => 0.5).groups.some((g) => g.is808)).toBe(false);
 });
