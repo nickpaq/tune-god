@@ -12,7 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { resolvePlayback, type PadPlayback } from "./audio/padSettings";
+import { resolvePlayback, loopStretchBeats, type PadPlayback } from "./audio/padSettings";
 import { Keyboard } from "./components/Keyboard";
 import {
   guessAcapellaRoles,
@@ -2834,7 +2834,15 @@ function App() {
         if (settings) padPlayback.set(p.origIndex, autoPlayback ? settings : { ...settings, eq: undefined, bus: undefined });
       }
       // Sounds export compact Type labels without file or preset numbering.
-      // Ordinary loops use Koala’s automatic length detection; chop exports write their exact lengths.
+      // Loops are written stretched to 2, 4, 8 or 16 bars; chop exports write their exact lengths.
+      const stretch = new Map<number, number>();
+      const beatsPerBar = await beatsPerBarOfProject();
+      for (const p of allPads) {
+        const settings = padPlayback.get(p.origIndex);
+        if (settings?.stretch && settings.stretch !== "off") {
+          stretch.set(p.sampleId, loopStretchBeats(p.channelData[0].length / p.sampleRate, p.bpm, projectBpm, beatsPerBar));
+        }
+      }
       const colors = new Map<number, { color: string; label: string }>();
       for (const p of allPads) {
         // The label is what the pad's caption says in the app, without its number.
@@ -2846,6 +2854,7 @@ function App() {
       }
       const { blob, filename } = await buildTunedKoala(project, tuned, {
         bpm: projectBpm,
+        stretch,
         vols,
         pitches,
         busNames: organize ? BUS_NAMES : undefined,

@@ -84,3 +84,18 @@ export function resolvePlayback(category: CategoryId, typeOverrides?: PadPlaybac
   if (stretch === true && (!resolved.stretch || resolved.stretch === "off")) resolved.stretch = playbackFor(category)?.stretch === "beats" ? "beats" : "modern";
   return resolved;
 }
+
+/** The bar counts a loop's stretch length may take. */
+export const LOOP_BARS = [2, 4, 8, 16] as const;
+
+/** The nearest allowed bar count (compared on a log scale, so 5.5 bars is 4 or 8 by ratio, never 5 or 7). */
+export function snapLoopBars(bars: number): number {
+  if (!(bars > 0)) return LOOP_BARS[0];
+  return LOOP_BARS.reduce((best, n) => (Math.abs(Math.log(bars / n)) < Math.abs(Math.log(bars / best)) ? n : best));
+}
+
+/** A loop's `stretchLength` in beats: its length at its own tempo (the name's, else the project's), snapped to 2, 4, 8 or 16 bars. */
+export function loopStretchBeats(seconds: number, ownBpm: number | undefined, projectBpm: number, beatsPerBar: number): number {
+  const bpm = ownBpm && ownBpm > 0 ? ownBpm : projectBpm;
+  return snapLoopBars((seconds * bpm) / 60 / beatsPerBar) * beatsPerBar;
+}
