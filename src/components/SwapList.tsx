@@ -28,13 +28,12 @@ const SwapGlyph = () => (
  * Hot-swap list: the sounds that can take the tapped pad's place, drawn on the OLED like the other screens (no colour
  * coding), one slim row each with the sound's name, a play button and a swap button. The list scrolls on its own.
  */
-/** Scroll distances (px) for the collapsing bars: down this far hides them, up this far brings them back, and a list must have this much to scroll before they hide. */
+/** Scroll distances (px) for the sliding bars: down this far hides them, up this far brings them back. */
 const HIDE_AFTER = 32;
 /** Rows added per step of the infinite scroll, and how close (px) to the end of the list the next step starts. */
 const BATCH = 50;
 const LOAD_AHEAD = 400;
 const SHOW_AFTER = 16;
-const MIN_SCROLL_TO_HIDE = 160;
 
 export function SwapList({
   slotLabel,
@@ -71,11 +70,9 @@ export function SwapList({
   const hiddenNow = useRef(false);
   const lastTop = useRef(0);
   const travel = useRef(0);
-  const settleUntil = useRef(0);
   const setChrome = (hide: boolean) => {
     hiddenNow.current = hide;
     travel.current = 0;
-    settleUntil.current = performance.now() + 300; // the list resizes as the bars collapse; its scroll events during that are not the user's
     setChromeHidden(hide);
   };
   const onScroll = () => {
@@ -85,18 +82,13 @@ export function SwapList({
     if (el.scrollHeight - top - el.clientHeight < LOAD_AHEAD) setShown(n => (n < filtered.length ? n + BATCH : n));
     const delta = top - lastTop.current;
     lastTop.current = top;
-    if (performance.now() < settleUntil.current || delta === 0) return;
+    if (delta === 0) return;
     if (top <= 4) { if (hiddenNow.current) setChrome(false); return; }
     // Distance travelled in one direction; turning round starts it again. Down hides after HIDE_AFTER px, up shows after SHOW_AFTER px.
     travel.current = Math.sign(delta) === Math.sign(travel.current) ? travel.current + delta : delta;
-    if (!hiddenNow.current && travel.current > HIDE_AFTER && el.scrollHeight - el.clientHeight > MIN_SCROLL_TO_HIDE) setChrome(true);
+    if (!hiddenNow.current && travel.current > HIDE_AFTER) setChrome(true);
     else if (hiddenNow.current && travel.current < -SHOW_AFTER) setChrome(false);
   };
-  useEffect(() => {
-    const oled = rows.current?.closest(".oled");
-    oled?.setAttribute("data-swap-chrome", chromeHidden ? "hidden" : "shown");
-    return () => oled?.removeAttribute("data-swap-chrome");
-  }, [chromeHidden]);
   // A new pad or a new search starts at the top with the bars showing.
   useEffect(() => { lastTop.current = 0; if (hiddenNow.current) setChrome(false); }, [slotLabel, query]);
   const filtered = useMemo(() => candidates.filter(pad => `${pad.name} ${pad.sourcePath ?? ""}`.toLowerCase().includes(query.toLowerCase())), [candidates, query]);
@@ -126,7 +118,7 @@ export function SwapList({
   }, [slotLabel]);
   useEffect(() => () => { request.current++; }, []);
   return (
-    <div className="swap-list">
+    <div className="swap-list" data-chrome={chromeHidden ? "hidden" : "shown"}>
       <input className="swap-list__search" aria-label="Search hot-swap sounds" placeholder="Search sounds" value={query} onChange={event => { setQuery(event.target.value); setShown(BATCH); if (rows.current) rows.current.scrollTop = 0; }} />
       <div className="swap-list__rows" ref={rows} onScroll={onScroll}>
         {filtered.length === 0 && <div className="swap-list__empty">No other sounds to swap in</div>}

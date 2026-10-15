@@ -2482,22 +2482,24 @@
 .swap-list__search { flex: none; min-width: 0; width: 100%; box-sizing: border-box; font: inherit; font-size: calc(var(--cell) * 6); background: transparent; color: var(--oled); border: 0; border-bottom: 1px solid var(--track); border-radius: 0; padding: var(--cell); }
 .swap-list__foot { display: flex; align-items: center; justify-content: space-between; font-size: calc(var(--cell) * 6); }
 
-/* Hot swap: the title bar, the search field and the page bar collapse while the list is scrolled down, and return on scrolling up. */
-.oled__head, .swap-list__search, .swap-list__foot {
-  transition: height 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.16s ease, padding 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-width 0.22s ease;
+/* Hot swap: the title bar, the search field and the count bar are overlays. The list always fills the whole screen (its rows carry padding for the bars), and the
+   bars slide over it with a transform when they hide and return, so they never take room from the list and can never move its scroll position. */
+.oled--swap { --head-h: calc(var(--cell) * 10); }
+.oled--swap .oled__head { position: absolute; top: 0; left: 0; right: 0; z-index: 3; }
+.swap-list { position: relative; --search-h: calc(var(--cell) * 11); --foot-h: calc(var(--cell) * 10); }
+.swap-list__rows {
+  padding-top: calc(var(--head-h, 0px) + var(--search-h));
+  padding-bottom: var(--foot-h);
+  scroll-padding-top: calc(var(--head-h, 0px) + var(--search-h));
+  scroll-padding-bottom: var(--foot-h);
 }
-.swap-list__search { box-sizing: border-box; height: calc(var(--cell) * 11); }
-.swap-list__foot { height: calc(var(--cell) * 10); overflow: hidden; justify-content: center; text-align: center; }
-.oled[data-swap-chrome="hidden"] .oled__head,
-.oled[data-swap-chrome="hidden"] .swap-list__search,
-.oled[data-swap-chrome="hidden"] .swap-list__foot {
-  height: 0;
-  padding-block: 0;
-  border-bottom-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
+.swap-list__search { position: absolute; top: var(--head-h, 0px); left: 0; right: 0; z-index: 2; height: var(--search-h); background: #000; }
+.swap-list__foot { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; height: var(--foot-h); display: flex; align-items: center; justify-content: center; text-align: center; background: #000; opacity: 1; border-top: 1px solid var(--track); box-sizing: border-box; }
+.swap-list__foot > span { opacity: 0.6; }
+.oled__head, .swap-list__search, .swap-list__foot { transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1); will-change: transform; }
+.oled--swap:has(.swap-list[data-chrome="hidden"]) .oled__head { transform: translateY(-100%); }
+.swap-list[data-chrome="hidden"] .swap-list__search { transform: translateY(calc(-100% - var(--head-h, 0px))); }
+.swap-list[data-chrome="hidden"] .swap-list__foot { transform: translateY(100%); }
 @media (prefers-reduced-motion: reduce) {
   .oled__head, .swap-list__search, .swap-list__foot { transition: none; }
 }

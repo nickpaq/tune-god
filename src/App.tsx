@@ -3764,7 +3764,7 @@ function App() {
                   className="screen"
                   aria-label={`Display: ${shownMode ?? "sample"}`}
                 >
-                  <div className="oled">
+                  <div className={`oled${shownMode === "swap" && selectedPad ? " oled--swap" : ""}`}>
                     {selectedPad && (
                       <div className="oled__head">
                         <span>
