@@ -2749,6 +2749,7 @@ function App() {
               channelData,
               sampleRate: pad.sampleRate,
               category: pad.category,
+              harsh: true,
             }),
           );
         rendered.push({ pad, channelData, retimed });
