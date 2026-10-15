@@ -49,7 +49,7 @@
   flex-direction: column;
   gap: 2cqw;
   /* Center the compact grid; its bottom outer margin matches its actual side margins. */
-  padding: 0 4.1cqw calc(4.1cqw + (88.5cqw - var(--pad-grid-width)) / 2);
+  padding: 0 4.1cqw calc((100cqw - var(--pad-grid-width) - 3cqw) / 2);
   box-shadow: inset 0 1px 0 var(--seam-l);
 }
 
@@ -176,8 +176,8 @@
 .screen-wrap {
   flex: 1;
   min-height: var(--screen-min);
-  /* locked proportions: the screen never grows past this, whatever room the viewport leaves. 70.8cqw = the OLED's approved 65.2cqw plus the bezel (2.8cqw) on top and bottom, so the start-screen squares keep their approved size */
-  max-height: 70.8cqw;
+  /* locked proportions: the screen never grows past this (278 px on the 402 px phone), whatever room the viewport leaves */
+  max-height: 69.2cqw;
   position: relative;
   display: flex;
 }
@@ -186,7 +186,8 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  padding: 2.8cqw;
+  /* the same bezel on all four sides: the smaller of the old two (2cqw top and bottom, 2.8cqw sides), so the display is wider */
+  padding: 2cqw;
   border-radius: 2.6cqw;
   background: var(--bezel);
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75), 0 1px 0 var(--seam-l);
@@ -895,10 +896,10 @@
 .padzone {
   position: relative;
   isolation: isolate;
-  /* hugs the grid: the same spacing on all four sides, and at full size exactly as wide as the screen above it */
+  /* hugs the grid: the same 1.5cqw on all four sides (the smaller of the old two), so its outer edge sits in around the pads, which stay square */
   width: fit-content;
   margin-inline: auto;
-  padding: 1.65cqw;
+  padding: 1.5cqw;
   border-radius: 2.6cqw;
   background: #0d0d0e;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8);
