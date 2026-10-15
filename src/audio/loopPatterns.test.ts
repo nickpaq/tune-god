@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { estimateLoopBars, FIRST_LOOP_PATTERN_SLOT, writeLoopPatterns } from "./loopPatterns";
 import { emptySequence, isEmpty, isFreeForChop, SEQUENCE_SLOTS, TICKS_PER_BEAT } from "./exportSong";
 
-const slots = () => Array.from({ length: SEQUENCE_SLOTS }, () => emptySequence());
+const slots = (): any[] => Array.from({ length: SEQUENCE_SLOTS }, () => emptySequence());
 const bar = (bpm: number, bars: number, beatsPerBar = 4) => (bars * beatsPerBar * 60) / bpm;
 
 describe("estimateLoopBars", () => {
@@ -53,7 +53,7 @@ describe("writeLoopPatterns", () => {
 
   it("skips slots that already hold a pattern and does not overwrite them", () => {
     const sequences = slots();
-    const mine = { ...emptySequence(), noteSequence: { pattern: { numBars: 1, notes: [{ num: 3 }] } } };
+    const mine: any = { ...emptySequence(), noteSequence: { pattern: { numBars: 1, notes: [{ num: 3 }] } } };
     sequences[31] = mine;
     sequences[29] = mine;
     writeLoopPatterns(sequences, [{ pad: 1, bars: 4 }, { pad: 2, bars: 4 }], 4);
@@ -76,6 +76,6 @@ describe("writeLoopPatterns", () => {
     writeLoopPatterns(sequences, [{ pad: 1, bars: 4 }], 4);
     expect(isFreeForChop(sequences[31])).toBe(true);
     expect(isFreeForChop(emptySequence())).toBe(true);
-    expect(isFreeForChop({ ...emptySequence(), noteSequence: { pattern: { numBars: 1, notes: [{ num: 3 }] } } })).toBe(false);
+    expect(isFreeForChop({ ...(emptySequence() as any), noteSequence: { pattern: { numBars: 1, notes: [{ num: 3 }] } } })).toBe(false);
   });
 });
