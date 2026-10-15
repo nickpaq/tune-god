@@ -35,7 +35,8 @@
   display: flex;
   flex-direction: column;
   gap: 2.6cqw;
-  padding: max(3cqw, var(--safe-top)) 3cqw 3cqw;
+  /* the bottom padding (less the 1px seam) is the gap above the pad box: exactly twice the 3cqw side gap, so 24px on the 402px phone */
+  padding: max(3cqw, var(--safe-top)) 3cqw calc(6cqw - 1px);
   background: var(--chassis1);
   border-bottom: 1px solid var(--seam-d);
 }
@@ -43,7 +44,7 @@
 .lower {
   /* the pads fill the panel exactly: the screen's width (100cqw - 6cqw) less the panel's 1.5cqw on each side and the three 1.5cqw gaps, split over four square pads */
   --pad-w: calc((100cqw - 6cqw - 2 * 1.5cqw - 3 * 1.5cqw) / 4);
-  --pad-h: min(var(--pad-w), calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - var(--screen-min) - var(--deck-min) - 3cqw - 4.5cqw - 5.6cqw) / 4));
+  --pad-h: min(var(--pad-w), calc((100cqh - max(3cqw, var(--safe-top)) - 11.3cqw - 5 * 2.6cqw - var(--screen-min) - var(--deck-min) - 6cqw - 4.5cqw - 5.6cqw) / 4));
   --pad-grid-width: calc(4 * var(--pad-h) + 3 * 1.5cqw);
   flex: none;
   display: flex;
@@ -177,8 +178,7 @@
 .screen-wrap {
   flex: 1;
   min-height: var(--screen-min);
-  /* locked proportions: the screen never grows past this (278 px on the 402 px phone), whatever room the viewport leaves */
-  max-height: 69.2cqw;
+  /* no cap: the screen takes all the room the keys row, the deck (piano or type keys, when the mode has one) and the pads leave */
   position: relative;
   display: flex;
 }
@@ -900,7 +900,8 @@
   /* exactly as wide as the screen above it, so their left and right edges line up; 1.5cqw round the pads (more at the sides only when a short phone makes the square pads smaller) */
   box-sizing: border-box;
   padding: 1.5cqw calc((100% - var(--pad-grid-width)) / 2);
-  border-radius: 2.6cqw;
+  --box-radius: 2.6cqw;
+  border-radius: var(--box-radius);
   background: #0d0d0e;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8);
 }
@@ -2500,3 +2501,9 @@
 @media (prefers-reduced-motion: reduce) {
   .oled__head, .swap-list__search, .swap-list__foot { transition: none; }
 }
+
+/* The four corner pads follow the pad box's curve: their outer corner is the box's radius less the 1.5cqw between pad and box, so the gap is the same all the way round */
+.pads > .pad:nth-child(1) { border-top-left-radius: calc(var(--box-radius, 2.6cqw) - 1.5cqw); }
+.pads > .pad:nth-child(4) { border-top-right-radius: calc(var(--box-radius, 2.6cqw) - 1.5cqw); }
+.pads > .pad:nth-child(13) { border-bottom-left-radius: calc(var(--box-radius, 2.6cqw) - 1.5cqw); }
+.pads > .pad:nth-child(16) { border-bottom-right-radius: calc(var(--box-radius, 2.6cqw) - 1.5cqw); }
