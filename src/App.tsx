@@ -105,7 +105,8 @@ import { chooseShuffleSound } from "./audio/shufflePad";
 import { copyProjectPad } from "./audio/copyProjectPad";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
-import { ExportOptionsModal } from "./components/ExportOptionsModal";
+import { ExportOptionsModal, type ExportValues } from "./components/ExportOptionsModal";
+import { exportFileName, keyLabel } from "./audio/exportFileName";
 import { DEFAULT_EXPORT_OPTIONS, mergeExportOptions, panPlan, type ExportOptions } from "./audio/exportOptions";
 import {
   extraDrumCount,
@@ -162,7 +163,6 @@ import {
   type ChopperExport,
 } from "./audio/exportChopper";
 import { keyOffset } from "./audio/song/keyOffset";
-import { ScrubField } from "./components/ScrubField";
 import { PixelIcon } from "./components/PixelIcon";
 import { AcapellaFilesModal } from "./components/AcapellaFilesModal";
 import { AcapellaModeModal, type ChopMode } from "./components/AcapellaModeModal";
@@ -400,7 +400,7 @@ function App() {
   const [exportOptions, setExportOptions] = useState<ExportOptions>(() => mergeExportOptions({ ...(saved.masterStyleDefaultedDynamic && saved.masterStyle ? { masterStyle: saved.masterStyle } : {}), ...saved.exportOptions }));
   const [exportDialog, setExportDialog] = useState(false);
   /** The choices of the export in progress, kept while the unused-drums question is asked. */
-  const pendingExportOptions = useRef<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
+  const pendingExport = useRef<{ options: ExportOptions; values: ExportValues }>({ options: DEFAULT_EXPORT_OPTIONS, values: { bpm: 120, a4: 440 } });
   /** A short message over the screen ("Sounds organized..."). */
   const [notice, setNotice] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -446,7 +446,6 @@ function App() {
   );
   /** Whether a tapped key retunes every pad ("Tune all") or only the selected one. */
   const [a4, setA4] = useState(Math.round(clampA4Reference(saved.a4 ?? 440)));
-  const [, setA4Text] = useState(String(Math.round(clampA4Reference(saved.a4 ?? 440))));
   /** Ghost under the finger while a pad is being dragged, and the drop target under it ("kind:index"). */
   const [drag, setDrag] = useState<{
     from: number;
@@ -2683,7 +2682,9 @@ function App() {
           ACTIVE_MIX_PRESET.buses.fade808.maxMs,
         );
   };
-  const exportProject = async (mode: ExtraDrums = "keep", options: ExportOptions = exportOptions) => {
+  const exportProject = async (mode: ExtraDrums = "keep", options: ExportOptions = exportOptions, values: ExportValues = { bpm: projectBpm, a4 }) => {
+    // The tempo and A4 reference chosen in the export dialog (the state may not have caught up yet), used for everything below.
+    const { bpm: projectBpm, a4 } = values;
     const pads = mode === "delete" ? withoutExtraDrums(padsNow) : padsNow;
     const arrangement = arrangementOf(pads);
     if (!projectRef.current) return;
@@ -2820,7 +2821,7 @@ function App() {
             label: exportPadLabel(p.category, p.is808),
           });
       }
-      const { blob, filename } = await buildTunedKoala(project, tuned, {
+      const { blob } = await buildTunedKoala(project, tuned, {
         bpm: projectBpm,
         vols,
         pitches,
@@ -2840,7 +2841,7 @@ function App() {
         loops: loopLengths,
         melodicPatterns: options.melodicPatterns,
       });
-      downloadBlob(blob, filename);
+      downloadBlob(blob, exportFileName(project.originalName, keyLabel(keyPc, keyMajor), projectBpm));
       haptic("success");
     } catch (err) {
       console.error(err);
@@ -3503,26 +3504,7 @@ function App() {
             </button>
             </details>
             <details className="menu__library-tools menu__section"><summary>Project & sound settings</summary>
-            <label className="menu__a4">
-              Project BPM
-              <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.02} wholePerPx={1 / 14} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
-            </label>
             <button className="menu__button" onClick={() => { setMenuOpen(false); setPlaybackEditorOpen(true); }}>Koala Type & pad settings</button>
-            <label className="menu__a4">
-              A4 reference (Hz)
-              <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v))} onDoubleTap={() => setA4(440)} />
-            </label>
-            {a4 !== 440 && (
-              <button
-                className="menu__button"
-                onClick={() => {
-                  setA4(440);
-                  setA4Text("440");
-                }}
-              >
-                Reset to A440
-              </button>
-            )}
             <button
               className="menu__button"
               disabled={!hasProject && !loading}
@@ -4245,14 +4227,18 @@ function App() {
         {exportDialog && (
           <ExportOptionsModal
             initial={exportOptions}
+            values={{ bpm: projectBpm, a4 }}
+            a4Range={A4_REFERENCE_RANGE}
             fade808Blocker={sidechainReady ? undefined : SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
             onCancel={() => setExportDialog(false)}
-            onExport={(options) => {
+            onExport={(options, values) => {
               setExportDialog(false);
               setExportOptions(options);
-              pendingExportOptions.current = options;
+              setProjectBpm(values.bpm);
+              setA4(values.a4);
+              pendingExport.current = { options, values };
               if (layout.on && extraDrumCount(pads) > 0) setExtraPrompt(true);
-              else void exportProject("keep", options);
+              else void exportProject("keep", options, values);
             }}
           />
         )}
@@ -4261,7 +4247,7 @@ function App() {
             count={extraDrumCount(pads)}
             onChoose={(mode) => {
               setExtraPrompt(false);
-              void exportProject(mode, pendingExportOptions.current);
+              void exportProject(mode, pendingExport.current.options, pendingExport.current.values);
             }}
             onCancel={() => setExtraPrompt(false)}
           />
