@@ -2494,8 +2494,8 @@
   scroll-padding-bottom: var(--foot-h);
 }
 .swap-list__search { position: absolute; top: var(--head-h, 0px); left: 0; right: 0; z-index: 2; height: var(--search-h); background: #000; }
-.swap-list__foot { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; height: var(--foot-h); display: flex; align-items: center; justify-content: center; text-align: center; opacity: 1; pointer-events: none; box-sizing: border-box; } /* no bar behind the count: the rows show through it */
-.swap-list__foot > span { opacity: 0.6; }
+/* a black bar at 60% opacity, so the rows scrolling under it show through dimmed; it does not take touches, so a row under it still gets the tap */
+.swap-list__foot { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; height: var(--foot-h); display: flex; align-items: center; justify-content: center; text-align: center; background: #000; opacity: 0.6; pointer-events: none; box-sizing: border-box; }
 .oled__head, .swap-list__search, .swap-list__foot { transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1); will-change: transform; }
 .oled--swap:has(.swap-list[data-chrome="hidden"]) .oled__head { transform: translateY(-100%); }
 .swap-list[data-chrome="hidden"] .swap-list__search { transform: translateY(calc(-100% - var(--head-h, 0px))); }
