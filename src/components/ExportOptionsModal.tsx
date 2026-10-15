@@ -10,11 +10,11 @@ const CHOICES: { key: Flag; label: string; hint: string }[] = [
   { key: "normalize", label: "Apply per-type pad EQ", hint: "A high-pass, mid and high shelf by sound type. Sounds are never made louder or quieter." },
   { key: "colorsAndLabels", label: "Apply colours and labels to pads", hint: "The pad colours and names shown in the app. Off, pads keep what the project gave them." },
   { key: "masterChain", label: "Add the Koala FX master chain", hint: "EQ, drive, compressor, clipper and limiter on the master (replaces effects already there)." },
-  { key: "buses", label: "Route to and rename buses", hint: "Kick, Bass, Drums and Melodic buses, with the kick clipper and melodic EQ." },
+  { key: "buses", label: "Route to and rename buses", hint: "Kick, Bass, Drums, and Melodic + Chops + FX buses, with the kick clipper and an EQ on the last one." },
   { key: "melodicPatterns", label: "Create patterns for melodic loops", hint: "One pattern per loop at its length, from the last slot back (slots 32 to 17)." },
   { key: "panSpread", label: "Spread hats and melodic sounds in the stereo field", hint: "A random left and right placement, mirrored in pairs." },
   { key: "fade808", label: "Fade 808s in under the kick", hint: "A short fade-in the length of the kick's hit, so the kick comes through (a stand-in for a sidechain)." },
-  { key: "chokeGroups", label: "Set choke groups automatically", hint: "Open and closed hats, 808s and basses and melodic loops cut each other off." },
+  { key: "chokeGroups", label: "Set choke groups automatically", hint: "Hats, cymbals, drum loops, basses and vocal loops cut each other off by type (six groups). Chops keep group 4." },
 ];
 
 export interface ExportValues {

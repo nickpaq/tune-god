@@ -242,7 +242,7 @@ async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]
     if (!kick.chain.some((fx: MixerSlot) => fx?.name === "CLIPPER")) appendAfterExisting(kick.chain, [kickClipper()]);
   }
   if (setup.melodicEq) {
-    const melodic = (mixer.buses[2] ??= emptyStrip(BUS_NAMES[2]));
+    const melodic = (mixer.buses[3] ??= emptyStrip(BUS_NAMES[3]));
     melodic.chain = Array.isArray(melodic.chain) ? melodic.chain : [null, null, null, null, null];
     if (!melodic.chain.some((fx: MixerSlot) => fx?.name === "EQ")) appendAfterExisting(melodic.chain, [melodicEq()]);
   }

@@ -107,11 +107,11 @@ export function PlaybackEditor({
             aria-label="Choke group"
             type="number"
             min={0}
-            max={16}
+            max={6}
             value={current.chokeGroup ?? 0}
             onChange={(event) => {
               const value = Number(event.target.value);
-              if (Number.isInteger(value) && value >= 0 && value <= 16)
+              if (Number.isInteger(value) && value >= 0 && value <= 6)
                 patch({ chokeGroup: value });
             }}
           />

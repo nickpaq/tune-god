@@ -20,13 +20,13 @@ const exported = async (project: ParsedKoalaProject, options: Parameters<typeof 
 };
 
 describe("bus routing", () => {
-  it("shares bus 1 for kick and bass, bus 3 for melodic and bus 4 for loops, vox and FX", () => {
-    expect(CATEGORY_BUS.kick).toBe(0);
-    expect(BUS_NAMES[0]).toBe("Kick + Bass");
-    expect(Object.entries(CATEGORY_BUS).filter(([, bus]) => bus === 0).map(([c]) => c)).toEqual(["kick", "bass", "bassLoop"]);
-    expect(CATEGORY_BUS.melodicLoop).toBe(2);
-    expect(CATEGORY_BUS.bass).toBe(0);
-    expect(BUS_NAMES[1]).toBe("Drums");
+  it("gives the kick bus 1, bass bus 2, drums bus 3, and melodic, chops, vocals and FX bus 4", () => {
+    expect(BUS_NAMES).toEqual(["Kick", "Bass", "Drums", "Melodic + Chops + FX"]);
+    const on = (bus: number) => Object.entries(CATEGORY_BUS).filter(([, b]) => b === bus).map(([c]) => c);
+    expect(on(0)).toEqual(["kick"]);
+    expect(on(1)).toEqual(["bass", "bassLoop"]);
+    expect(on(2)).toEqual(["snare", "clap", "closedHat", "openHat", "cymbal", "perc", "drumLoop", "percLoop"]);
+    expect(on(3)).toEqual(["melodic", "melodicLoop", "vox", "voxLoop", "fx", "fxLoop"]);
   });
 });
 
@@ -114,10 +114,10 @@ describe("effect parameters", () => {
 });
 
 describe("kick clipping, melodic EQ and per-pad EQ", () => {
-  it("puts an EQ on the melodic bus only", async () => {
+  it("puts an EQ on the melodic bus (bus 4) only", async () => {
     const mixer = await exported(await load(), { busNames: BUS_NAMES, busEffects: true });
-    expect(mixer.buses[2].chain.filter((s: any) => s?.name === "EQ")).toHaveLength(1);
-    expect(mixer.buses.filter((_: any, index: number) => index !== 2).some((b: any) => b.chain.some((s: any) => s?.name === "EQ"))).toBe(false);
+    expect(mixer.buses[3].chain.filter((s: any) => s?.name === "EQ")).toHaveLength(1);
+    expect(mixer.buses.filter((_: any, index: number) => index !== 3).some((b: any) => b.chain.some((s: any) => s?.name === "EQ"))).toBe(false);
   });
 
   it("puts a clipper on the kick bus once, and none on the others", async () => {

@@ -2,7 +2,7 @@
 import * as Comlink from "comlink";
 import { dominantPitch } from "../audio/pitch/yin";
 import { loopKey } from "../audio/pitch/loopKey";
-import { bpmFromName, keyFromName } from "../audio/pitch/nameKey";
+import { bpmFromName, keyFromName, TRUST_NAME_KEYS } from "../audio/pitch/nameKey";
 import { frequencyToMidi } from "../audio/theory";
 import { extractFeatures, isTunedCategory, type CategoryId } from "../audio/classify";
 import { categoryOfFile } from "../audio/samplePack";
@@ -33,9 +33,9 @@ const api = {
     const category = categoryHint ?? categoryOfFile(fileName.replace(/\\/g, "/").split("/").slice(0, -1), fileName);
     // An 808 or bass glides down from its attack to the note it settles on, so its pitch is read from the second half of the sound only.
     if ((category === "bass" || category === "bassLoop")) pitch = api.detectMidi(mono.subarray(Math.floor(mono.length / 2)), sampleRate) ?? pitch;
-    // A key written in the file name wins over anything measured. A loop's "pitch" is the tonic of its key (as the relative minor), a whole note; another
+    // A key written in the file name wins over anything measured (only while TRUST_NAME_KEYS is on; it is off, so every key is detected). A loop's "pitch" is the tonic of its key (as the relative minor), a whole note; another
     // pitched sound's is its root, and the measured pitch is kept when it already sits on that note (it carries the cents a name cannot).
-    const named = keyFromName(fileName);
+    const named = TRUST_NAME_KEYS ? keyFromName(fileName) : null;
     const loop = isLoop || category === "melodicLoop";
     let midi: number | null;
     let fromName = false;

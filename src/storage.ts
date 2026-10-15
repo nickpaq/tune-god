@@ -11,9 +11,8 @@ const DB_NAME = "tune-god";
 const STORE = "project";
 const SAMPLE_LIBRARY_STORE = "sample-library";
 
-/** Favorites keep their audio on the device, a few sounds and not whole packs: at most this many, and this many bytes in all. */
-export const MAX_FAVORITES = 40;
-export const MAX_FAVORITE_BYTES = 60 * 1024 * 1024;
+/** Favorites keep their audio on the device, one sound at a time (never batches): as many as fit in this many bytes (1 GB), with no limit on the count. */
+export const MAX_FAVORITE_BYTES = 1024 * 1024 * 1024;
 
 export interface SampleLibraryRecord {
   id: string;

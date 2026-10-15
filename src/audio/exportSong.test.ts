@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
 import type { ParsedKoalaProject } from "./koalaProject";
-import { SECTION_MUTE_GROUP, sectionMuteGroup, STRETCH_LENGTH_UNIT, stretchLengthFor, TICKS_PER_BEAT } from "./exportSong";
+import { SECTION_MUTE_GROUP, sectionMuteGroup, unusedMuteGroup, STRETCH_LENGTH_UNIT, stretchLengthFor, TICKS_PER_BEAT } from "./exportSong";
 
 async function load(file: string): Promise<ParsedKoalaProject> {
   const zip = await JSZip.loadAsync(readFileSync(new URL(`../../docs/calibration/${file}`, import.meta.url)));
@@ -194,13 +194,19 @@ describe("the mute group of the section pads", () => {
     expect(sectionMuteGroup({ chokeGroup: 3 }, [{ chokeGroup: 3 }, { chokeGroup: 5 }])).toBe(3);
   });
 
-  it("takes group 7 when the song's pad has none and no pad uses 7", () => {
-    expect(sectionMuteGroup({ chokeGroup: 0 }, [{ chokeGroup: 4 }, { chokeGroup: 0 }])).toBe(SECTION_MUTE_GROUP);
-    expect(SECTION_MUTE_GROUP).toBe(7);
+  it("takes group 4 when the song's pad has none and no pad uses 4", () => {
+    expect(sectionMuteGroup({ chokeGroup: 0 }, [{ chokeGroup: 5 }, { chokeGroup: 0 }])).toBe(SECTION_MUTE_GROUP);
+    expect(SECTION_MUTE_GROUP).toBe(4);
   });
 
-  it("takes the next free group instead when 7 is already used", () => {
-    expect(sectionMuteGroup({}, [{ chokeGroup: 1 }, { chokeGroup: 7 }])).toBe(8);
+  it("takes the lowest free group of the six instead when 4 is already used", () => {
+    expect(sectionMuteGroup({}, [{ chokeGroup: 1 }, { chokeGroup: 4 }])).toBe(2);
+  });
+
+  it("falls back to group 4 when all six are used, and unusedMuteGroup then says none is free", () => {
+    const all = [1, 2, 3, 4, 5, 6].map((chokeGroup) => ({ chokeGroup }));
+    expect(sectionMuteGroup({}, all)).toBe(4);
+    expect(unusedMuteGroup(all)).toBeNull();
   });
 });
 

@@ -24,6 +24,12 @@ const tokensOf = (fileName: string) =>
 // Capital letters only: "am", "e" and "dm" are words and typos, and packs write note names as capitals.
 const KEY_TOKEN = /^([A-G])([#b♯♭]?)(m|min|minor|maj|major|Major|Minor|Maj|Min|M)?$/;
 
+/**
+ * Whether a key written in a sound's name beats the measured one when tuning. Off while detection is judged on its own: the analysis then reads
+ * every key from the audio and ignores names. (The classifier still takes a name's key as evidence that a long sound is a melodic loop.)
+ */
+export const TRUST_NAME_KEYS = false;
+
 export function keyFromName(fileName: string): NameKey | null {
   const tokens = tokensOf(fileName);
   for (let i = 0; i < tokens.length; i++) {

@@ -89,6 +89,15 @@ it("hot swap rejects other Types, unselected packs, unknown sources and locked s
     expect(eligibleHotSwapSound(sound, "melodicLoop", allowed)).toBe(false);
 });
 
+it("hot swap shows only sounds of the selected packs for every Type, and everything when all packs are selected", () => {
+  const allowed = new Set(["selected:1", "Library/Selected/kick.wav"]);
+  expect(eligibleHotSwapSound({ category: "kick", libraryId: "selected:1" }, "kick", allowed)).toBe(true);
+  expect(eligibleHotSwapSound({ category: "kick", sourcePath: "Library/Selected/kick.wav" }, "kick", allowed)).toBe(true);
+  expect(eligibleHotSwapSound({ category: "kick", libraryId: "other:1" }, "kick", allowed)).toBe(false);
+  expect(eligibleHotSwapSound({ category: "kick" }, "kick", allowed)).toBe(false);
+  expect(eligibleHotSwapSound({ category: "kick", libraryId: "other:1" }, "kick", null)).toBe(true);
+});
+
 it("backfills duration on an already migrated legacy index before reusing classification", async () => {
   const legacy = refreshLibrary("Library", [file()]).index;
   legacy.classificationVersion = undefined;

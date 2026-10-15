@@ -79,7 +79,6 @@ import {
 import {
   chopColor,
   colorFor,
-  darker,
   paletteById,
   shade,
   DEFAULT_PALETTE_ID,
@@ -97,7 +96,7 @@ import {
 import { BUS_NAMES, CATEGORY_BUS } from "./audio/routing";
 import { chooseShuffleSound } from "./audio/shufflePad";
 import { copyProjectPad } from "./audio/copyProjectPad";
-import { sortForSlot } from "./audio/swapOrder";
+import { rankForSlot, sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import { ExportOptionsModal, type ExportValues } from "./components/ExportOptionsModal";
 import { pickProjectName, rememberName } from "./audio/projectName";
@@ -176,7 +175,6 @@ import {
   saveState,
   type SavedPad,
   loadSampleLibrary,
-  MAX_FAVORITES,
   MAX_FAVORITE_BYTES,
   recordImportedSamples,
   setSampleFavorite,
@@ -2869,8 +2867,7 @@ function App() {
     if (p.section) return chopColor(palette.colors, p.section.colorIndex ?? 0);
     const base = colorFor(palette, p.category ?? "other");
     if (p.ghost) return shade(base, 2);
-    // A key read from the file name is a sure one: the pad is a slightly darker shade. A key that was only detected leaves the normal shade.
-    return p.keyFromName ? darker(base) : base;
+    return base;
   };
   /** Generated Bank A sounds keep their template labels; other sounds show their numbered Type or detail. */
   /** A section of a chopped song: the vocal label and its number, "Vox 1". */
@@ -3017,8 +3014,21 @@ function App() {
       return next;
     });
   };
+  /** The last few library sounds auditioned in hot swap, kept decoded so playing one again (or swapping it in) is instant. Kit pads are always decoded already. */
+  const swapAudioCache = useRef(new Map<string, Awaited<ReturnType<typeof decodeNative>>>());
   const readSwapAudio = async (pad: Pad) => {
     if (pad.channelData.length) return { channelData: audioOf(pad), sampleRate: pad.sampleRate };
+    const key = pad.libraryId;
+    const hit = key ? swapAudioCache.current.get(key) : undefined;
+    if (hit) return hit;
+    const decoded = await readSwapAudioFresh(pad);
+    if (key) {
+      swapAudioCache.current.set(key, decoded);
+      if (swapAudioCache.current.size > 24) swapAudioCache.current.delete(swapAudioCache.current.keys().next().value!);
+    }
+    return decoded;
+  };
+  const readSwapAudioFresh = async (pad: Pad) => {
     const cached = sampleLibrary.find(record => record.id === pad.libraryId)?.audio;
     const file = libraryFiles.current?.files.find(file => file.libraryId === pad.libraryId);
     if (!cached && !file) throw new Error("Reconnect the library folder to load this sound.");
@@ -3115,11 +3125,11 @@ function App() {
       ? await encodeWav({ sampleRate: pad.sampleRate, channelData: audioOf(pad), bitDepth: 24 })
       : undefined;
     if (audio) {
-      // Favorites are kept on the device, but only a few sounds: never whole batches.
+      // Favorites are kept on the device one sound at a time: as many as fit in the byte limit.
       const kept = sampleLibrary.filter((r) => r.favorite && r.audio && r.id !== pad.libraryId);
       const bytes = kept.reduce((n, r) => n + (r.audio?.size ?? 0), audio.size);
-      if (kept.length >= MAX_FAVORITES || bytes > MAX_FAVORITE_BYTES)
-        return void window.alert(`Favorites keep their audio on this device, so they are limited to ${MAX_FAVORITES} sounds or ${MAX_FAVORITE_BYTES / 1024 / 1024} MB. Remove a favorite first.`);
+      if (bytes > MAX_FAVORITE_BYTES)
+        return void window.alert(`Favorites keep their audio on this device, so they are limited to ${MAX_FAVORITE_BYTES / 1024 / 1024 / 1024} GB in all. Remove a favorite first.`);
     }
     if (!old && favorite) {
       await recordImportedSamples([{
@@ -3178,9 +3188,13 @@ function App() {
     category: sample.classification.category, classification: sample.classification,
     tune: false, semis: 0, cents: 0,
   })) ?? [], [libraryIndex]);
-  const selectedSwapSources = useMemo(() => kitPacks === null ? null : new Set(
-    libraryIndex?.samples.filter(sample => kitPacks.includes(sample.pack)).flatMap(sample => [sample.id, sample.path]) ?? [],
-  ), [kitPacks, libraryIndex]);
+  /** The sources hot swap may offer: only sounds in the selected packs, for every Type. null (no limit) when no pack is chosen or every pack is. */
+  const selectedSwapSources = useMemo(() => {
+    if (kitPacks === null || !libraryIndex) return null;
+    const chosen = new Set(kitPacks);
+    if (libraryIndex.samples.every(sample => chosen.has(sample.pack))) return null;
+    return new Set(libraryIndex.samples.filter(sample => chosen.has(sample.pack)).flatMap(sample => [sample.id, sample.path]));
+  }, [kitPacks, libraryIndex]);
   const hotSwapSounds = (target: Pad) => {
     const slotCategory = (layout.on && target.index < 16 ? layoutById(null).slots[target.index]?.category : undefined) || target.category;
     const eligible = (pad: Pad) => eligibleHotSwapSound(pad, slotCategory, selectedSwapSources);
@@ -3227,6 +3241,7 @@ function App() {
             ? `${GHOST_LABEL[target.ghost.kind]} (made on export unless filled)`
             : `PAD ${(target.index % 16) + 1}`
         }
+        groupOf={(p) => `${p.favorite ? 1 : 0}|${slotCategory === "bass" ? Number(!!p.is808 !== !!target.is808) : 0}|${rankForSlot(slotCategory, p.category)}`}
         candidates={sortForSlot(
           hotSwapSounds(target),
           slotCategory,

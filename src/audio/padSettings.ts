@@ -1,4 +1,4 @@
-// Product defaults: hats 1, cymbals 2, drum loops 3, melodic loops 4, both bass Types 5, vocal loops 6.
+// Koala offers six choke groups. Product defaults: hats 1, cymbals 2, drum loops 3, chops 4, both bass Types 5, vocal loops 6. Melodic loops have no group.
 // Loops use One Shot off and Stretch on; one-shots use One Shot on and Stretch off. Chops keep their own settings.
 import { CATEGORY_BUS } from "./routing";
 import { isDrumCategory, type CategoryId } from "./classify";
@@ -28,12 +28,12 @@ export interface PadPlayback {
 export const HAT_MUTE_GROUP = 1;
 export const CYMBAL_MUTE_GROUP = 2;
 export const DRUM_LOOP_MUTE_GROUP = 3;
-export const MELODIC_LOOP_MUTE_GROUP = 4;
+/** Reserved for the chops (acapella, synced, chopper); no sound type uses it. */
+export const CHOP_MUTE_GROUP = 4;
 export const BASS_MUTE_GROUP = 5;
-/** Reserved for vox loops, which the classifier has no category for yet. */
 export const VOX_LOOP_MUTE_GROUP = 6;
-/** The first mute group the chops may use: 1 to 6 belong to the sound types. */
-export const FIRST_FREE_MUTE_GROUP = 7;
+/** Koala's choke groups: 1 to 6. 0 is no group. */
+export const MUTE_GROUPS = 6;
 /** Release knob at its maximum. */
 export const MELODIC_RELEASE = 1;
 
@@ -42,7 +42,7 @@ const PAD_EQ = ACTIVE_MIX_PRESET.padEq;
 const PAD_TONE = ACTIVE_MIX_PRESET.padTone;
 
 /** A melodic loop is written this way whatever the Organize switch says. */
-export const MELODIC_LOOP_PLAYBACK: PadPlayback = { chokeGroup: MELODIC_LOOP_MUTE_GROUP, oneShot: false, loop: false, stretch: "modern" };
+export const MELODIC_LOOP_PLAYBACK: PadPlayback = { chokeGroup: 0, oneShot: false, loop: false, stretch: "modern" };
 
 function basePlayback(category: CategoryId): PadPlayback | undefined {
   if (category === "melodicLoop") return MELODIC_LOOP_PLAYBACK;
