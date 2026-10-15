@@ -17,6 +17,8 @@ export function candidateNames(fileNames: string[]): string[] {
   for (const fileName of fileNames) {
     const original = stem(fileName);
     const name = parseSoundName(original).name.replace(/\s+/g, " ").trim();
+    // Letters only: no digits, underscores or other symbols in a suggested name.
+    if (!/^[A-Za-z]+(?: [A-Za-z]+)*$/.test(name)) continue;
     if ((name.match(/[A-Za-z]/g)?.length ?? 0) < 3 || name.length > 40) continue;
     // Only type words and numbers ("Kick 1") is not a name.
     if (name.split(/[^A-Za-z0-9]+/).every((t) => !t || /^\d+$/.test(t) || KIND_WORDS.has(t.toLowerCase()))) continue;

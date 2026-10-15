@@ -16,6 +16,9 @@ describe("candidateNames", () => {
     const names = candidateNames(["Kick 1.wav", "Snare 2.wav", "07.wav", "x.wav", "Hat.wav"]);
     expect(names).toEqual([]);
   });
+  it("never suggests a name with digits or underscores", () => {
+    expect(candidateNames(["Askari2_Em.wav", "Lo_Fi_Dream.wav", "Night808Owl.wav"]).every((n) => /^[A-Za-z ]+$/.test(n))).toBe(true);
+  });
   it("lists each name once", () => {
     expect(candidateNames(["Askari_Em.wav", "ASKARI 140.wav", "askari.wav"])).toHaveLength(1);
   });
