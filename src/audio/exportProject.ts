@@ -67,7 +67,8 @@ export async function buildTunedKoala(
     bpm,
     stretch,
     loops,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; padPlayback?: Map<number, PadPlayback>; classifications?: Map<number, unknown>; padOverrides?: Map<number, PadPlayback | null>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number>; loops?: Map<number, { bpm: number; seconds: number; melodic: boolean }> } = {},
+    melodicPatterns = true,
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; padPlayback?: Map<number, PadPlayback>; classifications?: Map<number, unknown>; padOverrides?: Map<number, PadPlayback | null>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number>; loops?: Map<number, { bpm: number; seconds: number; melodic: boolean }>; melodicPatterns?: boolean } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -159,7 +160,7 @@ export async function buildTunedKoala(
   if (song?.sections.length) await addSongSections(project, samplerJson, song, template);
   if (chopper) await addChopperPad(project, samplerJson, chopper);
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
-  await writeMelodicLoopPatterns(project, samplerJson, loopBars, beatsPerBar);
+  await writeMelodicLoopPatterns(project, samplerJson, melodicPatterns ? loopBars : new Map(), beatsPerBar);
   if (bpm !== undefined) await writeBpm(project, bpm);
   if (busNames || busEffects || masterChain) await setupMixer(project, { names: busNames, kickClip: busEffects, melodicEq: busEffects, master: masterChain, masterStyle });
 

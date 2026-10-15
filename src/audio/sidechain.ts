@@ -15,7 +15,7 @@ export interface SidechainStatus {
 }
 
 /** `categories` are the types of the real sounds on the pads (not hot-swap spares, ghost copies or silent placeholders). */
-export function sidechainStatus(categories: (CategoryId | undefined)[], organizeOn: boolean): SidechainStatus {
+export function sidechainStatus(categories: (CategoryId | undefined)[], organizeOn = true): SidechainStatus {
   const hasKick = categories.includes("kick");
   const hasBass = categories.includes("bass");
   const blocker: SidechainBlocker | null = !organizeOn ? "organize" : !hasKick ? "kick" : !hasBass ? "bass" : null;

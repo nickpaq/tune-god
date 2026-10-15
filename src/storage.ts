@@ -100,6 +100,10 @@ export interface SavedState {
   libraryIndexId?: string;
   /** Organize now defaults to off; saved states from before that carry no flag, so their stored value is ignored once. */
   organizeDefaultedOff?: boolean;
+  /** The Sidechain switch (the 808 fade-in): off by default, and independent of the export check boxes. */
+  fade808On?: boolean;
+  /** The export check boxes (see audio/exportOptions.ts), remembered between exports. */
+  exportOptions?: Partial<import("./audio/exportOptions").ExportOptions>;
   /** The master style now defaults to dynamic; saved states from before carry no flag, so their stored style is ignored once. */
   masterStyleDefaultedDynamic?: boolean;
   /** Types the user gave folder names (key: the normalised folder name), applied to every library. */

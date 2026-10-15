@@ -72,7 +72,6 @@ import {
   FILE_CEILING_DB,
   type BalanceStats,
 } from "./audio/loudness";
-import { balancedSpread } from "./audio/spread";
 import {
   CATEGORIES,
   categoryIndex,
@@ -106,6 +105,8 @@ import { chooseShuffleSound } from "./audio/shufflePad";
 import { copyProjectPad } from "./audio/copyProjectPad";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
+import { ExportOptionsModal } from "./components/ExportOptionsModal";
+import { DEFAULT_EXPORT_OPTIONS, mergeExportOptions, panPlan, type ExportOptions } from "./audio/exportOptions";
 import {
   extraDrumCount,
   fillGhostSlot,
@@ -213,11 +214,7 @@ import {
   LOCK_ICON,
   UNLOCK_ICON,
 } from "./components/dropIcons";
-import {
-  ACTIVE_MIX_PRESET,
-  MASTER_STYLES,
-  type MasterStyle,
-} from "./audio/mixPresets";
+import { ACTIVE_MIX_PRESET } from "./audio/mixPresets";
 import "./App.css";
 
 const BANKS = ["A", "B", "C", "D"];
@@ -259,8 +256,6 @@ interface LayoutState {
 
 /** Pad volume knob value for a dB level: plain linear amplitude (checked against a Koala project: -60 dB = 0.001, -6 dB = 0.501, 0 dB = 1, +6 dB = 1.995, -inf = 0). */
 const volFromDb = (db: number) => 10 ** (db / 20);
-/** Widest spread pan, in percent either side of centre. */
-const MAX_SPREAD_PERCENT = 40;
 
 /** A sound from the project itself: not a silent placeholder and not a ghost copy the layout made. */
 const isReal = (p: Pad) =>
@@ -399,30 +394,21 @@ function App() {
   /** "done/total" while an export is rendering, so a long high-quality render shows progress. */
   const [exportProgress, setExportProgress] = useState("");
   /**
-   * The Organize switch: balances levels, routes sounds to buses, sets each sound type's settings, spreads the melodic pads and adds the master chain.
-   * It never touches where a pad sits, what it says or what colour it is: the loaders (Load Bank A to D) place, label and colour every sound they bring in.
+   * What the export does for the user (normalize and balance, colours and labels, master chain, buses, melodic loop patterns, pan spread, choke groups):
+   * asked with check boxes each time they export, and remembered. Nothing is mixed when a sound is loaded; the loaders bring sounds in as they are.
    */
-  const [organize, setOrganize] = useState(
-    // Off by default; a value saved before this default changed is ignored once.
-    saved.organizeDefaultedOff ? (saved.organizeOn ?? false) : false,
-  );
-  const normalize = organize;
-  const spread = organize;
-  const routeBuses = organize;
-  const autoPlayback = organize;
-  const masterChain = organize;
+  const [exportOptions, setExportOptions] = useState<ExportOptions>(() => mergeExportOptions({ ...(saved.masterStyleDefaultedDynamic && saved.masterStyle ? { masterStyle: saved.masterStyle } : {}), ...saved.exportOptions }));
+  const [exportDialog, setExportDialog] = useState(false);
+  /** The choices of the export in progress, kept while the unused-drums question is asked. */
+  const pendingExportOptions = useRef<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   /** The Sidechain switch (the bass ducking to the kick); it needs a kick and a bass on the pads, so it stays locked until a drum kit and a bass are loaded. */
-  const [sidechainOn, setSidechainOn] = useState(saved.sidechainOn ?? true);
+  const [sidechainOn, setSidechainOn] = useState(saved.fade808On ?? false);
   /** A short message over the screen ("Sounds organized..."). */
   const [notice, setNotice] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   /** Temporarily disabled: live-input performance needs a later sequencer port. Keep the screen code for that work. */
   const [seqOpen, setSeqOpen] = useState(false);
   const seqBeatsPerBar = 4;
-  const [masterStyle, setMasterStyle] = useState<MasterStyle>(
-    // Dynamic by default; a style saved before that default changed is ignored once.
-    saved.masterStyleDefaultedDynamic ? (saved.masterStyle ?? "dynamic") : "dynamic",
-  );
   const [padSymbols, setPadSymbols] = useState(saved.padSymbols ?? true);
   const [packMemory, setPackMemory] = useState<PackMemory>(
     saved.packMemory === "low" ? "low" : "auto",
@@ -901,11 +887,9 @@ function App() {
 
   useEffect(() => {
     saveState({
-      organizeOn: organize,
-      organizeDefaultedOff: true,
-      masterStyleDefaultedDynamic: true,
+      exportOptions,
+      fade808On: sidechainOn,
       sidechainOn,
-      masterStyle,
       padSymbols,
       packMemory,
       paletteId,
@@ -921,9 +905,8 @@ function App() {
       bpm: projectBpm,
     });
   }, [
-    organize,
+    exportOptions,
     sidechainOn,
-    masterStyle,
     padSymbols,
     packMemory,
     paletteId,
@@ -1063,10 +1046,9 @@ function App() {
 
   /**
    * Opening a .koala project from the start screen leaves it exactly as it is: no long-sample question, and every menu option goes back off
-   * (Organize and Sidechain apply only if the user switches them on again after this load).
+   * (the Sidechain applies only if the user switches it on again after this load).
    */
   const openKoalaProject = (file: File) => {
-    setOrganize(false);
     setSidechainOn(false);
     void loadProject(file, false, true);
   };
@@ -1161,7 +1143,7 @@ function App() {
       );
       const excludedIds = new Set(kept.flatMap((pad) => pad.libraryId ? [pad.libraryId] : []));
       const groups = (loadHotSwapSpares ? plan.groups : padOnlyGroups(bank, plan.groups, lockedSlots)).map((group) => ({ ...group, candidates: group.candidates.filter((file) => !file.libraryId || !excludedIds.has(file.libraryId)) }));
-      const result = await writeBankSounds(project, groups, { levelling: organize,
+      const result = await writeBankSounds(project, groups, { levelling: false,
         existing: kept.map((p) => ({
           channelData: p.channelData,
           sampleRate: p.sampleRate,
@@ -2331,7 +2313,7 @@ function App() {
         toneRef ? toneRef.pc : null,
         padMode(pad),
         undefined,
-        normalize ? pad.knobDb : undefined,
+        undefined,
         0,
         toneRef ? toneRef.kind : "sine",
         toneVolume * 2,
@@ -2550,7 +2532,7 @@ function App() {
         ref ? ref.pc : null,
         "loop",
         undefined,
-        normalize ? pad.knobDb : undefined,
+        undefined,
         0,
         ref ? ref.kind : "sine",
         toneVolume * 2,
@@ -2707,7 +2689,7 @@ function App() {
           ACTIVE_MIX_PRESET.buses.fade808.maxMs,
         );
   };
-  const exportProject = async (mode: ExtraDrums = "keep") => {
+  const exportProject = async (mode: ExtraDrums = "keep", options: ExportOptions = exportOptions) => {
     const pads = mode === "delete" ? withoutExtraDrums(padsNow) : padsNow;
     const arrangement = arrangementOf(pads);
     if (!projectRef.current) return;
@@ -2718,7 +2700,7 @@ function App() {
       const project = projectFile.current
         ? await parseKoalaProject(projectFile.current)
         : projectRef.current;
-      if (masterChain) {
+      if (options.masterChain) {
         const there = await masterEffectNames(project);
         if (
           there.length > 0 &&
@@ -2731,15 +2713,9 @@ function App() {
       const tuned: TunedSample[] = [];
       // Koala's pan runs 0..1 (0.5 = centre) for L100..R100, so N percent is N/200 off centre.
       const pans = new Map<number, number>();
-      if (spread) {
-        // Only melodic pads move; bass, drums and the rest stay centred.
-        const tunedPads = Object.values(pads).filter(
-          (p) => p.category === "melodic" && isReal(p),
-        );
-        const offsets = balancedSpread(tunedPads.length, MAX_SPREAD_PERCENT);
-        tunedPads.forEach((p, i) =>
-          pans.set(p.sampleId, 0.5 + offsets[i] / 200),
-        );
+      if (options.panSpread) {
+        // Hats and melodic sounds are spread (hats among themselves, melodic among themselves); bass, drums and the rest stay centred.
+        for (const [sampleId, pan] of panPlan(Object.values(pads).filter(isReal))) pans.set(sampleId, pan);
       }
       const allPads = Object.values(pads).filter(isReal);
       // Every file is rendered to its final audio and peak-normalized; the mix is on the Koala volume knob, and every tuning on the pitch knob.
@@ -2773,7 +2749,7 @@ function App() {
         if (fade && isEight(pad))
           channelData = fadeIn(channelData, pad.sampleRate, fade);
         // Levelling is part of Organize: off, the file goes out as it is (after any tuning) and the pad keeps its own volume.
-        if (organize)
+        if (options.normalize)
           stats.push(
             await getRenderWorker().measure({
               channelData,
@@ -2786,12 +2762,12 @@ function App() {
           loopLengths.set(pad.sampleId, { bpm: pad.bpm, seconds: channelData[0].length / pad.sampleRate, melodic: pad.category === "melodicLoop" });
       }
       const vols = new Map<number, number>();
-      const gains = organize
+      const gains = options.normalize
         ? balanceFromStats(stats, FILE_CEILING_DB)
         : { gainDb: rendered.map(() => 0), knobDb: rendered.map(() => 0) };
       rendered.forEach((r, i) => {
         // Organize off: no mix level is written, and a volume a loader set while Organize was on goes back to 0 dB.
-        if (organize) vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
+        if (options.normalize) vols.set(r.pad.sampleId, volFromDb(gains.knobDb[i]));
         else if (r.pad.knobDb !== undefined) vols.set(r.pad.sampleId, 1);
         tuned.push({
           sampleId: r.pad.sampleId,
@@ -2835,14 +2811,15 @@ function App() {
         padOverrides.set(p.origIndex, p.playback || p.stretch !== undefined ? { ...p.playback, ...(p.stretch !== undefined ? { stretch: p.stretch ? settings?.stretch : "off" as const } : {}) } : null);
         if (p.classification) classifications.set(p.origIndex, { ...p.classification, category: p.category });
         // Bus routing and the per-pad EQ are part of the mix: with Organize off the pad keeps the bus and EQ it came with.
-        if (settings) padPlayback.set(p.origIndex, autoPlayback ? settings : { ...settings, eq: undefined, bus: undefined });
+        // The per-type EQ goes with normalize and balance, the bus with the bus routing, and the mute group with the choke groups; the rest of a type's pad rules always apply.
+        if (settings) padPlayback.set(p.origIndex, { ...settings, ...(options.normalize ? {} : { eq: undefined }), ...(options.buses ? {} : { bus: undefined }), ...(options.chokeGroups ? {} : { chokeGroup: undefined }) });
       }
       // Sounds export compact Type labels without file or preset numbering.
       // Ordinary loops use Koala’s automatic length detection; chop exports write their exact lengths.
       const colors = new Map<number, { color: string; label: string }>();
       for (const p of allPads) {
         // The label is what the pad's caption says in the app, without its number.
-        if (p.category)
+        if (options.colorsAndLabels && p.category)
           colors.set(p.sampleId, {
             color: autoColorOf(p),
             label: exportPadLabel(p.category, p.is808),
@@ -2852,10 +2829,10 @@ function App() {
         bpm: projectBpm,
         vols,
         pitches,
-        busNames: organize ? BUS_NAMES : undefined,
-        busEffects: routeBuses,
-        masterChain,
-        masterStyle,
+        busNames: options.buses ? BUS_NAMES : undefined,
+        busEffects: options.buses,
+        masterChain: options.masterChain,
+        masterStyle: options.masterStyle,
         arrangement,
         pans,
         colors,
@@ -2866,6 +2843,7 @@ function App() {
         song: songExport,
         chopper: chopperPad ? chopperExportOf(chopperPad) : undefined,
         loops: loopLengths,
+        melodicPatterns: options.melodicPatterns,
       });
       downloadBlob(blob, filename);
       haptic("success");
@@ -2946,7 +2924,6 @@ function App() {
     Object.values(pads)
       .filter(isReal)
       .map((p) => p.category),
-    organize,
   );
   const sidechainReady = sidechain.ready;
   const sidechainActive = sidechainReady && sidechainOn;
@@ -3073,7 +3050,7 @@ function App() {
     try {
       const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
       const reasons: string[] = [];
-      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], { levelling: organize, explicit, onSkip: (reason) => reasons.push(reason),
+      const result = await writeBankSounds(project, [{ category: other.category ?? "other", candidates: alternatives ?? [file], want: 1 }], { levelling: false, explicit, onSkip: (reason) => reasons.push(reason),
         existing: used.map(pad => ({ channelData: audioOf(pad), sampleRate: pad.sampleRate, category: pad.category })),
         byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
         measure: input => getRenderWorker().measure(input),
@@ -3184,7 +3161,7 @@ function App() {
     };
     const used = Object.values(latest.current.pads).filter(isReal).concat(Object.values(latest.current.hidden));
     const reasons: string[] = [];
-    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], { levelling: organize, explicit: true, onSkip: (reason) => reasons.push(reason),
+    const result = await writeBankSounds(opened.project, [{ category: record.category, is808: record.is808, candidates: [candidate], want: 1 }], { levelling: false, explicit: true, onSkip: (reason) => reasons.push(reason),
       existing: used.map((p) => ({ channelData: audioOf(p), sampleRate: p.sampleRate, category: p.category })),
       byteBudget: Math.max(0, packByteBudget(packMemory) - (projectFile.current?.size ?? 0)),
       measure: (input) => getRenderWorker().measure(input),
@@ -3414,10 +3391,8 @@ function App() {
               className="menu__button menu__button--primary"
               disabled={!canExport}
               onClick={() => {
-                if (layout.on && extraDrumCount(pads) > 0) {
-                  setMenuOpen(false);
-                  setExtraPrompt(true);
-                } else void exportProject();
+                setMenuOpen(false);
+                setExportDialog(true);
               }}
             >
               {exporting ? `Exporting ${exportProgress || "…"}` : "Export"}
@@ -3539,26 +3514,6 @@ function App() {
               <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.02} wholePerPx={1 / 14} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
             </label>
             <button className="menu__button" onClick={() => { setMenuOpen(false); setPlaybackEditorOpen(true); }}>Koala Type & pad settings</button>
-            <Switch
-              label="Organize"
-              hint="All the mixing: peak-normalizing every file and setting pad volumes (on load and at export), bus names and effects, the melodic spread, the 808 fade-in and the master chain. Off, sounds come out as they went in. Never moves, labels or colours pads"
-              on={organize}
-              disabled={!hasProject}
-              onChange={setOrganize}
-            />
-            <select
-              className="menu__select"
-              value={masterStyle}
-              disabled={!organize}
-              onChange={(e) => setMasterStyle(e.target.value as MasterStyle)}
-              aria-label="Master chain style"
-            >
-              {MASTER_STYLES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
             <Switch
               label="Sidechain"
               hint={SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
@@ -4300,12 +4255,25 @@ function App() {
           />
         )}
 
+        {exportDialog && (
+          <ExportOptionsModal
+            initial={exportOptions}
+            onCancel={() => setExportDialog(false)}
+            onExport={(options) => {
+              setExportDialog(false);
+              setExportOptions(options);
+              pendingExportOptions.current = options;
+              if (layout.on && extraDrumCount(pads) > 0) setExtraPrompt(true);
+              else void exportProject("keep", options);
+            }}
+          />
+        )}
         {extraPrompt && (
           <ExtraDrumsModal
             count={extraDrumCount(pads)}
             onChoose={(mode) => {
               setExtraPrompt(false);
-              void exportProject(mode);
+              void exportProject(mode, pendingExportOptions.current);
             }}
             onCancel={() => setExtraPrompt(false)}
           />
