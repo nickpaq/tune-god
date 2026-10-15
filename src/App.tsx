@@ -554,6 +554,8 @@ function App() {
   useEffect(() => { saveState({ kitPacks }); }, [kitPacks]);
   const libraryInput = useRef<HTMLInputElement>(null);
   const refreshOnReconnect = useRef(false);
+  /** "Build another kit" opened the picker: generating the kit then clears every bank first. Closing the picker cancels it. */
+  const buildFreshKit = useRef(false);
   const reportOnReconnect = useRef(false);
   const [scanReport, setScanReport] = useState<string | null>(null);
   const [scanReportOpen, setScanReportOpen] = useState(false);
@@ -3398,13 +3400,14 @@ function App() {
         {menuOpen && (
           <div className="menu">
             <button className="menu__button menu__button--build" disabled={analyzing > 0 || loading || !!addPackStatus || indexBusy} onClick={() => {
-              clearProject(false);
+              // Nothing is cleared yet: the loaded kit goes only when a new one is generated, so closing the picker with X leaves it as it was.
+              buildFreshKit.current = true;
               setNotice("");
               setKitReport(null);
               setLibraryError("");
               setLibraryToolsOpen(false);
               setLibraryOpen(true);
-            }} title="Clear all four banks and open pack selection for a fresh kit.">
+            }} title="Open pack selection for a fresh kit. The loaded sounds are cleared only when you generate it; closing the picker leaves them.">
               {hasProject ? "Build another kit" : "Build a kit"}
             </button>
             <button
@@ -3646,7 +3649,7 @@ function App() {
             </section>
           </div>
         )}
-        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setKitPacks(packs); setLibraryOpen(false); void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); }}/>}
+        {(libraryOpen || libraryToolsOpen) && <LibraryBrowser error={libraryError} tools={libraryToolsOpen} progress={indexProgress} key={libraryIndex?.id ?? "none"} report={kitReport} onRead={async (id) => { const file = libraryFiles.current?.files.find((file) => file.libraryId === id); if (!file) throw new Error("Reselect the library folder to audition samples."); return decodeNative(await file.source()); }} index={libraryIndex} connected={!!libraryFiles.current} reused={indexReused} busy={indexBusy || !!addPackStatus} palette={palette} onChoose={() => { refreshOnReconnect.current = false; libraryInput.current?.click(); }} onCorrect={correctLibrarySample} onClose={() => { buildFreshKit.current = false; setLibraryOpen(false); setLibraryToolsOpen(false); }} onGenerate={(packs) => { const found = libraryFiles.current; if (!found) return; setKitPacks(packs); setLibraryOpen(false); const generate = () => void loadBank("kit", () => ({ ...found, files: found.files.filter((file) => packs.includes(file.sourcePack ?? "")) })); if (buildFreshKit.current) { buildFreshKit.current = false; clearProject(false); window.setTimeout(generate, 60); } else generate(); }}/>}
         {sampleLibraryOpen && (
           <SampleLibraryModal
             records={sampleLibrary}
