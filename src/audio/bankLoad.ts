@@ -17,9 +17,6 @@ import { categoryOfFile, classifyFile, fairPackOrder, shuffled, type PackFile } 
 
 export type BankLoad = "drums" | "loops" | "bass" | "oneShots" | "kit";
 
-/** Longest a loop or one-shot may be; longer files are skipped. */
-export const MAX_LOAD_SECONDS = 30;
-
 /** How many of each drum type are pulled from a drum pack (pads and hot-swap spares together). */
 export const DRUM_QUOTA: Partial<Record<CategoryId, number>> = {
   kick: 10,

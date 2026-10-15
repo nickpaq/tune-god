@@ -27,7 +27,6 @@ import {
 import {
   BANK_ZONES,
   bankTakes,
-  MAX_LOAD_SECONDS,
   exportPadLabel,
   placeBank,
   planBank,
@@ -1167,7 +1166,6 @@ function App() {
           category: p.category,
         })),
         byteBudget: budget,
-        maxSeconds: MAX_LOAD_SECONDS,
         replace: replaced.map((p) => p.origIndex),
         fillTo: bank === "kit" || bank === "drums" ? zone.end - zone.start - lockedSlots.size : undefined,
         fallbackCandidates: bank === "kit" || bank === "drums" ? shuffled(found.files) : undefined,
@@ -1181,7 +1179,7 @@ function App() {
           setLibraryError("No samples could be loaded. Reconnect your packs folder and try again.");
           setLibraryToolsOpen(false);
           setLibraryOpen(true);
-        } else window.alert(`No sound in that folder could be loaded: they were longer than ${MAX_LOAD_SECONDS} s (the most a bank load takes), marked as loops for a one-shot slot, too big for the project size limit, or unreadable.`);
+        } else window.alert(`No sound in that folder could be loaded: they were marked as loops for a one-shot slot, too big for the project size limit, or unreadable.`);
         return;
       }
       // The first load into a new project names it: "TuneGod - All Kits" for a whole library, "TuneGod - {pack}" for one pack.
