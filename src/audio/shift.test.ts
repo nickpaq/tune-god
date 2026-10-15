@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Pad } from "../components/PadPanel";
-import { pitchKnobFor, shiftFor, snapSemitones } from "./shift";
+import { shiftFor, snapSemitones } from "./shift";
 
 const pad = (over: Partial<Pad>): Pad => ({ index: 0, origIndex: 0, name: "x.wav", sampleId: 1, sampleRate: 48000, channelData: [new Float32Array(1)], tune: true, semis: 0, cents: 0, ...over });
 
@@ -19,26 +19,19 @@ describe("shiftFor", () => {
   });
 });
 
-describe("the 808's render and the pitch knob", () => {
-  it("renders only bass onto the nearest semitone, to two decimals", () => {
+describe("the 808's pitch is on the knob, never rendered", () => {
+  it("moves only bass onto the nearest semitone, to two decimals", () => {
     expect(snapSemitones(pad({ category: "bass", detectedMidi: 36.3 }))).toBe(-0.3);
     expect(snapSemitones(pad({ category: "bass", detectedMidi: 36.7 }))).toBe(0.3);
     expect(snapSemitones(pad({ category: "bass", detectedMidi: null }))).toBe(0);
     expect(snapSemitones(pad({ category: "melodic", detectedMidi: 36.3 }))).toBe(0);
   });
 
-  it("writes the knob as the total shift less what the render already did, so audio and knob add up to the shift", () => {
-    const p = pad({ category: "bass", detectedMidi: 36.3 });
-    const shift = shiftFor(p, 0, 440); // target C: from 36.3 down 0.3
-    expect(shift).toBe(-0.3);
-    expect(pitchKnobFor(p, shift)).toBe(0);
+  it("the knob carries the whole shift of an 808, snap and retune together", () => {
+    const p = pad({ category: "bass", detectedMidi: 36.3, tune: false });
+    expect(shiftFor(p, 0, 440)).toBe(-0.3); // Tune off: onto its nearest semitone
     const q = pad({ category: "bass", detectedMidi: 36.3, semis: 2, cents: 25 });
-    expect(snapSemitones(q) + pitchKnobFor(q, shiftFor(q, 0, 440))).toBeCloseTo(shiftFor(q, 0, 440), 10);
-  });
-
-  it("a pad that is not rendered gets the whole shift on the knob", () => {
-    const p = pad({ category: "melodic", detectedMidi: 62.25 });
-    expect(pitchKnobFor(p, shiftFor(p, 0, 440))).toBe(-2.25);
+    expect(shiftFor(q, 0, 440)).toBe(1.95); // C from 36.3 is -0.3, plus 2 semitones and 25 cents
   });
 });
 

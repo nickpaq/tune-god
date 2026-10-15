@@ -45,10 +45,10 @@ Written when "Route pads to buses" is on. Bus A is Kick, B Bass, C Drums, D Melo
 | `kickClipper.threshold` | same | Clip level and softness of the curve | about -35 to 0 dB | Near 0 is a hard clip, low is a soft S-curve. Lower also lowers the kick's peak |
 | `kickClipper.output` | same | Level after the clip | -36 to 0 dB | Can only turn down |
 | `kickClipper.oversample` | same | HQ button | 0 or 1 | 1 for less aliasing |
-| `fade808.withinDb` / `minMs` / `maxMs` | The soft fade-in every 808 gets instead of a sidechain | The fade is as long as the kick's main transient (how long its envelope stays within `withinDb` of its peak, `kickTransient.ts`), held between `minMs` and `maxMs` | 6 dB, 4 to 30 ms | Longer fade = more room for the kick, less 808 attack |
+| `sidechain.threshold` / `release` / `output` / `source` | Koala's SIDECHAIN on the Bass bus, ducking to the Kick bus (written when the export's Sidechain box is ticked) | Threshold -60 to 0 dB (lower ducks harder), release 10 to 1000 ms, output -12 to +12 dB after the duck, source 0 = the Kick bus | -20 dB, 80 ms, 0 dB, 0 | Lower threshold = deeper, longer duck (see the sweep in `koala-mixer-reference.md`) |
 | `melodicEq` | Melodic bus EQ | lo low shelf, mid bell, hi shelf (freq, gain, Q for each) | freq 20 to 20000 Hz, gain +-18 dB, Q 0.5 to 10 | Lower `lo gain` to clear more low end, lower `hi gain` to darken |
 
-The bus layout is fixed in `routing.ts` (`CATEGORY_BUS`, `BUS_NAMES`), which decides which sound types go on which bus. There is no sidechain.
+The bus layout is fixed in `routing.ts` (`CATEGORY_BUS`, `BUS_NAMES`), which decides which sound types go on which bus. The sidechain (Bass bus listening to the Kick bus) is an export option and ducks bass and 808s without changing any sound. The 808 fade-in is gone.
 
 ## 4. Master chain (`master`)
 

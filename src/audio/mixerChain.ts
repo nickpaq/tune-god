@@ -1,5 +1,5 @@
 // Builds the effects the export puts on Koala's mixer strips from the active mix preset (src/audio/mixPresets.ts, where every value
-// to tweak lives): clipping on the kick bus, an EQ on the melodic bus and a master
+// to tweak lives): clipping on the kick bus, a sidechain on the bass bus, an EQ on the melodic bus and a master
 // chain. Plugin and parameter names are Koala's own (docs/koala-mixer-reference.md). Bus plugins are added after any plugins already on the strip (never replacing one, never doubling one that is there); the master chain replaces the master strip, and the app warns first.
 import { ACTIVE_MIX_PRESET, type MasterStyle, type MixPreset } from "./mixPresets";
 
@@ -15,6 +15,9 @@ const effect = (name: string, parameters: Record<string, number>): MixerEffect =
 
 /** CLIPPER for the kick bus. Values: preset.buses.kickClipper. */
 export const kickClipper = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect => effect("CLIPPER", { ...preset.buses.kickClipper });
+
+/** SIDECHAIN for the Bass bus, ducking to the Kick bus (`source` 0). Values: preset.buses.sidechain. */
+export const sidechain = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect => effect("SIDECHAIN", { ...preset.buses.sidechain });
 
 /** EQ for the melodic bus (lo highpass, mid bell, hi high shelf). Values: preset.buses.melodicEq. */
 export const melodicEq = (preset: MixPreset = ACTIVE_MIX_PRESET): MixerEffect => effect("EQ", { ...preset.buses.melodicEq });

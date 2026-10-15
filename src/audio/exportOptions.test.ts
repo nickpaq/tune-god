@@ -5,7 +5,7 @@ import { writeLoopPatterns } from "./loopPatterns";
 
 describe("export options", () => {
   it("default to sounds coming out as they went in, plus the labels, mute groups and melodic loop patterns", () => {
-    expect(DEFAULT_EXPORT_OPTIONS).toMatchObject({ normalize: false, masterChain: false, buses: false, panSpread: false, fade808: false, colorsAndLabels: true, chokeGroups: true, melodicPatterns: true, masterStyle: "dynamic" });
+    expect(DEFAULT_EXPORT_OPTIONS).toMatchObject({ normalize: false, masterChain: false, buses: false, panSpread: false, sidechain: false, colorsAndLabels: true, chokeGroups: true, melodicPatterns: true, masterStyle: "dynamic" });
   });
   it("take defaults for anything an older save left out", () => {
     expect(mergeExportOptions({ normalize: true })).toEqual({ ...DEFAULT_EXPORT_OPTIONS, normalize: true });
@@ -52,5 +52,14 @@ describe("loop patterns when the option is off", () => {
     expect(sequences.filter((s) => !isEmpty(s))).toHaveLength(2);
     writeLoopPatterns(sequences, [], 4);
     expect(sequences.filter((s) => !isEmpty(s))).toHaveLength(0);
+  });
+});
+
+describe("older saved choices", () => {
+  it("drop the removed 808 fade-in", () => {
+    const merged = mergeExportOptions({ fade808: true, buses: true } as any);
+    expect(merged).not.toHaveProperty("fade808");
+    expect(merged.buses).toBe(true);
+    expect(merged.sidechain).toBe(false);
   });
 });

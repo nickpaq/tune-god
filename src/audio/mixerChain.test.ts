@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildTunedKoala } from "./exportProject";
 import type { ParsedKoalaProject } from "./koalaProject";
 import { BUS_NAMES, CATEGORY_BUS } from "./routing";
-import { appendAfterExisting, fillEmptySlots, kickClipper, masterChain, melodicEq, type MixerSlot } from "./mixerChain";
+import { appendAfterExisting, fillEmptySlots, kickClipper, masterChain, melodicEq, sidechain, type MixerSlot } from "./mixerChain";
 
 async function load(mixer?: unknown): Promise<ParsedKoalaProject> {
   const zip = await JSZip.loadAsync(readFileSync(new URL("../../docs/calibration/calibration.koala", import.meta.url)));
@@ -95,7 +95,7 @@ describe("effect parameters", () => {
   const hi = read("mixer-all-max.json");
   const find = (mixer: any, fxName: string) => [...mixer.buses.flatMap((b: any) => b.chain), ...mixer.master.chain].find((s: any) => s?.name === fxName);
 
-  it.each([...masterChain("loud"), ...masterChain("dynamic"), kickClipper(), melodicEq()].map((fx) => [fx.name, fx] as const))("%s uses Koala's parameter names and stays inside their range", (name, fx) => {
+  it.each([...masterChain("loud"), ...masterChain("dynamic"), kickClipper(), melodicEq(), sidechain()].map((fx) => [fx.name, fx] as const))("%s uses Koala's parameter names and stays inside their range", (name, fx) => {
     const a = find(lo, name).parameters;
     const b = find(hi, name).parameters;
     expect(Object.keys(fx.parameters).sort()).toEqual(Object.keys(a).sort());

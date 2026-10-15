@@ -3,7 +3,7 @@ import { applyPadEq, STRETCH_MODE, type PadPlayback } from "./padSettings";
 import { encodeWav } from "./wavEncode";
 import type { ParsedKoalaProject } from "./koalaProject";
 import type { MasterStyle } from "./mixPresets";
-import { appendAfterExisting, kickClipper, melodicEq, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
+import { appendAfterExisting, kickClipper, melodicEq, sidechain as sidechainEffect, masterChain as masterChainEffects, type MixerSlot } from "./mixerChain";
 import { BUS_NAMES } from "./routing";
 import { addChopperPad, type ChopperExport } from "./exportChopper";
 import { addSongSections, emptySequence, SEQUENCE_SLOTS, songTemplate, stretchLengthFor, type SongExport } from "./exportSong";
@@ -51,6 +51,7 @@ export async function buildTunedKoala(
     buses,
     busNames,
     busEffects,
+    sidechain,
     pitches,
     masterChain,
     masterStyle,
@@ -68,7 +69,7 @@ export async function buildTunedKoala(
     stretch,
     loops,
     melodicPatterns = true,
-  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; padPlayback?: Map<number, PadPlayback>; classifications?: Map<number, unknown>; padOverrides?: Map<number, PadPlayback | null>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number>; loops?: Map<number, { bpm: number; seconds: number; melodic: boolean }>; melodicPatterns?: boolean } = {},
+  }: { vols?: Map<number, number>; buses?: Map<number, number>; busNames?: string[]; busEffects?: boolean; sidechain?: boolean; pitches?: Map<number, number>; masterChain?: boolean; masterStyle?: MasterStyle; arrangement?: Map<number, number | null>; pans?: Map<number, number>; colors?: Map<number, { color: string; label: string }>; playback?: Map<number, PadPlayback>; padPlayback?: Map<number, PadPlayback>; classifications?: Map<number, unknown>; padOverrides?: Map<number, PadPlayback | null>; ghosts?: GhostPadExport[]; song?: SongExport; chopper?: ChopperExport; bpm?: number; stretch?: Map<number, number>; loops?: Map<number, { bpm: number; seconds: number; melodic: boolean }>; melodicPatterns?: boolean } = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const byId = new Map(tuned.map((t) => [t.sampleId, t]));
   const samplerJson = JSON.parse(JSON.stringify(project.samplerJson));
@@ -162,7 +163,7 @@ export async function buildTunedKoala(
   project.zip.file("sampler/sampler.json", JSON.stringify(samplerJson));
   await writeMelodicLoopPatterns(project, samplerJson, melodicPatterns ? loopBars : new Map(), beatsPerBar);
   if (bpm !== undefined) await writeBpm(project, bpm);
-  if (busNames || busEffects || masterChain) await setupMixer(project, { names: busNames, kickClip: busEffects, melodicEq: busEffects, master: masterChain, masterStyle });
+  if (busNames || busEffects || sidechain || masterChain) await setupMixer(project, { names: busNames, kickClip: busEffects, melodicEq: busEffects, sidechain, master: masterChain, masterStyle });
 
   const blob = await project.zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 1 }, streamFiles: true });
   const base = project.originalName.replace(/\.koala$/i, "");
@@ -225,11 +226,11 @@ export async function writeBpm(project: ParsedKoalaProject, bpm: number): Promis
 const emptyStrip = (name: string) => ({ chain: [null, null, null, null, null], mute: false, name, solo: false, volume: 0 });
 
 /**
- * Sets up the mixer in mixer.json: bus strip names, a little clipping on the kick bus, an EQ on the melodic bus, and the master chain.
+ * Sets up the mixer in mixer.json: bus strip names, a little clipping on the kick bus, a sidechain on the bass bus, an EQ on the melodic bus, and the master chain.
  * Each bus keeps its effects and levels, and a new effect goes after the last one already there; the master chain replaces the master
  * strip's plugins (the app warns first). A project that has never opened the mixer has no mixer.json, so one is created from Koala's own layout.
  */
-async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; master?: boolean; masterStyle?: MasterStyle; kickClip?: boolean; melodicEq?: boolean }): Promise<void> {
+async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]; master?: boolean; masterStyle?: MasterStyle; kickClip?: boolean; melodicEq?: boolean; sidechain?: boolean }): Promise<void> {
   const entry = project.zip.file("mixer.json");
   const mixer = entry ? JSON.parse(await entry.async("string")) : { buses: [], master: emptyStrip("MAIN") };
   mixer.buses = Array.isArray(mixer.buses) ? mixer.buses : [];
@@ -240,6 +241,11 @@ async function setupMixer(project: ParsedKoalaProject, setup: { names?: string[]
     const kick = (mixer.buses[0] ??= emptyStrip(BUS_NAMES[0]));
     kick.chain = Array.isArray(kick.chain) ? kick.chain : [null, null, null, null, null];
     if (!kick.chain.some((fx: MixerSlot) => fx?.name === "CLIPPER")) appendAfterExisting(kick.chain, [kickClipper()]);
+  }
+  if (setup.sidechain) {
+    const bass = (mixer.buses[1] ??= emptyStrip(BUS_NAMES[1]));
+    bass.chain = Array.isArray(bass.chain) ? bass.chain : [null, null, null, null, null];
+    if (!bass.chain.some((fx: MixerSlot) => fx?.name === "SIDECHAIN")) appendAfterExisting(bass.chain, [sidechainEffect()]);
   }
   if (setup.melodicEq) {
     const melodic = (mixer.buses[3] ??= emptyStrip(BUS_NAMES[3]));

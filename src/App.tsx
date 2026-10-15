@@ -59,18 +59,11 @@ import {
   type GhostPadExport,
   type TunedSample,
 } from "./audio/exportProject";
-import { pitchKnobFor, shiftFor, snapSemitones } from "./audio/shift";
-import {
-  fadeIn,
-  fadeMsFor,
-  kickTransientMs,
-  medianTransientMs,
-} from "./audio/kickTransient";
+import { shiftFor } from "./audio/shift";
 import {
   CATEGORIES,
   categoryIndex,
   categoryLabel,
-  is808Name,
   isKitCategory,
   isTunedCategory,
   migrateCategory,
@@ -185,7 +178,6 @@ import {
   clampA4Reference,
   NOTE_NAMES,
   referenceOffsetSemitones,
-  semitonesToRatio,
   splitTrim,
   trimCents,
   bassLiftSemitones,
@@ -389,11 +381,11 @@ function App() {
    * What the export does for the user (normalize and balance, colours and labels, master chain, buses, melodic loop patterns, pan spread, choke groups):
    * asked with check boxes each time they export, and remembered. Nothing is mixed when a sound is loaded; the loaders bring sounds in as they are.
    */
-  const [exportOptions, setExportOptions] = useState<ExportOptions>(() => mergeExportOptions({ ...(saved.masterStyleDefaultedDynamic && saved.masterStyle ? { masterStyle: saved.masterStyle } : {}), ...saved.exportOptions }));
+  const [exportOptions, setExportOptions] = useState<ExportOptions>(() => mergeExportOptions(saved.exportOptions));
   const [exportDialog, setExportDialog] = useState(false);
   /** The choices of the export in progress, kept while the unused-drums question is asked. */
   const pendingExport = useRef<{ options: ExportOptions; values: ExportValues }>({ options: DEFAULT_EXPORT_OPTIONS, values: { bpm: 120, a4: 440, name: "" } });
-  /** A short message over the screen ("Sounds organized..."). */
+  /** A short message over the screen. */
   const [notice, setNotice] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   /** Temporarily disabled: live-input performance needs a later sequencer port. Keep the screen code for that work. */
@@ -2645,35 +2637,10 @@ function App() {
   };
 
   /**
-   * Rebuilds the project and downloads it. Every file is peak-normalized and the mix is on each pad's Koala volume knob (audio/loudness.ts); every
-   * tuning is written to the pitch knob (audio/shift.ts). Only 808 and bass audio is rendered: onto its nearest semitone, then faded in under the kick.
+   * Rebuilds the project and downloads it. No sound is re-rendered: every tuning, the 808s' and basses' included, is written to the pitch knob
+   * (audio/shift.ts) and the audio stays as it was loaded.
    */
   const padsNow = pads;
-  /** An 808 is a bass sound by the name or by the loader's flag. */
-  const isEight = (p: Pad) =>
-    p.category === "bass" && (!!p.is808 || is808Name(p.name));
-  /** The 808s' fade-in, in ms: the length of the kicks' main transient, when the export option is on. Null when it is off or there is no kick and 808 to work from. */
-  const fadeFor = (list: Pad[], enabled: boolean): number | null => {
-    if (!enabled || !list.some(isEight)) return null;
-    const ms = medianTransientMs(
-      list
-        .filter((p) => p.category === "kick")
-        .map((p) =>
-          kickTransientMs(
-            p.channelData,
-            p.sampleRate,
-            ACTIVE_MIX_PRESET.buses.fade808.withinDb,
-          ),
-        ),
-    );
-    return ms === null
-      ? null
-      : fadeMsFor(
-          ms,
-          ACTIVE_MIX_PRESET.buses.fade808.minMs,
-          ACTIVE_MIX_PRESET.buses.fade808.maxMs,
-        );
-  };
   const [exportName, setExportName] = useState("");
   /** A random name from the loaded sounds' own file names, one not used for an earlier export; null when no sound gives one. */
   const suggestName = () => {
@@ -2711,14 +2678,10 @@ function App() {
         for (const [sampleId, pan] of panPlan(Object.values(pads).filter(isReal))) pans.set(sampleId, pan);
       }
       const allPads = Object.values(pads).filter(isReal);
-      // Every file is rendered to its final audio (no loudness matching, no volume knob); every tuning is on the pitch knob.
-      // The only audio that is changed is 808 and bass (resampled onto their nearest semitone, then faded in under the kick) and it is measured as it is
-      // rendered, so the whole project is never shipped to the worker or copied at once.
-      const fade = fadeFor(allPads, options.fade808 && sidechainReady);
+      // No sound is re-rendered (no loudness matching, no volume knob, no 808 pitch snap): every tuning is on the pitch knob.
       const rendered: {
         pad: Pad;
         channelData: Float32Array[];
-        retimed: boolean;
       }[] = [];
       const pitches = new Map<number, number>();
       // Loops with a tempo in their name: the export works out their length in bars from it (and gives each melodic loop a pattern).
@@ -2727,20 +2690,11 @@ function App() {
       for (const pad of allPads) {
         setExportProgress(`${done++}/${allPads.length}`);
         const shift = shiftFor(pad, tunedTarget, a4, keyMajor);
-        const snap = snapSemitones(pad);
-        const retimed = Math.abs(snap) >= 0.005;
-        if (pad.tune || pad.tuneLocked || snap !== 0)
-          pitches.set(pad.sampleId, pitchKnobFor(pad, shift));
+        // An 808 or bass with Tune off still sits on its nearest semitone, by the pitch knob (shiftFor), not by re-rendering the file.
+        if (pad.tune || pad.tuneLocked || shift !== 0) pitches.set(pad.sampleId, shift);
         // The pad's audio was already cut to Koala's start/end points on load, so a stretched loop stays in time.
-        let channelData = retimed
-          ? await getRenderWorker().resamplePitch(
-              pad.channelData,
-              semitonesToRatio(snap),
-            )
-          : pad.channelData;
-        if (fade && isEight(pad))
-          channelData = fadeIn(channelData, pad.sampleRate, fade);
-        rendered.push({ pad, channelData, retimed });
+        const channelData = pad.channelData;
+        rendered.push({ pad, channelData });
         if (isLoopCategory(pad.category) && pad.bpm && pad.bpm > 0 && channelData[0]?.length)
           loopLengths.set(pad.sampleId, { bpm: pad.bpm, seconds: channelData[0].length / pad.sampleRate, melodic: pad.category === "melodicLoop" });
       }
@@ -2752,7 +2706,7 @@ function App() {
           sampleId: r.pad.sampleId,
           sampleRate: r.pad.sampleRate,
           channelData: r.channelData,
-          retimed: r.retimed,
+          retimed: false,
           trimmedFrom: r.pad.trimmedFrom,
         });
       });
@@ -2783,13 +2737,12 @@ function App() {
       const classifications = new Map<number, unknown>();
       const padOverrides = new Map<number, PadPlayback | null>();
       for (const p of allPads) {
-        // The playback rules by sound type are written on every export; only the per-pad EQ is Organize's.
+        // The playback rules by sound type are written on every export; the per-pad EQ, bus and mute group follow the export check boxes.
         const settings = p.category ? resolvePlayback(p.category, typeSettings[p.category], p.playback, p.stretch) : undefined;
         padOverrides.set(p.origIndex, p.playback || p.stretch !== undefined ? { ...p.playback, ...(p.stretch !== undefined ? { stretch: p.stretch ? settings?.stretch : "off" as const } : {}) } : null);
         if (p.classification) classifications.set(p.origIndex, { ...p.classification, category: p.category });
-        // Bus routing and the per-pad EQ are part of the mix: with Organize off the pad keeps the bus and EQ it came with.
         // The per-type EQ goes with normalize and balance, the bus with the bus routing, and the mute group with the choke groups; the rest of a type's pad rules always apply.
-        if (settings) padPlayback.set(p.origIndex, { ...settings, ...(options.normalize ? {} : { eq: undefined }), ...(options.buses ? {} : { bus: undefined }), ...(options.chokeGroups ? {} : { chokeGroup: undefined }) });
+        if (settings) padPlayback.set(p.origIndex, { ...settings, ...(options.normalize ? {} : { eq: undefined }), ...(options.buses || options.sidechain ? {} : { bus: undefined }), ...(options.chokeGroups ? {} : { chokeGroup: undefined }) });
       }
       // Sounds export compact Type labels without file or preset numbering.
       // Loops are written stretched to 2, 4, 8 or 16 bars; chop exports write their exact lengths.
@@ -2815,8 +2768,10 @@ function App() {
         stretch,
         vols,
         pitches,
-        busNames: options.buses ? BUS_NAMES : undefined,
+        // The sidechain needs the kick and the bass on their own buses, so it brings the bus routing with it.
+        busNames: options.buses || options.sidechain ? BUS_NAMES : undefined,
         busEffects: options.buses,
+        sidechain: options.sidechain,
         masterChain: options.masterChain,
         masterStyle: options.masterStyle,
         arrangement,
@@ -4239,7 +4194,7 @@ function App() {
             keyText={keyLabel(keyPc, keyMajor)}
             onShuffle={suggestName}
             a4Range={A4_REFERENCE_RANGE}
-            fade808Blocker={sidechainReady ? undefined : SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
+            sidechainBlocker={sidechainReady ? undefined : SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
             onCancel={() => setExportDialog(false)}
             onExport={(options, values) => {
               setExportDialog(false);

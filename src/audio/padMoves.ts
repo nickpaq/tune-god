@@ -5,7 +5,7 @@ import type { Pad } from "../components/PadPanel";
 export const PAD_COUNT = 64;
 export const PADS_PER_BANK = 16;
 /**
- * Bank D (pads 48 to 63) belongs to the chopped song's sections and nothing else. No tool (drum layouts, Organize, packs, extra drums, the
+ * Bank D (pads 48 to 63) belongs to the chopped song's sections and nothing else. No tool (drum layouts, packs, extra drums, the
  * misfit swap, "next empty pad") puts anything there, placeholders included, or moves anything in or out of it: tools work on banks A to C only.
  */
 export const CHOP_BANK_START = 48;

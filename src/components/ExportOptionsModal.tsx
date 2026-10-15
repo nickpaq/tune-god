@@ -13,7 +13,7 @@ const CHOICES: { key: Flag; label: string; hint: string }[] = [
   { key: "buses", label: "Route to and rename buses", hint: "Kick, Bass, Drums, and Melodic + Chops + FX buses, with the kick clipper and an EQ on the last one." },
   { key: "melodicPatterns", label: "Create patterns for melodic loops", hint: "One pattern per loop at its length, from the last slot back (slots 32 to 17)." },
   { key: "panSpread", label: "Spread hats and melodic sounds in the stereo field", hint: "A random left and right placement, mirrored in pairs." },
-  { key: "fade808", label: "Fade 808s in under the kick", hint: "A short fade-in the length of the kick's hit, so the kick comes through (a stand-in for a sidechain)." },
+  { key: "sidechain", label: "Sidechain the bass and 808s to the kick", hint: "Koala's sidechain on the Bass bus, listening to the Kick bus. Turns on bus routing; sounds are not changed." },
   { key: "chokeGroups", label: "Set choke groups automatically", hint: "Hats, cymbals, drum loops, basses and vocal loops cut each other off by type (six groups). Chops keep group 4." },
 ];
 
@@ -26,7 +26,7 @@ export interface ExportValues {
   name: string;
 }
 
-export function ExportOptionsModal({ initial, values, a4Range, fade808Blocker, keyText, onShuffle, onExport, onCancel }: { initial: ExportOptions; values: ExportValues; a4Range: { min: number; max: number }; /** Why the 808 fade-in cannot be used now (no kick, or no bass or 808, on the pads); undefined when it can. */ fade808Blocker?: string; /** The key picked on the piano as it goes in the file name; null when none. */ keyText: string | null; /** A new random name taken from the sounds, or null when there is none. */ onShuffle: () => string | null; onExport: (options: ExportOptions, values: ExportValues) => void; onCancel: () => void }) {
+export function ExportOptionsModal({ initial, values, a4Range, sidechainBlocker, keyText, onShuffle, onExport, onCancel }: { initial: ExportOptions; values: ExportValues; a4Range: { min: number; max: number }; /** Why the sidechain cannot be used now (no kick, or no bass or 808, on the pads); undefined when it can. */ sidechainBlocker?: string; /** The key picked on the piano as it goes in the file name; null when none. */ keyText: string | null; /** A new random name taken from the sounds, or null when there is none. */ onShuffle: () => string | null; onExport: (options: ExportOptions, values: ExportValues) => void; onCancel: () => void }) {
   const [options, setOptions] = useState<ExportOptions>(initial);
   const [bpmText, setBpmText] = useState(String(values.bpm));
   const [a4Text, setA4Text] = useState(String(values.a4));
@@ -48,10 +48,10 @@ export function ExportOptionsModal({ initial, values, a4Range, fade808Blocker, k
         <div className="palette-modal__list">
           {CHOICES.map((choice) => (
             <label key={choice.key} className="export-options__row">
-              <input type="checkbox" checked={options[choice.key] && !(choice.key === "fade808" && fade808Blocker)} disabled={choice.key === "fade808" && !!fade808Blocker} onChange={(e) => set(choice.key, e.target.checked)} />
+              <input type="checkbox" checked={options[choice.key] && !(choice.key === "sidechain" && sidechainBlocker)} disabled={choice.key === "sidechain" && !!sidechainBlocker} onChange={(e) => set(choice.key, e.target.checked)} />
               <span>
                 <strong>{choice.label}</strong>
-                <small>{choice.key === "fade808" && fade808Blocker ? fade808Blocker : choice.hint}</small>
+                <small>{choice.key === "sidechain" && sidechainBlocker ? sidechainBlocker : choice.hint}</small>
                 {choice.key === "masterChain" && options.masterChain && (
                   <select aria-label="Master chain style" value={options.masterStyle} onChange={(e) => setOptions((prev) => ({ ...prev, masterStyle: e.target.value as MasterStyle }))}>
                     {MASTER_STYLES.map((m) => (

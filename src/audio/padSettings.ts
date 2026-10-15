@@ -41,7 +41,7 @@ export const MELODIC_RELEASE = 1;
 const PAD_EQ = ACTIVE_MIX_PRESET.padEq;
 const PAD_TONE = ACTIVE_MIX_PRESET.padTone;
 
-/** A melodic loop is written this way whatever the Organize switch says. */
+/** A melodic loop is written this way on every export. */
 export const MELODIC_LOOP_PLAYBACK: PadPlayback = { chokeGroup: 0, oneShot: false, loop: false, stretch: "modern" };
 
 function basePlayback(category: CategoryId): PadPlayback | undefined {
