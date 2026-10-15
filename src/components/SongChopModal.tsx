@@ -8,6 +8,7 @@ import type { SectionPlan } from "../audio/song/chop";
 import {
   barLineNear,
   beatChopLines,
+  markerAt,
   anchorAtPlayhead,
   nudgeGridMarks,
   barsIn,
@@ -216,8 +217,8 @@ export function SongChopModal({
 
   const lines = useMemo(() => {
     if (!grid) return [];
-    return fine ? fineChopLines(grid, marks.chops) : beatChopLines(grid, marks.chops);
-  }, [grid, marks.chops, fine]);
+    return fine ? fineChopLines(grid, marks.chops, marks.freeChops) : beatChopLines(grid, marks.chops);
+  }, [grid, marks.chops, marks.freeChops, fine]);
   const sections = useMemo(() => sectionsBetween(lines), [lines]);
   const plans = useMemo(() => (grid ? planSections(totalFrames, grid, sections) : []), [grid, totalFrames, sections]);
   // Acapella and synced mode: the destination pads are picked after the export button, so only the chopper has a limit here.
@@ -306,10 +307,17 @@ export function SongChopModal({
   const addChop = () => {
     if (!grid) return;
     const cursor = pointAtCursor();
+    // Chopper mode with the snap off: the marker sits exactly where it was set (a marker already within 10 ms is taken away instead).
+    if (fine && !(timeline.current?.snapping() ?? magnetOn)) {
+      const near = markerAt(marks.chops, cursor, Math.round(sampleRate * 0.01));
+      if (near !== null) return change({ ...marks, chops: marks.chops.filter((f) => f !== near), freeChops: (marks.freeChops ?? []).filter((f) => f !== near) }, `Chop removed at ${formatTime(near / sampleRate)}`);
+      haptic("snap");
+      return change({ ...marks, chops: [...marks.chops, cursor], freeChops: [...(marks.freeChops ?? []), cursor] }, `Chop added at ${formatTime(cursor / sampleRate)} (free)`);
+    }
     const lineOf = (frame: number) => (fine ? fineLineNear(grid, frame) : lineNear(grid, frame));
     const line = lineOf(cursor);
     const at = lineFrame(grid, line);
-    const there = marks.chops.find((f) => lineOf(f) === line);
+    const there = marks.chops.find((f) => !(marks.freeChops ?? []).includes(f) && lineOf(f) === line);
     if (there !== undefined) return change({ ...marks, chops: marks.chops.filter((f) => f !== there) }, `Chop removed at ${formatTime(at / sampleRate)}`);
     haptic("snap");
     // Outside chopper mode a section may not pass 16 bars: markers fill in every 8 bars from the nearest chop before this one when it is further back than that.
@@ -346,7 +354,7 @@ export function SongChopModal({
     const chosen = planSections(totalFrames, grid, sectionsBetween(cuts));
     if (chosen.length === 0) return setStatus("No whole bars to chop");
     // The markers are placed; the export button then says how they are written.
-    change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)) }, `Chop marker every ${bars} bars`);
+    change({ ...marks, chops: cuts.map((n) => lineFrame(grid, n)), freeChops: [] }, `Chop marker every ${bars} bars`);
   };
 
   autoChopRef.current = autoChop;

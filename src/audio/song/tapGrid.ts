@@ -62,6 +62,13 @@ export function lineNear(grid: TapGrid, frame: number): number {
   return after && n >= after.line ? after.line - 1 : n;
 }
 
+/** The line number (with any fraction) that falls exactly on `frame` by the steady spacing: a chop set with the snap off, in chopper mode. `lineFrame` of it gives `frame` back. */
+export function exactLineAt(grid: TapGrid, frame: number): number {
+  let s = grid.segments[0];
+  for (const next of grid.segments) if (next.frame <= frame) s = next;
+  return s.line + (frame - s.frame) / s.beatFrames;
+}
+
 /** Steps (sixteenth notes) to a beat: the finest the chopper's grid and chops go. */
 export const STEPS_PER_BEAT = 4;
 

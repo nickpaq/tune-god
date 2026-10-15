@@ -284,3 +284,15 @@ describe("the finest chop outside chopper mode", () => {
     expect(plans[0].length).toBeCloseTo(5 * beat, 0);
   });
 });
+
+describe("chops set with the snap off (chopper mode)", () => {
+  it("sit exactly where they were set, and a snapped chop still goes to the nearest sixteenth", async () => {
+    const { baseGrid, fineChopLines } = await import("./chopMarks");
+    const { lineFrame } = await import("./tapGrid");
+    const grid = baseGrid(44100, 4, 120, 0);
+    const free = 12345;
+    const lines = fineChopLines(grid, [free, 30000], [free]);
+    expect(Math.round(lineFrame(grid, lines[0]))).toBe(free);
+    expect(lines[1]).toBe(fineChopLines(grid, [30000])[0]);
+  });
+});

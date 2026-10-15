@@ -150,6 +150,7 @@ const CHOP_KEY = "tune-god:chop:";
 export interface SavedChopMarks {
   gridOffsetFrames?: number;
   chops: readonly number[];
+  freeChops?: readonly number[];
   downbeats: readonly number[];
   oneOne: number | null;
   tempoScale: number;

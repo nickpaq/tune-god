@@ -6,6 +6,7 @@ import {
   lineFrame,
   lineNear,
   fineLineNear,
+  exactLineAt,
   MAX_SECTION_BARS,
   type PickedSection,
   type TapGrid,
@@ -14,6 +15,8 @@ import {
 /** What the user has placed, as the frames of the song they were placed on (the cursor's position at the time), in the order they were placed. */
 export interface Marks {
   chops: readonly number[];
+  /** Chopper mode only: the chops (a subset of `chops`, as frames) placed with the snap off. They sit exactly where they were set, not on the nearest sixteenth. */
+  freeChops?: readonly number[];
   /** Whole-grid phase nudge, in source frames; independent of detection input and tempo. */
   gridOffsetFrames?: number;
   /** Legacy downbeat markers, read only for saved-project compatibility. */
@@ -79,8 +82,9 @@ export function chopLines(grid: TapGrid, chops: readonly number[]): number[] {
 }
 
 /** The positions the chop markers sit on when chops may go as fine as sixteenth notes (chopper mode), in song order (two markers on one sixteenth are one). */
-export function fineChopLines(grid: TapGrid, chops: readonly number[]): number[] {
-  return [...new Set(chops.map((frame) => fineLineNear(grid, frame)))].sort((a, b) => a - b);
+export function fineChopLines(grid: TapGrid, chops: readonly number[], free: readonly number[] = []): number[] {
+  const loose = new Set(free);
+  return [...new Set(chops.map((frame) => (loose.has(frame) ? exactLineAt(grid, frame) : fineLineNear(grid, frame))))].sort((a, b) => a - b);
 }
 
 /** The beat lines the chop markers sit on (acapella and synced mode: the finest cut is a single beat), in song order (two markers on one beat are one). */
