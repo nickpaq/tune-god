@@ -12,10 +12,11 @@ const CHOICES: { key: Flag; label: string; hint: string }[] = [
   { key: "buses", label: "Route to and rename buses", hint: "Kick, Bass, Drums and Melodic buses, with the kick clipper and melodic EQ." },
   { key: "melodicPatterns", label: "Create patterns for melodic loops", hint: "One pattern per loop at its length, from the last slot back (slots 32 to 17)." },
   { key: "panSpread", label: "Spread hats and melodic sounds in the stereo field", hint: "A random left and right placement, mirrored in pairs." },
+  { key: "fade808", label: "Fade 808s in under the kick", hint: "A short fade-in the length of the kick's hit, so the kick comes through (a stand-in for a sidechain)." },
   { key: "chokeGroups", label: "Set choke groups automatically", hint: "Open and closed hats, 808s and basses and melodic loops cut each other off." },
 ];
 
-export function ExportOptionsModal({ initial, onExport, onCancel }: { initial: ExportOptions; onExport: (options: ExportOptions) => void; onCancel: () => void }) {
+export function ExportOptionsModal({ initial, fade808Blocker, onExport, onCancel }: { initial: ExportOptions; /** Why the 808 fade-in cannot be used now (no kick, or no bass or 808, on the pads); undefined when it can. */ fade808Blocker?: string; onExport: (options: ExportOptions) => void; onCancel: () => void }) {
   const [options, setOptions] = useState<ExportOptions>(initial);
   const set = (key: Flag, value: boolean) => setOptions((prev) => ({ ...prev, [key]: value }));
   return (
@@ -31,10 +32,10 @@ export function ExportOptionsModal({ initial, onExport, onCancel }: { initial: E
         <div className="palette-modal__list">
           {CHOICES.map((choice) => (
             <label key={choice.key} className="export-options__row">
-              <input type="checkbox" checked={options[choice.key]} onChange={(e) => set(choice.key, e.target.checked)} />
+              <input type="checkbox" checked={options[choice.key] && !(choice.key === "fade808" && fade808Blocker)} disabled={choice.key === "fade808" && !!fade808Blocker} onChange={(e) => set(choice.key, e.target.checked)} />
               <span>
                 <strong>{choice.label}</strong>
-                <small>{choice.hint}</small>
+                <small>{choice.key === "fade808" && fade808Blocker ? fade808Blocker : choice.hint}</small>
                 {choice.key === "masterChain" && options.masterChain && (
                   <select aria-label="Master chain style" value={options.masterStyle} onChange={(e) => setOptions((prev) => ({ ...prev, masterStyle: e.target.value as MasterStyle }))}>
                     {MASTER_STYLES.map((m) => (

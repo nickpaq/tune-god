@@ -401,8 +401,6 @@ function App() {
   const [exportDialog, setExportDialog] = useState(false);
   /** The choices of the export in progress, kept while the unused-drums question is asked. */
   const pendingExportOptions = useRef<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
-  /** The Sidechain switch (the bass ducking to the kick); it needs a kick and a bass on the pads, so it stays locked until a drum kit and a bass are loaded. */
-  const [sidechainOn, setSidechainOn] = useState(saved.fade808On ?? false);
   /** A short message over the screen ("Sounds organized..."). */
   const [notice, setNotice] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -888,8 +886,6 @@ function App() {
   useEffect(() => {
     saveState({
       exportOptions,
-      fade808On: sidechainOn,
-      sidechainOn,
       padSymbols,
       packMemory,
       paletteId,
@@ -906,7 +902,6 @@ function App() {
     });
   }, [
     exportOptions,
-    sidechainOn,
     padSymbols,
     packMemory,
     paletteId,
@@ -1046,10 +1041,9 @@ function App() {
 
   /**
    * Opening a .koala project from the start screen leaves it exactly as it is: no long-sample question, and every menu option goes back off
-   * (the Sidechain applies only if the user switches it on again after this load).
+   * (the export options are asked again at export).
    */
   const openKoalaProject = (file: File) => {
-    setSidechainOn(false);
     void loadProject(file, false, true);
   };
 
@@ -2667,9 +2661,9 @@ function App() {
   /** An 808 is a bass sound by the name or by the loader's flag. */
   const isEight = (p: Pad) =>
     p.category === "bass" && (!!p.is808 || is808Name(p.name));
-  /** The 808s' fade-in, in ms: the length of the kicks' main transient, with the Sidechain switch on. Null when it is off or there is no kick and 808 to work from. */
-  const fadeFor = (list: Pad[]): number | null => {
-    if (!sidechainActive || !list.some(isEight)) return null;
+  /** The 808s' fade-in, in ms: the length of the kicks' main transient, when the export option is on. Null when it is off or there is no kick and 808 to work from. */
+  const fadeFor = (list: Pad[], enabled: boolean): number | null => {
+    if (!enabled || !list.some(isEight)) return null;
     const ms = medianTransientMs(
       list
         .filter((p) => p.category === "kick")
@@ -2721,7 +2715,7 @@ function App() {
       // Every file is rendered to its final audio and peak-normalized; the mix is on the Koala volume knob, and every tuning on the pitch knob.
       // The only audio that is changed is 808 and bass (resampled onto their nearest semitone, then faded in under the kick) and it is measured as it is
       // rendered, so the whole project is never shipped to the worker or copied at once.
-      const fade = fadeFor(allPads);
+      const fade = fadeFor(allPads, options.fade808 && sidechainReady);
       const rendered: {
         pad: Pad;
         channelData: Float32Array[];
@@ -2926,7 +2920,6 @@ function App() {
       .map((p) => p.category),
   );
   const sidechainReady = sidechain.ready;
-  const sidechainActive = sidechainReady && sidechainOn;
   const longPads = Object.values(pads)
     .filter((p) => longSamples.includes(p.origIndex))
     .sort((a, b) => a.index - b.index);
@@ -3514,13 +3507,6 @@ function App() {
               <ScrubField label="Project BPM" value={projectBpm} text={String(projectBpm)} min={20} max={300} perPx={0.02} wholePerPx={1 / 14} onChange={(v) => setProjectBpm(Math.round(v * 100) / 100)} />
             </label>
             <button className="menu__button" onClick={() => { setMenuOpen(false); setPlaybackEditorOpen(true); }}>Koala Type & pad settings</button>
-            <Switch
-              label="Sidechain"
-              hint={SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
-              on={sidechainReady && sidechainOn}
-              disabled={!sidechainReady}
-              onChange={setSidechainOn}
-            />
             <label className="menu__a4">
               A4 reference (Hz)
               <ScrubField label="A4 reference (Hz)" value={a4} text={String(a4)} min={A4_REFERENCE_RANGE.min} max={A4_REFERENCE_RANGE.max} perPx={0.05} onChange={(v) => setA4(Math.round(v))} onDoubleTap={() => setA4(440)} />
@@ -4258,6 +4244,7 @@ function App() {
         {exportDialog && (
           <ExportOptionsModal
             initial={exportOptions}
+            fade808Blocker={sidechainReady ? undefined : SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
             onCancel={() => setExportDialog(false)}
             onExport={(options) => {
               setExportDialog(false);

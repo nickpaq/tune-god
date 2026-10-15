@@ -24,7 +24,7 @@ export function sidechainStatus(categories: (CategoryId | undefined)[], organize
 
 export const SIDECHAIN_HINT: Record<SidechainBlocker | "ready", string> = {
   ready: "The 808s fade in a touch so the kick hits through",
-  organize: "Turn Organize on first. The sidechain also needs a kick and a bass or 808 on the pads",
+  organize: "Needs a kick and a bass or 808 on the pads",
   kick: "Load a drum kit with a kick first",
   bass: "Load a bass or 808 first",
 };

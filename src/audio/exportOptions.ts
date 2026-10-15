@@ -17,6 +17,8 @@ export interface ExportOptions {
   melodicPatterns: boolean;
   /** Spread hats and melodic sounds across the stereo field. */
   panSpread: boolean;
+  /** Fade every 808 in over the length of the kick's main transient (rendered into the file), so the kick hits through. Needs a kick and a bass or 808 on the pads. */
+  fade808: boolean;
   /** Set mute groups by sound type (open and closed hats, 808s and basses, melodic loops cut each other off). Off, pads keep their own. */
   chokeGroups: boolean;
 }
@@ -30,6 +32,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   buses: false,
   melodicPatterns: true,
   panSpread: false,
+  fade808: false,
   chokeGroups: true,
 };
 

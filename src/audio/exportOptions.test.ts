@@ -5,7 +5,7 @@ import { writeLoopPatterns } from "./loopPatterns";
 
 describe("export options", () => {
   it("default to sounds coming out as they went in, plus the labels, mute groups and melodic loop patterns", () => {
-    expect(DEFAULT_EXPORT_OPTIONS).toMatchObject({ normalize: false, masterChain: false, buses: false, panSpread: false, colorsAndLabels: true, chokeGroups: true, melodicPatterns: true, masterStyle: "dynamic" });
+    expect(DEFAULT_EXPORT_OPTIONS).toMatchObject({ normalize: false, masterChain: false, buses: false, panSpread: false, fade808: false, colorsAndLabels: true, chokeGroups: true, melodicPatterns: true, masterStyle: "dynamic" });
   });
   it("take defaults for anything an older save left out", () => {
     expect(mergeExportOptions({ normalize: true })).toEqual({ ...DEFAULT_EXPORT_OPTIONS, normalize: true });
