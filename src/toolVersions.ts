@@ -8,7 +8,7 @@ export interface ToolVersion { name: string; version: string }
  * whenever its behaviour changes, in the same commit as the app version bump. The classifier's numbers come from the code, so they cannot drift.
  */
 export const TOOL_VERSIONS: ToolVersion[] = [
-  { name: "Product spec", version: "1.15.0" },
+  { name: "Product spec", version: "1.16.0" },
   { name: "Chopper mode", version: "1.1.0" },
   { name: "Song chop editor", version: "0.9.0" },
   { name: "Chop to pads", version: "1.2.1" },

@@ -1,6 +1,6 @@
 # KoalaTune notes for Claude sessions
 
-## Consolidated product specification (v1.15.0)
+## Consolidated product specification (v1.16.0)
 
 These rules supersede older conflicting notes below. Implementation and validation details: `docs/consolidated-product-spec.md`.
 
@@ -93,3 +93,4 @@ Acapella mode tries project song/vocal detection first. Without a valid pair, pr
   - **The export has a Sidechain box** (`sidechain` in `ExportOptions`, off by default, disabled with its reason when the pads lack a kick or a bass/808: `sidechainStatus`). It writes Koala's SIDECHAIN on the Bass bus (bus 2), listening to the Kick bus (`source` 0), values in the mix preset (`buses.sidechain`: threshold -20 dB, release 80 ms, output 0). It brings bus routing with it (the pads must sit on the Kick and Bass buses). No sound is changed.
   - **The 808 fade-in ("attack ducking") is removed** (`kickTransient.ts`, the `fade808` option and preset values are deleted; a saved `fade808` is dropped).
   - **No audio is ever re-rendered at another pitch, the 808s' and basses' included.** Every tuning goes on Koala's pitch knob (`pad.pitch`) as the whole `shiftFor` value; an 808 with Tune off still sits on its nearest semitone, by the knob (`snapSemitones` in `shift.ts` now only feeds `shiftFor`). `pitchKnobFor` and the worker's `resamplePitch` are gone, and `TunedSample.retimed` is always false.
+- **v2.0.19: banks B and C are grouped, in even counts** (`kitGeneration.ts`). B: melodic loop ×4 / drum loop ×2, perc loop ×2 / vox ×2, FX ×2 / bass ×2, melodic ×2. C: melodic loop ×4 / vocal loop ×2, FX loop ×2 / melodic ×4 / bass ×2, vox ×2. Every Type there takes an even number of pads, side by side, never an odd one. A group the library can only half fill gives back its odd sound; empty groups are then filled one Type at a time (the whole group of four from one Type if enough, else a pair), so random fills stay together instead of scattering. Bank A (the fixed MPC layout of single pads) is unchanged and still filled slot by slot. This supersedes the older row description of B and C above.

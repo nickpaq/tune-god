@@ -89,10 +89,50 @@ describe("Type-only preset", () => {
   it("uses mixed, organized sound families on both B and C", () => {
     const slots = generationSlots();
     for (const bank of [slots.slice(16, 32), slots.slice(32, 48)]) {
-      for (const type of ["bass", "melodic", "vox", "fx", "melodicLoop", "drumLoop"]) expect(bank.some(slot => slot.category === type)).toBe(true);
+      for (const type of ["bass", "melodic", "vox", "melodicLoop"]) expect(bank.some(slot => slot.category === type)).toBe(true);
       expect(bank.slice(12).some(slot => slot.category === "bass")).toBe(true);
     }
     expect(layoutById("old-custom-template")).toBe(layout);
+  });
+  it("gives every Type on banks B and C an even number of pads, side by side in its row", () => {
+    const slots = generationSlots().slice(16);
+    const counts = new Map<string, number>();
+    for (const slot of slots) counts.set(slot.category, (counts.get(slot.category) ?? 0) + 1);
+    for (const [type, n] of counts) { expect(n % 2, type).toBe(0); expect(n, type).toBeGreaterThanOrEqual(2); }
+    for (let row = 0; row < slots.length; row += 4) {
+      const kinds = slots.slice(row, row + 4).map((s) => s.category);
+      expect(kinds[0] === kinds[1] && kinds[2] === kinds[3]).toBe(true);
+    }
+  });
+  it("never leaves an odd number of one Type on B and C when the library is short, and keeps the Types together", () => {
+    const slots = generationSlots();
+    // 3 melodic loops for 8 slots, one vox, and plenty of melodic one-shots and bass
+    const sounds = [
+      ...[0, 1, 2].map((k) => sample(k, "melodicLoop")), sample(3, "vox"),
+      ...Array.from({ length: 12 }, (_, i) => sample(10 + i, "melodic")),
+      ...Array.from({ length: 6 }, (_, i) => sample(40 + i, "bass")),
+    ];
+    const { positions } = allocateKit(sounds, slots, new Set(), new Set(), () => 0);
+    const byType = new Map<string, number[]>();
+    for (const sound of sounds) {
+      const at = positions.get(sound.key);
+      if (at !== undefined && at >= 16) byType.set(sound.category, [...(byType.get(sound.category) ?? []), at]);
+    }
+    for (const [type, at] of byType) expect(at.length % 2, type).toBe(0);
+    // the filled pads of each row are one Type or two pairs, never a scatter of singles
+    for (let row = 16; row < 48; row += 4) {
+      const kinds = [0, 1, 2, 3].map((n) => [...positions].find(([, i]) => i === row + n)).map((e) => e && sounds.find((s) => s.key === e[0])!.category);
+      expect(kinds[0] === undefined, `row at ${row}`).toBe(kinds[1] === undefined);
+      expect(kinds[2] === undefined, `row at ${row}`).toBe(kinds[3] === undefined);
+    }
+  });
+  it("fills a whole empty group of four from one Type when there are enough", () => {
+    const slots = generationSlots().slice(16, 20); // four melodic loops
+    const sounds = Array.from({ length: 6 }, (_, i) => sample(i, "fx")).concat(Array.from({ length: 6 }, (_, i) => sample(10 + i, "snare")));
+    const { positions } = allocateKit(sounds, slots.map((slot) => ({ ...slot })), new Set(), new Set(), () => 0);
+    const types = [...positions.keys()].map((key) => sounds.find((s) => s.key === key)!.category);
+    expect(types).toHaveLength(4);
+    expect(new Set(types).size).toBe(1);
   });
   it("fills missing FX with another available Type without relabeling it", () => {
     const result = allocateKit([sample(0, "fx"), sample(1, "fxLoop"), sample(2, "kick")], [

@@ -1,6 +1,6 @@
 # TuneGod consolidated product specification — implemented foundation
 
-Version 1.15.0 extends the existing project loader, sample allocation, Web Audio auditioning, waveform/chop tools, native sequencer work, and Koala writer. It does not replace those systems.
+Version 1.16.0 extends the existing project loader, sample allocation, Web Audio auditioning, waveform/chop tools, native sequencer work, and Koala writer. It does not replace those systems.
 
 ## Library workflow
 
@@ -16,7 +16,7 @@ Explicit typed folders supply family context; filenames refine mixed hats, gener
 
 Bank A keeps its 16 slot positions with main Types only: Cymbal / FX / FX / FX; Perc / Perc 2 / Perc / FX; Kick 2 / Snare 2 / Snare 3 / Clap; Kick 1 / Snare 1 / Closed Hat / Open Hat 2. There are no subtype controls or subtype matching. Legacy subtype metadata migrates without reconnecting or rebuilding the library. Old custom templates are no longer used for generation. Repeated generic FX and percussion slots use different sample identities. There is one fixed MPC preset; template editing and additional-bank choices are removed. Existing pad movement, audition, hot swap and sample locks stay available.
 
-Generate kit always fills 48 pads across A–C. A uses the MPC drum layout above. Both B and C mix sound families in organized rows: loops on top, vocals and FX next, melodic sounds below, and bass along the bottom. Bank D is reserved for chops and acapellas and is left untouched. B15, B16 and C15 now request melodic loops in place of bass loops, preserving all 48 positions. Bass loops remain indexed but cannot fill any melodic-loop slot, including fallback allocation.
+Generate kit always fills 48 pads across A–C. A uses the MPC drum layout above. Both B and C mix sound families in organized rows of four. Every Type on B and C takes an even number of pads (2, 4 or 8, never an odd number), side by side; a group the library can only half fill gives back its odd sound, and empty groups are filled one Type at a time (the whole group from one Type when there are enough, otherwise a pair), so Types are never scattered. Bank D is reserved for chops and acapellas and is left untouched. Bank B rows: melodic loop ×4, drum loop ×2 + perc loop ×2, vox ×2 + FX ×2, bass ×2 + melodic ×2. Bank C rows: melodic loop ×4, vocal loop ×2 + FX loop ×2, melodic ×4, bass ×2 + vox ×2 (eight melodic-loop slots in all). Bass loops remain indexed but cannot fill any melodic-loop slot, including fallback allocation.
 
 Generation (Generate kit, Build another kit) replaces only unlocked A–C pads and the kit's hot-swap spares. Locked pads and their sample identities are retained. **Bank D (pads 48–63) is never replaced, cleared or filled by kit generation or any bank loader**: a vocal, acapella or chopped song loaded there independently of the kit stays, and is saved with the project file and the pad state, so it persists across sessions. Only the chop tools write to bank D. Match requested Types first, then randomly fill missing pads with available Types. Preserve each replacement's actual Type. Tiny libraries may share audio across independent pads; do not show shortage notices. **Balance across packs** alternates packs within candidate groups. Repeated preset slots define Type quotas. Existing individual bank loaders remain available.
 
