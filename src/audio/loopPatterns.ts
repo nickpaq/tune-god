@@ -11,8 +11,8 @@ import { emptySequence, isEmpty, isLoopPattern, SEQUENCE_SLOTS, TICKS_PER_BEAT }
 export const LOOP_BARS = [2, 4, 8, 16] as const;
 /** The first slot (0-based) a loop pattern may use: slots 0 to 15 are the first two banks of 8 and are never used. */
 export const FIRST_LOOP_PATTERN_SLOT = 16;
-/** The note every loop pattern holds: pitch 0 is the pad's own pitch (C3) and the velocity is 100. */
-export const LOOP_NOTE_VELOCITY = 100;
+/** The note every loop pattern holds: pitch 0 is the pad's own pitch (C3) and the velocity is 110 (as in a Koala-made example). */
+export const LOOP_NOTE_VELOCITY = 110;
 
 /**
  * How many bars a loop is, from its length and the tempo in its file name, rounded to the nearest of 2, 4, 8 and 16 (nearest in ratio, so 6 bars is

@@ -29,7 +29,7 @@ describe("estimateLoopBars", () => {
 });
 
 describe("writeLoopPatterns", () => {
-  it("writes a pattern per loop from the last slot back towards the middle, one held note at 1.1.1 with velocity 100", () => {
+  it("writes a pattern per loop from the last slot back towards the middle, one held note at 1.1.1 with velocity 110", () => {
     const sequences = slots();
     expect(writeLoopPatterns(sequences, [{ pad: 16, bars: 4 }, { pad: 17, bars: 8 }, { pad: 20, bars: 2 }], 4)).toBe(3);
     const filled = sequences.map((s, i) => (isEmpty(s) ? -1 : i)).filter((i) => i >= 0);
@@ -37,7 +37,7 @@ describe("writeLoopPatterns", () => {
     const first = sequences[31].noteSequence.pattern;
     expect(first.numBars).toBe(4);
     expect(first.notes).toHaveLength(1);
-    expect(first.notes[0]).toMatchObject({ num: 16, start: 0, timeOffset: 0, pitch: 0, vel: 100, length: 4 * 4 * TICKS_PER_BEAT });
+    expect(first.notes[0]).toMatchObject({ num: 16, start: 0, timeOffset: 0, pitch: 0, vel: 110, length: 4 * 4 * TICKS_PER_BEAT });
     expect(sequences[30].noteSequence.pattern.numBars).toBe(8);
     expect(sequences[30].noteSequence.pattern.notes[0].length).toBe(8 * 4 * TICKS_PER_BEAT);
     expect(sequences[29].noteSequence.pattern.numBars).toBe(2);
