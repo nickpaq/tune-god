@@ -580,7 +580,7 @@ function App() {
   useEffect(() => {
     if (!saved.libraryIndexId) return;
     let cancelled = false;
-    void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); void saveLibraryIndex(index); } });
+    void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); } });
     return () => { cancelled = true; };
   }, [saved.libraryIndexId]);
   const connectLibrary = async (input: FoundPack | File[], force = false, report = false) => {
@@ -867,6 +867,14 @@ function App() {
               if (source && !next[g.index])
                 next[g.index] = makeGhostPad(g.index, g.kind, source);
             }
+            return next;
+          });
+        }
+        // The labelled gaps ("Add Closed Hat", "Empty") left where a corrected sound moved out come back on the pads they were on.
+        if (restore && saved.layoutPlaceholders?.length) {
+          setPads((prev) => {
+            const next = { ...prev };
+            for (const ph of saved.layoutPlaceholders ?? []) if (!next[ph.index]) next[ph.index] = makePlaceholderPad(ph);
             return next;
           });
         }

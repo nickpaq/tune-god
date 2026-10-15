@@ -323,7 +323,10 @@ export async function loadLibraryIndex(id: string): Promise<LibraryIndex | null>
         const req = db.transaction("library-index").objectStore("library-index").get(id);
         req.onsuccess = () => {
           const index = req.result as LibraryIndex | undefined;
-          resolve(index ? reclassifyLibrary({ ...index, samples: index.samples.map((sample) => ({ ...sample, classification: normalizeClassification(sample.classification), correction: sample.correction ? normalizeClassification(sample.correction) : undefined })) }) : null);
+          const loaded = index ? reclassifyLibrary({ ...index, samples: index.samples.map((sample) => ({ ...sample, classification: normalizeClassification(sample.classification), correction: sample.correction ? normalizeClassification(sample.correction) : undefined })) }) : null;
+          // The index is written back only when loading upgraded it (new classification rules); an unchanged library is never rewritten.
+          if (index && loaded && loaded.classificationVersion !== index.classificationVersion) void saveLibraryIndex(loaded);
+          resolve(loaded);
         }; req.onerror = () => reject(req.error);
       });
     } finally { db.close(); }
