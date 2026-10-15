@@ -107,3 +107,18 @@ describe("Type-only preset", () => {
     expect(matchingTemplateLabel({ category: "kick", label: "Kick 2" }, sample(0, "snare"))).toBeUndefined();
   });
 });
+
+describe("808s for missing kick pads", () => {
+  const e808 = (key: number) => ({ ...sample(key, "bass"), is808: true });
+  const slots = generationSlots();
+  it("puts 808s on the bottom-left pad and the one above it when there are no kicks", () => {
+    const { positions } = allocateKit([sample(1, "snare"), e808(2), e808(3), sample(4, "bass")], slots);
+    expect(positions.get(2)).toBe(12);
+    expect(positions.get(3)).toBe(8);
+  });
+  it("prefers real kicks, and uses an 808 only for the pad a kick does not fill", () => {
+    const { positions } = allocateKit([sample(1, "kick"), e808(2)], slots);
+    expect(positions.get(1)).toBe(8);
+    expect(positions.get(2)).toBe(12);
+  });
+});

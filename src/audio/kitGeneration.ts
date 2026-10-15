@@ -25,6 +25,7 @@ export interface KitSound {
   category: CategoryId;
   classification?: SampleClassification;
   identity?: string;
+  is808?: boolean;
 }
 export interface KitShortage {
   index: number;
@@ -49,13 +50,22 @@ export function allocateKit(
   const positions = new Map<number, number>();
   const used = new Set<string>(excluded);
   const occupied = new Set<number>(locked);
+  const take808 = () => sounds.find((sound) => !used.has(sound.identity ?? String(sound.key)) && sound.category === "bass" && sound.is808);
+  // No kicks at all: 808s take the bottom-left pad, then the pad above it, before anything else.
+  if (!sounds.some((sound) => sound.category === "kick" && !used.has(sound.identity ?? String(sound.key)))) {
+    for (const index of [12, 8]) {
+      const eight = slots[index]?.category === "kick" && !occupied.has(index) ? take808() : undefined;
+      if (!eight) continue;
+      used.add(eight.identity ?? String(eight.key));
+      occupied.add(index);
+      positions.set(eight.key, index);
+    }
+  }
   for (const [index, slot] of slots.entries()) {
     if (occupied.has(index)) continue;
-    const candidate = sounds.find(
-      (sound) =>
-        !used.has(sound.identity ?? String(sound.key)) &&
-        sound.category === slot.category,
-    );
+    const free = (sound: KitSound) => !used.has(sound.identity ?? String(sound.key));
+    // Kicks ran out before the bottom-left pad: an 808 takes it before the bass slots do.
+    const candidate = sounds.find((sound) => free(sound) && sound.category === slot.category) ?? (slot.category === "kick" && index === 12 ? take808() : undefined);
     if (!candidate) continue;
     used.add(candidate.identity ?? String(candidate.key));
     occupied.add(index);
