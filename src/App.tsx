@@ -106,6 +106,7 @@ import { copyProjectPad } from "./audio/copyProjectPad";
 import { sortForSlot } from "./audio/swapOrder";
 import { ExtraDrumsModal } from "./components/ExtraDrumsModal";
 import { ExportOptionsModal, type ExportValues } from "./components/ExportOptionsModal";
+import { pickProjectName, rememberName } from "./audio/projectName";
 import { exportFileName, keyLabel } from "./audio/exportFileName";
 import { DEFAULT_EXPORT_OPTIONS, mergeExportOptions, panPlan, type ExportOptions } from "./audio/exportOptions";
 import {
@@ -400,7 +401,7 @@ function App() {
   const [exportOptions, setExportOptions] = useState<ExportOptions>(() => mergeExportOptions({ ...(saved.masterStyleDefaultedDynamic && saved.masterStyle ? { masterStyle: saved.masterStyle } : {}), ...saved.exportOptions }));
   const [exportDialog, setExportDialog] = useState(false);
   /** The choices of the export in progress, kept while the unused-drums question is asked. */
-  const pendingExport = useRef<{ options: ExportOptions; values: ExportValues }>({ options: DEFAULT_EXPORT_OPTIONS, values: { bpm: 120, a4: 440 } });
+  const pendingExport = useRef<{ options: ExportOptions; values: ExportValues }>({ options: DEFAULT_EXPORT_OPTIONS, values: { bpm: 120, a4: 440, name: "" } });
   /** A short message over the screen ("Sounds organized..."). */
   const [notice, setNotice] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -2682,7 +2683,13 @@ function App() {
           ACTIVE_MIX_PRESET.buses.fade808.maxMs,
         );
   };
-  const exportProject = async (mode: ExtraDrums = "keep", options: ExportOptions = exportOptions, values: ExportValues = { bpm: projectBpm, a4 }) => {
+  const [exportName, setExportName] = useState("");
+  /** A random name from the loaded sounds' own file names, one not used for an earlier export; null when no sound gives one. */
+  const suggestName = () => {
+    const names = Object.values(pads).filter(isReal).map((p) => p.sourcePath?.split("/").pop() ?? p.name);
+    return pickProjectName(names, loadState().usedProjectNames ?? []);
+  };
+  const exportProject = async (mode: ExtraDrums = "keep", options: ExportOptions = exportOptions, values: ExportValues = { bpm: projectBpm, a4, name: "" }) => {
     // The tempo and A4 reference chosen in the export dialog (the state may not have caught up yet), used for everything below.
     const { bpm: projectBpm, a4 } = values;
     const pads = mode === "delete" ? withoutExtraDrums(padsNow) : padsNow;
@@ -2841,7 +2848,8 @@ function App() {
         loops: loopLengths,
         melodicPatterns: options.melodicPatterns,
       });
-      downloadBlob(blob, exportFileName(project.originalName, keyLabel(keyPc, keyMajor), projectBpm));
+      downloadBlob(blob, exportFileName(values.name || project.originalName, keyLabel(keyPc, keyMajor), projectBpm));
+      saveState({ usedProjectNames: rememberName(loadState().usedProjectNames ?? [], values.name || project.originalName) });
       haptic("success");
     } catch (err) {
       console.error(err);
@@ -3387,7 +3395,7 @@ function App() {
               disabled={!canExport}
               onClick={() => {
                 setMenuOpen(false);
-                setExportDialog(true);
+                setExportName(suggestName() ?? projectRef.current?.originalName.replace(/\.koala$/i, "") ?? ""); setExportDialog(true);
               }}
             >
               {exporting ? `Exporting ${exportProgress || "…"}` : "Export"}
@@ -4227,7 +4235,9 @@ function App() {
         {exportDialog && (
           <ExportOptionsModal
             initial={exportOptions}
-            values={{ bpm: projectBpm, a4 }}
+            values={{ bpm: projectBpm, a4, name: exportName }}
+            keyText={keyLabel(keyPc, keyMajor)}
+            onShuffle={suggestName}
             a4Range={A4_REFERENCE_RANGE}
             fade808Blocker={sidechainReady ? undefined : SIDECHAIN_HINT[sidechain.blocker ?? "ready"]}
             onCancel={() => setExportDialog(false)}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { MASTER_STYLES, type MasterStyle } from "../audio/mixPresets";
 import type { ExportOptions } from "../audio/exportOptions";
+import { exportFileName } from "../audio/exportFileName";
 
 type Flag = Exclude<keyof ExportOptions, "masterStyle">;
 
@@ -21,12 +22,15 @@ export interface ExportValues {
   bpm: number;
   /** The A4 reference in Hz the tunings are worked out from. */
   a4: number;
+  /** The project's name; the file is named "{name} - {key} - {bpm}bpm.koala". */
+  name: string;
 }
 
-export function ExportOptionsModal({ initial, values, a4Range, fade808Blocker, onExport, onCancel }: { initial: ExportOptions; values: ExportValues; a4Range: { min: number; max: number }; /** Why the 808 fade-in cannot be used now (no kick, or no bass or 808, on the pads); undefined when it can. */ fade808Blocker?: string; onExport: (options: ExportOptions, values: ExportValues) => void; onCancel: () => void }) {
+export function ExportOptionsModal({ initial, values, a4Range, fade808Blocker, keyText, onShuffle, onExport, onCancel }: { initial: ExportOptions; values: ExportValues; a4Range: { min: number; max: number }; /** Why the 808 fade-in cannot be used now (no kick, or no bass or 808, on the pads); undefined when it can. */ fade808Blocker?: string; /** The key picked on the piano as it goes in the file name; null when none. */ keyText: string | null; /** A new random name taken from the sounds, or null when there is none. */ onShuffle: () => string | null; onExport: (options: ExportOptions, values: ExportValues) => void; onCancel: () => void }) {
   const [options, setOptions] = useState<ExportOptions>(initial);
   const [bpmText, setBpmText] = useState(String(values.bpm));
   const [a4Text, setA4Text] = useState(String(values.a4));
+  const [name, setName] = useState(values.name);
   const bpm = Number(bpmText.replace(",", "."));
   const a4 = Number(a4Text.replace(",", "."));
   const valid = Number.isFinite(bpm) && bpm >= 20 && bpm <= 300 && Number.isFinite(a4) && a4 >= a4Range.min && a4 <= a4Range.max;
@@ -61,6 +65,16 @@ export function ExportOptionsModal({ initial, values, a4Range, fade808Blocker, o
             </label>
           ))}
         </div>
+        <div className="export-options__values export-options__name">
+          <label>
+            <span>Project name</span>
+            <input type="text" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} aria-label="Project name" />
+          </label>
+          <button type="button" className="menu__button" onClick={() => { const next = onShuffle(); if (next) setName(next); }}>
+            Shuffle
+          </button>
+        </div>
+        <small className="export-options__preview">{exportFileName(name, keyText, Number.isFinite(bpm) ? bpm : 0)}</small>
         <div className="export-options__values">
           <label>
             <span>Project BPM</span>
@@ -75,7 +89,7 @@ export function ExportOptionsModal({ initial, values, a4Range, fade808Blocker, o
           <button className="menu__button" onClick={onCancel}>
             Cancel
           </button>
-          <button className="menu__button menu__button--primary" disabled={!valid} onClick={() => onExport(options, { bpm: Math.round(bpm * 100) / 100, a4: Math.round(a4) })}>
+          <button className="menu__button menu__button--primary" disabled={!valid} onClick={() => onExport(options, { bpm: Math.round(bpm * 100) / 100, a4: Math.round(a4), name: name.trim() })}>
             Export
           </button>
         </div>

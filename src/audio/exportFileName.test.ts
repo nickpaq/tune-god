@@ -16,6 +16,10 @@ describe("export file name", () => {
     expect(exportFileName("My Beat - 90bpm.koala", null, 95)).toBe("My Beat - 95bpm.koala");
     expect(exportFileName("My Beat_tuned.koala", "Dm", 100)).toBe("My Beat - Dm - 100bpm.koala");
   });
+  it("removes characters a file name cannot hold and falls back to TuneGod", () => {
+    expect(exportFileName('A/B: "C"', null, 100)).toBe("A B C - 100bpm.koala");
+    expect(exportFileName("  ", "Am", 100)).toBe("TuneGod - Am - 100bpm.koala");
+  });
   it("names minor and major keys", () => {
     expect(keyLabel(9, false)).toBe("Am");
     expect(keyLabel(1, true)).toBe("C#maj");

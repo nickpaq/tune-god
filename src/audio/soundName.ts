@@ -17,7 +17,7 @@ export interface SoundNameParts {
 }
 
 const KEY_CAPS = /^([A-G])([#b♯♭]?)(m|min|minor|maj|major|Major|Minor|Maj|Min|M)?$/;
-const KIND_WORDS = new Set([
+export const KIND_WORDS = new Set([
   "loop", "loops", "808", "808s", "bass", "sub", "kick", "kicks", "snare", "snares", "clap", "claps", "hat", "hats", "hh", "hihat", "cymbal", "crash", "ride", "perc", "percs", "percussion",
   "tom", "toms", "shaker", "vox", "vocal", "vocals", "fx", "sfx", "riser", "impact", "sweep", "drum", "drums", "fill", "fills", "oneshot", "shot", "melody", "melodic", "synth", "lead", "pad", "keys",
   "guitar", "piano", "bell", "bells", "pluck", "chord", "chords", "stack", "stacks", "chop", "chops", "stem", "songstarter", "top", "tops", "open", "closed", "low", "high",

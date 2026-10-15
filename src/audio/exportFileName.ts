@@ -13,7 +13,7 @@ export function keyLabel(pc: number | null, major: boolean): string | null {
  * there is none), then the tempo: "TuneGod - All Kits - Am - 140bpm.koala". A name from an earlier export loses its old key and tempo first.
  */
 export function exportFileName(originalName: string, key: string | null, bpm: number): string {
-  const base = originalName.replace(/\.koala$/i, "").replace(INFO_SUFFIX, "").replace(/_tuned$/i, "");
+  const base = originalName.replace(/\.koala$/i, "").replace(INFO_SUFFIX, "").replace(/_tuned$/i, "").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "TuneGod";
   const tempo = `${Number(bpm.toFixed(2))}bpm`;
   return `${[base, key, tempo].filter(Boolean).join(" - ")}.koala`;
 }
