@@ -62,6 +62,8 @@ export function SwapList({
   const preview = useSoundPreview();
   const rows = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
+  // The count bar's two keys: every sound (default), or only the favorites of this type (the star).
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   // The list grows as it is scrolled: BATCH rows at first, BATCH more each time the end comes within LOAD_AHEAD px (there are no pages).
   const [shown, setShown] = useState(BATCH);
   const [loading, setLoading] = useState(false);
@@ -95,7 +97,16 @@ export function SwapList({
   };
   // A new pad or a new search starts at the top with the bars showing.
   useEffect(() => { lastTop.current = 0; if (hiddenNow.current) setChrome(false); }, [slotLabel, query]);
-  const filtered = useMemo(() => candidates.filter(pad => `${pad.name} ${pad.sourcePath ?? ""}`.toLowerCase().includes(query.toLowerCase())), [candidates, query]);
+  const filtered = useMemo(
+    () => candidates.filter(pad => (!favoritesOnly || pad.favorite) && `${pad.name} ${pad.sourcePath ?? ""}`.toLowerCase().includes(query.toLowerCase())),
+    [candidates, query, favoritesOnly],
+  );
+  const chooseMode = (favorites: boolean) => {
+    if (favorites === favoritesOnly) return;
+    setFavoritesOnly(favorites);
+    setShown(BATCH);
+    if (rows.current) rows.current.scrollTop = 0;
+  };
   const visible = filtered.slice(0, shown);
   // The sound's own name, with the pack abbreviation, tempo, key and type words taken out (shown dimmed after it). Sounds of one folder share prefixes.
   const first = candidates[0];
@@ -132,14 +143,14 @@ export function SwapList({
     <div className="swap-list" data-chrome={chromeHidden ? "hidden" : "shown"} data-reveal={reveal}>
       <input className="swap-list__search" aria-label="Search hot-swap sounds" placeholder="Search sounds" value={query} onChange={event => { setQuery(event.target.value); setShown(BATCH); if (rows.current) rows.current.scrollTop = 0; }} />
       <div className="swap-list__rows" ref={rows} onScroll={onScroll}>
-        {filtered.length === 0 && <div className="swap-list__empty">No other sounds to swap in</div>}
+        {filtered.length === 0 && <div className="swap-list__empty">{favoritesOnly ? "No favorites of this type yet" : "No other sounds to swap in"}</div>}
         {visible.map((pad) => {
           const name = nameOf(pad);
           const part = parts.get(pad);
           const shownName = part?.name || name;
           const meta = [part?.bpm ? `${part.bpm}` : "", part?.key ?? ""].filter(Boolean).join(" ");
           return (
-          <div key={pad.libraryId ?? pad.origIndex} className="swap-row">
+          <div key={pad.libraryId ?? pad.origIndex} className={`swap-row${pad.favorite ? " swap-row--favorite" : ""}`}>
               <span className="swap-row__name" title={pad.sourcePath ?? pad.name}>
                 {shownName}
               </span>
@@ -183,7 +194,12 @@ export function SwapList({
         })}
       </div>
       <div className="swap-list__foot">
-        <span>{loading || busy ? "Loading…" : `${filtered.length.toLocaleString()} sounds`}</span>
+        <button type="button" className={`swap-foot__key${favoritesOnly ? "" : " is-on"}`} aria-pressed={!favoritesOnly} aria-label="Show all sounds" onClick={() => chooseMode(false)}>
+          {loading || busy ? "Loading…" : `${filtered.length.toLocaleString()} sounds`}
+        </button>
+        <button type="button" className={`swap-foot__key swap-foot__star${favoritesOnly ? " is-on" : ""}`} aria-pressed={favoritesOnly} aria-label="Show only favorites" onClick={() => chooseMode(true)}>
+          <StarGlyph filled={favoritesOnly} />
+        </button>
       </div>
     </div>
   );
