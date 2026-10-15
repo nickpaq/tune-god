@@ -580,7 +580,7 @@ function App() {
   useEffect(() => {
     if (!saved.libraryIndexId) return;
     let cancelled = false;
-    void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); void saveLibraryIndex(index); setLibraryOpen(true); } });
+    void loadLibraryIndex(saved.libraryIndexId).then((index) => { if (!cancelled && index) { setLibraryIndex(index); void saveLibraryIndex(index); } });
     return () => { cancelled = true; };
   }, [saved.libraryIndexId]);
   const connectLibrary = async (input: FoundPack | File[], force = false, report = false) => {
